@@ -1,70 +1,83 @@
 #pragma once
 #include "RenderGraphTypes.hpp"
 #include "ResourceSystem.hpp"
-#include "DependencyAnalyzer.hpp"
+#include "RenderGraphAnalyzer.hpp"
 #include "RenderPass.hpp"
-
+#include "SynchronizationGenerator.hpp"
 #include <vector>
 #include <memory>
 #include <unordered_map>
 #include <string>
 
 namespace StarryEngine {
-	struct ResourceAliasGroup {
-		std::vector<ResourceHandle> resources;
-		size_t requiredSize = 0;
-		VkMemoryRequirements memRequirements = {};
-		bool canAlias = true;
-	};
 
-	class RenderGraphCompiler {
-	private:
-		VmaAllocator mAllocator = VK_NULL_HANDLE;
-		VkDevice mDevice = VK_NULL_HANDLE;
+    // 前向声明
+    class RenderGraph;
 
-		mutable std::string mDebugInfo;
+    // 编译结果
+    struct CompilationResult {
+        bool success = false;
+        std::vector<RenderPassHandle> executionOrder;
+        std::unordered_map<RenderPassHandle, BarrierBatch> barriers;
+        std::vector<ResourceAliasGroup> aliasGroups;
+        std::string errorMessage;
+        std::string debugInfo;
+    };
 
-		std::vector<RenderPassHandle> mExecutionOrder;
-		std::unordered_map<RenderPassHandle, BarrierBatch> mBarriers;
-		std::vector<ResourceAliasGroup> mAliasGroups;
-	public:
+    // 编译统计信息
+    struct CompilationStats {
+        uint32_t passCount = 0;
+        uint32_t resourceCount = 0;
+        uint32_t barrierCount = 0;
+        uint32_t aliasGroups = 0;
+        size_t estimatedMemory = 0;
+    };
+
+    // 渲染图编译器
+    class RenderGraphCompiler {
+    public:
         RenderGraphCompiler(VkDevice device, VmaAllocator allocator);
-        ~RenderGraphCompiler();
+        ~RenderGraphCompiler() = default;
 
-        // 编译整个渲染图
-        bool compile(class RenderGraph& graph);
+        // 主要编译接口
+        CompilationResult compile(RenderGraph& graph);
 
-        // 获取编译后的执行顺序
-        const std::vector<RenderPassHandle>& getExecutionOrder() const {
-            return mExecutionOrder;
-        }
+        // 分步编译接口
+        CompilationResult compileStepByStep(RenderGraph& graph);
 
-        // 获取屏障信息
-        const std::unordered_map<RenderPassHandle, BarrierBatch>& getBarriers() const {
-            return mBarriers;
-        }
+        // 获取编译统计信息
+        CompilationStats getStats() const { return mStats; }
 
-        // 获取资源别名信息
-        const std::vector<ResourceAliasGroup>& getAliasGroups() const {
-            return mAliasGroups;
-        }
+        // 获取编译结果
+        const std::vector<RenderPassHandle>& getExecutionOrder() const { return mExecutionOrder; }
+        const std::unordered_map<RenderPassHandle, BarrierBatch>& getBarriers() const { return mBarriers; }
 
-        // 调试功能：输出编译信息
-        void dumpCompilationInfo() const;
-	private:
+    private:
+        VkDevice mDevice;
+        VmaAllocator mAllocator;
+
+        // 子组件
+        RenderGraphAnalyzer mAnalyzer;
+        SynchronizationGenerator mSyncGenerator;
+
+        // 编译状态
+        CompilationStats mStats;
+        std::vector<RenderPassHandle> mExecutionOrder;
+        std::unordered_map<RenderPassHandle, BarrierBatch> mBarriers;
+
         // 编译步骤
-        bool validateGraph(const class RenderGraph& graph) const;
-        bool computeResourceLifetimes(class RenderGraph& graph);
-        bool topologicalSort(class RenderGraph& graph);
-        bool analyzeDependencies(class RenderGraph& graph);
-        bool generateSynchronization(class RenderGraph& graph);
-        bool allocateResources(class RenderGraph& graph);
-        bool createVulkanObjects(class RenderGraph& graph);
+        CompilationResult validateInput(RenderGraph& graph);
+        CompilationResult analyzeGraphStructure(RenderGraph& graph);
+        CompilationResult generateSynchronization(RenderGraph& graph, const RenderGraphAnalysisResult& analysis);
+        CompilationResult allocateResources(RenderGraph& graph, const RenderGraphAnalysisResult& analysis);
+        CompilationResult createVulkanObjects(RenderGraph& graph);
 
-        // 辅助函数
-        bool detectCycles(const class RenderGraph& graph) const;
-        void computeMemoryRequirements(class RenderGraph& graph);
-        bool optimizeResourceAliasing(class RenderGraph& graph);
-	}
-}
+        // 资源优化
+        bool optimizeResourceAllocation(RenderGraph& graph, const RenderGraphAnalysisResult& analysis);
 
+        // 调试和验证
+        void validateCompilationResult(const CompilationResult& result) const;
+        void collectDebugInfo(CompilationResult& result, const std::string& info);
+    };
+
+} // namespace StarryEngine

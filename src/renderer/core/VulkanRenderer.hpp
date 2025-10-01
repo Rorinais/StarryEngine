@@ -17,8 +17,8 @@ namespace StarryEngine {
         void init(VulkanCore::Ptr vulkanCore, WindowContext::Ptr windowContext);
         void shutdown();
 
-        void setRenderGraph(RenderGraph::Ptr renderGraph);
-        RenderGraph::Ptr getRenderGraph() const { return mRenderGraph; }
+        void setRenderGraph(RenderGraph renderGraph);
+        RenderGraph getRenderGraph() const { return mRenderGraph; }
 
         void beginFrame();
         void renderFrame();
@@ -34,7 +34,7 @@ namespace StarryEngine {
 
         VulkanCore::Ptr mVulkanCore;
         WindowContext::Ptr mWindowContext;
-        RenderGraph::Ptr mRenderGraph;
+        RenderGraph mRenderGraph;
 
         std::vector<FrameContext> mFrameContexts;
         uint32_t mCurrentFrame = 0;

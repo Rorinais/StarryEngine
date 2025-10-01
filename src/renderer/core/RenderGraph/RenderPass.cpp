@@ -1,16 +1,15 @@
-#include"RenderPass.hpp"
+#include "RenderPass.hpp"
 
-namespace StarryEngine
-{
-    // 资源使用声明
+namespace StarryEngine {
+
     void RenderPass::reads(ResourceHandle resource, VkPipelineStageFlags stages) {
-		PassResourceUsage usage;
-		usage.resource = resource;
-		usage.stageFlags = stages;
+        PassResourceUsage usage;
+        usage.resource = resource;
+        usage.stageFlags = stages;
         usage.accessFlags = VK_ACCESS_SHADER_READ_BIT;
-		usage.layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL; // TODO: 需要根据资源类型和具体使用情况设置
-		usage.isWrite = false;
-		mResourceUsages.push_back(usage);
+        usage.layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        usage.isWrite = false;
+        mResourceUsages.push_back(usage);
     }
 
     void RenderPass::writes(ResourceHandle resource, VkPipelineStageFlags stages) {
@@ -27,13 +26,12 @@ namespace StarryEngine
         PassResourceUsage usage;
         usage.resource = resource;
         usage.stageFlags = stages;
-        usage.accessFlags = VK_ACCESS_SHADER_READ_BIT|VK_ACCESS_SHADER_WRITE_BIT;
+        usage.accessFlags = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
         usage.layout = VK_IMAGE_LAYOUT_GENERAL;
         usage.isWrite = true;
         mResourceUsages.push_back(usage);
     }
 
-    // 带描述符绑定的资源使用
     void RenderPass::reads(ResourceHandle resource, uint32_t binding, VkDescriptorType type, VkPipelineStageFlags stages) {
         PassResourceUsage usage;
         usage.resource = resource;
@@ -41,27 +39,29 @@ namespace StarryEngine
         usage.accessFlags = VK_ACCESS_SHADER_READ_BIT;
         usage.layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         usage.isWrite = false;
-		usage.binding = binding;
-		usage.descriptorType = type;
+        usage.binding = binding;
+        usage.descriptorType = type;
         mResourceUsages.push_back(usage);
     }
 
     bool RenderPass::compile() {
-		return createVulkanRenderPass()&&createFramebuffer();
+        return createVulkanRenderPass() && createFramebuffer();
     }
 
-    void RenderPass::execute(CommandBuffer::Ptr cmdBuffer, RenderContext& context) {
-        if(mExecuteCallback) {
+    void RenderPass::execute(CommandBuffer* cmdBuffer, RenderContext& context) {
+        if (mExecuteCallback) {
             mExecuteCallback(cmdBuffer, context);
-		} 
+        }
     }
 
     bool RenderPass::createVulkanRenderPass() {
-
-		return true;
+        // 简化的实现，实际中需要根据资源使用创建Vulkan渲染通道
+        return true;
     }
 
     bool RenderPass::createFramebuffer() {
-		return true;
+        // 简化的实现，实际中需要根据资源创建帧缓冲区
+        return true;
     }
-}
+
+} // namespace StarryEngine

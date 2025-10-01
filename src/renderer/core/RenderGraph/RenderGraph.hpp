@@ -2,7 +2,7 @@
 #include "RenderGraphTypes.hpp"
 #include "ResourceSystem.hpp"
 #include "RenderPass.hpp"
-#include "DependencyAnalyzer.hpp"
+#include "RenderGraphAnalyzer.hpp"
 #include "RenderGraphCompiler.hpp"
 #include "RenderGraphExecutor.hpp"
 #include <memory>
@@ -10,22 +10,20 @@
 #include <functional>
 
 namespace StarryEngine {
+
     class RenderGraph {
     public:
         RenderGraph(VkDevice device, VmaAllocator allocator);
         ~RenderGraph();
 
         // 构建接口
-        RenderPassHandle addPass(const std::string& name,
-            std::function<void(RenderPass&)> setupCallback);
+        RenderPassHandle addPass(const std::string& name,std::function<void(RenderPass&)> setupCallback);
 
         // 资源管理
-        ResourceHandle createResource(const std::string& name,
-            const ResourceDescription& desc);
+        ResourceHandle createResource(const std::string& name, const ResourceDescription& desc);
 
         // 导入外部资源
-        bool importResource(ResourceHandle handle, VkImage image, VkImageView view,
-            ResourceState initialState = { VK_IMAGE_LAYOUT_UNDEFINED });
+        bool importResource(ResourceHandle handle, VkImage image, VkImageView view,ResourceState initialState = { VK_IMAGE_LAYOUT_UNDEFINED });
 
         // 编译和执行
         bool compile();
@@ -56,5 +54,7 @@ namespace StarryEngine {
         // 编译状态
         bool mIsCompiled = false;
         uint32_t mCurrentFrame = 0;
+        uint32_t mConcurrentFrame = 2;
     };
-}
+
+} // namespace StarryEngine

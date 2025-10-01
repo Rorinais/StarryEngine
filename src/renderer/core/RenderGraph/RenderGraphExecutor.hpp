@@ -7,19 +7,19 @@
 #include <memory>
 
 namespace StarryEngine {
+
     // 前向声明
     class RenderGraph;
+    class CommandBuffer;
 
     // 渲染上下文实现
     class RenderContextImpl {
     public:
-        RenderContextImpl(VkCommandBuffer cmd, uint32_t frame,
-            ResourceRegistry* registry, class RenderGraphExecutor* executor)
-            : commandBuffer(cmd), frameIndex(frame),
-            resourceRegistry(registry), executor(executor) {
+        RenderContextImpl(VkCommandBuffer cmd, uint32_t frame, ResourceRegistry* registry, class RenderGraphExecutor* executor)
+            : commandBuffer(cmd), frameIndex(frame), resourceRegistry(registry), executor(executor) {
         }
 
-        VkImage getImage(ResourceHandle  handle) const;
+        VkImage getImage(ResourceHandle handle) const;
         VkBuffer getBuffer(ResourceHandle handle) const;
         VkImageView getImageView(ResourceHandle handle) const;
 
@@ -34,18 +34,17 @@ namespace StarryEngine {
 
     class RenderGraphExecutor {
     private:
-        // 获取每帧数据
+        // 每帧数据
         struct FrameData {
             std::vector<VkDescriptorSet> descriptorSets;
         };
 
         VkDevice mDevice;
-
-        // 每帧数据
         std::vector<FrameData> mFrameData;
         uint32_t mCurrentFrame;
+
     public:
-		friend class RenderContextImpl;
+        friend class RenderContextImpl;
 
         RenderGraphExecutor(VkDevice device);
         ~RenderGraphExecutor();
@@ -79,4 +78,5 @@ namespace StarryEngine {
         void bindResources(VkCommandBuffer cmd, const RenderPass& pass,
             const RenderContextImpl& context, uint32_t frameIndex);
     };
-}
+
+} // namespace StarryEngine

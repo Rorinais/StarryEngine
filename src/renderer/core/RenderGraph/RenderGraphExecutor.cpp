@@ -3,6 +3,7 @@
 #include <cassert>
 
 namespace StarryEngine {
+
     RenderGraphExecutor::RenderGraphExecutor(VkDevice device)
         : mDevice(device), mCurrentFrame(0) {
     }
@@ -11,6 +12,7 @@ namespace StarryEngine {
         // 清理每帧数据
         for (auto& frameData : mFrameData) {
             // 清理描述符集等资源
+            // 注意：实际应用中需要正确释放Vulkan资源
         }
     }
 
@@ -66,7 +68,12 @@ namespace StarryEngine {
         bindResources(cmd, *pass, context, frameIndex);
 
         // 执行pass
-        pass->execute(cmd, context);
+        CommandBuffer* cmdBuffer = nullptr; // 需要实际的CommandBuffer实现
+        RenderContext renderContext;
+        renderContext.commandBuffer = cmdBuffer;
+        renderContext.frameIndex = frameIndex;
+
+        pass->execute(cmdBuffer, renderContext);
     }
 
     void RenderGraphExecutor::insertBarriers(VkCommandBuffer cmd, RenderPassHandle passHandle,
@@ -136,8 +143,10 @@ namespace StarryEngine {
         const std::vector<VkWriteDescriptorSet>& writes) {
         // 创建或获取描述符集布局
         VkDescriptorSetLayout layout = VK_NULL_HANDLE;
-        // 简化的布局缓存实现
-        // ...
+        VkResult result = vkCreateDescriptorSetLayout(executor->mDevice, &layoutInfo, nullptr, &layout);
+        if (result != VK_SUCCESS) {
+            return VK_NULL_HANDLE;
+        }
 
         // 分配描述符集
         VkDescriptorSet descriptorSet = executor->allocateDescriptorSet(layout);
@@ -151,4 +160,5 @@ namespace StarryEngine {
 
         return descriptorSet;
     }
-}
+
+} // namespace StarryEngine

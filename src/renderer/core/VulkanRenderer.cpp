@@ -20,7 +20,7 @@ namespace StarryEngine {
         mRenderGraph.reset();
     }
 
-    void VulkanRenderer::setRenderGraph(RenderGraph::Ptr renderGraph) {
+    void VulkanRenderer::setRenderGraph(RenderGraph renderGraph) {
         mRenderGraph = renderGraph;
         mRenderGraph->compile(mVulkanCore, mWindowContext);
     }
