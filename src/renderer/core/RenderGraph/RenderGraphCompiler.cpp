@@ -156,7 +156,7 @@ namespace StarryEngine {
             graph.getResourceRegistry().getAllVirtualResources());
 
         // 分配实际资源
-        if (!graph.getResourceRegistry().allocateActualResources(2)) { // 2帧并行
+        if (!graph.getResourceRegistry().allocateActualResources(graph.getConcurrentFrame())) { //默认2帧并行
             result.errorMessage = "Failed to allocate resources";
             return result;
         }

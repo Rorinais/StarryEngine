@@ -39,6 +39,7 @@ namespace StarryEngine {
         const std::vector<std::unique_ptr<RenderPass>>& getPasses() const { return mPasses; }
         const std::vector<Dependency>& getDependencies() const { return mDependencies; }
         const RenderGraphCompiler& getCompiler() const { return mCompiler; }
+		const uint32_t getConcurrentFrame() const { return mConcurrentFrame; }
 
     private:
         VkDevice mDevice;
