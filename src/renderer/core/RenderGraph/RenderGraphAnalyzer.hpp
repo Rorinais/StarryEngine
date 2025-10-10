@@ -4,7 +4,7 @@
 #include <memory>
 #include "RenderGraphTypes.hpp"
 #include "ResourceSystem.hpp"
-#include "RenderPass.hpp"
+#include "RenderPassSystem.hpp"
 
 namespace StarryEngine {
 

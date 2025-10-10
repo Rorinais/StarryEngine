@@ -2,7 +2,7 @@
 #include "RenderGraphTypes.hpp"
 #include "ResourceSystem.hpp"
 #include "RenderGraphAnalyzer.hpp"
-#include "RenderPass.hpp"
+#include "RenderPassSystem.hpp"
 #include "SynchronizationGenerator.hpp"
 #include <vector>
 #include <memory>

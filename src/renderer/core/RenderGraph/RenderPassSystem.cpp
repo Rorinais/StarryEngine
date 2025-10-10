@@ -1,4 +1,4 @@
-#include "RenderPass.hpp"
+#include "RenderPassSystem.hpp"
 
 namespace StarryEngine {
 

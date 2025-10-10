@@ -42,22 +42,16 @@ namespace StarryEngine {
     // 资源使用类型
     enum class ResourceType {
         Undefined,
-        ColorAttachment,
-        DepthStencilAttachment,
-        InputAttachment,
-        SampledImage,
-        UniformBuffer,
-        StorageBuffer,
-        IndirectBuffer,
-        VertexBuffer,
-        IndexBuffer,
+        Texture,
+        Buffer,
+        Attachment
     };
 
     // 资源描述符
     struct ResourceDescription {
         ResourceType type = ResourceType::Undefined;
         VkFormat format = VK_FORMAT_UNDEFINED;
-        VkExtent3D extent = { 1, 1, 1 };
+        VkExtent3D extent = { 0, 0, 0 };
         uint32_t arrayLayers = 1;
         uint32_t mipLevels = 1;
         VkSampleCountFlagBits samples = VK_SAMPLE_COUNT_1_BIT;
@@ -87,7 +81,7 @@ namespace StarryEngine {
     struct ResourceState {
         VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
         VkAccessFlags accessMask = 0;
-        VkPipelineStageFlags stageMask = 0;
+        VkPipelineStageFlags stageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
 
         bool isWrite() const {
             return accessMask & (VK_ACCESS_SHADER_WRITE_BIT |
@@ -95,6 +89,20 @@ namespace StarryEngine {
                 VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
                 VK_ACCESS_TRANSFER_WRITE_BIT);
         }
+    };
+
+
+    // 资源使用类型
+    struct ResourceUsage {
+        ResourceHandle resource;
+        VkPipelineStageFlags stageFlags;
+        VkAccessFlags accessFlags;
+        VkImageLayout layout;
+        bool isWrite;
+
+        uint32_t binding = 0;
+        uint32_t descriptorSet = 0;
+        VkDescriptorType descriptorType = VK_DESCRIPTOR_TYPE_MAX_ENUM;
     };
 
     struct BarrierBatch {
@@ -120,25 +128,32 @@ namespace StarryEngine {
     struct ResourceAliasGroup {
         std::vector<ResourceHandle> resources;
         size_t requiredSize = 0;
+        VkMemoryRequirements memoryRequirements;
         bool canAlias = false;
     };
 
     // 哈希函数
     inline size_t hash(const ResourceDescription& desc) {
-        size_t hash = std::hash<int>()(static_cast<int>(desc.type));
-        hash ^= std::hash<int>()(static_cast<int>(desc.format)) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
-        hash ^= std::hash<uint32_t>()(desc.extent.width) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
-        hash ^= std::hash<uint32_t>()(desc.extent.height) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
-        hash ^= std::hash<uint32_t>()(desc.extent.depth) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
-        hash ^= std::hash<uint32_t>()(desc.arrayLayers) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
-        hash ^= std::hash<uint32_t>()(desc.mipLevels) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
-        hash ^= std::hash<int>()(static_cast<int>(desc.samples)) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
-        hash ^= std::hash<uint32_t>()(desc.imageUsage) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
-        hash ^= std::hash<uint32_t>()(desc.bufferUsage) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
-        hash ^= std::hash<uint32_t>()(desc.memoryProperties) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
-        hash ^= std::hash<size_t>()(desc.size) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
-        hash ^= std::hash<bool>()(desc.isTransient) + 0x9e3779b9 + (hash << 6) + (hash >> 2);
-        return hash;
+        size_t seed = 0;
+        auto combine = [&seed](size_t value) {
+            seed ^= value + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+            };
+
+        combine(static_cast<size_t>(desc.type));
+        combine(static_cast<size_t>(desc.format));
+        combine(static_cast<size_t>(desc.extent.width));
+        combine(static_cast<size_t>(desc.extent.height));
+        combine(static_cast<size_t>(desc.extent.depth));
+        combine(static_cast<size_t>(desc.arrayLayers));
+        combine(static_cast<size_t>(desc.mipLevels));
+        combine(static_cast<size_t>(desc.samples));
+        combine(static_cast<size_t>(desc.imageUsage));
+        combine(static_cast<size_t>(desc.bufferUsage));
+        combine(static_cast<size_t>(desc.memoryProperties));
+        combine(static_cast<size_t>(desc.size));
+        combine(static_cast<size_t>(desc.isTransient));
+
+        return seed;
     }
 
 } // namespace StarryEngine

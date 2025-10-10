@@ -4,6 +4,7 @@
 #include <iostream>
 #include <vector>
 #include <unordered_map>
+#include <variant>
 #include "RenderGraphTypes.hpp"
 
 namespace StarryEngine {
@@ -24,27 +25,23 @@ namespace StarryEngine {
     };
 
     struct ActualResource {
-        ResourceHandle virtualHandle;
-        uint32_t frameIndex = 0;
-
-        union {
-            struct {
-                VkImage image = VK_NULL_HANDLE;
-                VkImageView defaultView = VK_NULL_HANDLE;
-            } image;
-            struct {
-                VkBuffer buffer = VK_NULL_HANDLE;
-            } buffer;
+    private:
+        struct Image {
+            VkImage image = VK_NULL_HANDLE;
+            VkImageView defaultView = VK_NULL_HANDLE;
         };
+        struct Buffer {
+            VkBuffer buffer = VK_NULL_HANDLE;
+        };
+
+    public:
+        ResourceHandle virtualHandle;
+        ResourceState currentState;
+        uint32_t frameIndex = 0;
 
         VmaAllocation allocation = VK_NULL_HANDLE;
         VmaAllocationInfo allocationInfo{};
-        ResourceState currentState;
-
-        ActualResource() {
-            image.image = VK_NULL_HANDLE;
-            image.defaultView = VK_NULL_HANDLE;
-        }
+        std::variant<Image, Buffer> actualResource;
     };
 
     class ResourceRegistry {

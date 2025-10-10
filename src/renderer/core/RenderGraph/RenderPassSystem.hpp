@@ -20,23 +20,11 @@ namespace StarryEngine {
         // 资源访问方法将在执行器中实现
     };
 
-    // 资源使用类型
-    struct PassResourceUsage {
-        ResourceHandle resource;
-        VkPipelineStageFlags stageFlags;
-        VkAccessFlags accessFlags;
-        VkImageLayout layout;
-        VkDescriptorType descriptorType;
-        bool isWrite;
-        uint32_t binding = 0;
-        uint32_t descriptorSet = 0;
-    };
-
     class RenderPass {
     private:
         std::string mName;
         ExecuteCallback mExecuteCallback;
-        std::vector<PassResourceUsage> mResourceUsages;
+        std::vector<ResourceUsage> mResourceUsages;
         uint32_t mIndex = 0;
 
         // 编译时确定的资源依赖
@@ -63,7 +51,7 @@ namespace StarryEngine {
         void execute(CommandBuffer* cmdBuffer, RenderContext& context);
 
         const std::string& getName() const { return mName; }
-        const std::vector<PassResourceUsage>& getResourceUsages() const { return mResourceUsages; }
+        const std::vector<ResourceUsage>& getResourceUsages() const { return mResourceUsages; }
         uint32_t getIndex() const { return mIndex; }
         void setIndex(uint32_t index) { mIndex = index; }
 

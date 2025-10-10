@@ -1,7 +1,7 @@
 #pragma once
 #include "RenderGraphTypes.hpp"
 #include "ResourceSystem.hpp"
-#include "RenderPass.hpp"
+#include "RenderPassSystem.hpp"
 #include "RenderGraphAnalyzer.hpp"
 #include "RenderGraphCompiler.hpp"
 #include "RenderGraphExecutor.hpp"
