@@ -18,7 +18,7 @@ namespace StarryEngine {
         resource.description = desc;
         resource.isTransient = desc.isTransient;
 
-        if (desc.type == ResourceType::SampledImage || desc.type == ResourceType::ColorAttachment) {
+        if (desc.type == ResourceType::Texture || desc.type == ResourceType::Attachment) {
             resource.initialState.layout = VK_IMAGE_LAYOUT_UNDEFINED;
             resource.currentState.layout = VK_IMAGE_LAYOUT_UNDEFINED;
         }
@@ -59,11 +59,11 @@ namespace StarryEngine {
             for (uint32_t frameIndex = 0; frameIndex < framesInFlight; ++frameIndex) {
                 bool success = false;
 
-                if (virtualResource.description.type == ResourceType::SampledImage ||
-                    virtualResource.description.type == ResourceType::ColorAttachment) {
+                if (virtualResource.description.type == ResourceType::Texture ||
+                    virtualResource.description.type == ResourceType::Attachment) {
                     success = createImage(handle, frameIndex);
                 }
-                else if (virtualResource.description.type == ResourceType::UniformBuffer) {
+                else if (virtualResource.description.type == ResourceType::Buffer) {
                     success = createBuffer(handle, frameIndex);
                 }
 
@@ -82,12 +82,12 @@ namespace StarryEngine {
                 if (resource.virtualHandle.isValid()) {
                     auto& virtualResource = getVirtualResource(resource.virtualHandle);
 
-                    if (virtualResource.description.type == ResourceType::SampledImage ||
-                        virtualResource.description.type == ResourceType::ColorAttachment) {
+                    if (virtualResource.description.type == ResourceType::Texture ||
+                        virtualResource.description.type == ResourceType::Attachment) {
                         vkDestroyImageView(mDevice, resource.image.defaultView, nullptr);
                         vmaDestroyImage(mAllocator, resource.image.image, resource.allocation);
                     }
-                    else if (virtualResource.description.type == ResourceType::UniformBuffer) {
+                    else if (virtualResource.description.type == ResourceType::Buffer) {
                         vmaDestroyBuffer(mAllocator, resource.buffer.buffer, resource.allocation);
                     }
                 }

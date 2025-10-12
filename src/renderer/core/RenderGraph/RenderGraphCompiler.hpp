@@ -51,7 +51,6 @@ namespace StarryEngine {
         // 获取编译结果
         const std::vector<RenderPassHandle>& getExecutionOrder() const { return mExecutionOrder; }
         const std::unordered_map<RenderPassHandle, BarrierBatch>& getBarriers() const { return mBarriers; }
-
     private:
         VkDevice mDevice;
         VmaAllocator mAllocator;

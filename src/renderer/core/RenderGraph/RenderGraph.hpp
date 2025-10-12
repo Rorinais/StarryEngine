@@ -11,6 +11,10 @@
 
 namespace StarryEngine {
 
+    class RenderGraphExecutor;
+    class DescriptorAllocator;
+    class PipelineCache;
+
     class RenderGraph {
     public:
         RenderGraph(VkDevice device, VmaAllocator allocator);
@@ -36,11 +40,15 @@ namespace StarryEngine {
         // 获取内部组件
         ResourceRegistry& getResourceRegistry() { return mResourceRegistry; }
         const ResourceRegistry& getResourceRegistry() const { return mResourceRegistry; }
+        const RenderGraphCompiler& getCompiler() const { return mCompiler; }
         const std::vector<std::unique_ptr<RenderPass>>& getPasses() const { return mPasses; }
         const std::vector<Dependency>& getDependencies() const { return mDependencies; }
-        const RenderGraphCompiler& getCompiler() const { return mCompiler; }
-		const uint32_t getConcurrentFrame() const { return mConcurrentFrame; }
+        const uint32_t getPassCount() const { return static_cast<uint32_t>(mPasses.size()); }
+        const uint32_t getConcurrentFrame() const { return mConcurrentFrame; }
+        const std::string& getPassName(RenderPassHandle handle) const;
 
+        void exportToDot(const std::string& filename) const;
+        void dumpCompilationInfo() const;
     private:
         VkDevice mDevice;
         VmaAllocator mAllocator;
@@ -51,11 +59,17 @@ namespace StarryEngine {
 
         RenderGraphCompiler mCompiler;
         RenderGraphExecutor mExecutor;
+        std::unique_ptr<DescriptorAllocator> mDescriptorAllocator;
+        std::unique_ptr<PipelineCache> mPipelineCache;
 
         // 编译状态
         bool mIsCompiled = false;
         uint32_t mCurrentFrame = 0;
         uint32_t mConcurrentFrame = 2;
+
+        void initializeInternalComponents();
+        RenderGraph(const RenderGraph&) = delete;
+        RenderGraph& operator=(const RenderGraph&) = delete;
     };
 
 } // namespace StarryEngine

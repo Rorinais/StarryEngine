@@ -3,6 +3,7 @@
 #include "ResourceSystem.hpp"
 #include "RenderPassSystem.hpp"
 #include "RenderGraphCompiler.hpp"
+#include "RenderContext.hpp"
 #include <vector>
 #include <memory>
 
@@ -10,43 +11,14 @@ namespace StarryEngine {
 
     // 前向声明
     class RenderGraph;
-    class CommandBuffer;
-
-    // 渲染上下文实现
-    class RenderContextImpl {
-    public:
-        RenderContextImpl(VkCommandBuffer cmd, uint32_t frame, ResourceRegistry* registry, class RenderGraphExecutor* executor)
-            : commandBuffer(cmd), frameIndex(frame), resourceRegistry(registry), executor(executor) {
-        }
-
-        VkImage getImage(ResourceHandle handle) const;
-        VkBuffer getBuffer(ResourceHandle handle) const;
-        VkImageView getImageView(ResourceHandle handle) const;
-
-        VkDescriptorSet getDescriptorSet(const VkDescriptorSetLayoutCreateInfo& layoutInfo,
-            const std::vector<VkWriteDescriptorSet>& writes);
-
-        VkCommandBuffer commandBuffer;
-        uint32_t frameIndex;
-        ResourceRegistry* resourceRegistry;
-        class RenderGraphExecutor* executor;
-    };
+    class DescriptorAllocator;
+    class PipelineCache;
 
     class RenderGraphExecutor {
-    private:
-        // 每帧数据
-        struct FrameData {
-            std::vector<VkDescriptorSet> descriptorSets;
-        };
-
-        VkDevice mDevice;
-        std::vector<FrameData> mFrameData;
-        uint32_t mCurrentFrame;
-
     public:
-        friend class RenderContextImpl;
-
-        RenderGraphExecutor(VkDevice device);
+        RenderGraphExecutor(VkDevice device,
+            DescriptorAllocator* descriptorAllocator,
+            PipelineCache* pipelineCache);
         ~RenderGraphExecutor();
 
         // 初始化执行器
@@ -58,10 +30,6 @@ namespace StarryEngine {
         // 帧开始和结束
         void beginFrame(uint32_t frameIndex);
         void endFrame(uint32_t frameIndex);
-
-        const FrameData& getFrameData(uint32_t frameIndex) const {
-            return mFrameData[frameIndex];
-        }
 
     private:
         // 执行辅助函数
@@ -76,7 +44,22 @@ namespace StarryEngine {
 
         // 资源绑定
         void bindResources(VkCommandBuffer cmd, const RenderPass& pass,
-            const RenderContextImpl& context, uint32_t frameIndex);
+            const RenderContext& context, uint32_t frameIndex);
+
+        std::unique_ptr<RenderContext> createRenderContext(VkCommandBuffer cmd, uint32_t frameIndex, RenderGraph& graph);
+
+    private:
+        VkDevice mDevice;
+        DescriptorAllocator* mDescriptorAllocator;
+        PipelineCache* mPipelineCache;
+        uint32_t mCurrentFrame = 0;
+
+        struct ExecutionState {
+            std::unique_ptr<RenderContext> context;
+            const std::unordered_map<RenderPassHandle, BarrierBatch>* barriers = nullptr;
+            const std::vector<RenderPassHandle>* executionOrder = nullptr;
+        };
+        ExecutionState mExecutionState;
     };
 
 } // namespace StarryEngine

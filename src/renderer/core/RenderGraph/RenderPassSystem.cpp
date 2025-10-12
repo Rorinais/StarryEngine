@@ -3,7 +3,7 @@
 namespace StarryEngine {
 
     void RenderPass::reads(ResourceHandle resource, VkPipelineStageFlags stages) {
-        PassResourceUsage usage;
+        ResourceUsage usage;
         usage.resource = resource;
         usage.stageFlags = stages;
         usage.accessFlags = VK_ACCESS_SHADER_READ_BIT;
@@ -13,7 +13,7 @@ namespace StarryEngine {
     }
 
     void RenderPass::writes(ResourceHandle resource, VkPipelineStageFlags stages) {
-        PassResourceUsage usage;
+        ResourceUsage usage;
         usage.resource = resource;
         usage.stageFlags = stages;
         usage.accessFlags = VK_ACCESS_SHADER_WRITE_BIT;
@@ -23,7 +23,7 @@ namespace StarryEngine {
     }
 
     void RenderPass::readWrite(ResourceHandle resource, VkPipelineStageFlags stages) {
-        PassResourceUsage usage;
+        ResourceUsage usage;
         usage.resource = resource;
         usage.stageFlags = stages;
         usage.accessFlags = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
@@ -33,7 +33,7 @@ namespace StarryEngine {
     }
 
     void RenderPass::reads(ResourceHandle resource, uint32_t binding, VkDescriptorType type, VkPipelineStageFlags stages) {
-        PassResourceUsage usage;
+        ResourceUsage usage;
         usage.resource = resource;
         usage.stageFlags = stages;
         usage.accessFlags = VK_ACCESS_SHADER_READ_BIT;

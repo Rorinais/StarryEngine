@@ -92,7 +92,7 @@ namespace StarryEngine {
     }
 
     void RenderGraphExecutor::bindResources(VkCommandBuffer cmd, const RenderPass& pass,
-        const RenderContextImpl& context, uint32_t frameIndex) {
+        const RenderContext& context, uint32_t frameIndex) {
         // 这里实现资源绑定逻辑，如描述符集绑定等
         // 简化实现，实际中需要根据pass的资源使用情况来绑定
     }
