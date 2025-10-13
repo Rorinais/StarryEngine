@@ -1,24 +1,27 @@
 #pragma once
 #include <vulkan/vulkan.h>
 #include <vector>
-#include <unordered_map>
 
-class DescriptorAllocator {
-public:
-    DescriptorAllocator(VkDevice device);
-    ~DescriptorAllocator();
+namespace StarryEngine {
 
-    bool initialize();
-    void cleanup();
+    class DescriptorAllocator {
+    public:
+        DescriptorAllocator(VkDevice device);
+        ~DescriptorAllocator();
 
-    VkDescriptorSet allocateDescriptorSet(VkDescriptorSetLayout layout);
-    void resetPools();
+        bool initialize();
+        void cleanup();
 
-private:
-    VkDevice mDevice;
-    VkDescriptorPool mCurrentPool = VK_NULL_HANDLE;
-    std::vector<VkDescriptorPool> mUsedPools;
-    std::vector<VkDescriptorPool> mFreePools;
+        VkDescriptorSet allocateDescriptorSet(VkDescriptorSetLayout layout);
+        void resetPools();
 
-    VkDescriptorPool createPool();
-};
+    private:
+        VkDevice mDevice;
+        VkDescriptorPool mCurrentPool = VK_NULL_HANDLE;
+        std::vector<VkDescriptorPool> mUsedPools;
+        std::vector<VkDescriptorPool> mFreePools;
+
+        VkDescriptorPool createPool();
+    };
+
+} // namespace StarryEngine

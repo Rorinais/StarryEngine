@@ -19,6 +19,15 @@ namespace StarryEngine {
         RenderGraphExecutor(VkDevice device,
             DescriptorAllocator* descriptorAllocator,
             PipelineCache* pipelineCache);
+
+        // 禁止拷贝和赋值
+        RenderGraphExecutor(const RenderGraphExecutor&) = delete;
+        RenderGraphExecutor& operator=(const RenderGraphExecutor&) = delete;
+
+        // 允许移动
+        RenderGraphExecutor(RenderGraphExecutor&&) = default;
+        RenderGraphExecutor& operator=(RenderGraphExecutor&&) = default;
+
         ~RenderGraphExecutor();
 
         // 初始化执行器

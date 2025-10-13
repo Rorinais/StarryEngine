@@ -12,16 +12,32 @@ namespace StarryEngine {
     }
 
     ResourceHandle ResourceRegistry::createVirtualResource(const std::string& name, const ResourceDescription& desc) {
+        // 验证资源描述的有效性
+        if (!desc.isValid()) {
+            std::cerr << "Error: Invalid resource description - cannot create both image and buffer" << std::endl;
+            return ResourceHandle{}; // 返回无效句柄
+        }
+
         VirtualResource resource;
         resource.name = name;
         resource.handle.setId(static_cast<uint32_t>(mVirtualResources.size()));
         resource.description = desc;
         resource.isTransient = desc.isTransient;
 
-        if (desc.type == ResourceType::Texture || desc.type == ResourceType::Attachment) {
+        // 根据资源类型设置初始状态
+        if (desc.isImage()) {
             resource.initialState.layout = VK_IMAGE_LAYOUT_UNDEFINED;
             resource.currentState.layout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+            // 如果是附件，可能需要不同的初始状态
+            if (desc.isAttachment) {
+                // 附件通常初始化为通用布局或颜色附件布局
+                resource.initialState.layout = VK_IMAGE_LAYOUT_UNDEFINED;
+                resource.initialState.accessMask = 0;
+                resource.initialState.stageMask = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+            }
         }
+        // 缓冲区不需要布局设置
 
         mVirtualResources.push_back(std::move(resource));
         return mVirtualResources.back().handle;
@@ -59,11 +75,10 @@ namespace StarryEngine {
             for (uint32_t frameIndex = 0; frameIndex < framesInFlight; ++frameIndex) {
                 bool success = false;
 
-                if (virtualResource.description.type == ResourceType::Texture ||
-                    virtualResource.description.type == ResourceType::Attachment) {
+                if (virtualResource.isImage()) {
                     success = createImage(handle, frameIndex);
                 }
-                else if (virtualResource.description.type == ResourceType::Buffer) {
+                else if (virtualResource.isBuffer()) {
                     success = createBuffer(handle, frameIndex);
                 }
 
@@ -78,19 +93,18 @@ namespace StarryEngine {
 
     void ResourceRegistry::destroyActualResources() {
         for (auto& resource : mActualResources) {
-            if (resource.allocation != VK_NULL_HANDLE) {
-                if (resource.virtualHandle.isValid()) {
-                    auto& virtualResource = getVirtualResource(resource.virtualHandle);
+            if (resource.allocation != VK_NULL_HANDLE && resource.virtualHandle.isValid()) {
+                std::visit([&](auto&& actual_res) {
+                    using T = std::decay_t<decltype(actual_res)>;
 
-                    if (virtualResource.description.type == ResourceType::Texture ||
-                        virtualResource.description.type == ResourceType::Attachment) {
-                        vkDestroyImageView(mDevice, resource.image.defaultView, nullptr);
-                        vmaDestroyImage(mAllocator, resource.image.image, resource.allocation);
+                    if constexpr (std::is_same_v<T, ActualResource::Image>) {
+                        vkDestroyImageView(mDevice, actual_res.defaultView, nullptr);
+                        vmaDestroyImage(mAllocator, actual_res.image, resource.allocation);
                     }
-                    else if (virtualResource.description.type == ResourceType::Buffer) {
-                        vmaDestroyBuffer(mAllocator, resource.buffer.buffer, resource.allocation);
+                    else if constexpr (std::is_same_v<T, ActualResource::Buffer>) {
+                        vmaDestroyBuffer(mAllocator, actual_res.buffer, resource.allocation);
                     }
-                }
+                    }, resource.actualResource);
             }
         }
 
@@ -137,10 +151,14 @@ namespace StarryEngine {
         ActualResource actualResource;
         actualResource.virtualHandle = handle;
         actualResource.frameIndex = 0;
-        actualResource.image.image = image;
-        actualResource.image.defaultView = imageView;
         actualResource.allocation = VK_NULL_HANDLE;
         actualResource.currentState = initialState;
+
+        // 创建 Image 对象并设置到 variant 中
+        ActualResource::Image importedImage;
+        importedImage.image = image;
+        importedImage.defaultView = imageView;
+        actualResource.actualResource = std::move(importedImage); 
 
         uint32_t index = static_cast<uint32_t>(mActualResources.size());
         mActualResources.push_back(std::move(actualResource));
@@ -177,8 +195,11 @@ namespace StarryEngine {
         actualResource.virtualHandle = handle;
         actualResource.frameIndex = frameIndex;
 
+        // 先创建 Image 对象
+        ActualResource::Image newImage;
+
         VkResult result = vmaCreateImage(mAllocator, &imageInfo, &allocInfo,
-            &actualResource.image.image,
+            &newImage.image,
             &actualResource.allocation,
             &actualResource.allocationInfo);
 
@@ -187,7 +208,7 @@ namespace StarryEngine {
         }
 
         VkImageViewCreateInfo viewInfo = { VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO };
-        viewInfo.image = actualResource.image.image;
+        viewInfo.image = newImage.image;
         viewInfo.viewType = desc.arrayLayers > 1 ? VK_IMAGE_VIEW_TYPE_2D_ARRAY : VK_IMAGE_VIEW_TYPE_2D;
         viewInfo.format = desc.format;
         viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -196,12 +217,14 @@ namespace StarryEngine {
         viewInfo.subresourceRange.baseArrayLayer = 0;
         viewInfo.subresourceRange.layerCount = desc.arrayLayers;
 
-        result = vkCreateImageView(mDevice, &viewInfo, nullptr, &actualResource.image.defaultView);
+        result = vkCreateImageView(mDevice, &viewInfo, nullptr, &newImage.defaultView);
         if (result != VK_SUCCESS) {
-            vmaDestroyImage(mAllocator, actualResource.image.image, actualResource.allocation);
+            vmaDestroyImage(mAllocator, newImage.image, actualResource.allocation);
             return false;
         }
 
+        // 将创建好的 Image 对象设置到 variant 中
+        actualResource.actualResource = std::move(newImage);
         actualResource.currentState = virtResource.initialState;
 
         uint32_t index = static_cast<uint32_t>(mActualResources.size());
@@ -227,8 +250,11 @@ namespace StarryEngine {
         actualResource.virtualHandle = handle;
         actualResource.frameIndex = frameIndex;
 
+        // 先创建 Buffer 对象
+        ActualResource::Buffer newBuffer;
+
         VkResult result = vmaCreateBuffer(mAllocator, &bufferInfo, &allocInfo,
-            &actualResource.buffer.buffer,
+            &newBuffer.buffer,
             &actualResource.allocation,
             &actualResource.allocationInfo);
 
@@ -236,6 +262,8 @@ namespace StarryEngine {
             return false;
         }
 
+        // 将创建好的 Buffer 对象设置到 variant 中
+        actualResource.actualResource = std::move(newBuffer);
         actualResource.currentState = virtResource.initialState;
 
         uint32_t index = static_cast<uint32_t>(mActualResources.size());

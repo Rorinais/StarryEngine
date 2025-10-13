@@ -5,15 +5,13 @@
 #include "RenderGraphAnalyzer.hpp"
 #include "RenderGraphCompiler.hpp"
 #include "RenderGraphExecutor.hpp"
+#include "DescriptorAllocator.hpp"
+#include "PipelineCache.hpp"
 #include <memory>
 #include <vector>
 #include <functional>
 
 namespace StarryEngine {
-
-    class RenderGraphExecutor;
-    class DescriptorAllocator;
-    class PipelineCache;
 
     class RenderGraph {
     public:
@@ -21,13 +19,13 @@ namespace StarryEngine {
         ~RenderGraph();
 
         // 构建接口
-        RenderPassHandle addPass(const std::string& name,std::function<void(RenderPass&)> setupCallback);
+        RenderPassHandle addPass(const std::string& name, std::function<void(RenderPass&)> setupCallback);
 
         // 资源管理
         ResourceHandle createResource(const std::string& name, const ResourceDescription& desc);
 
         // 导入外部资源
-        bool importResource(ResourceHandle handle, VkImage image, VkImageView view,ResourceState initialState = { VK_IMAGE_LAYOUT_UNDEFINED });
+        bool importResource(ResourceHandle handle, VkImage image, VkImageView view, ResourceState initialState = { VK_IMAGE_LAYOUT_UNDEFINED });
 
         // 编译和执行
         bool compile();
@@ -43,12 +41,13 @@ namespace StarryEngine {
         const RenderGraphCompiler& getCompiler() const { return mCompiler; }
         const std::vector<std::unique_ptr<RenderPass>>& getPasses() const { return mPasses; }
         const std::vector<Dependency>& getDependencies() const { return mDependencies; }
-        const uint32_t getPassCount() const { return static_cast<uint32_t>(mPasses.size()); }
-        const uint32_t getConcurrentFrame() const { return mConcurrentFrame; }
+        uint32_t getPassCount() const { return static_cast<uint32_t>(mPasses.size()); }
+        uint32_t getConcurrentFrame() const { return mConcurrentFrame; }
         const std::string& getPassName(RenderPassHandle handle) const;
 
         void exportToDot(const std::string& filename) const;
         void dumpCompilationInfo() const;
+
     private:
         VkDevice mDevice;
         VmaAllocator mAllocator;
@@ -58,7 +57,7 @@ namespace StarryEngine {
         std::vector<Dependency> mDependencies;
 
         RenderGraphCompiler mCompiler;
-        RenderGraphExecutor mExecutor;
+        std::unique_ptr<RenderGraphExecutor> mExecutor;  // 改为智能指针
         std::unique_ptr<DescriptorAllocator> mDescriptorAllocator;
         std::unique_ptr<PipelineCache> mPipelineCache;
 

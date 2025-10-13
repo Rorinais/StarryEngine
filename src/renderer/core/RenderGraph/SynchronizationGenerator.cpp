@@ -147,24 +147,25 @@ namespace StarryEngine {
             const auto& actualResource = registry.getActualResource(usage.resource, 0);
 
             // 根据资源类型创建相应的屏障
-            if (virtResource.description.type == ResourceType::SampledImage ||
-                virtResource.description.type == ResourceType::ColorAttachment ||
-                virtResource.description.type == ResourceType::DepthStencilAttachment) {
+            std::visit([&](auto&& actual_res) {
+                using T = std::decay_t<decltype(actual_res)>;
 
-                VkImageMemoryBarrier imageBarrier = createImageBarrier(
-                    actualResource, virtResource, currentState, requiredState);
-                batch.imageBarriers.push_back(imageBarrier);
-                mStats.imageBarriers++;
+                if constexpr (std::is_same_v<T, ActualResource::Image>) {
+                    // 只处理图像资源
+                    VkImageMemoryBarrier imageBarrier = createImageBarrier(
+                        actual_res, virtResource, currentState, requiredState);
+                    batch.imageBarriers.push_back(imageBarrier);
+                    mStats.imageBarriers++;
 
-            }
-            else if (virtResource.description.type == ResourceType::UniformBuffer ||
-                virtResource.description.type == ResourceType::StorageBuffer) {
-
-                VkBufferMemoryBarrier bufferBarrier = createBufferBarrier(
-                    actualResource, virtResource, currentState, requiredState);
-                batch.bufferBarriers.push_back(bufferBarrier);
-                mStats.bufferBarriers++;
-            }
+                }
+                else if constexpr (std::is_same_v<T, ActualResource::Buffer>) {
+                    // 只处理缓冲区资源
+                    VkBufferMemoryBarrier bufferBarrier = createBufferBarrier(
+                        actual_res, virtResource, currentState, requiredState);
+                    batch.bufferBarriers.push_back(bufferBarrier);
+                    mStats.bufferBarriers++;
+                }
+                }, actualResource.actualResource);
 
             // 如果需要内存屏障
             if (currentState.stageMask != requiredState.stageMask &&
@@ -181,7 +182,7 @@ namespace StarryEngine {
     }
 
     VkImageMemoryBarrier SynchronizationGenerator::createImageBarrier(
-        const ActualResource& resource,
+        const ActualResource::Image& imageResource,
         const VirtualResource& virtResource,
         const ResourceState& currentState,
         const ResourceState& requiredState) const {
@@ -193,7 +194,7 @@ namespace StarryEngine {
         barrier.dstAccessMask = requiredState.accessMask;
         barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.image = resource.image.image;
+        barrier.image = imageResource.image;  // 直接从 Image 结构获取
 
         // 设置子资源范围
         barrier.subresourceRange.aspectMask = determineAspectMask(virtResource.description.format);
@@ -206,7 +207,7 @@ namespace StarryEngine {
     }
 
     VkBufferMemoryBarrier SynchronizationGenerator::createBufferBarrier(
-        const ActualResource& resource,
+        const ActualResource::Buffer& bufferResource,
         const VirtualResource& virtResource,
         const ResourceState& currentState,
         const ResourceState& requiredState) const {
@@ -216,7 +217,7 @@ namespace StarryEngine {
         barrier.dstAccessMask = requiredState.accessMask;
         barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.buffer = resource.buffer.buffer;
+        barrier.buffer = bufferResource.buffer;  // 直接从 Buffer 结构获取
         barrier.offset = 0;
         barrier.size = VK_WHOLE_SIZE;
 

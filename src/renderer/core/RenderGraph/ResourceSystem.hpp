@@ -22,10 +22,13 @@ namespace StarryEngine {
         ResourceState initialState;
         ResourceState finalState;
         ResourceState currentState;
+
+        // 添加便捷方法
+        bool isImage() const { return description.isImage(); }
+        bool isBuffer() const { return description.isBuffer(); }
     };
 
     struct ActualResource {
-    private:
         struct Image {
             VkImage image = VK_NULL_HANDLE;
             VkImageView defaultView = VK_NULL_HANDLE;
@@ -34,7 +37,6 @@ namespace StarryEngine {
             VkBuffer buffer = VK_NULL_HANDLE;
         };
 
-    public:
         ResourceHandle virtualHandle;
         ResourceState currentState;
         uint32_t frameIndex = 0;

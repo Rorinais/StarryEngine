@@ -1,23 +1,29 @@
 #include "RenderGraphExecutor.hpp"
 #include "RenderGraph.hpp"
+#include "RenderContext.hpp"
+#include "DescriptorAllocator.hpp" // Added this line
+#include "PipelineCache.hpp"
 #include <cassert>
 
 namespace StarryEngine {
 
-    RenderGraphExecutor::RenderGraphExecutor(VkDevice device)
-        : mDevice(device), mCurrentFrame(0) {
+    RenderGraphExecutor::RenderGraphExecutor(VkDevice device,
+        DescriptorAllocator* descriptorAllocator,
+        PipelineCache* pipelineCache)
+        : mDevice(device),
+        mDescriptorAllocator(descriptorAllocator),
+        mPipelineCache(pipelineCache),
+        mCurrentFrame(0) {
     }
 
     RenderGraphExecutor::~RenderGraphExecutor() {
-        // 清理每帧数据
-        for (auto& frameData : mFrameData) {
-            // 清理描述符集等资源
-            // 注意：实际应用中需要正确释放Vulkan资源
-        }
+        // 清理执行状态
+        mExecutionState.context.reset();
     }
 
     bool RenderGraphExecutor::initialize(uint32_t framesInFlight) {
-        mFrameData.resize(framesInFlight);
+        mCurrentFrame = 0;
+        // 可以在这里初始化每帧数据
         return true;
     }
 
@@ -25,59 +31,75 @@ namespace StarryEngine {
         mCurrentFrame = frameIndex;
 
         // 获取编译结果
-        const auto& compiler = graph.getCompiler();
-        const auto& executionOrder = compiler.getExecutionOrder();
-        const auto& barriers = compiler.getBarriers();
+        const auto& executionOrder = graph.getCompiler().getExecutionOrder();
+        const auto& barriers = graph.getCompiler().getBarriers();
 
         // 创建渲染上下文
-        RenderContextImpl context(cmd, frameIndex, &graph.getResourceRegistry(), this);
+        auto context = createRenderContext(cmd, frameIndex, graph);
+        if (!context) {
+            return;
+        }
+
+        mExecutionState.context = std::move(context);
+        mExecutionState.barriers = &barriers;
+        mExecutionState.executionOrder = &executionOrder;
 
         // 按顺序执行每个pass
         for (RenderPassHandle passHandle : executionOrder) {
-            // 插入屏障
-            auto it = barriers.find(passHandle);
-            if (it != barriers.end() && !it->second.empty()) {
-                insertBarriers(cmd, passHandle, it->second);
-            }
-
-            // 执行pass
             executePass(graph, passHandle, cmd, frameIndex);
         }
+
+        // 清理执行状态
+        mExecutionState.context.reset();
+        mExecutionState.barriers = nullptr;
+        mExecutionState.executionOrder = nullptr;
     }
 
     void RenderGraphExecutor::beginFrame(uint32_t frameIndex) {
         mCurrentFrame = frameIndex;
-
-        // 重置每帧数据
-        mFrameData[frameIndex].descriptorSets.clear();
+        if (mExecutionState.context) {
+            mExecutionState.context->beginFrame();
+        }
     }
 
     void RenderGraphExecutor::endFrame(uint32_t frameIndex) {
-        // 清理临时资源等
+        if (mExecutionState.context) {
+            mExecutionState.context->endFrame();
+        }
     }
 
     void RenderGraphExecutor::executePass(RenderGraph& graph, RenderPassHandle passHandle,
         VkCommandBuffer cmd, uint32_t frameIndex) {
+
         const auto& passes = graph.getPasses();
+
+        // 边界检查
+        if (passHandle.getId() >= passes.size()) {
+            return;
+        }
+
         const auto& pass = passes[passHandle.getId()];
 
-        // 创建渲染上下文
-        RenderContextImpl context(cmd, frameIndex, &graph.getResourceRegistry(), this);
-
-        // 绑定资源
-        bindResources(cmd, *pass, context, frameIndex);
+        // 插入屏障
+        auto barrierIt = mExecutionState.barriers->find(passHandle);
+        if (barrierIt != mExecutionState.barriers->end() && !barrierIt->second.empty()) {
+            insertBarriers(cmd, passHandle, barrierIt->second);
+        }
 
         // 执行pass
-        CommandBuffer* cmdBuffer = nullptr; // 需要实际的CommandBuffer实现
-        RenderContext renderContext;
-        renderContext.commandBuffer = cmdBuffer;
-        renderContext.frameIndex = frameIndex;
-
-        pass->execute(cmdBuffer, renderContext);
+        if (mExecutionState.context) {
+            pass->execute(nullptr, *mExecutionState.context);
+        }
     }
 
     void RenderGraphExecutor::insertBarriers(VkCommandBuffer cmd, RenderPassHandle passHandle,
         const BarrierBatch& barriers) {
+
+        if (barriers.empty()) {
+            return;
+        }
+
+        // 确定管线阶段掩码
         VkPipelineStageFlags srcStageMask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
         VkPipelineStageFlags dstStageMask = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
 
@@ -85,80 +107,48 @@ namespace StarryEngine {
             cmd,
             srcStageMask, dstStageMask,
             0,
-            static_cast<uint32_t>(barriers.memoryBarriers.size()), barriers.memoryBarriers.data(),
-            static_cast<uint32_t>(barriers.bufferBarriers.size()), barriers.bufferBarriers.data(),
-            static_cast<uint32_t>(barriers.imageBarriers.size()), barriers.imageBarriers.data()
+            static_cast<uint32_t>(barriers.memoryBarriers.size()),
+            barriers.memoryBarriers.empty() ? nullptr : barriers.memoryBarriers.data(),
+            static_cast<uint32_t>(barriers.bufferBarriers.size()),
+            barriers.bufferBarriers.empty() ? nullptr : barriers.bufferBarriers.data(),
+            static_cast<uint32_t>(barriers.imageBarriers.size()),
+            barriers.imageBarriers.empty() ? nullptr : barriers.imageBarriers.data()
         );
     }
 
+    std::unique_ptr<RenderContext> RenderGraphExecutor::createRenderContext(
+        VkCommandBuffer cmd, uint32_t frameIndex, RenderGraph& graph) {
+
+        return std::make_unique<RenderContext>(
+            mDevice,
+            cmd,
+            frameIndex,
+            &graph.getResourceRegistry(),
+            mDescriptorAllocator,
+            mPipelineCache
+        );
+    }
+
+    // 以下方法不再需要，因为功能已经在RenderContext中实现
     void RenderGraphExecutor::bindResources(VkCommandBuffer cmd, const RenderPass& pass,
         const RenderContext& context, uint32_t frameIndex) {
-        // 这里实现资源绑定逻辑，如描述符集绑定等
-        // 简化实现，实际中需要根据pass的资源使用情况来绑定
+        // 资源绑定现在在RenderContext中处理
     }
 
     VkDescriptorSet RenderGraphExecutor::allocateDescriptorSet(VkDescriptorSetLayout layout) {
-        // 简化的描述符集分配
-        // 实际中应该使用描述符池
+        if (mDescriptorAllocator) {
+            return mDescriptorAllocator->allocateDescriptorSet(layout);
 
-        VkDescriptorSetAllocateInfo allocInfo{};
-        allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        allocInfo.descriptorPool = VK_NULL_HANDLE; // 需要实际的描述符池
-        allocInfo.descriptorSetCount = 1;
-        allocInfo.pSetLayouts = &layout;
-
-        VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
-        VkResult result = vkAllocateDescriptorSets(mDevice, &allocInfo, &descriptorSet);
-
-        if (result == VK_SUCCESS) {
-            // 存储到当前帧数据中
-            mFrameData[mCurrentFrame].descriptorSets.push_back(descriptorSet);
         }
-
-        return descriptorSet;
+        return VK_NULL_HANDLE;
     }
 
     void RenderGraphExecutor::updateDescriptorSets(const std::vector<VkWriteDescriptorSet>& writes) {
-        vkUpdateDescriptorSets(mDevice,
-            static_cast<uint32_t>(writes.size()), writes.data(),
-            0, nullptr);
-    }
-
-    VkImage RenderContextImpl::getImage(ResourceHandle handle) const {
-        auto& actualResource = resourceRegistry->getActualResource(handle, frameIndex);
-        return actualResource.image.image;
-    }
-
-    VkBuffer RenderContextImpl::getBuffer(ResourceHandle handle) const {
-        auto& actualResource = resourceRegistry->getActualResource(handle, frameIndex);
-        return actualResource.buffer.buffer;
-    }
-
-    VkImageView RenderContextImpl::getImageView(ResourceHandle handle) const {
-        auto& actualResource = resourceRegistry->getActualResource(handle, frameIndex);
-        return actualResource.image.defaultView;
-    }
-
-    VkDescriptorSet RenderContextImpl::getDescriptorSet(const VkDescriptorSetLayoutCreateInfo& layoutInfo,
-        const std::vector<VkWriteDescriptorSet>& writes) {
-        // 创建或获取描述符集布局
-        VkDescriptorSetLayout layout = VK_NULL_HANDLE;
-        VkResult result = vkCreateDescriptorSetLayout(executor->mDevice, &layoutInfo, nullptr, &layout);
-        if (result != VK_SUCCESS) {
-            return VK_NULL_HANDLE;
+        if (!writes.empty()) {
+            vkUpdateDescriptorSets(mDevice,
+                static_cast<uint32_t>(writes.size()), writes.data(),
+                0, nullptr);
         }
-
-        // 分配描述符集
-        VkDescriptorSet descriptorSet = executor->allocateDescriptorSet(layout);
-
-        // 更新描述符集
-        std::vector<VkWriteDescriptorSet> updatedWrites = writes;
-        for (auto& write : updatedWrites) {
-            write.dstSet = descriptorSet;
-        }
-        executor->updateDescriptorSets(updatedWrites);
-
-        return descriptorSet;
     }
 
 } // namespace StarryEngine

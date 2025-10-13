@@ -104,17 +104,31 @@ namespace StarryEngine {
                 bool lifetimesOverlap = (lifetime1.firstUse <= lifetime2.lastUse) &&
                     (lifetime2.firstUse <= lifetime1.lastUse);
 
-                // 检查内存兼容性
-                bool memoryCompatible = (resource1.description.size == resource2.description.size) &&
-                    (resource1.description.type == resource2.description.type);
+                // 直接使用 ResourceDescription 的 operator== 检查兼容性
+                bool memoryCompatible = (resource1.description == resource2.description);
 
                 if (!lifetimesOverlap && memoryCompatible) {
                     // 创建别名组或添加到现有组
                     bool foundGroup = false;
                     for (auto& group : aliasGroups) {
-                        if (group.canAlias && group.requiredSize == resource1.description.size) {
-                            group.resources.push_back(lifetime1.resource);
-                            group.resources.push_back(lifetime2.resource);
+                        // 检查是否与组内所有资源兼容
+                        bool compatibleWithGroup = true;
+                        for (const auto& existingHandle : group.resources) {
+                            const auto& existingResource = resources[existingHandle.getId()];
+                            if (!(resource1.description == existingResource.description)) {
+                                compatibleWithGroup = false;
+                                break;
+                            }
+                        }
+
+                        if (compatibleWithGroup) {
+                            // 确保资源不在组中
+                            if (std::find(group.resources.begin(), group.resources.end(), lifetime1.resource) == group.resources.end()) {
+                                group.resources.push_back(lifetime1.resource);
+                            }
+                            if (std::find(group.resources.begin(), group.resources.end(), lifetime2.resource) == group.resources.end()) {
+                                group.resources.push_back(lifetime2.resource);
+                            }
                             foundGroup = true;
                             break;
                         }
@@ -123,7 +137,16 @@ namespace StarryEngine {
                     if (!foundGroup) {
                         ResourceAliasGroup newGroup;
                         newGroup.resources = { lifetime1.resource, lifetime2.resource };
-                        newGroup.requiredSize = resource1.description.size;
+
+                        // 计算所需大小
+                        if (resource1.description.isImage()) {
+                            // 对于图像，使用估算的大小
+                            newGroup.requiredSize = estimateImageSize(resource1.description);
+                        }
+                        else {
+                            newGroup.requiredSize = resource1.description.size;
+                        }
+
                         newGroup.canAlias = true;
                         aliasGroups.push_back(newGroup);
                     }
@@ -132,6 +155,19 @@ namespace StarryEngine {
         }
 
         return aliasGroups;
+    }
+
+    // 辅助函数 - 估算图像大小
+    size_t estimateImageSize(const ResourceDescription& desc) {
+        if (!desc.isImage()) return 0;
+
+        // 简化的图像大小估算
+        // 实际应用中应该根据格式、mip级别等精确计算
+        size_t pixelSize = 4; // 假设每个像素4字节
+        size_t totalPixels = desc.extent.width * desc.extent.height * desc.extent.depth;
+        size_t totalLayers = desc.arrayLayers * desc.mipLevels;
+
+        return totalPixels * pixelSize * totalLayers;
     }
 
     bool RenderGraphAnalyzer::validateGraph(const std::vector<Dependency>& dependencies, uint32_t passCount) const {
@@ -261,6 +297,16 @@ namespace StarryEngine {
 
     void RenderGraphAnalyzer::dumpGraphInfo(const RenderGraphAnalysisResult& result) const {
         // 调试信息输出
+        std::cout << "=== Render Graph Analysis Result ===" << std::endl;
+        std::cout << "Has cycles: " << (result.hasCycles ? "Yes" : "No") << std::endl;
+        std::cout << "Execution order: ";
+        for (const auto& handle : result.executionOrder) {
+            std::cout << handle.getId() << " ";
+        }
+        std::cout << std::endl;
+        std::cout << "Dependencies: " << result.dependencies.size() << std::endl;
+        std::cout << "Unused resources: " << result.unusedResources.size() << std::endl;
+        std::cout << "Debug info: " << result.debugInfo << std::endl;
     }
 
 } // namespace StarryEngine

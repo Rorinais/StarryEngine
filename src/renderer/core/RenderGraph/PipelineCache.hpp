@@ -3,26 +3,30 @@
 #include <string>
 #include <unordered_map>
 
-class PipelineCache {
-public:
-    PipelineCache(VkDevice device);
-    ~PipelineCache();
+namespace StarryEngine {
 
-    bool initialize();
-    void cleanup();
+    class PipelineCache {
+    public:
+        PipelineCache(VkDevice device);
+        ~PipelineCache();
 
-    VkPipeline getGraphicsPipeline(const std::string& name);
-    VkPipeline getComputePipeline(const std::string& name);
-    VkPipelineLayout getPipelineLayout(const std::string& name);
+        bool initialize();
+        void cleanup();
 
-    bool registerGraphicsPipeline(const std::string& name, const VkGraphicsPipelineCreateInfo& createInfo);
-    bool registerComputePipeline(const std::string& name, const VkComputePipelineCreateInfo& createInfo);
+        VkPipeline getGraphicsPipeline(const std::string& name);
+        VkPipeline getComputePipeline(const std::string& name);
+        VkPipelineLayout getPipelineLayout(const std::string& name);
 
-private:
-    VkDevice mDevice;
-    VkPipelineCache mPipelineCache = VK_NULL_HANDLE;
+        bool registerGraphicsPipeline(const std::string& name, const VkGraphicsPipelineCreateInfo& createInfo);
+        bool registerComputePipeline(const std::string& name, const VkComputePipelineCreateInfo& createInfo);
 
-    std::unordered_map<std::string, VkPipeline> mGraphicsPipelines;
-    std::unordered_map<std::string, VkPipeline> mComputePipelines;
-    std::unordered_map<std::string, VkPipelineLayout> mPipelineLayouts;
-};
+    private:
+        VkDevice mDevice;
+        VkPipelineCache mPipelineCache = VK_NULL_HANDLE;
+
+        std::unordered_map<std::string, VkPipeline> mGraphicsPipelines;
+        std::unordered_map<std::string, VkPipeline> mComputePipelines;
+        std::unordered_map<std::string, VkPipelineLayout> mPipelineLayouts;
+    };
+
+} // namespace StarryEngine

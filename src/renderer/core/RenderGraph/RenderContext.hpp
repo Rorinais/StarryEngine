@@ -7,11 +7,11 @@
 #include <string>
 #include <memory>
 
-class DescriptorAllocator;
-class PipelineCache;
-class CommandBuffer;
-
 namespace StarryEngine{
+    class DescriptorAllocator;
+    class PipelineCache;
+    class CommandBuffer;
+
     class RenderContext {
     public:
         RenderContext(VkDevice device, VkCommandBuffer cmd, uint32_t frameIndex,
@@ -81,9 +81,9 @@ namespace StarryEngine{
         void uploadToTemporary(ResourceHandle handle, const void* data, size_t size);
 
         // 获取底层对象
-        VkCommandBuffer getCommandBuffer() const { return m_CommandBuffer; }
-        uint32_t getFrameIndex() const { return m_FrameIndex; }
-        VkDevice getDevice() const { return m_Device; }
+        VkCommandBuffer getCommandBuffer() const { return mCommandBuffer; }
+        uint32_t getFrameIndex() const { return mFrameIndex; }
+        VkDevice getDevice() const { return mDevice; }
 
         // 生命周期管理
         void beginFrame();

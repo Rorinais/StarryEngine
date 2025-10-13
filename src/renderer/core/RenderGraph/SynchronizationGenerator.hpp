@@ -95,13 +95,13 @@ namespace StarryEngine {
 
         // 单个屏障创建方法
         VkImageMemoryBarrier createImageBarrier(
-            const ActualResource& resource,
+            const ActualResource::Image& imageResource,  // 改为接受具体的 Image 结构
             const VirtualResource& virtResource,
             const ResourceState& currentState,
             const ResourceState& requiredState) const;
 
         VkBufferMemoryBarrier createBufferBarrier(
-            const ActualResource& resource,
+            const ActualResource::Buffer& bufferResource,  // 改为接受具体的 Buffer 结构
             const VirtualResource& virtResource,
             const ResourceState& currentState,
             const ResourceState& requiredState) const;
@@ -131,5 +131,4 @@ namespace StarryEngine {
         std::string resourceStateToString(const ResourceState& state) const;
         std::string imageLayoutToString(VkImageLayout layout) const;
     };
-
 } // namespace StarryEngine
