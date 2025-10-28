@@ -40,7 +40,9 @@ namespace StarryEngine {
     }
 
     RenderPassHandle RenderGraph::addPass(const std::string& name, std::function<void(RenderPass&)> setupCallback) {
-        auto pass = std::make_unique<RenderPass>(name);
+        auto pass = std::make_unique<RenderPass>();
+        pass->setName(name); 
+
         setupCallback(*pass);
 
         RenderPassHandle handle;

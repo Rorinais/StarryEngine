@@ -30,6 +30,9 @@ namespace StarryEngine {
         deviceConfig.wideLines = VK_TRUE;
         logicalDevice = LogicalDevice::create(physicalDevice, deviceConfig);
 
+        // 创建VMA分配器
+        createAllocator();
+
         mInitialized = true;
     }
 
@@ -38,6 +41,12 @@ namespace StarryEngine {
     }
 
     void VulkanCore::cleanup() {
+        // 先销毁VMA分配器
+        if (mAllocator != VK_NULL_HANDLE) {
+            vmaDestroyAllocator(mAllocator);
+            mAllocator = VK_NULL_HANDLE;
+        }
+
         logicalDevice.reset();
         physicalDevice.reset();
         vulkanDebug.reset();
@@ -57,6 +66,22 @@ namespace StarryEngine {
             nullptr,
             &mSurface) != VK_SUCCESS) {
             throw std::runtime_error("Failed to create window surface!");
+        }
+    }
+
+    void VulkanCore::createAllocator() {
+        VmaAllocatorCreateInfo allocatorInfo = {};
+        allocatorInfo.vulkanApiVersion = VK_API_VERSION_1_3;
+        allocatorInfo.physicalDevice = physicalDevice->getHandle();
+        allocatorInfo.device = logicalDevice->getHandle();
+        allocatorInfo.instance = instance->getHandle();
+
+        // 可选：设置VMA特性
+        allocatorInfo.flags = 0;
+
+        VkResult result = vmaCreateAllocator(&allocatorInfo, &mAllocator);
+        if (result != VK_SUCCESS) {
+            throw std::runtime_error("Failed to create VMA allocator!");
         }
     }
 }

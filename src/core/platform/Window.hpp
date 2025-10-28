@@ -30,6 +30,8 @@ namespace StarryEngine {
         ~Window();
 
         GLFWwindow* getHandle() const noexcept { return mWindow; }
+		uint16_t getWidth() const noexcept { return mConfig.width; }
+		uint16_t getHeight() const noexcept { return mConfig.height; }
 
         void setResizeCallback(ResizeCallback callback);
         void setKeyCallback(KeyCallback callback);

@@ -17,12 +17,15 @@ namespace StarryEngine {
 
         vkDeviceWaitIdle(mVulkanCore->getLogicalDeviceHandle());
         cleanupSyncObjects();
-        mRenderGraph.reset();
+        mRenderGraph.reset();  // shared_ptr会自动管理
     }
 
-    void VulkanRenderer::setRenderGraph(RenderGraph renderGraph) {
+    void VulkanRenderer::setRenderGraph(std::shared_ptr<RenderGraph> renderGraph) {
         mRenderGraph = renderGraph;
-        mRenderGraph->compile(mVulkanCore, mWindowContext);
+        // 新的RenderGraph需要编译
+        if (mRenderGraph) {
+            mRenderGraph->compile();
+        }
     }
 
     void VulkanRenderer::createSyncObjects() {
@@ -66,6 +69,11 @@ namespace StarryEngine {
         else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
             throw std::runtime_error("Failed to acquire swap chain image!");
         }
+
+        // 新的RenderGraph帧开始
+        if (mRenderGraph) {
+            mRenderGraph->beginFrame();
+        }
     }
 
     void VulkanRenderer::renderFrame() {
@@ -73,9 +81,9 @@ namespace StarryEngine {
         ctx.mainCommandBuffer->reset();
         ctx.mainCommandBuffer->begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
 
-        // 执行Render Graph
+        // 执行新的Render Graph
         if (mRenderGraph) {
-            mRenderGraph->execute(ctx.mainCommandBuffer, mImageIndex, mCurrentFrame);
+            mRenderGraph->execute(ctx.mainCommandBuffer->getHandle(), mCurrentFrame);
         }
 
         ctx.mainCommandBuffer->end();
@@ -102,6 +110,11 @@ namespace StarryEngine {
     }
 
     void VulkanRenderer::endFrame() {
+        // 新的RenderGraph帧结束
+        if (mRenderGraph) {
+            mRenderGraph->endFrame();
+        }
+
         VkSemaphore signalSemaphores[] = { mFrameContexts[mCurrentFrame].renderFinishedSemaphore->getHandle() };
 
         VkPresentInfoKHR presentInfo{};
@@ -131,13 +144,10 @@ namespace StarryEngine {
         vkDeviceWaitIdle(mVulkanCore->getLogicalDeviceHandle());
         mWindowContext->recreateSwapchain();
 
+        // 新的RenderGraph可能需要重新编译或更新资源
         if (mRenderGraph) {
-            try {
-                mRenderGraph->onSwapchainRecreated();
-            }
-            catch (const std::exception& e) {
-                throw std::runtime_error("RenderGraph swapchain recreation failed: " + std::string(e.what()));
-            }
+            // 这里可能需要重新导入交换链资源
+            // 具体实现取决于您的ResourceSystem设计
         }
     }
 }

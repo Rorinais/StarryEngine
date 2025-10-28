@@ -34,12 +34,6 @@ namespace StarryEngine{
         VkDescriptorSet getOrCreateDescriptorSet(const std::string& key,
             const std::vector<VkDescriptorSetLayoutBinding>& bindings,
             const std::vector<VkWriteDescriptorSet>& writes);
-        // 描述符管理
-        VkDescriptorSet createDescriptorSet(const std::vector<VkDescriptorSetLayoutBinding>& bindings,
-            const std::vector<VkWriteDescriptorSet>& writes);
-        VkDescriptorSet getOrCreateDescriptorSet(const std::string& key,
-            const std::vector<VkDescriptorSetLayoutBinding>& bindings,
-            const std::vector<VkWriteDescriptorSet>& writes);
 
         // 管线状态管理
         void bindGraphicsPipeline(const std::string& pipelineName);

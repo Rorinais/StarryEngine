@@ -6,6 +6,18 @@
 #include "RenderGraphAnalyzer.hpp"
 
 namespace StarryEngine {
+    // 辅助函数 - 估算图像大小
+    size_t estimateImageSize(const ResourceDescription& desc) {
+        if (!desc.isImage()) return 0;
+
+        // 简化的图像大小估算
+        // 实际应用中应该根据格式、mip级别等精确计算
+        size_t pixelSize = 4; // 假设每个像素4字节
+        size_t totalPixels = desc.extent.width * desc.extent.height * desc.extent.depth;
+        size_t totalLayers = desc.arrayLayers * desc.mipLevels;
+
+        return totalPixels * pixelSize * totalLayers;
+    }
 
     RenderGraphAnalysisResult RenderGraphAnalyzer::analyzeGraph(
         const std::vector<std::unique_ptr<RenderPass>>& passes,
@@ -157,18 +169,6 @@ namespace StarryEngine {
         return aliasGroups;
     }
 
-    // 辅助函数 - 估算图像大小
-    size_t estimateImageSize(const ResourceDescription& desc) {
-        if (!desc.isImage()) return 0;
-
-        // 简化的图像大小估算
-        // 实际应用中应该根据格式、mip级别等精确计算
-        size_t pixelSize = 4; // 假设每个像素4字节
-        size_t totalPixels = desc.extent.width * desc.extent.height * desc.extent.depth;
-        size_t totalLayers = desc.arrayLayers * desc.mipLevels;
-
-        return totalPixels * pixelSize * totalLayers;
-    }
 
     bool RenderGraphAnalyzer::validateGraph(const std::vector<Dependency>& dependencies, uint32_t passCount) const {
         return !detectCycles(dependencies, passCount);

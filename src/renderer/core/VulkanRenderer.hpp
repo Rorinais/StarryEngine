@@ -2,7 +2,7 @@
 #include "VulkanCore/VulkanCore.hpp"
 #include "WindowContext/WindowContext.hpp"
 #include "FrameContext/FrameContext.hpp"
-#include "RenderGraph/RenderGraph.hpp"
+#include "RenderGraph/RenderGraph.hpp"  // 包含新的RenderGraph头文件
 
 namespace StarryEngine {
     class VulkanRenderer {
@@ -17,8 +17,8 @@ namespace StarryEngine {
         void init(VulkanCore::Ptr vulkanCore, WindowContext::Ptr windowContext);
         void shutdown();
 
-        void setRenderGraph(RenderGraph renderGraph);
-        RenderGraph getRenderGraph() const { return mRenderGraph; }
+        void setRenderGraph(std::shared_ptr<RenderGraph> renderGraph);  // 改为shared_ptr
+        std::shared_ptr<RenderGraph> getRenderGraph() const { return mRenderGraph; }
 
         void beginFrame();
         void renderFrame();
@@ -34,11 +34,11 @@ namespace StarryEngine {
 
         VulkanCore::Ptr mVulkanCore;
         WindowContext::Ptr mWindowContext;
-        RenderGraph mRenderGraph;
+        std::shared_ptr<RenderGraph> mRenderGraph;  // 改为shared_ptr
 
         std::vector<FrameContext> mFrameContexts;
         uint32_t mCurrentFrame = 0;
         uint32_t mImageIndex = 0;
         bool mFramebufferResized = false;
     };
-}
+};

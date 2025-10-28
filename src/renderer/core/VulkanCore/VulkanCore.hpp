@@ -4,11 +4,12 @@
 #include "logicalDevice.hpp"
 #include "physicalDevice.hpp"
 #include "vulkanDebug.hpp"
+#include "vk_mem_alloc.h"  // 添加VMA头文件
 
 namespace StarryEngine {
     const int MAX_FRAMES_IN_FLIGHT = 2;
 
-    class WindowContext; 
+    class WindowContext;
 
     class VulkanCore {
     public:
@@ -33,10 +34,13 @@ namespace StarryEngine {
 
         VkSurfaceKHR getSurface() const { return mSurface; }
 
+        // 添加VMA分配器相关方法
+        VmaAllocator getAllocator() const { return mAllocator; }
         bool isInitialized() const;
 
     private:
         void createSurface(Window::Ptr window);
+        void createAllocator();  // 创建VMA分配器
 
         bool mInitialized = false;
         Instance::Ptr instance;
@@ -45,5 +49,6 @@ namespace StarryEngine {
         VulkanDebug::Ptr vulkanDebug;
 
         VkSurfaceKHR mSurface = VK_NULL_HANDLE;
+        VmaAllocator mAllocator = VK_NULL_HANDLE;  // VMA分配器
     };
 }
