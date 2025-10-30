@@ -35,6 +35,9 @@ namespace StarryEngine{
             const std::vector<VkDescriptorSetLayoutBinding>& bindings,
             const std::vector<VkWriteDescriptorSet>& writes);
 
+        void beginRenderPass(VkCommandBuffer commandBuffer,const VkRenderPassBeginInfo* renderPassBeginInfo, VkSubpassContents subpassContents);
+        void endRenderPass(VkCommandBuffer commandBuffer);
+
         // 管线状态管理
         void bindGraphicsPipeline(const std::string& pipelineName);
         void bindComputePipeline(const std::string& pipelineName);

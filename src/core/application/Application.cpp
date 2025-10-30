@@ -83,7 +83,7 @@ namespace StarryEngine {
 
         auto depthAttachment = renderGraph->createResource("DepthAttachment",
             createAttachmentDescription(
-                VK_FORMAT_D32_SFLOAT, // 确保这个格式在您的系统上受支持
+                VK_FORMAT_D32_SFLOAT, 
                 { window->getWidth(), window->getHeight(), 1 },
                 VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT
             )
@@ -103,12 +103,10 @@ namespace StarryEngine {
             pass.declareWrite(depthAttachment, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT);
             pass.declareRead(cameraUBO, 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT);
 
-            // 设置执行回调 - 使用RenderContext简化代码
             pass.setExecutionLogic([this, colorAttachment, depthAttachment](CommandBuffer* cmdBuffer, RenderContext& context) {
-                // 开始渲染通道
                 VkRenderPassBeginInfo renderPassInfo{};
                 renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-                renderPassInfo.renderPass = mGeometryRenderPass; // 预先创建的VkRenderPass
+                renderPassInfo.renderPass = mGeometryRenderPass; 
                 renderPassInfo.framebuffer = mGeometryFramebuffers[context.getFrameIndex()];
                 renderPassInfo.renderArea.offset = { 0, 0 };
                 renderPassInfo.renderArea.extent = { mWidth, mHeight };
@@ -119,7 +117,8 @@ namespace StarryEngine {
                 renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
                 renderPassInfo.pClearValues = clearValues.data();
 
-                vkCmdBeginRenderPass(cmdBuffer->getHandle(), &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+				// 开始渲染通道
+                context.beginRenderPass(cmdBuffer->getHandle(), &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
                 // 使用RenderContext绑定管线
                 context.bindGraphicsPipeline("GeometryPipeline");
@@ -151,7 +150,7 @@ namespace StarryEngine {
                 context.drawIndexed(mMesh.getIndexCount(), 1, 0, 0, 0);
 
                 // 结束渲染通道
-                vkCmdEndRenderPass(cmdBuffer->getHandle());
+                context.endRenderPass(cmdBuffer->getHandle());
                 });
             });
 
