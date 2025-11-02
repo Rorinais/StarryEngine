@@ -1,16 +1,7 @@
-#include "IVulkanBackend.h"
-#include "IResourceManager.h"
-#include "VulkanCore/VulkanCore.hpp"
-#include "WindowContext/WindowContext.hpp"
-#include "FrameContext/FrameContext.hpp"
+#include "SimpleVulkanBackend.hpp"
 
 namespace StarryEngine {
-
-    class SimpleVulkanBackend : public IVulkanBackend {
-    public:
-        SimpleVulkanBackend() = default;
-
-        bool initialize(VulkanCore::Ptr core, WindowContext::Ptr window) override {
+        bool SimpleVulkanBackend::initialize(VulkanCore::Ptr core, WindowContext::Ptr window) {
             mVulkanCore = core;
             mWindowContext = window;
 
@@ -21,11 +12,11 @@ namespace StarryEngine {
             return true;
         }
 
-        void shutdown() override {
+        void SimpleVulkanBackend::shutdown() {
             cleanupSyncObjects();
         }
 
-        void beginFrame() override {
+        void SimpleVulkanBackend::beginFrame() {
             mCurrentFrameContext = &mFrameContexts[mCurrentFrame];
 
             // 等待上一帧完成
@@ -57,11 +48,11 @@ namespace StarryEngine {
             mCurrentFrameContext->mainCommandBuffer->begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
         }
 
-        VkCommandBuffer getCommandBuffer() override {
+        VkCommandBuffer SimpleVulkanBackend::getCommandBuffer() {
             return mCurrentFrameContext->mainCommandBuffer->getHandle();
         }
 
-        void submitFrame() override {
+        void SimpleVulkanBackend::submitFrame(){
             if (!mFrameInProgress) return;
 
             auto& ctx = *mCurrentFrameContext;
@@ -115,11 +106,11 @@ namespace StarryEngine {
             mCurrentFrame = (mCurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
         }
 
-        void setResourceManager(IResourceManager* manager) override {
+        void SimpleVulkanBackend::setResourceManager(IResourceManager* manager) {
             mResourceManager = manager;
         }
 
-        void onSwapchainRecreated() override {
+        void SimpleVulkanBackend::onSwapchainRecreated() {
             vkDeviceWaitIdle(mVulkanCore->getLogicalDeviceHandle());
             mWindowContext->recreateSwapchain();
 
@@ -128,16 +119,14 @@ namespace StarryEngine {
             }
         }
 
-        uint32_t getCurrentFrameIndex() const override {
+        uint32_t SimpleVulkanBackend::getCurrentFrameIndex() const {
             return mCurrentFrame;
         }
 
-        bool isFrameInProgress() const override {
+        bool SimpleVulkanBackend::isFrameInProgress() const {
             return mFrameInProgress;
         }
-
-    private:
-        bool createSyncObjects() {
+        bool SimpleVulkanBackend::createSyncObjects() {
             mFrameContexts.resize(MAX_FRAMES_IN_FLIGHT);
 
             for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
@@ -160,7 +149,7 @@ namespace StarryEngine {
             return true;
         }
 
-        void cleanupSyncObjects() {
+        void SimpleVulkanBackend::cleanupSyncObjects() {
             for (auto& frame : mFrameContexts) {
                 frame.imageAvailableSemaphore.reset();
                 frame.renderFinishedSemaphore.reset();
@@ -169,17 +158,5 @@ namespace StarryEngine {
             }
             mFrameContexts.clear();
         }
-
-    private:
-        VulkanCore::Ptr mVulkanCore;
-        WindowContext::Ptr mWindowContext;
-        IResourceManager* mResourceManager = nullptr;
-
-        std::vector<FrameContext> mFrameContexts;
-        FrameContext* mCurrentFrameContext = nullptr;
-        uint32_t mCurrentFrame = 0;
-        uint32_t mImageIndex = 0;
-        bool mFrameInProgress = false;
-    };
 
 } // namespace StarryEngine

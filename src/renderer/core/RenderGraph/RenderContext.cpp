@@ -137,12 +137,12 @@ namespace StarryEngine {
         return descriptorSet;
     }
 
-    void RenderContext::beginRenderPass(VkCommandBuffer commandBuffer, const VkRenderPassBeginInfo* renderPassBeginInfo, VkSubpassContents subpassContents) {
-        vkCmdBeginRenderPass(commandBuffer, renderPassBeginInfo, subpassContents);
+    void RenderContext::beginRenderPass(const VkRenderPassBeginInfo* renderPassBeginInfo, VkSubpassContents subpassContents) {
+        vkCmdBeginRenderPass(mCommandBuffer, renderPassBeginInfo, subpassContents);
     }
 
-    void RenderContext::endRenderPass(VkCommandBuffer commandBuffer) {
-        vkCmdEndRenderPass(commandBuffer);
+    void RenderContext::endRenderPass() {
+        vkCmdEndRenderPass(mCommandBuffer);
     }
 
     void RenderContext::bindGraphicsPipeline(const std::string& pipelineName) {

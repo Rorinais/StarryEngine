@@ -33,6 +33,12 @@ namespace StarryEngine {
         const std::vector<Vertex>& getVertices() const { return vertices; }
         const std::vector<uint32_t>& getIndices() const { return indices; }
 
+        // 获取顶点数量
+        uint32_t getVertexCount() const { return static_cast<uint32_t>(vertices.size()); }
+
+        // 获取索引数量
+        uint32_t getIndexCount() const { return static_cast<uint32_t>(indices.size()); }
+
     private:
         std::vector<Vertex> vertices;
         std::vector<uint32_t> indices;

@@ -1,6 +1,10 @@
 #include "Application.hpp"
+#include "../../renderer/core/RenderSystemFactory.hpp"
 #include "../../renderer/resources/models/geometry/shape/Cube.hpp"
 #include "../../renderer/resources/shaders/ShaderBuilder.hpp"
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <chrono>
 
 namespace StarryEngine {
     struct UniformBuffers {
@@ -28,8 +32,10 @@ namespace StarryEngine {
             }
             });
 
-        window->setResizeCallback([this](int, int) {
+        window->setResizeCallback([this](int width, int height) {
             mFramebufferResized = true;
+            mWidth = width;
+            mHeight = height;
             });
 
         vulkanCore = VulkanCore::create();
@@ -40,174 +46,244 @@ namespace StarryEngine {
         windowContext = WindowContext::create();
         windowContext->init(vulkanCore, window, commandPool);
 
-        renderer = VulkanRenderer::create();
-        renderer->init(vulkanCore, windowContext);
+        // 使用工厂创建渲染器
+        renderer = RenderSystemFactory::createDefaultRenderer(vulkanCore, windowContext);
+        if (!renderer) {
+            throw std::runtime_error("Failed to create renderer!");
+        }
+
+        setupResources();
+        setupRenderGraph();
+
+        mVertexBufferHandle = ResourceHandle();
+        mIndexBufferHandle = ResourceHandle();
+    }
+
+    void Application::setupResources() {
+        // 创建几何体（立方体）- 使用静态创建方法
+        mCube = Cube::create(1.0f, 1.0f, 1.0f);
+
+        // 创建顶点和索引缓冲区
+        createVertexBuffer();
+        createIndexBuffer();
+
+        // 创建描述符集和管线布局
+        createDescriptorSets();
+
+        // 创建着色器程序
+        auto* backend = renderer->getBackend();
+        auto device = backend->getDevice();
 
         ShaderProgram::Ptr shaderProgram = ShaderProgram::create(vulkanCore->getLogicalDevice());
 
+        // 顶点着色器
         ShaderBuilder vertBuilder(ShaderType::Vertex, "#version 450\n#extension GL_KHR_vulkan_glsl : enable");
         vertBuilder.addInput("vec3", "inPosition", 0);
         vertBuilder.addOutput("vec3", "fragColor", 0);
         vertBuilder.addUniformBuffer("CameraUBO", 0, 0, { "mat4 viewProj" });
         vertBuilder.setMainBody(R"(
-            gl_Position = ubo.viewProj*vec4(inPosition,1.0);
-            fragColor = vec3(1.0,1.0,1.0);
-         )");
+            gl_Position = ubo.viewProj * vec4(inPosition, 1.0);
+            fragColor = vec3(1.0, 1.0, 1.0);
+        )");
         std::string vertexShader = vertBuilder.getSource();
         shaderProgram->addGLSLStringStage(vertexShader, VK_SHADER_STAGE_VERTEX_BIT, "main", {}, "VertexShader");
 
+        // 片段着色器
         ShaderBuilder fragBuilder(ShaderType::Fragment, "#version 450\n#extension GL_KHR_vulkan_glsl : enable");
         fragBuilder.addInput("vec3", "fragColor", 0);
         fragBuilder.addOutput("vec4", "outColor", 0);
         fragBuilder.setMainBody(R"(
-            outColor = vec4(fragColor,1.0);
+            outColor = vec4(fragColor, 1.0);
         )");
         std::string fragmentShader = fragBuilder.getSource();
         shaderProgram->addGLSLStringStage(fragmentShader, VK_SHADER_STAGE_FRAGMENT_BIT, "main", {}, "FragmentShader");
 
-	
-        // 创建RenderGraph
-        auto renderGraph = std::make_shared<RenderGraph>(
-            vulkanCore->getLogicalDeviceHandle(),
-            vulkanCore->getAllocator()
-        );
+        createGraphicsPipeline(shaderProgram);
+    }
 
-        // 创建资源
-        auto colorAttachment = renderGraph->createResource("ColorAttachment",
-            createAttachmentDescription(
-                windowContext->getSwapchainFormat(),
-                { window->getWidth(), window->getHeight(), 1 },
-                VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT
-            )
-        );
+    void Application::createVertexBuffer() {
+        if (!mCube) return;
 
-        auto depthAttachment = renderGraph->createResource("DepthAttachment",
-            createAttachmentDescription(
-                VK_FORMAT_D32_SFLOAT, 
-                { window->getWidth(), window->getHeight(), 1 },
-                VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT
-            )
-        );
+        // 生成几何体数据
+        auto geometry = mCube->generateGeometry();
+        if (!geometry) return;
 
-        auto cameraUBO = renderGraph->createResource("CameraUBO",
-            createBufferDescription(
-                sizeof(glm::mat4),
-                VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
-            )
-        );
+        // 获取顶点数据 - 这里需要根据你的 Geometry 类实现来获取数据
+        // 假设 Geometry 类有获取顶点数据的方法
+        auto vertices = geometry->getVertices(); // 你需要实现这个方法
+        size_t vertexDataSize = vertices.size() * sizeof(Vertex);
 
-        // 添加几何通道
-        renderGraph->addPass("geometryPass", [&](RenderPass& pass) {
-            // 声明资源读写关系
-            pass.declareWrite(colorAttachment, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT);
-            pass.declareWrite(depthAttachment, VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT);
-            pass.declareRead(cameraUBO, 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT);
+        // 通过资源管理器创建顶点缓冲区
+        auto* resourceManager = renderer->getResourceManager();
+        BufferDesc vertexBufferDesc{
+            .size = vertexDataSize,
+            .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+            .memoryUsage = VMA_MEMORY_USAGE_CPU_TO_GPU
+        };
 
-            pass.setExecutionLogic([this, colorAttachment, depthAttachment](CommandBuffer* cmdBuffer, RenderContext& context) {
-                VkRenderPassBeginInfo renderPassInfo{};
-                renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-                renderPassInfo.renderPass = mGeometryRenderPass; 
-                renderPassInfo.framebuffer = mGeometryFramebuffers[context.getFrameIndex()];
-                renderPassInfo.renderArea.offset = { 0, 0 };
-                renderPassInfo.renderArea.extent = { mWidth, mHeight };
+        // 保存 ResourceHandle，而不是 VkBuffer
+        mVertexBufferHandle = resourceManager->createBuffer("VertexBuffer", vertexBufferDesc);
 
-                std::array<VkClearValue, 2> clearValues{};
-                clearValues[0].color = { {0.1f, 0.2f, 0.3f, 1.0f} };
-                clearValues[1].depthStencil = { 1.0f, 0 };
-                renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-                renderPassInfo.pClearValues = clearValues.data();
+        // 上传顶点数据到缓冲区
+        if (mVertexBufferHandle.isValid()) {
+            VkBuffer buffer = resourceManager->getBuffer(mVertexBufferHandle);
+            void* mappedData = resourceManager->getBufferMappedPointer(mVertexBufferHandle);
+            if (mappedData && !vertices.empty()) {
+                memcpy(mappedData, vertices.data(), vertexDataSize);
+            }
+            // 如果没有映射指针，你可能需要使用暂存缓冲区来上传数据
+        }
+    }
 
-				// 开始渲染通道
-                context.beginRenderPass(cmdBuffer->getHandle(), &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+    void Application::createIndexBuffer() {
+        if (!mCube) return;
 
-                // 使用RenderContext绑定管线
-                context.bindGraphicsPipeline("GeometryPipeline");
+        // 生成几何体数据
+        auto geometry = mCube->generateGeometry();
+        if (!geometry) return;
 
-                // 绑定描述符集
-                VkDescriptorSet descriptorSet = mDescriptorSets[context.getFrameIndex()];
-                context.bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, descriptorSet, 0);
+        // 获取索引数据 - 这里需要根据你的 Geometry 类实现来获取数据
+        auto indices = geometry->getIndices(); // 你需要实现这个方法
+        size_t indexDataSize = indices.size() * sizeof(uint32_t);
 
-                // 设置动态状态
-                VkViewport viewport{};
-                viewport.x = 0.0f;
-                viewport.y = 0.0f;
-                viewport.width = static_cast<float>(mWidth);
-                viewport.height = static_cast<float>(mHeight);
-                viewport.minDepth = 0.0f;
-                viewport.maxDepth = 1.0f;
-                context.setViewport(viewport);
+        // 通过资源管理器创建索引缓冲区
+        auto* resourceManager = renderer->getResourceManager();
+        BufferDesc indexBufferDesc{
+            .size = indexDataSize,
+            .usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+            .memoryUsage = VMA_MEMORY_USAGE_CPU_TO_GPU
+        };
 
-                VkRect2D scissor{};
-                scissor.offset = { 0, 0 };
-                scissor.extent = { mWidth, mHeight };
-                context.setScissor(scissor);
+        // 保存 ResourceHandle，而不是 VkBuffer
+        mIndexBufferHandle = resourceManager->createBuffer("IndexBuffer", indexBufferDesc);
 
-                // 使用RenderContext绑定缓冲区
-                context.bindVertexBuffer(mVertexBufferHandle);
-                context.bindIndexBuffer(mIndexBufferHandle);
+        // 上传索引数据到缓冲区
+        if (mIndexBufferHandle.isValid()) {
+            VkBuffer buffer = resourceManager->getBuffer(mIndexBufferHandle);
+            void* mappedData = resourceManager->getBufferMappedPointer(mIndexBufferHandle);
+            if (mappedData && !indices.empty()) {
+                memcpy(mappedData, indices.data(), indexDataSize);
+            }
+            // 如果没有映射指针，你可能需要使用暂存缓冲区来上传数据
+        }
+    }
 
-                // 绘制
-                context.drawIndexed(mMesh.getIndexCount(), 1, 0, 0, 0);
+    void Application::createDescriptorSets() {
+        // 简化的描述符集创建
+        // 实际实现需要根据你的描述符池和布局创建
+        mDescriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
+        // TODO: 创建描述符集
+    }
 
-                // 结束渲染通道
-                context.endRenderPass(cmdBuffer->getHandle());
-                });
-            });
+    void Application::createGraphicsPipeline(ShaderProgram::Ptr shaderProgram) {
+        // 简化的图形管线创建
+        // 实际实现需要根据你的管线创建API
+        // TODO: 创建渲染通道、管线布局和图形管线
+    }
 
-        // 编译RenderGraph
-        if (!renderGraph->compile()) {
-            throw std::runtime_error("Failed to compile render graph!");
+    void Application::executeGeometryPass(CommandBuffer* cmdBuffer, RenderContext& context) {
+        if (!mCube) return;
+
+        // 开始渲染通道
+        VkRenderPassBeginInfo renderPassInfo{};
+        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        renderPassInfo.renderPass = mGeometryRenderPass;
+        renderPassInfo.framebuffer = mGeometryFramebuffers[context.getFrameIndex()];
+        renderPassInfo.renderArea.offset = { 0, 0 };
+        renderPassInfo.renderArea.extent = { mWidth, mHeight };
+
+        std::array<VkClearValue, 2> clearValues{};
+        clearValues[0].color = { {0.1f, 0.2f, 0.3f, 1.0f} };
+        clearValues[1].depthStencil = { 1.0f, 0 };
+        renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
+        renderPassInfo.pClearValues = clearValues.data();
+
+        context.beginRenderPass(&renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+
+        // 绑定管线
+        context.bindGraphicsPipeline("GeometryPipeline");
+
+        // 绑定描述符集
+        VkDescriptorSet descriptorSet = mDescriptorSets[context.getFrameIndex()];
+        context.bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, descriptorSet, 0);
+
+        // 设置动态状态
+        VkViewport viewport{};
+        viewport.x = 0.0f;
+        viewport.y = 0.0f;
+        viewport.width = static_cast<float>(mWidth);
+        viewport.height = static_cast<float>(mHeight);
+        viewport.minDepth = 0.0f;
+        viewport.maxDepth = 1.0f;
+        context.setViewport(viewport);
+
+        VkRect2D scissor{};
+        scissor.offset = { 0, 0 };
+        scissor.extent = { mWidth, mHeight };
+        context.setScissor(scissor);
+
+        // 绑定顶点和索引缓冲区 - 使用 ResourceHandle
+        if (mVertexBufferHandle.isValid()) {
+            context.bindVertexBuffer(mVertexBufferHandle);
         }
 
-        renderer->setRenderGraph(renderGraph);
+        if (mIndexBufferHandle.isValid()) {
+            context.bindIndexBuffer(mIndexBufferHandle);
+        }
+
+        // 绘制 - 使用Cube的getIndexCount方法
+        context.drawIndexed(mCube->getIndexCount(), 1, 0, 0, 0);
+
+        // 结束渲染通道
+        context.endRenderPass();
     }
 
     void Application::run() {
         while (!glfwWindowShouldClose(window->getHandle())) {
             glfwPollEvents();
+
             if (mFramebufferResized) {
                 mFramebufferResized = false;
-                renderer->recreateSwapChain();
+                renderer->onSwapchainRecreated();
             }
 
             static auto startTime = std::chrono::high_resolution_clock::now();
             auto currentTime = std::chrono::high_resolution_clock::now();
             float time = std::chrono::duration<float>(currentTime - startTime).count();
 
-            UniformBuffers ubo{};
-            ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(1.0f, 1.0f, 1.0f));
-            ubo.view = glm::lookAt(
-                glm::vec3(2.0f, 2.0f, 2.0f),
-                glm::vec3(0.0f, 0.0f, 0.0f),
-                glm::vec3(0.0f, 1.0f, 0.0f));
-            ubo.proj = glm::perspective(
-                glm::radians(30.0f),
-                window->getAspectRatio(),
-                0.1f,
-                100.0f);
+            // 更新Uniform Buffer数据
+            updateUniformBuffer(time);
 
-            glm::mat4 viewProj = ubo.proj * ubo.view * ubo.model;
-
-            // 更新Uniform Buffer - 需要根据新的ResourceSystem调整
-            /* 示例代码
-            auto renderGraph = renderer->getRenderGraph();
-            if (renderGraph) {
-                auto& resourceRegistry = renderGraph->getResourceRegistry();
-                // 更新Uniform Buffer数据
-                // resourceRegistry.updateBufferData("CameraUBO", renderer->getCurrentFrame(), &viewProj, sizeof(glm::mat4));
-            }
-            */
-
-            renderer->beginFrame();
-            renderer->renderFrame();
-            renderer->endFrame();
+            // 渲染帧
+            renderer->render();
         }
 
         // 等待设备空闲再退出
         vkDeviceWaitIdle(vulkanCore->getLogicalDeviceHandle());
     }
 
+    void Application::updateUniformBuffer(float time) {
+        UniformBuffers ubo{};
+        ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(1.0f, 1.0f, 1.0f));
+        ubo.view = glm::lookAt(
+            glm::vec3(2.0f, 2.0f, 2.0f),
+            glm::vec3(0.0f, 0.0f, 0.0f),
+            glm::vec3(0.0f, 1.0f, 0.0f));
+        ubo.proj = glm::perspective(
+            glm::radians(30.0f),
+            window->getAspectRatio(),
+            0.1f,
+            100.0f);
+
+        glm::mat4 viewProj = ubo.proj * ubo.view * ubo.model;
+
+        // TODO: 更新Uniform Buffer
+        // 需要通过资源管理器来更新缓冲区数据
+        // 这需要根据你的具体实现来完善
+    }
+
     Application::~Application() {
+        // 按正确顺序销毁资源
         renderer.reset();
         windowContext.reset();
 

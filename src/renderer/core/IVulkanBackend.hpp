@@ -29,6 +29,8 @@ namespace StarryEngine {
         // 状态查询
         virtual uint32_t getCurrentFrameIndex() const = 0;
         virtual bool isFrameInProgress() const = 0;
+
+        virtual VkDevice getDevice() const = 0;
     };
 
 } // namespace StarryEngine

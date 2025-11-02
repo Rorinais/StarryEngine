@@ -7,10 +7,12 @@
 #include <string>
 #include <memory>
 
-namespace StarryEngine{
+namespace StarryEngine {
+    // 前向声明
     class DescriptorAllocator;
     class PipelineCache;
-    class CommandBuffer;
+
+    // 不需要前向声明 CommandBuffer，因为这里只使用 VkCommandBuffer
 
     class RenderContext {
     public:
@@ -35,8 +37,9 @@ namespace StarryEngine{
             const std::vector<VkDescriptorSetLayoutBinding>& bindings,
             const std::vector<VkWriteDescriptorSet>& writes);
 
-        void beginRenderPass(VkCommandBuffer commandBuffer,const VkRenderPassBeginInfo* renderPassBeginInfo, VkSubpassContents subpassContents);
-        void endRenderPass(VkCommandBuffer commandBuffer);
+        // 渲染通道管理
+        void beginRenderPass(const VkRenderPassBeginInfo* renderPassBeginInfo, VkSubpassContents subpassContents);
+        void endRenderPass();
 
         // 管线状态管理
         void bindGraphicsPipeline(const std::string& pipelineName);
@@ -111,5 +114,4 @@ namespace StarryEngine{
         void cleanupTemporaryResources();
         void validateResourceAccess(ResourceHandle handle, VkImageLayout expectedLayout = VK_IMAGE_LAYOUT_MAX_ENUM) const;
     };
-}
-
+} // namespace StarryEngine

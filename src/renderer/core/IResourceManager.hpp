@@ -1,5 +1,6 @@
 #pragma once
-#include "RenderGraphTypes.hpp"
+#include "RenderGraph/RenderGraphTypes.hpp"
+#include "../core/VulkanCore/VulkanCore.hpp"
 #include <vulkan/vulkan.h>
 #include <memory>
 
@@ -30,14 +31,15 @@ namespace StarryEngine {
         virtual void shutdown() = 0;
 
         // 资源创建
-        virtual ResourceHandle createTexture(const TextureDesc& desc) = 0;
-        virtual ResourceHandle createBuffer(const BufferDesc& desc) = 0;
+        virtual ResourceHandle createTexture(const std::string& name,const TextureDesc& desc) = 0;
+        virtual ResourceHandle createBuffer(const std::string& name,const BufferDesc& desc) = 0;
         virtual ResourceHandle getSwapchainResource() = 0;
 
         // 资源访问
         virtual VkImage getImage(ResourceHandle handle) const = 0;
         virtual VkBuffer getBuffer(ResourceHandle handle) const = 0;
         virtual VkImageView getImageView(ResourceHandle handle) const = 0;
+        virtual void* getBufferMappedPointer(ResourceHandle handle) const = 0;
 
         // 事件处理
         virtual void onSwapchainRecreated(WindowContext* window) = 0;

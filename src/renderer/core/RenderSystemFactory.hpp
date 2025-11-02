@@ -1,8 +1,8 @@
 #pragma once
-#include "VulkanRenderer.h"
-#include "SimpleVulkanBackend.h"
-#include "DecoupledRenderGraph.h"
-#include "UnifiedResourceManager.h"
+#include "VulkanRenderer.hpp"
+#include "SimpleVulkanBackend.hpp"
+#include "DecoupledRenderGraph.hpp"
+#include "UnifiedResourceManager.hpp"
 #include <memory>
 
 namespace StarryEngine {

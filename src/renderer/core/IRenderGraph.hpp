@@ -1,5 +1,6 @@
 #pragma once
-#include "RenderGraphTypes.hpp"
+#include "RenderGraph/RenderGraphTypes.hpp"
+#include "RenderGraph/RenderPassSystem.hpp"
 #include <vulkan/vulkan.h>
 #include <functional>
 #include <memory>

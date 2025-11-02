@@ -1,14 +1,7 @@
-#include "IResourceManager.h"
-#include "VulkanCore/VulkanCore.hpp"
-#include "WindowContext/WindowContext.hpp"
+#include "UnifiedResourceManager.hpp"
 
 namespace StarryEngine {
-
-    class UnifiedResourceManager : public IResourceManager {
-    public:
-        UnifiedResourceManager() = default;
-
-        bool initialize(VulkanCore::Ptr core) override {
+        bool UnifiedResourceManager::initialize(VulkanCore::Ptr core)  {
             mVulkanCore = core;
             mAllocator = core->getAllocator();
 
@@ -21,50 +14,69 @@ namespace StarryEngine {
             return mResourceRegistry != nullptr;
         }
 
-        void shutdown() override {
+        void UnifiedResourceManager::shutdown() {
             if (mResourceRegistry) {
                 mResourceRegistry->destroyActualResources();
             }
             mResourceRegistry.reset();
         }
 
-        ResourceHandle createTexture(const TextureDesc& desc) override {
+        ResourceHandle UnifiedResourceManager::createTexture(const std::string& name, const TextureDesc& desc) {
             if (!mResourceRegistry) return ResourceHandle();
 
             ResourceDescription resourceDesc;
-            resourceDesc.type = ResourceType::Texture;
             resourceDesc.format = desc.format;
+            resourceDesc.extent = { desc.width, desc.height, 1 };
             resourceDesc.width = desc.width;
             resourceDesc.height = desc.height;
             resourceDesc.depth = 1;
             resourceDesc.mipLevels = desc.mipLevels;
             resourceDesc.arrayLayers = desc.arrayLayers;
-            resourceDesc.sampleCount = VK_SAMPLE_COUNT_1_BIT;
-            resourceDesc.usage = desc.usage;
+            resourceDesc.samples = VK_SAMPLE_COUNT_1_BIT;
+            resourceDesc.imageUsage = desc.usage;
+            resourceDesc.usage = desc.usage;  // 设置兼容字段
             resourceDesc.memoryUsage = VMA_MEMORY_USAGE_GPU_ONLY;
+            resourceDesc.isAttachment = (desc.aspect & (VK_IMAGE_ASPECT_COLOR_BIT | VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)) != 0;
 
-            return mResourceRegistry->createVirtualResource("Texture", resourceDesc);
+            return mResourceRegistry->createVirtualResource(name, resourceDesc);
         }
 
-        ResourceHandle createBuffer(const BufferDesc& desc) override {
+        ResourceHandle UnifiedResourceManager::createBuffer(const std::string& name, const BufferDesc& desc) {
             if (!mResourceRegistry) return ResourceHandle();
 
             ResourceDescription resourceDesc;
-            resourceDesc.type = ResourceType::Buffer;
             resourceDesc.size = desc.size;
-            resourceDesc.usage = desc.usage;
+            resourceDesc.bufferUsage = desc.usage;
             resourceDesc.memoryUsage = desc.memoryUsage;
 
-            return mResourceRegistry->createVirtualResource("Buffer", resourceDesc);
+            // 设置内存属性（根据 VMA 使用情况）
+            switch (desc.memoryUsage) {
+            case VMA_MEMORY_USAGE_GPU_ONLY:
+                resourceDesc.memoryProperties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+                break;
+            case VMA_MEMORY_USAGE_CPU_ONLY:
+                resourceDesc.memoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+                break;
+            case VMA_MEMORY_USAGE_CPU_TO_GPU:
+                resourceDesc.memoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+                break;
+            case VMA_MEMORY_USAGE_GPU_TO_CPU:
+                resourceDesc.memoryProperties = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+                break;
+            default:
+                resourceDesc.memoryProperties = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+            }
+
+            return mResourceRegistry->createVirtualResource(name, resourceDesc);
         }
 
-        ResourceHandle getSwapchainResource() override {
+        ResourceHandle UnifiedResourceManager::getSwapchainResource() {
             // 返回交换链资源的特殊句柄
             // 这里需要根据你的设计来实现
             return mSwapchainHandle;
         }
 
-        VkImage getImage(ResourceHandle handle) const override {
+        VkImage UnifiedResourceManager::getImage(ResourceHandle handle) const  {
             if (!mResourceRegistry) return VK_NULL_HANDLE;
 
             const auto& actualResource = mResourceRegistry->getActualResource(handle, 0);
@@ -80,7 +92,7 @@ namespace StarryEngine {
             return image;
         }
 
-        VkBuffer getBuffer(ResourceHandle handle) const override {
+        VkBuffer UnifiedResourceManager::getBuffer(ResourceHandle handle) const {
             if (!mResourceRegistry) return VK_NULL_HANDLE;
 
             const auto& actualResource = mResourceRegistry->getActualResource(handle, 0);
@@ -96,7 +108,7 @@ namespace StarryEngine {
             return buffer;
         }
 
-        VkImageView getImageView(ResourceHandle handle) const override {
+        VkImageView UnifiedResourceManager::getImageView(ResourceHandle handle) const {
             if (!mResourceRegistry) return VK_NULL_HANDLE;
 
             const auto& actualResource = mResourceRegistry->getActualResource(handle, 0);
@@ -112,7 +124,14 @@ namespace StarryEngine {
             return imageView;
         }
 
-        void onSwapchainRecreated(WindowContext* window) override {
+        void* UnifiedResourceManager::getBufferMappedPointer(ResourceHandle handle) const {
+            if (!mResourceRegistry) return nullptr;
+
+            const auto& actualResource = mResourceRegistry->getActualResource(handle, 0);
+            return actualResource.allocationInfo.pMappedData;
+        }
+
+        void UnifiedResourceManager::onSwapchainRecreated(WindowContext* window) {
             // 处理交换链重建事件
             // 这里需要更新交换链资源
             if (mResourceRegistry) {
@@ -120,12 +139,5 @@ namespace StarryEngine {
                 mResourceRegistry->allocateActualResources(MAX_FRAMES_IN_FLIGHT);
             }
         }
-
-    private:
-        VulkanCore::Ptr mVulkanCore;
-        VmaAllocator mAllocator = VK_NULL_HANDLE;
-        std::unique_ptr<ResourceRegistry> mResourceRegistry;
-        ResourceHandle mSwapchainHandle;
-    };
 
 } // namespace StarryEngine
