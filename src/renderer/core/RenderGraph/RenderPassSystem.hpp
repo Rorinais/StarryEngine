@@ -40,6 +40,7 @@ namespace StarryEngine {
         const ExecuteCallback& getExecuteCallback() const { return mExecuteCallback; } // 用于调试
         uint32_t getIndex() const { return mIndex; }
         void setIndex(uint32_t index) { mIndex = index; }
+		VkRenderPass getHandle() const { return mRenderPass; }
 
     private:
         bool createVulkanRenderPass();

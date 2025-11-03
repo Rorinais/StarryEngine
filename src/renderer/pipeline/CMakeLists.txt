@@ -5,7 +5,6 @@ add_library(pipeline STATIC ${SRC})
 target_link_libraries(pipeline PRIVATE
 	BaseInterface
 	core
-	passes
 	utils
 	resources
 )

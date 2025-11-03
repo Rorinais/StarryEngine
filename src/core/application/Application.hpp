@@ -3,6 +3,7 @@
 #include "../../renderer/core/WindowContext/WindowContext.hpp"
 #include "../../renderer/core/VulkanRenderer.hpp"
 #include "../../renderer/resources/models/geometry/shape/Cube.hpp"
+#include "../../renderer/resources/shaders/ShaderProgram.hpp"
 #include <memory>
 
 namespace StarryEngine {

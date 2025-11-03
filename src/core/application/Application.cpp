@@ -59,6 +59,10 @@ namespace StarryEngine {
         mIndexBufferHandle = ResourceHandle();
     }
 
+    void Application::setupRenderGraph() {
+
+    }
+
     void Application::setupResources() {
         // 创建几何体（立方体）- 使用静态创建方法
         mCube = Cube::create(1.0f, 1.0f, 1.0f);
@@ -184,7 +188,6 @@ namespace StarryEngine {
     void Application::executeGeometryPass(CommandBuffer* cmdBuffer, RenderContext& context) {
         if (!mCube) return;
 
-        // 开始渲染通道
         VkRenderPassBeginInfo renderPassInfo{};
         renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
         renderPassInfo.renderPass = mGeometryRenderPass;
@@ -200,14 +203,11 @@ namespace StarryEngine {
 
         context.beginRenderPass(&renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-        // 绑定管线
         context.bindGraphicsPipeline("GeometryPipeline");
 
-        // 绑定描述符集
         VkDescriptorSet descriptorSet = mDescriptorSets[context.getFrameIndex()];
         context.bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, descriptorSet, 0);
 
-        // 设置动态状态
         VkViewport viewport{};
         viewport.x = 0.0f;
         viewport.y = 0.0f;
@@ -222,7 +222,6 @@ namespace StarryEngine {
         scissor.extent = { mWidth, mHeight };
         context.setScissor(scissor);
 
-        // 绑定顶点和索引缓冲区 - 使用 ResourceHandle
         if (mVertexBufferHandle.isValid()) {
             context.bindVertexBuffer(mVertexBufferHandle);
         }
@@ -231,10 +230,8 @@ namespace StarryEngine {
             context.bindIndexBuffer(mIndexBufferHandle);
         }
 
-        // 绘制 - 使用Cube的getIndexCount方法
         context.drawIndexed(mCube->getIndexCount(), 1, 0, 0, 0);
 
-        // 结束渲染通道
         context.endRenderPass();
     }
 

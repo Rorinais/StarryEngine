@@ -2,6 +2,7 @@
 #include "RenderGraph/RenderGraphTypes.hpp"
 #include "../core/VulkanCore/VulkanCore.hpp"
 #include <vulkan/vulkan.h>
+#include <vk_mem_alloc.h>
 #include <memory>
 
 namespace StarryEngine {

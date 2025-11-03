@@ -97,6 +97,25 @@ namespace StarryEngine {
         bool isValid() const {
             return (isImage() && !isBuffer()) || (!isImage() && isBuffer());
         }
+
+        // Define the equality operator
+        bool operator==(const ResourceDescription& other) const {
+            return format == other.format &&
+                extent.width == other.extent.width &&
+                extent.height == other.extent.height &&
+                extent.depth == other.extent.depth &&
+                arrayLayers == other.arrayLayers &&
+                mipLevels == other.mipLevels &&
+                samples == other.samples &&
+                imageUsage == other.imageUsage &&
+                usage == other.usage &&
+                memoryUsage == other.memoryUsage &&
+                bufferUsage == other.bufferUsage &&
+                memoryProperties == other.memoryProperties &&
+                size == other.size &&
+                isTransient == other.isTransient &&
+                isAttachment == other.isAttachment;
+        }
     };
 
     inline ResourceDescription createTextureDescription(
