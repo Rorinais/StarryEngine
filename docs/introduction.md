@@ -1,5 +1,20 @@
 1. 创建vkInstance
 2. 创建vkValidationLayer
-3. 创建vkPhysicalDevice
-4. 创建vkDvice
-5. 
+3. 创建glfwWindowInstance
+4. 创建vkPhysicalDevice
+5. 创建vkDvice
+6. 创建vkWindowSurface
+7. 创建vkSwapChain
+8. 创建vkshaderModule
+9. 创建vkBuffer
+10. 创建vkView
+11. 创建vkSamper
+12. 创建vkDescriptorSetLayout
+13. 创键vkDescriptorSetPool
+14. 创建vkDescriptorSet
+15. 创建vkPipelineLayout
+16. 创建vkRenderPass
+17. 创建vkPipeline
+18. 创建vkCommandPool
+19. 创建VkCommandBuffer
+20. 创建vkFece和vkSemaphore
