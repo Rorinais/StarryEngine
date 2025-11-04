@@ -1,3 +1,4 @@
+#define VMA_IMPLEMENTATION
 #include <cassert>
 #include "ResourceSystem.hpp"
 

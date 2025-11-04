@@ -2,7 +2,6 @@
 #include "VulkanCore/VulkanCore.hpp"
 #include "WindowContext/WindowContext.hpp"
 #include <vulkan/vulkan.h>
-#include <vk_mem_alloc.h>
 
 namespace StarryEngine {
 

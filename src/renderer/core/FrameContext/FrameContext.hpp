@@ -3,6 +3,7 @@
 #include "commandBuffer.hpp"
 #include "sync/fence.hpp"
 #include "sync/semaphore.hpp"
+#include "../RenderGraph/RenderContext.hpp"
 namespace StarryEngine {
 
     struct FrameContext {
@@ -10,7 +11,7 @@ namespace StarryEngine {
         Semaphore::Ptr imageAvailableSemaphore;
         Semaphore::Ptr renderFinishedSemaphore;
         Fence::Ptr inFlightFence;
+        std::unique_ptr<RenderContext> renderContext;
     };
-
 }
 
