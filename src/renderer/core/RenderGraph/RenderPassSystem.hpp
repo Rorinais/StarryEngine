@@ -4,6 +4,7 @@
 #include <functional>
 #include <vulkan/vulkan.h>
 #include "RenderGraphTypes.hpp"
+#include "PipelineBuilder.hpp"
 
 namespace StarryEngine {
     class CommandBuffer;
@@ -12,8 +13,9 @@ namespace StarryEngine {
     class RenderPass {
     public:
         using ExecuteCallback = std::function<void(CommandBuffer* cmdBuffer, RenderContext& context)>;
-
+        using PipelineCreationCallback = std::function<Pipeline::Ptr(PipelineBuilder&)>;
         using Ptr = std::shared_ptr<RenderPass>;
+
         RenderPass() = default;
         ~RenderPass() = default;
 
@@ -29,9 +31,14 @@ namespace StarryEngine {
 
         // 设置执行逻辑 - 使用更清晰的命名
         void setExecutionLogic(ExecuteCallback callback) { mExecuteCallback = std::move(callback); }
+        void setPipelineCreation(const PipelineCreationCallback& callback) { mPipelineCreationCallback = callback; }
+        Pipeline::Ptr getPipeline() const { return mPipeline; }
 
         bool compile();
         void execute(CommandBuffer* cmdBuffer, RenderContext& context);
+
+        // 管线创建方法
+        void createPipeline(VkRenderPass renderPass, const LogicalDevice::Ptr& logicalDevice);
 
         // 调试方法
         void dumpDebugInfo() const;
@@ -49,6 +56,7 @@ namespace StarryEngine {
     private:
         std::string mName;
         ExecuteCallback mExecuteCallback;
+        PipelineCreationCallback mPipelineCreationCallback;
         std::vector<ResourceUsage> mResourceUsages;
         uint32_t mIndex = UINT32_MAX;
 
@@ -56,6 +64,8 @@ namespace StarryEngine {
         VkRenderPass mRenderPass = VK_NULL_HANDLE;
         VkFramebuffer mFramebuffer = VK_NULL_HANDLE;
         std::vector<VkClearValue> mClearValues;
+
+        Pipeline::Ptr mPipeline;
     };
 
 } // namespace StarryEngine

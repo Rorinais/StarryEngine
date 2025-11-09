@@ -15,7 +15,7 @@ namespace StarryEngine {
 
     class RenderGraph {
     public:
-        RenderGraph(VkDevice device, VmaAllocator allocator);
+        RenderGraph(VkDevice device, VmaAllocator allocator, const LogicalDevice::Ptr& logicalDevice);
         ~RenderGraph();
 
         // 构建接口
@@ -45,19 +45,23 @@ namespace StarryEngine {
         uint32_t getConcurrentFrame() const { return mConcurrentFrame; }
         const std::string& getPassName(RenderPassHandle handle) const;
 
+        // 管线管理
+        Pipeline::Ptr getPipeline(const std::string& passName) const;
+
         void exportToDot(const std::string& filename) const;
         void dumpCompilationInfo() const;
 
     private:
         VkDevice mDevice;
         VmaAllocator mAllocator;
+        LogicalDevice::Ptr mLogicalDevice;
 
         ResourceRegistry mResourceRegistry;
         std::vector<std::unique_ptr<RenderPass>> mPasses;
         std::vector<Dependency> mDependencies;
 
         RenderGraphCompiler mCompiler;
-        std::unique_ptr<RenderGraphExecutor> mExecutor;  // 改为智能指针
+        std::unique_ptr<RenderGraphExecutor> mExecutor;
         std::unique_ptr<DescriptorAllocator> mDescriptorAllocator;
         std::unique_ptr<PipelineCache> mPipelineCache;
 

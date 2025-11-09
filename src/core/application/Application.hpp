@@ -4,43 +4,70 @@
 #include "../../renderer/core/VulkanRenderer.hpp"
 #include "../../renderer/resources/models/geometry/shape/Cube.hpp"
 #include "../../renderer/resources/shaders/ShaderProgram.hpp"
+#include "../../renderer/core/IVulkanBackend.hpp"
 #include <memory>
 
 namespace StarryEngine {
-
     class Application {
     public:
         Application();
         ~Application();
-        void run();
-        void setupRenderGraph();
-        void setupResources();
-        void executeGeometryPass(CommandBuffer* cmdBuffer, RenderContext& context);
-        void updateUniformBuffer(float time);
 
-        // 添加缺失的方法声明
+        void run();
+
+    private:
+        void setupResources();
+        void setupRenderGraph();
+
+        // 管线创建方法
+        Pipeline::Ptr createGeometryPipeline(PipelineBuilder& builder);
+        VertexInput getCubeVertexInput() const;
+        Rasterization getRasterizationState() const;
+        DepthStencil getDepthStencilState() const;
+        ColorBlend getColorBlendState() const;
+        InputAssembly getInputAssemblyState() const;
+        MultiSample getMultisampleState() const;
+        Dynamic getDynamicState() const;
+        Viewport getViewportState() const;
+        std::vector<VkDescriptorSetLayout> getDescriptorSetLayouts() const;
+
+        // 资源创建方法
         void createVertexBuffer();
         void createIndexBuffer();
         void createDescriptorSets();
-        void createGraphicsPipeline(ShaderProgram::Ptr shaderProgram);
+
+        // 渲染通道执行方法
+        void executeGeometryPass(CommandBuffer* cmdBuffer, RenderContext& context);
+
+        // 更新方法
+        void updateUniformBuffer(float time);
 
     private:
-        StarryEngine::Window::Ptr window;
-        StarryEngine::VulkanCore::Ptr vulkanCore;
-        StarryEngine::WindowContext::Ptr windowContext;
-        std::unique_ptr<StarryEngine::VulkanRenderer> renderer;
-
-        bool mFramebufferResized = false;
-
-        // 更新成员变量类型 - 使用 ResourceHandle 而不是 VkBuffer
-        std::shared_ptr<Cube> mCube;
-        VkRenderPass mGeometryRenderPass = VK_NULL_HANDLE;
-        std::vector<VkFramebuffer> mGeometryFramebuffers;
-        std::vector<VkDescriptorSet> mDescriptorSets;
-        ResourceHandle mVertexBufferHandle;  // 改为 ResourceHandle
-        ResourceHandle mIndexBufferHandle;   // 改为 ResourceHandle
         uint32_t mWidth = 800;
         uint32_t mHeight = 600;
-    };
+        bool mFramebufferResized = false;
 
+        Window::Ptr window;
+        VulkanCore::Ptr vulkanCore;
+        WindowContext::Ptr windowContext;
+        std::unique_ptr<VulkanRenderer> renderer;
+
+        // 几何体
+        std::shared_ptr<Cube> mCube;
+
+        // 缓冲区句柄
+        ResourceHandle mVertexBufferHandle;
+        ResourceHandle mIndexBufferHandle;
+
+        // 着色器程序
+        ShaderProgram::Ptr mShaderProgram;
+
+        // 描述符集
+        std::vector<VkDescriptorSet> mDescriptorSets;
+        VkDescriptorSetLayout mDescriptorSetLayout = VK_NULL_HANDLE;
+
+        // 渲染通道和管线
+        VkRenderPass mGeometryRenderPass = VK_NULL_HANDLE;
+        std::vector<VkFramebuffer> mGeometryFramebuffers;
+    };
 }

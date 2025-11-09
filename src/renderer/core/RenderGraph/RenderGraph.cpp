@@ -6,8 +6,8 @@
 
 namespace StarryEngine {
 
-    RenderGraph::RenderGraph(VkDevice device, VmaAllocator allocator)
-        : mDevice(device), mAllocator(allocator),
+    RenderGraph::RenderGraph(VkDevice device, VmaAllocator allocator, const LogicalDevice::Ptr& logicalDevice)
+        : mDevice(device), mAllocator(allocator), mLogicalDevice(logicalDevice),
         mResourceRegistry(device, allocator),
         mCompiler(device, allocator) {
         initializeInternalComponents();
@@ -41,6 +41,7 @@ namespace StarryEngine {
 
     RenderPassHandle RenderGraph::addPass(const std::string& name, std::function<void(RenderPass&)> setupCallback) {
         auto pass = std::make_unique<RenderPass>();
+
         pass->setName(name); 
 
         setupCallback(*pass);
@@ -66,6 +67,26 @@ namespace StarryEngine {
         auto result = mCompiler.compile(*this);
         if (!result.success) {
             return false;
+        }
+
+        // 首先创建所有渲染通道的Vulkan渲染通道
+        for (auto& pass : mPasses) {
+            if (!pass->compile()) {
+                std::cerr << "Failed to compile render pass: " << pass->getName() << std::endl;
+                return false;
+            }
+        }
+
+        // 然后为每个渲染通道创建管线
+        for (auto& pass : mPasses) {
+            // 现在getHandle()应该返回有效的VkRenderPass
+            VkRenderPass renderPass = pass->getHandle();
+            if (renderPass != VK_NULL_HANDLE) {
+                pass->createPipeline(renderPass, mLogicalDevice);
+            }
+            else {
+                std::cerr << "WARNING: No render pass handle for " << pass->getName() << std::endl;
+            }
         }
 
         // 初始化执行器
@@ -110,6 +131,15 @@ namespace StarryEngine {
             return mPasses[handle.getId()]->getName();
         }
         return empty;
+    }
+
+    Pipeline::Ptr RenderGraph::getPipeline(const std::string& passName) const {
+        for (const auto& pass : mPasses) {
+            if (pass->getName() == passName) {
+                return pass->getPipeline();
+            }
+        }
+        return nullptr;
     }
 
     void RenderGraph::exportToDot(const std::string& filename) const {

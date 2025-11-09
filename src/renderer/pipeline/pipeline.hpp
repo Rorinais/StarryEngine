@@ -71,7 +71,7 @@ namespace StarryEngine {
 
 		//必须指定
 		void setShaderStage(ShaderProgram::Ptr shaderStates);
-		void setRenderPass(RenderPass* renderPass);
+		void setRenderPass(VkRenderPass renderpass);
 		void setPipelineLayout(PipelineLayout::Ptr pipelineLayout);
 		void setViewportState(Viewport viewport);
 		void setVertexInputState(VertexInput vertexInput);
@@ -100,8 +100,8 @@ namespace StarryEngine {
 		LogicalDevice::Ptr mLogicalDevice;
 		PipelineLayout::Ptr mPipelineLayout;
 		ShaderProgram::Ptr mShaderStages;
-		RenderPass* mRenderPass;
 
+		VkRenderPass mRenderPass = VK_NULL_HANDLE;
 		VkPipeline mGraphicsPipeline = VK_NULL_HANDLE;
 		VkPipeline mBasePipelineHandle = VK_NULL_HANDLE;
 		int32_t  mBasePipelineIndex = -1;

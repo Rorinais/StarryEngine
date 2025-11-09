@@ -2,11 +2,16 @@
 #include <vulkan/vulkan.h>
 #include <vector>
 #include <memory>
+
 namespace StarryEngine {
 
     class Dynamic {
     public:
-        void setEnableDynamic(bool enable = true) { mEnableDynamic = enable; }
+        Dynamic& setEnableDynamic(bool enable = true) {
+            mEnableDynamic = enable;
+            return *this;
+        }
+
         bool getEnableDynamic() { return mEnableDynamic; }
 
         const VkPipelineDynamicStateCreateInfo& getCreateInfo() {

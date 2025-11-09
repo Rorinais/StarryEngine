@@ -2,6 +2,20 @@
 #include <iostream>
 
 namespace StarryEngine {
+    void RenderPass::createPipeline(VkRenderPass renderPass, const LogicalDevice::Ptr& logicalDevice) {
+        if (mPipelineCreationCallback && !mPipeline) {
+            PipelineBuilder builder(renderPass, logicalDevice);
+            mPipeline = mPipelineCreationCallback(builder);
+
+            if (mPipeline) {
+                std::cout << "[RenderPass] Created pipeline for " << mName << std::endl;
+            }
+            else {
+                std::cout << "[RenderPass] WARNING: Failed to create pipeline for " << mName << std::endl;
+            }
+        }
+    }
+
 
     void RenderPass::declareRead(ResourceHandle resource, VkPipelineStageFlags stages) {
         ResourceUsage usage;

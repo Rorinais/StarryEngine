@@ -102,7 +102,7 @@ namespace StarryEngine {
     void Pipeline::setPipelineLayout(PipelineLayout::Ptr pipelineLayout) {
         mPipelineLayout = pipelineLayout;
     }
-    void Pipeline::setRenderPass(RenderPass* renderPass) {
+    void Pipeline::setRenderPass(VkRenderPass renderPass) {
         mRenderPass = renderPass;
     }
     void Pipeline::setSubPass(uint32_t count) {
@@ -128,7 +128,7 @@ namespace StarryEngine {
         createInfo.pColorBlendState = &mPipelineStageConfig.colorBlendState.getCreateInfo();
         createInfo.pDynamicState = &mPipelineStageConfig.dynamicState.getCreateInfo();
         createInfo.layout = mPipelineLayout->getHandle();
-        createInfo.renderPass = mRenderPass->getHandle();
+        createInfo.renderPass = mRenderPass;
         createInfo.subpass = mSubpass;
         createInfo.basePipelineHandle = mBasePipelineHandle;
         createInfo.basePipelineIndex = mBasePipelineIndex;
