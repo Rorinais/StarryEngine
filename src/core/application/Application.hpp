@@ -31,11 +31,6 @@ namespace StarryEngine {
         Viewport getViewportState() const;
         std::vector<VkDescriptorSetLayout> getDescriptorSetLayouts() const;
 
-        // 资源创建方法
-        void createVertexBuffer();
-        void createIndexBuffer();
-        void createDescriptorSets();
-
         // 渲染通道执行方法
         void executeGeometryPass(CommandBuffer* cmdBuffer, RenderContext& context);
 
@@ -51,9 +46,6 @@ namespace StarryEngine {
         VulkanCore::Ptr vulkanCore;
         WindowContext::Ptr windowContext;
         std::unique_ptr<VulkanRenderer> renderer;
-
-        // 几何体
-        std::shared_ptr<Cube> mCube;
 
         // 缓冲区句柄
         ResourceHandle mVertexBufferHandle;

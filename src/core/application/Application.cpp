@@ -3,6 +3,7 @@
 #include "../../renderer/resources/models/geometry/shape/Cube.hpp"
 #include "../../renderer/resources/shaders/ShaderBuilder.hpp"
 #include "../../renderer/pipeline/pipeline.hpp"
+#include "../../renderer/resources/models/mesh/Mesh.hpp"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <chrono>
@@ -47,7 +48,6 @@ namespace StarryEngine {
         windowContext = WindowContext::create();
         windowContext->init(vulkanCore, window, commandPool);
 
-        // 使用工厂创建渲染器
         renderer = RenderSystemFactory::createDefaultRenderer(vulkanCore, windowContext);
         if (!renderer) {
             throw std::runtime_error("Failed to create renderer!");
@@ -175,8 +175,10 @@ namespace StarryEngine {
         if (!mCube) return VertexInput();
 
         auto geometry = mCube->generateGeometry();
-        auto bindings = geometry.getVertexBuffer()->getBindingDescriptions();
-        auto attributes = geometry.getVertexBuffer()->getAttributeDescriptions();
+
+        auto mesh = Mesh(geometry,vulkanCore->getLogicalDevice(),windowContext->getCommandPool());
+        auto bindings = mesh.getVertexBuffer()->getBindingDescriptions();
+        auto attributes = mesh.getVertexBuffer()->getAttributeDescriptions();
 
         VertexInput vertexInput;
         for (const auto& binding : bindings) {
@@ -253,16 +255,6 @@ namespace StarryEngine {
     }
 
     void Application::setupResources() {
-        // 创建几何体
-        mCube = Cube::create(1.0f, 1.0f, 1.0f);
-
-        // 创建顶点和索引缓冲区
-        createVertexBuffer();
-        createIndexBuffer();
-
-        // 创建描述符集
-        createDescriptorSets();
-
         // 创建着色器程序
         mShaderProgram = ShaderProgram::create(vulkanCore->getLogicalDevice());
 
@@ -287,80 +279,6 @@ namespace StarryEngine {
         )");
         std::string fragmentShader = fragBuilder.getSource();
         mShaderProgram->addGLSLStringStage(fragmentShader, VK_SHADER_STAGE_FRAGMENT_BIT, "main", {}, "FragmentShader");
-    }
-
-    void Application::createVertexBuffer() {
-        if (!mCube) return;
-
-        // 生成几何体数据
-        auto geometry = mCube->generateGeometry();
-        if (!geometry) return;
-
-        // 获取顶点数据 - 这里需要根据你的 Geometry 类实现来获取数据
-        // 假设 Geometry 类有获取顶点数据的方法
-        auto vertices = geometry->getVertices(); // 你需要实现这个方法
-        size_t vertexDataSize = vertices.size() * sizeof(Vertex);
-
-        // 通过资源管理器创建顶点缓冲区
-        auto* resourceManager = renderer->getResourceManager();
-        BufferDesc vertexBufferDesc{
-            .size = vertexDataSize,
-            .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-            .memoryUsage = VMA_MEMORY_USAGE_CPU_TO_GPU
-        };
-
-        // 保存 ResourceHandle，而不是 VkBuffer
-        mVertexBufferHandle = resourceManager->createBuffer("VertexBuffer", vertexBufferDesc);
-
-        // 上传顶点数据到缓冲区
-        if (mVertexBufferHandle.isValid()) {
-            VkBuffer buffer = resourceManager->getBuffer(mVertexBufferHandle);
-            void* mappedData = resourceManager->getBufferMappedPointer(mVertexBufferHandle);
-            if (mappedData && !vertices.empty()) {
-                memcpy(mappedData, vertices.data(), vertexDataSize);
-            }
-            // 如果没有映射指针，你可能需要使用暂存缓冲区来上传数据
-        }
-    }
-
-    void Application::createIndexBuffer() {
-        if (!mCube) return;
-
-        // 生成几何体数据
-        auto geometry = mCube->generateGeometry();
-        if (!geometry) return;
-
-        // 获取索引数据 - 这里需要根据你的 Geometry 类实现来获取数据
-        auto indices = geometry->getIndices(); // 你需要实现这个方法
-        size_t indexDataSize = indices.size() * sizeof(uint32_t);
-
-        // 通过资源管理器创建索引缓冲区
-        auto* resourceManager = renderer->getResourceManager();
-        BufferDesc indexBufferDesc{
-            .size = indexDataSize,
-            .usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-            .memoryUsage = VMA_MEMORY_USAGE_CPU_TO_GPU
-        };
-
-        // 保存 ResourceHandle，而不是 VkBuffer
-        mIndexBufferHandle = resourceManager->createBuffer("IndexBuffer", indexBufferDesc);
-
-        // 上传索引数据到缓冲区
-        if (mIndexBufferHandle.isValid()) {
-            VkBuffer buffer = resourceManager->getBuffer(mIndexBufferHandle);
-            void* mappedData = resourceManager->getBufferMappedPointer(mIndexBufferHandle);
-            if (mappedData && !indices.empty()) {
-                memcpy(mappedData, indices.data(), indexDataSize);
-            }
-            // 如果没有映射指针，你可能需要使用暂存缓冲区来上传数据
-        }
-    }
-
-    void Application::createDescriptorSets() {
-        // 简化的描述符集创建
-        // 实际实现需要根据你的描述符池和布局创建
-        mDescriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
-        // TODO: 创建描述符集
     }
 
     void Application::run() {
