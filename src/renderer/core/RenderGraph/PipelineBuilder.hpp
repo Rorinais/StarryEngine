@@ -1,16 +1,16 @@
 #pragma once
+#include "../../pipeline/pipeline.hpp"
 #include <vulkan/vulkan.h>
 #include <memory>
-#include "../../pipeline/pipeline.hpp"
-#include "../../core/VulkanCore/VulkanCore.hpp"
+
 
 namespace StarryEngine {
-
+    class Pipeline;
     class PipelineBuilder {
     public:
         using Ptr = std::shared_ptr<PipelineBuilder>;
 
-        PipelineBuilder(VkRenderPass renderPass, const LogicalDevice::Ptr& logicalDevice);
+        PipelineBuilder(VkRenderPass renderPass,VkDevice device);
 
         PipelineBuilder& setShaderProgram(ShaderProgram::Ptr program);
         PipelineBuilder& setVertexInput(const VertexInput& vertexInput);

@@ -145,14 +145,8 @@ namespace StarryEngine {
         vkCmdEndRenderPass(mCommandBuffer);
     }
 
-    void RenderContext::bindGraphicsPipeline(const std::string& pipelineName) {
-        VkPipeline pipeline = mPipelineCache->getGraphicsPipeline(pipelineName);
-        if (pipeline != VK_NULL_HANDLE) {
-            vkCmdBindPipeline(mCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-            mBindingState.currentBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-            mBindingState.currentPipeline = pipeline;
-            mBindingState.currentPipelineLayout = mPipelineCache->getPipelineLayout(pipelineName + "_layout");
-        }
+    void RenderContext::bindGraphicsPipeline(VkPipeline pipeline) {
+        vkCmdBindPipeline(mCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
     }
 
     void RenderContext::bindComputePipeline(const std::string& pipelineName) {
@@ -177,34 +171,18 @@ namespace StarryEngine {
         vkCmdSetBlendConstants(mCommandBuffer, constants);
     }
 
-    void RenderContext::bindVertexBuffer(ResourceHandle bufferHandle, uint32_t binding, VkDeviceSize offset) {
-        VkBuffer buffer = getBuffer(bufferHandle);
+    void RenderContext::bindVertexBuffer(VkBuffer buffer, uint32_t binding, VkDeviceSize offset) {
         if (buffer != VK_NULL_HANDLE) {
             vkCmdBindVertexBuffers(mCommandBuffer, binding, 1, &buffer, &offset);
         }
     }
 
-    void RenderContext::bindVertexBuffers(const std::vector<ResourceHandle>& bufferHandles,
-        const std::vector<VkDeviceSize>& offsets) {
-
-        std::vector<VkBuffer> buffers;
-        buffers.reserve(bufferHandles.size());
-
-        for (const auto& handle : bufferHandles) {
-            VkBuffer buffer = getBuffer(handle);
-            if (buffer != VK_NULL_HANDLE) {
-                buffers.push_back(buffer);
-            }
-        }
-
-        if (!buffers.empty()) {
-            const VkDeviceSize* offsetsPtr = offsets.empty() ? nullptr : offsets.data();
-            vkCmdBindVertexBuffers(mCommandBuffer, 0, static_cast<uint32_t>(buffers.size()), buffers.data(), offsetsPtr);
-        }
+    void RenderContext::bindVertexBuffers(const std::vector<VkBuffer>& buffers) {
+		std::vector<VkDeviceSize> offsets(buffers.size(), 0);
+        vkCmdBindVertexBuffers(mCommandBuffer, 0, static_cast<uint32_t>(buffers.size()), buffers.data(), offsets.data());
     }
 
-    void RenderContext::bindIndexBuffer(ResourceHandle bufferHandle, VkDeviceSize offset, VkIndexType indexType) {
-        VkBuffer buffer = getBuffer(bufferHandle);
+    void RenderContext::bindIndexBuffer(VkBuffer buffer, VkDeviceSize offset, VkIndexType indexType) {
         if (buffer != VK_NULL_HANDLE) {
             vkCmdBindIndexBuffer(mCommandBuffer, buffer, offset, indexType);
         }

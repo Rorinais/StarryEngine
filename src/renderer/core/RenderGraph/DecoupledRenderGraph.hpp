@@ -1,6 +1,6 @@
 #include "IRenderGraph.hpp"
-#include "IResourceManager.hpp"
-#include "RenderGraph/RenderGraph.hpp"
+#include "../IResourceManager.hpp"
+#include "RenderGraph.hpp"
 
 namespace StarryEngine {
 

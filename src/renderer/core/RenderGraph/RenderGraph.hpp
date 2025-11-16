@@ -2,20 +2,21 @@
 #include "RenderGraphTypes.hpp"
 #include "ResourceSystem.hpp"
 #include "RenderPassSystem.hpp"
-#include "RenderGraphAnalyzer.hpp"
 #include "RenderGraphCompiler.hpp"
 #include "RenderGraphExecutor.hpp"
 #include "DescriptorAllocator.hpp"
 #include "PipelineCache.hpp"
+#include "../VulkanCore/VulkanCore.hpp"
 #include <memory>
 #include <vector>
 #include <functional>
 
 namespace StarryEngine {
+    class Pipeline;
 
     class RenderGraph {
     public:
-        RenderGraph(VkDevice device, VmaAllocator allocator, const LogicalDevice::Ptr& logicalDevice);
+        RenderGraph(VkDevice device, VmaAllocator allocator);
         ~RenderGraph();
 
         // 构建接口
@@ -46,7 +47,7 @@ namespace StarryEngine {
         const std::string& getPassName(RenderPassHandle handle) const;
 
         // 管线管理
-        Pipeline::Ptr getPipeline(const std::string& passName) const;
+        std::shared_ptr <Pipeline> getPipeline(const std::string& passName) const;
 
         void exportToDot(const std::string& filename) const;
         void dumpCompilationInfo() const;
@@ -54,7 +55,6 @@ namespace StarryEngine {
     private:
         VkDevice mDevice;
         VmaAllocator mAllocator;
-        LogicalDevice::Ptr mLogicalDevice;
 
         ResourceRegistry mResourceRegistry;
         std::vector<std::unique_ptr<RenderPass>> mPasses;

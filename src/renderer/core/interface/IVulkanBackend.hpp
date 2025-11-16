@@ -1,11 +1,9 @@
 #pragma once
-#include "VulkanCore/VulkanCore.hpp"
-#include "WindowContext/WindowContext.hpp"
+#include "../VulkanCore/VulkanCore.hpp"
+#include "../WindowContext/WindowContext.hpp"
 #include <vulkan/vulkan.h>
 
 namespace StarryEngine {
-
-    class IResourceManager;
 
     class IVulkanBackend {
     public:
@@ -20,11 +18,8 @@ namespace StarryEngine {
         virtual VkCommandBuffer getCommandBuffer() = 0;
         virtual void submitFrame() = 0;
 
-        // 资源管理
-        virtual void setResourceManager(IResourceManager* manager) = 0;
-
         // 事件处理
-        virtual void onSwapchainRecreated() = 0;
+        virtual void onSwapchainRecreated(class IResourceManager* manager = nullptr) = 0;
 
         // 状态查询
         virtual uint32_t getCurrentFrameIndex() const = 0;

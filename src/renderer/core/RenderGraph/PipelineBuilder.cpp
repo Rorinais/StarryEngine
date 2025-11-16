@@ -2,8 +2,8 @@
 
 namespace StarryEngine {
 
-    PipelineBuilder::PipelineBuilder(VkRenderPass renderPass, const LogicalDevice::Ptr& logicalDevice)
-        : mRenderPass(renderPass), mLogicalDevice(logicalDevice) {
+    PipelineBuilder::PipelineBuilder(VkRenderPass renderPass, VkDevice device)
+        : mRenderPass(renderPass){
     }
 
     PipelineBuilder& PipelineBuilder::setShaderProgram(ShaderProgram::Ptr program) {

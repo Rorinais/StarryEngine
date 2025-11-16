@@ -22,6 +22,7 @@ add_subdirectory(renderer/core)
 add_subdirectory(renderer/pipeline)
 add_subdirectory(renderer/resources)
 
+
 # 设置图标文件路径
 set(ICON_FILE "${CMAKE_CURRENT_SOURCE_DIR}/../assets/icons/app_icon.ico")
 

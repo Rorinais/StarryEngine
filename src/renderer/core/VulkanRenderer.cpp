@@ -10,7 +10,6 @@ namespace StarryEngine {
         mResourceManager = std::move(resourceManager);
 
         // 建立模块间的连接
-        mBackend->setResourceManager(mResourceManager.get());
         mRenderGraph->setResourceManager(mResourceManager.get());
     }
 
@@ -43,7 +42,7 @@ namespace StarryEngine {
     }
 
     void VulkanRenderer::onSwapchainRecreated() {
-        mBackend->onSwapchainRecreated();
+        mBackend->onSwapchainRecreated(mResourceManager.get());
     }
 
 } // namespace StarryEngine

@@ -16,6 +16,7 @@ namespace StarryEngine {
 		return *this;
     }
     Viewport& Viewport::init(const VkExtent2D& extent) {
+		mExtent = extent;
         VkViewport viewport{};
         viewport.x = 0.0f;
         viewport.y = mIsOpenGLCoord ? static_cast<float>(extent.height) : 0.0f;

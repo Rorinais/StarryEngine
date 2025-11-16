@@ -1,4 +1,5 @@
 #include "SimpleVulkanBackend.hpp"
+#include "../interface/IResourceManager.hpp"
 
 namespace StarryEngine {
         bool SimpleVulkanBackend::initialize(VulkanCore::Ptr core, WindowContext::Ptr window) {
@@ -106,16 +107,12 @@ namespace StarryEngine {
             mCurrentFrame = (mCurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
         }
 
-        void SimpleVulkanBackend::setResourceManager(IResourceManager* manager) {
-            mResourceManager = manager;
-        }
-
-        void SimpleVulkanBackend::onSwapchainRecreated() {
+        void SimpleVulkanBackend::onSwapchainRecreated(IResourceManager* manager) {
             vkDeviceWaitIdle(mVulkanCore->getLogicalDeviceHandle());
             mWindowContext->recreateSwapchain();
 
-            if (mResourceManager) {
-                mResourceManager->onSwapchainRecreated(mWindowContext.get());
+            if (manager) {
+                manager->onSwapchainRecreated(mWindowContext.get());
             }
         }
 

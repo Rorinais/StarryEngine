@@ -1,7 +1,7 @@
 #pragma once
-#include "VulkanRenderer.hpp"
-#include "SimpleVulkanBackend.hpp"
-#include "DecoupledRenderGraph.hpp"
+#include "../VulkanRenderer.hpp"
+#include "backends/SimpleVulkanBackend.hpp"
+#include "RenderGraph/DecoupledRenderGraph.hpp"
 #include "UnifiedResourceManager.hpp"
 #include <memory>
 

@@ -7,5 +7,5 @@ target_link_libraries(application
 PRIVATE
     BaseInterface
     window
-    pipeline
+    renderer
 )

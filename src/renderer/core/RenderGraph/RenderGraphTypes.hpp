@@ -1,10 +1,8 @@
 #pragma once
 #include <vulkan/vulkan.h>
 #include <cstdint>
-#include <string>
 #include <functional>
 #include <vector>
-#include <unordered_map>
 #include <vk_mem_alloc.h>
 
 namespace StarryEngine {
@@ -139,7 +137,6 @@ namespace StarryEngine {
         return desc;
     }
 
-    // 添加重载版本以兼容旧代码
     inline ResourceDescription createTextureDescription(
         VkFormat format,
         uint32_t width, uint32_t height,

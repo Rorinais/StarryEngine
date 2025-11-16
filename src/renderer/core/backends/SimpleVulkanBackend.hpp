@@ -1,5 +1,4 @@
-#include "IVulkanBackend.hpp"
-#include "IResourceManager.hpp"
+#include "../interface/IVulkanBackend.hpp"
 #include "VulkanCore/VulkanCore.hpp"
 #include "WindowContext/WindowContext.hpp"
 #include "FrameContext/FrameContext.hpp"
@@ -21,9 +20,7 @@ namespace StarryEngine {
 
         void submitFrame() override;
 
-        void setResourceManager(IResourceManager* manager) override;
-
-        void onSwapchainRecreated() override;
+        void onSwapchainRecreated(class IResourceManager* manager=nullptr) override;
 
         uint32_t getCurrentFrameIndex() const override;
 
@@ -41,7 +38,6 @@ namespace StarryEngine {
     private:
         VulkanCore::Ptr mVulkanCore;
         WindowContext::Ptr mWindowContext;
-        IResourceManager* mResourceManager = nullptr;
 
         std::vector<FrameContext> mFrameContexts;
         FrameContext* mCurrentFrameContext = nullptr;

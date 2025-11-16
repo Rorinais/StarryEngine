@@ -24,10 +24,12 @@ namespace StarryEngine {
             return *this;
         }
 
+		VkExtent2D getExtent() const { return mExtent; }
         const VkPipelineViewportStateCreateInfo& getCreateInfo() const;
 
     private:
         VkPipelineViewportStateCreateInfo mCreateInfo{};
         bool mIsOpenGLCoord = false;
+		VkExtent2D mExtent{ 0,0 };
     };
 }

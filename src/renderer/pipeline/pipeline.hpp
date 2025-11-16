@@ -93,6 +93,7 @@ namespace StarryEngine {
 		Pipeline::Config  getPipelineStateConfig() { return mPipelineStageConfig; }
 		PipelineLayout::Ptr getPipelineLayout() { return mPipelineLayout; }
 		Dynamic getDynamic() { return mPipelineStageConfig.dynamicState; }
+		VkExtent2D getViewportExtent() { return mPipelineStageConfig.viewportState.getExtent(); }
 
 	private:
 		Pipeline::Config mPipelineStageConfig;

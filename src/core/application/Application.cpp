@@ -1,9 +1,11 @@
 #include "Application.hpp"
 #include "../../renderer/core/RenderSystemFactory.hpp"
 #include "../../renderer/resources/models/geometry/shape/Cube.hpp"
+#include "../../renderer/resources/shaders/ShaderProgram.hpp"
 #include "../../renderer/resources/shaders/ShaderBuilder.hpp"
 #include "../../renderer/pipeline/pipeline.hpp"
 #include "../../renderer/resources/models/mesh/Mesh.hpp"
+#include "../../renderer/core/RenderGraph/PipelineBuilder.hpp"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <chrono>
@@ -52,12 +54,39 @@ namespace StarryEngine {
         if (!renderer) {
             throw std::runtime_error("Failed to create renderer!");
         }
-
-        setupResources();
+        setupPipelineResource();
         setupRenderGraph();
+    }
 
-        mVertexBufferHandle = ResourceHandle();
-        mIndexBufferHandle = ResourceHandle();
+    void Application::setupPipelineResource() {
+        // 创建着色器程序
+        shaderProgram = ShaderProgram::create(vulkanCore->getLogicalDevice());
+
+        // 顶点着色器
+        ShaderBuilder vertBuilder(ShaderType::Vertex, "#version 450\n#extension GL_KHR_vulkan_glsl : enable");
+        vertBuilder.addInput("vec3", "inPosition", 0);
+        vertBuilder.addOutput("vec3", "fragColor", 0);
+        vertBuilder.addUniformBuffer("CameraUBO", 0, 0, { "mat4 viewProj" });
+        vertBuilder.setMainBody(R"(
+            gl_Position = ubo.viewProj * vec4(inPosition, 1.0);
+            fragColor = vec3(1.0, 1.0, 1.0);
+        )");
+        std::string vertexShader = vertBuilder.getSource();
+        shaderProgram->addGLSLStringStage(vertexShader, VK_SHADER_STAGE_VERTEX_BIT, "main", {}, "VertexShader");
+
+        // 片段着色器
+        ShaderBuilder fragBuilder(ShaderType::Fragment, "#version 450\n#extension GL_KHR_vulkan_glsl : enable");
+        fragBuilder.addInput("vec3", "fragColor", 0);
+        fragBuilder.addOutput("vec4", "outColor", 0);
+        fragBuilder.setMainBody(R"(
+            outColor = vec4(fragColor, 1.0);
+        )");
+        std::string fragmentShader = fragBuilder.getSource();
+        shaderProgram->addGLSLStringStage(fragmentShader, VK_SHADER_STAGE_FRAGMENT_BIT, "main", {}, "FragmentShader");
+
+        auto mCube = Cube::create();
+        auto geometry = mCube->generateGeometry();
+        mesh = Mesh(geometry, vulkanCore->getLogicalDevice(), windowContext->getCommandPool());
     }
 
     void Application::setupRenderGraph() {
@@ -103,111 +132,39 @@ namespace StarryEngine {
     }
 
     void Application::executeGeometryPass(CommandBuffer* cmdBuffer, RenderContext& context) {
-        if (!mCube) return;
-
-        VkRenderPassBeginInfo renderPassInfo{};
-        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        renderPassInfo.renderPass = mGeometryRenderPass;
-        renderPassInfo.framebuffer = mGeometryFramebuffers[context.getFrameIndex()];
-        renderPassInfo.renderArea.offset = { 0, 0 };
-        renderPassInfo.renderArea.extent = { mWidth, mHeight };
-
-        std::array<VkClearValue, 2> clearValues{};
-        clearValues[0].color = { {0.1f, 0.2f, 0.3f, 1.0f} };
-        clearValues[1].depthStencil = { 1.0f, 0 };
-        renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-        renderPassInfo.pClearValues = clearValues.data();
-
-        context.beginRenderPass(&renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-
-        context.bindGraphicsPipeline("GeometryPipeline");
-
-        VkDescriptorSet descriptorSet = mDescriptorSets[context.getFrameIndex()];
-        context.bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, descriptorSet, 0);
-
-        VkViewport viewport{};
-        viewport.x = 0.0f;
-        viewport.y = 0.0f;
-        viewport.width = static_cast<float>(mWidth);
-        viewport.height = static_cast<float>(mHeight);
-        viewport.minDepth = 0.0f;
-        viewport.maxDepth = 1.0f;
-        context.setViewport(viewport);
-
-        VkRect2D scissor{};
-        scissor.offset = { 0, 0 };
-        scissor.extent = { mWidth, mHeight };
-        context.setScissor(scissor);
-
-        if (mVertexBufferHandle.isValid()) {
-            context.bindVertexBuffer(mVertexBufferHandle);
+        VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
+        if (descriptorSet!=VK_NULL_HANDLE) {
+            context.bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, descriptorSet, 0);
         }
 
-        if (mIndexBufferHandle.isValid()) {
-            context.bindIndexBuffer(mIndexBufferHandle);
-        }
+        context.bindVertexBuffers(mesh.getVertexBuffer()->getBufferHandles());
+     
+        context.bindIndexBuffer(mesh.getIndexBuffer()->getBuffer());
 
-        context.drawIndexed(mCube->getIndexCount(), 1, 0, 0, 0);
-
-        context.endRenderPass();
+        context.drawIndexed(mesh.getVertexBuffer()->getVertexCount(), 1, 0, 0, 0);
     }
 
     Pipeline::Ptr Application::createGeometryPipeline(PipelineBuilder& builder) {
-        // 配置管线状态
-        builder.setColorBlend(getColorBlendState())
-            .setDepthStencil(getDepthStencilState())
-            .setInputAssembly(getInputAssemblyState())
-            .setMultisample(getMultisampleState())
-            .setRasterization(getRasterizationState())
-            .setDynamic(getDynamicState())
-            .setViewport(getViewportState())
-            .setVertexInput(getCubeVertexInput())
-            .setShaderProgram(mShaderProgram);
-
-        // 设置描述符集布局
-        std::vector<VkDescriptorSetLayout> descriptorSetLayouts = getDescriptorSetLayouts();
-        builder.setDescriptorSetLayouts(descriptorSetLayouts);
-
-        return builder.build();
-    }
-
-    VertexInput Application::getCubeVertexInput() const {
-        if (!mCube) return VertexInput();
-
-        auto geometry = mCube->generateGeometry();
-
-        auto mesh = Mesh(geometry,vulkanCore->getLogicalDevice(),windowContext->getCommandPool());
-        auto bindings = mesh.getVertexBuffer()->getBindingDescriptions();
-        auto attributes = mesh.getVertexBuffer()->getAttributeDescriptions();
-
         VertexInput vertexInput;
-        for (const auto& binding : bindings) {
+        for (const auto& binding : mesh.getVertexBuffer()->getBindingDescriptions()) {
             vertexInput.addBinding(binding.binding, binding.stride);
         }
-        for (const auto& attr : attributes) {
+        for (const auto& attr : mesh.getVertexBuffer()->getAttributeDescriptions()) {
             vertexInput.addAttribute(attr.binding, attr);
         }
 
-        return vertexInput;
-    }
-
-    Rasterization Application::getRasterizationState() const {
-        return Rasterization()
+        auto raterization = Rasterization()
             .setCullMode(VK_CULL_MODE_BACK_BIT)
             .setFrontFace(VK_FRONT_FACE_COUNTER_CLOCKWISE)
             .setPolygonMode(VK_POLYGON_MODE_FILL)
             .setLineWidth(1.0f);
-    }
 
-    DepthStencil Application::getDepthStencilState() const {
-        return DepthStencil()
+        auto depthStencil = DepthStencil()
             .enableDepthTest(VK_TRUE)
             .enableDepthWrite(VK_TRUE)
-            .setDepthCompareOp(VK_COMPARE_OP_LESS);
-    }
-
-    ColorBlend Application::getColorBlendState() const {
-        return ColorBlend().addAttachment(
+			.setDepthCompareOp(VK_COMPARE_OP_LESS);
+        
+        auto colorBlend = ColorBlend().addAttachment(
             ColorBlend::Config{
                 VK_FALSE,
                 VK_BLEND_FACTOR_ONE,
@@ -222,63 +179,32 @@ namespace StarryEngine {
                 VK_COLOR_COMPONENT_A_BIT
             }
         );
-    }
 
-    InputAssembly Application::getInputAssemblyState() const {
-        return InputAssembly()
+		auto inputAssembly = InputAssembly()
             .setTopology(VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST)
             .enablePrimitiveRestart(VK_FALSE);
-    }
 
-    MultiSample Application::getMultisampleState() const {
-        return MultiSample()
+		auto multiSample = MultiSample()
             .enableSampleShading(VK_FALSE)
             .setSampleCount(VK_SAMPLE_COUNT_1_BIT);
-    }
 
-    Dynamic Application::getDynamicState() const {
-        return Dynamic().setEnableDynamic(true);
-    }
+		auto dynamic = Dynamic().setEnableDynamic(true);
 
-    Viewport Application::getViewportState() const {
-        return Viewport()
+        auto viewport= Viewport()
             .IsOpenglCoordinate()
             .init(windowContext->getSwapchainExtent());
-    }
 
-    std::vector<VkDescriptorSetLayout> Application::getDescriptorSetLayouts() const {
-        std::vector<VkDescriptorSetLayout> layouts;
-        if (mDescriptorSetLayout != VK_NULL_HANDLE) {
-            layouts.push_back(mDescriptorSetLayout);
-        }
-        return layouts;
-    }
-
-    void Application::setupResources() {
-        // 创建着色器程序
-        mShaderProgram = ShaderProgram::create(vulkanCore->getLogicalDevice());
-
-        // 顶点着色器
-        ShaderBuilder vertBuilder(ShaderType::Vertex, "#version 450\n#extension GL_KHR_vulkan_glsl : enable");
-        vertBuilder.addInput("vec3", "inPosition", 0);
-        vertBuilder.addOutput("vec3", "fragColor", 0);
-        vertBuilder.addUniformBuffer("CameraUBO", 0, 0, { "mat4 viewProj" });
-        vertBuilder.setMainBody(R"(
-            gl_Position = ubo.viewProj * vec4(inPosition, 1.0);
-            fragColor = vec3(1.0, 1.0, 1.0);
-        )");
-        std::string vertexShader = vertBuilder.getSource();
-        mShaderProgram->addGLSLStringStage(vertexShader, VK_SHADER_STAGE_VERTEX_BIT, "main", {}, "VertexShader");
-
-        // 片段着色器
-        ShaderBuilder fragBuilder(ShaderType::Fragment, "#version 450\n#extension GL_KHR_vulkan_glsl : enable");
-        fragBuilder.addInput("vec3", "fragColor", 0);
-        fragBuilder.addOutput("vec4", "outColor", 0);
-        fragBuilder.setMainBody(R"(
-            outColor = vec4(fragColor, 1.0);
-        )");
-        std::string fragmentShader = fragBuilder.getSource();
-        mShaderProgram->addGLSLStringStage(fragmentShader, VK_SHADER_STAGE_FRAGMENT_BIT, "main", {}, "FragmentShader");
+        return builder.setColorBlend(colorBlend)
+            .setDepthStencil(depthStencil)
+            .setInputAssembly(inputAssembly)
+            .setMultisample(multiSample)
+            .setRasterization(raterization)
+            .setDynamic(dynamic)
+            .setViewport(viewport)
+            .setVertexInput(vertexInput)
+            .setShaderProgram(shaderProgram)
+            .setDescriptorSetLayouts(descriptorSetLayouts)
+            .build();
     }
 
     void Application::run() {

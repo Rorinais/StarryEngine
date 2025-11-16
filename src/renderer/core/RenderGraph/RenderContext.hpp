@@ -42,17 +42,16 @@ namespace StarryEngine {
         void endRenderPass();
 
         // 管线状态管理
-        void bindGraphicsPipeline(const std::string& pipelineName);
+        void bindGraphicsPipeline(VkPipeline pipeline);
         void bindComputePipeline(const std::string& pipelineName);
         void setViewport(const VkViewport& viewport);
         void setScissor(const VkRect2D& scissor);
         void setBlendConstants(const float constants[4]);
 
         // 资源绑定
-        void bindVertexBuffer(ResourceHandle bufferHandle, uint32_t binding = 0, VkDeviceSize offset = 0);
-        void bindVertexBuffers(const std::vector<ResourceHandle>& bufferHandles,
-            const std::vector<VkDeviceSize>& offsets = {});
-        void bindIndexBuffer(ResourceHandle bufferHandle, VkDeviceSize offset = 0,
+        void bindVertexBuffer(VkBuffer buffer, uint32_t binding = 0, VkDeviceSize offset = 0);
+        void bindVertexBuffers(const std::vector<VkBuffer>& buffers);
+        void bindIndexBuffer(VkBuffer buffer, VkDeviceSize offset = 0,
             VkIndexType indexType = VK_INDEX_TYPE_UINT32);
         void bindDescriptorSet(VkPipelineBindPoint bindPoint, VkDescriptorSet descriptorSet,
             uint32_t firstSet = 0, VkPipelineLayout layout = VK_NULL_HANDLE);

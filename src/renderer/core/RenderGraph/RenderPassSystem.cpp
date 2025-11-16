@@ -1,10 +1,14 @@
 #include "RenderPassSystem.hpp"
+#include "./RenderContext.hpp"
+#include "../VulkanCore/VulkanCore.hpp"
+#include "../../../renderer/pipeline/pipeline.hpp"
+#include "PipelineBuilder.hpp"
 #include <iostream>
 
 namespace StarryEngine {
-    void RenderPass::createPipeline(VkRenderPass renderPass, const LogicalDevice::Ptr& logicalDevice) {
+    void RenderPass::createPipeline(VkRenderPass renderPass,VkDevice device) {
         if (mPipelineCreationCallback && !mPipeline) {
-            PipelineBuilder builder(renderPass, logicalDevice);
+            PipelineBuilder builder(renderPass, device);
             mPipeline = mPipelineCreationCallback(builder);
 
             if (mPipeline) {
@@ -73,17 +77,38 @@ namespace StarryEngine {
     }
 
     bool RenderPass::compile() {
-        std::cout << "[RenderPass] Compiling " << mName << " with " << mResourceUsages.size()
-            << " resource usages" << std::endl;
-
-        // 调试输出资源使用情况
         dumpDebugInfo();
 
         return createVulkanRenderPass() && createFramebuffer();
     }
 
     void RenderPass::execute(CommandBuffer* cmdBuffer, RenderContext& context) {
-        std::cout << "[RenderPass] Executing " << mName << std::endl;
+        VkRenderPassBeginInfo renderPassInfo{};
+        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        renderPassInfo.renderPass = mRenderPass;
+        renderPassInfo.framebuffer = mFramebuffers[context.getFrameIndex()];
+        renderPassInfo.renderArea.offset = { 0, 0 };
+        renderPassInfo.renderArea.extent = mPipeline->getViewportExtent();
+
+        renderPassInfo.clearValueCount = static_cast<uint32_t>(mClearValues.size());
+        renderPassInfo.pClearValues = mClearValues.data();
+
+        context.beginRenderPass(&renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+        context.bindGraphicsPipeline(mPipeline->getHandle());
+
+        VkViewport viewport{};
+        viewport.x = 0.0f;
+        viewport.y = 0.0f;
+        viewport.width = static_cast<float>(mPipeline->getViewportExtent().width);
+        viewport.height = static_cast<float>(mPipeline->getViewportExtent().height);
+        viewport.minDepth = 0.0f;
+        viewport.maxDepth = 1.0f;
+        context.setViewport(viewport);
+
+        VkRect2D scissor{};
+        scissor.offset = { 0, 0 };
+        scissor.extent = mPipeline->getViewportExtent();
+        context.setScissor(scissor);
 
         if (mExecuteCallback) {
             mExecuteCallback(cmdBuffer, context);
@@ -91,6 +116,8 @@ namespace StarryEngine {
         else {
             std::cout << "[RenderPass] WARNING: No execution callback set for " << mName << std::endl;
         }
+
+		context.endRenderPass();
     }
 
     void RenderPass::dumpDebugInfo() const {

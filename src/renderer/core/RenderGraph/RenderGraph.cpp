@@ -1,4 +1,5 @@
 #include "RenderGraph.hpp"
+#include "../VulkanCore/VulkanCore.hpp"
 #include <stdexcept>
 #include <fstream>
 #include <sstream>
@@ -6,8 +7,8 @@
 
 namespace StarryEngine {
 
-    RenderGraph::RenderGraph(VkDevice device, VmaAllocator allocator, const LogicalDevice::Ptr& logicalDevice)
-        : mDevice(device), mAllocator(allocator), mLogicalDevice(logicalDevice),
+    RenderGraph::RenderGraph(VkDevice device, VmaAllocator allocator)
+        : mDevice(device), mAllocator(allocator),
         mResourceRegistry(device, allocator),
         mCompiler(device, allocator) {
         initializeInternalComponents();
@@ -82,7 +83,7 @@ namespace StarryEngine {
             // 现在getHandle()应该返回有效的VkRenderPass
             VkRenderPass renderPass = pass->getHandle();
             if (renderPass != VK_NULL_HANDLE) {
-                pass->createPipeline(renderPass, mLogicalDevice);
+                pass->createPipeline(renderPass, mDevice);
             }
             else {
                 std::cerr << "WARNING: No render pass handle for " << pass->getName() << std::endl;
@@ -133,7 +134,7 @@ namespace StarryEngine {
         return empty;
     }
 
-    Pipeline::Ptr RenderGraph::getPipeline(const std::string& passName) const {
+    std::shared_ptr <Pipeline> RenderGraph::getPipeline(const std::string& passName) const {
         for (const auto& pass : mPasses) {
             if (pass->getName() == passName) {
                 return pass->getPipeline();
