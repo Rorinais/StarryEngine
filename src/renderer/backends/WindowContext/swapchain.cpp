@@ -1,5 +1,4 @@
 #include "SwapChain.hpp"
-#include "../../resources/textures/Texture.hpp"
 
 namespace StarryEngine {
     SwapChain::SwapChain(const LogicalDevice::Ptr& logicalDevice, VkSurfaceKHR surface, const Window::Ptr& window)

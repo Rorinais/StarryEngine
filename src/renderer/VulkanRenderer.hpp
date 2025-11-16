@@ -1,4 +1,3 @@
-// VulkanRenderer.hpp - 简化版本
 #pragma once
 #include "interface/IRenderGraph.hpp"
 #include "interface/IVulkanBackend.hpp"

@@ -1,8 +1,8 @@
 file(GLOB_RECURSE SRC ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
 
-add_library(core STATIC ${SRC})
+add_library(renderer STATIC ${SRC})
 
-target_link_libraries(core PRIVATE
+target_link_libraries(renderer PRIVATE
 	BaseInterface
 )
 

@@ -17,10 +17,7 @@ target_link_libraries(BaseInterface INTERFACE
 
 add_subdirectory(core/application)
 add_subdirectory(core/platform)
-add_subdirectory(core/utils)
-add_subdirectory(renderer/core)
-add_subdirectory(renderer/pipeline)
-add_subdirectory(renderer/resources)
+add_subdirectory(renderer)
 
 
 # 设置图标文件路径

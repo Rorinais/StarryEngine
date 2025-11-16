@@ -1,6 +1,6 @@
 #pragma once
-#include "../../renderer/core/VulkanCore/VulkanCore.hpp"
-#include "../../renderer/core/WindowContext/WindowContext.hpp"
+#include "../../renderer/backends/VulkanCore/VulkanCore.hpp"
+#include "../../renderer/backends/WindowContext/WindowContext.hpp"
 #include "../../renderer/VulkanRenderer.hpp"
 #include "../../renderer/resources/models/mesh/Mesh.hpp"
 #include "../../renderer/resources/shaders/ShaderProgram.hpp"
