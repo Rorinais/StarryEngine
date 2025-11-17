@@ -137,6 +137,10 @@ namespace StarryEngine {
                     mWindowContext->getCommandPool()
                 );
 
+                if (frame.mainCommandBuffer) {
+                    frame.initRenderContext(mVulkanCore->getLogicalDeviceHandle(), i);
+                }
+
                 if (!frame.imageAvailableSemaphore || !frame.renderFinishedSemaphore ||
                     !frame.inFlightFence || !frame.mainCommandBuffer) {
                     return false;

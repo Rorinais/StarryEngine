@@ -2,7 +2,7 @@
 #include "SwapChain.hpp"
 #include "../VulkanCore/VulkanCore.hpp"
 #include "../../resources/textures/Texture.hpp"
-#include "../FrameContext/FrameContext.hpp"
+#include "../RenderContext/RenderContext.hpp"
 
 namespace StarryEngine {
     class WindowContext {
@@ -12,7 +12,6 @@ namespace StarryEngine {
 
         ~WindowContext() {
             mSwapChain.reset();
-            mDepthTexture.reset();
         }
 
 
@@ -23,7 +22,6 @@ namespace StarryEngine {
 
         SwapChain::Ptr getSwapChain() const { return mSwapChain; }
         CommandPool::Ptr getCommandPool() const { return mCommandPool; }
-        Texture::Ptr getDepthTexture() const { return mDepthTexture; }
         VkExtent2D getSwapchainExtent() const { return mSwapChain->getExtent(); }
         VkFormat getSwapchainFormat() const { return mSwapChain->getImageFormat(); }
         const std::vector<VkImageView>& getSwapchainImageViews() const {
@@ -34,12 +32,9 @@ namespace StarryEngine {
         bool isInitialized() const;
     private:
         bool mInitialized = false;
-        void createDepthResources();
-
         StarryEngine::VulkanCore::Ptr mVulkanCore;
         StarryEngine::Window::Ptr mWindow;
         StarryEngine::CommandPool::Ptr mCommandPool;
         StarryEngine::SwapChain::Ptr mSwapChain;
-        StarryEngine::Texture::Ptr mDepthTexture;
     };
 } 

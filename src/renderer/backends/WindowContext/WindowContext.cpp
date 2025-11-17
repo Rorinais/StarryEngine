@@ -10,17 +10,10 @@ namespace StarryEngine {
             mVulkanCore->getSurface(),
             mWindow
         );
-
-        createDepthResources();
         mInitialized = true;
     }
 
     void WindowContext::cleanupSwapchain() {
-        if (mDepthTexture) {
-            mDepthTexture->cleanup();
-            mDepthTexture.reset();
-        }
-
         if (mSwapChain) {
             mSwapChain->cleanup();
             mSwapChain.reset();
@@ -34,23 +27,6 @@ namespace StarryEngine {
             mVulkanCore->getLogicalDevice(),
             mVulkanCore->getSurface(),
             mWindow
-        );
-
-        createDepthResources();
-    }
-
-    void WindowContext::createDepthResources() {
-        if (mDepthTexture) {
-            mDepthTexture.reset();
-        }
-        mDepthTexture = Texture::create(
-            mVulkanCore->getLogicalDevice(),
-            Texture::Type::Depth,
-            VkExtent2D{
-                mSwapChain->getExtent().width,
-                mSwapChain->getExtent().height
-            },
-            mCommandPool
         );
     }
 

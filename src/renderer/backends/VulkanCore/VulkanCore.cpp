@@ -30,7 +30,6 @@ namespace StarryEngine {
         deviceConfig.wideLines = VK_TRUE;
         logicalDevice = LogicalDevice::create(physicalDevice, deviceConfig);
 
-        // 创建VMA分配器
         createAllocator();
 
         mInitialized = true;
@@ -71,12 +70,11 @@ namespace StarryEngine {
 
     void VulkanCore::createAllocator() {
         VmaAllocatorCreateInfo allocatorInfo = {};
-        allocatorInfo.vulkanApiVersion = VK_API_VERSION_1_3;
+        allocatorInfo.vulkanApiVersion = instance->getInstanceConfig().apiVersion;
         allocatorInfo.physicalDevice = physicalDevice->getHandle();
         allocatorInfo.device = logicalDevice->getHandle();
         allocatorInfo.instance = instance->getHandle();
 
-        // 可选：设置VMA特性
         allocatorInfo.flags = 0;
 
         VkResult result = vmaCreateAllocator(&allocatorInfo, &mAllocator);
