@@ -1,4 +1,4 @@
-#include"commandBuffer.hpp"
+#include"CommandBuffer.hpp"
 namespace StarryEngine {
     CommandBuffer::CommandBuffer(const LogicalDevice::Ptr& logicalDevice, const CommandPool::Ptr& commandPool, bool asSecondary
     ) :mLogicalDevice(logicalDevice), mCommandPool(commandPool) {

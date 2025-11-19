@@ -26,10 +26,6 @@ namespace StarryEngine {
 
         bool isFrameInProgress() const override;
 
-        VkDevice getDevice() const {
-            return mVulkanCore->getLogicalDeviceHandle();
-        }
-
     private:
         bool createSyncObjects();
 

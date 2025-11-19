@@ -1,10 +1,10 @@
 #pragma once
 #include "../../../core/platform/window.hpp"
-#include "instance.hpp"
-#include "logicalDevice.hpp"
-#include "physicalDevice.hpp"
-#include "vulkanDebug.hpp"
-#include "vk_mem_alloc.h"  // 添加VMA头文件
+#include "Instance.hpp"
+#include "LogicalDevice.hpp"
+#include "PhysicalDevice.hpp"
+#include "VulkanDebug.hpp"
+#include "vk_mem_alloc.h" 
 
 namespace StarryEngine {
     const int MAX_FRAMES_IN_FLIGHT = 2;

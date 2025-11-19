@@ -1,5 +1,5 @@
-#include"physicalDevice.hpp"
-#include"../WindowContext/swapchain.hpp"
+#include"PhysicalDevice.hpp"
+#include"../windowContext/swapchain.hpp"
 namespace StarryEngine {
     PhysicalDevice::PhysicalDevice(const Instance::Ptr& instance, VkSurfaceKHR surface)
         : mInstance(instance), mSurface(surface) {

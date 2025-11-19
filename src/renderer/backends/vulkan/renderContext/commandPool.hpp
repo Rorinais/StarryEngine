@@ -1,5 +1,5 @@
 #pragma once
-#include"../VulkanCore/logicalDevice.hpp"
+#include"../VulkanCore/LogicalDevice.hpp"
 namespace StarryEngine {
 	class CommandPool {
 	public:

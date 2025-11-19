@@ -1,4 +1,4 @@
-#include"logicalDevice.hpp"
+#include"LogicalDevice.hpp"
 namespace StarryEngine {
 	LogicalDevice::LogicalDevice(const PhysicalDevice::Ptr& physicalDevice, LogicalDevice::Config config) :
 		mPhysicalDevice(physicalDevice), mConfig(config) {

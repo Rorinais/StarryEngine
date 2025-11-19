@@ -1,8 +1,8 @@
 #pragma once
 #include "SwapChain.hpp"
-#include "../VulkanCore/VulkanCore.hpp"
+#include "../vulkanCore/VulkanCore.hpp"
 #include "../../resources/textures/Texture.hpp"
-#include "../RenderContext/RenderContext.hpp"
+#include "../renderContext/RenderContext.hpp"
 
 namespace StarryEngine {
     class WindowContext {

@@ -1,4 +1,4 @@
-#include"fence.hpp"
+#include"Fence.hpp"
 namespace StarryEngine {
 
     Fence::Fence(const LogicalDevice::Ptr& logicalDevice, bool signaled) :mLogicalDevice(logicalDevice) {

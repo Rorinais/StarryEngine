@@ -1,5 +1,6 @@
 #include "SimpleVulkanBackend.hpp"
 #include "../interface/IResourceManager.hpp"
+#include "vulkanCore/LogicalDevice.hpp"
 
 namespace StarryEngine {
         bool SimpleVulkanBackend::initialize(VulkanCore::Ptr core, WindowContext::Ptr window) {
@@ -138,7 +139,7 @@ namespace StarryEngine {
                 );
 
                 if (frame.mainCommandBuffer) {
-                    frame.initRenderContext(mVulkanCore->getLogicalDeviceHandle(), i);
+                    frame.initRenderContext(mVulkanCore->getLogicalDevice(), i);
                 }
 
                 if (!frame.imageAvailableSemaphore || !frame.renderFinishedSemaphore ||

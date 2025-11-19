@@ -1,8 +1,6 @@
 #pragma once
 #include "physicalDevice.hpp"
 namespace StarryEngine {
-    class LogicalDevice;
-
     class LogicalDevice {
     public:
         struct Config {

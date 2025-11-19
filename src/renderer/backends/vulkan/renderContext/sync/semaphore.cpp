@@ -1,4 +1,4 @@
-#include"semaphore.hpp"
+#include"Semaphore.hpp"
 namespace StarryEngine {
 
 	Semaphore::Semaphore(const LogicalDevice::Ptr& logicalDevice) :mLogicalDevice(logicalDevice) {

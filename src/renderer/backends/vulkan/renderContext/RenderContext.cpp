@@ -3,7 +3,7 @@
 
 namespace StarryEngine {
 
-    RenderContext::RenderContext(VkDevice device, VkCommandBuffer cmd, uint32_t frameIndex)
+    RenderContext::RenderContext(std::shared_ptr<LogicalDevice> device, VkCommandBuffer cmd, uint32_t frameIndex)
         : mDevice(device), mCommandBuffer(cmd), mFrameIndex(frameIndex) {
     }
 

@@ -1,6 +1,6 @@
 #pragma once
 #include "../../../core/platform/Window.hpp" 
-#include "../VulkanCore/VulkanCore.hpp"
+#include "../vulkanCore/VulkanCore.hpp"
 
 namespace StarryEngine {
     struct SwapChainSupportDetails {

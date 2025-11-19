@@ -17,7 +17,7 @@ namespace StarryEngine {
         Fence::Ptr inFlightFence; 
         std::unique_ptr<class RenderContext> renderContext;
 
-        void initRenderContext(VkDevice device, uint32_t frameIndex) {
+        void initRenderContext(std::shared_ptr<LogicalDevice> device,uint32_t frameIndex) {
             renderContext = std::make_unique<RenderContext>(
                 device,
                 mainCommandBuffer->getHandle(),
@@ -28,7 +28,7 @@ namespace StarryEngine {
 
     class RenderContext {
     public:
-        RenderContext(VkDevice device, VkCommandBuffer cmd, uint32_t frameIndex);
+        RenderContext(std::shared_ptr<LogicalDevice> device, VkCommandBuffer cmd, uint32_t frameIndex);
 
         // 渲染通道管理
         void beginRenderPass(const VkRenderPassBeginInfo* renderPassBeginInfo, VkSubpassContents subpassContents);
@@ -63,9 +63,10 @@ namespace StarryEngine {
         // 获取底层对象
         VkCommandBuffer getCommandBuffer() const { return mCommandBuffer; }
         uint32_t getFrameIndex() const { return mFrameIndex; }
-        VkDevice getDevice() const { return mDevice; }
+        std::shared_ptr<LogicalDevice> getLogicalDevice() const { return mDevice; }
+        VkDevice getDevice() const { return mDevice->getHandle(); }
     private:
-        VkDevice mDevice;
+        std::shared_ptr<LogicalDevice> mDevice;
         VkCommandBuffer mCommandBuffer;
         uint32_t mFrameIndex;
     };

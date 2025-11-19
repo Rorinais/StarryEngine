@@ -10,13 +10,6 @@ namespace StarryEngine {
         if (mPipelineCreationCallback && !mPipeline) {
             PipelineBuilder builder(renderPass, device);
             mPipeline = mPipelineCreationCallback(builder);
-
-            if (mPipeline) {
-                std::cout << "[RenderPass] Created pipeline for " << mName << std::endl;
-            }
-            else {
-                std::cout << "[RenderPass] WARNING: Failed to create pipeline for " << mName << std::endl;
-            }
         }
     }
 
