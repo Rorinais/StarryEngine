@@ -1,6 +1,6 @@
 #pragma once
-#include "RenderGraph/RenderGraphTypes.hpp"
-#include "../core/VulkanCore/VulkanCore.hpp"
+#include "../renderGraph/RenderGraphTypes.hpp"
+#include "../backends/vulkan/vulkanCore/VulkanCore.hpp"
 #include <vulkan/vulkan.h>
 #include <memory>
 

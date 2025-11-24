@@ -3,44 +3,6 @@
 #include <stdexcept>
 
 namespace StarryEngine {
-	Subpass::Subpass() {}
-
-	Subpass::~Subpass() {}
-
-	void Subpass::addInputAttachment(const VkAttachmentReference& ref) {
-		mInputAttachments.push_back(ref);
-	}
-
-	void Subpass::addColorAttachment(const VkAttachmentReference& ref) {
-		mColorAttachments.push_back(ref);
-	}
-
-	void Subpass::addResolveAttachment(const VkAttachmentReference& ref) {
-		mResolveAttachments.push_back(ref);
-	}
-
-	void Subpass::setDepthStencilAttachment(const VkAttachmentReference& ref) {
-		mDepthStencilAttachment = ref;
-	}
-
-	void Subpass::biuldSubpassDescription(VkPipelineBindPoint bindPoint) {
-		if(mColorAttachments.empty() && mInputAttachments.empty()) {
-			throw std::runtime_error("Subpass must have at least one color or input attachment.");
-		}
-
-		mSubpassDescription.pipelineBindPoint = bindPoint;
-
-		mSubpassDescription.colorAttachmentCount = static_cast<uint32_t>(mColorAttachments.size());
-		mSubpassDescription.pColorAttachments = mColorAttachments.data();
-
-		mSubpassDescription.inputAttachmentCount = static_cast<uint32_t>(mInputAttachments.size());
-		mSubpassDescription.pInputAttachments = mInputAttachments.data();
-
-		mSubpassDescription.pResolveAttachments = mResolveAttachments.empty() ? nullptr : mResolveAttachments.data();
-
-		mSubpassDescription.pDepthStencilAttachment = (mDepthStencilAttachment.attachment != VK_ATTACHMENT_UNUSED) ? &mDepthStencilAttachment : nullptr;
-	}
-
 	RenderPass::RenderPass(std::shared_ptr<LogicalDevice> logicalDevice):mLogicalDevice(logicalDevice) {}
 
 	RenderPass::~RenderPass() {

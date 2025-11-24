@@ -1,31 +1,8 @@
 #pragma once
-#include<vulkan/vulkan.h>
-#include<vector>
-#include<memory>
+#include"Subpass.hpp"
 
 namespace StarryEngine {
 	class LogicalDevice;
-
-	class Subpass {
-	public:
-		Subpass();
-		~Subpass();
-		void addInputAttachment(const VkAttachmentReference& ref);
-		void addColorAttachment(const VkAttachmentReference& ref);
-		void addResolveAttachment(const VkAttachmentReference& ref);
-		void setDepthStencilAttachment(const VkAttachmentReference& ref);
-
-		void biuldSubpassDescription(VkPipelineBindPoint bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS);
-
-		const VkSubpassDescription& getSubpassDescription() const { return mSubpassDescription; }
-
-	private:
-		VkSubpassDescription mSubpassDescription;
-		std::vector<VkAttachmentReference> mInputAttachments{};
-		std::vector<VkAttachmentReference> mColorAttachments{};
-		std::vector<VkAttachmentReference> mResolveAttachments{};
-		VkAttachmentReference mDepthStencilAttachment{};
-	};
 
 	class RenderPass {
 	public:
