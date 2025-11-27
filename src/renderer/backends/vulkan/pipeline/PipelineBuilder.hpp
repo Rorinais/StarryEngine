@@ -1,5 +1,5 @@
 #pragma once
-#include "../../pipeline/pipeline.hpp"
+#include "pipeline.hpp"
 #include <vulkan/vulkan.h>
 #include <memory>
 

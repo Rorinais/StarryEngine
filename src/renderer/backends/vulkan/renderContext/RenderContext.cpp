@@ -14,15 +14,10 @@ namespace StarryEngine {
             throw std::invalid_argument("RenderPassBeginInfo cannot be null");
         }
         vkCmdBeginRenderPass(mCommandBuffer, renderPassBeginInfo, subpassContents);
-        mInRenderPass = true;
     }
 
     void RenderContext::endRenderPass() {
-        if (!mInRenderPass) {
-            throw std::runtime_error("Cannot end render pass: no render pass is active");
-        }
         vkCmdEndRenderPass(mCommandBuffer);
-        mInRenderPass = false;
     }
 
     // ==================== 管线状态管理 ====================
@@ -32,7 +27,6 @@ namespace StarryEngine {
             throw std::invalid_argument("Graphics pipeline cannot be null");
         }
         vkCmdBindPipeline(mCommandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-        mBoundPipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
     }
 
     void RenderContext::bindComputePipeline(VkPipeline pipeline) {
@@ -40,7 +34,6 @@ namespace StarryEngine {
             throw std::invalid_argument("Compute pipeline cannot be null");
         }
         vkCmdBindPipeline(mCommandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, pipeline);
-        mBoundPipelineBindPoint = VK_PIPELINE_BIND_POINT_COMPUTE;
     }
 
     void RenderContext::setViewport(const VkViewport& viewport) {

@@ -1,9 +1,7 @@
 #pragma once
-#include"../../base.hpp"
-#include"../resources/shaders/shaderUtils.hpp"
-#include"../resources/shaders/shaderProgram.hpp"
-#include"../core/VulkanCore/VulkanCore.hpp"
-#include "../../renderer/core/RenderGraph/RenderPassSystem.hpp"
+#include "../../../../base.hpp"
+#include "../../../resourceManager/shaders/ShaderProgram.hpp"
+#include"../vulkanCore/LogicalDevice.hpp"
 #include"pipelineStates/colorBlend.hpp"
 #include"pipelineStates/depthStencil.hpp"
 #include"pipelineStates/inputAssembly.hpp"
