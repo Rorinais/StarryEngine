@@ -4,9 +4,6 @@
 #include "sync/fence.hpp"
 #include "sync/semaphore.hpp"
 #include <vulkan/vulkan.h>
-#include <functional>
-#include <unordered_map>
-#include <string>
 #include <memory>
 
 namespace StarryEngine {
@@ -32,6 +29,7 @@ namespace StarryEngine {
 
         // 渲染通道管理
         void beginRenderPass(const VkRenderPassBeginInfo* renderPassBeginInfo, VkSubpassContents subpassContents);
+        void nextSubpass(VkSubpassContents contents);
         void endRenderPass();
 
         // 管线状态管理

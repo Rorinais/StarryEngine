@@ -21,14 +21,19 @@ namespace StarryEngine {
         return *this;
     }
 
+    SubpassBuilder& SubpassBuilder::addPreserveAttachment(const std::string& name) {
+        mPreserveAttachmentNames.push_back(name);
+        return *this;
+    }
+
     SubpassBuilder& SubpassBuilder::setDepthStencilAttachment(const std::string& name, VkImageLayout layout) {
         mDepthStencilAttachmentName = name;
         mAttachmentLayouts[name] = layout;
         return *this;
     }
 
-    SubpassBuilder& SubpassBuilder::addPreserveAttachment(const std::string& name) {
-        mPreserveAttachmentNames.push_back(name);
+    SubpassBuilder& SubpassBuilder::setPipelineName(const std::string& pipelineName) {
+        mPipelineName = pipelineName;
         return *this;
     }
 

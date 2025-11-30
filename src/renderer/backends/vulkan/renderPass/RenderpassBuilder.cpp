@@ -86,8 +86,7 @@ namespace StarryEngine {
         return addAttachment(name, attachment);
     }
 
-    // 主要的 build 方法
-    std::unique_ptr<RenderPass> RenderPassBuilder::build(bool autoDependencies) {
+    std::unique_ptr<RenderPassBuildResult> RenderPassBuilder::build(bool autoDependencies) {
         // 分析附件使用情况
         analyzeAttachmentUsage();
 
@@ -96,6 +95,10 @@ namespace StarryEngine {
             generateDependenciesFromUsage();
         }
 
+        auto result = std::make_unique<RenderPassBuildResult>();
+        result->name = mName;
+
+        // 创建 RenderPass 对象
         auto renderPass = std::make_unique<RenderPass>(mLogicalDevice);
 
         // 添加所有附件
@@ -103,8 +106,10 @@ namespace StarryEngine {
             renderPass->addAttachment(attachment);
         }
 
-        // 构建所有子流程
-        for (auto& subpassBuilder : mSubpassBuilders) {
+        // 构建所有子流程并收集信息
+        for (uint32_t subpassIndex = 0; subpassIndex < mSubpassBuilders.size(); ++subpassIndex) {
+            auto& subpassBuilder = mSubpassBuilders[subpassIndex];
+
             // 验证子流程中引用的附件都存在
             for (const auto& name : subpassBuilder.getColorAttachmentNames()) {
                 if (mAttachmentIndices.find(name) == mAttachmentIndices.end()) {
@@ -124,6 +129,8 @@ namespace StarryEngine {
             // 构建子流程
             auto subpass = subpassBuilder.build(mAttachmentIndices);
             renderPass->addSubpass(*subpass);
+
+            result->pipelineNameToSubpassIndexMap[subpassBuilder.getPipelineName()] = subpassIndex;
         }
 
         // 合并依赖（手动 + 自动，自动去重）
@@ -134,7 +141,10 @@ namespace StarryEngine {
 
         // 构建 RenderPass
         renderPass->buildRenderPass();
-        return renderPass;
+
+        // 设置结果
+        result->renderPass = std::move(renderPass);
+        return result;
     }
 
     // 新的附件使用分析 - 基于字符串名称
@@ -215,10 +225,10 @@ namespace StarryEngine {
             for (uint32_t reader : readers) {
                 if (reader > writer) {
                     if (isDepthStencil) {
-                        addDepthReadAfterWriteDependency(writer, reader, name);
+                        addDepthReadAfterWriteDependency(writer, reader);
                     }
                     else {
-                        addColorReadAfterWriteDependency(writer, reader, name);
+                        addColorReadAfterWriteDependency(writer, reader);
                     }
                 }
             }
@@ -229,19 +239,19 @@ namespace StarryEngine {
         for (size_t i = 0; i < writersVec.size(); ++i) {
             for (size_t j = i + 1; j < writersVec.size(); ++j) {
                 if (isDepthStencil) {
-                    addDepthWriteAfterWriteDependency(writersVec[i], writersVec[j], name);
+                    addDepthWriteAfterWriteDependency(writersVec[i], writersVec[j]);
                 }
                 else {
-                    addColorWriteAfterWriteDependency(writersVec[i], writersVec[j], name);
+                    addColorWriteAfterWriteDependency(writersVec[i], writersVec[j]);
                 }
             }
         }
 
         // 外部依赖
-        generateExternalDependencies(name, usage, isDepthStencil);
+        generateExternalDependencies(usage, isDepthStencil);
     }
 
-    void RenderPassBuilder::addColorReadAfterWriteDependency(uint32_t src, uint32_t dst, const std::string& attachment) {
+    void RenderPassBuilder::addColorReadAfterWriteDependency(uint32_t src, uint32_t dst) {
         VkSubpassDependency dep{};
         dep.srcSubpass = src;
         dep.dstSubpass = dst;
@@ -253,7 +263,7 @@ namespace StarryEngine {
         mAutoDependencies.push_back(dep);
     }
 
-    void RenderPassBuilder::addDepthReadAfterWriteDependency(uint32_t src, uint32_t dst, const std::string& attachment) {
+    void RenderPassBuilder::addDepthReadAfterWriteDependency(uint32_t src, uint32_t dst) {
         VkSubpassDependency dep{};
         dep.srcSubpass = src;
         dep.dstSubpass = dst;
@@ -265,7 +275,7 @@ namespace StarryEngine {
         mAutoDependencies.push_back(dep);
     }
 
-    void RenderPassBuilder::addColorWriteAfterWriteDependency(uint32_t first, uint32_t second, const std::string& attachment) {
+    void RenderPassBuilder::addColorWriteAfterWriteDependency(uint32_t first, uint32_t second) {
         VkSubpassDependency dep{};
         dep.srcSubpass = first;
         dep.dstSubpass = second;
@@ -277,7 +287,7 @@ namespace StarryEngine {
         mAutoDependencies.push_back(dep);
     }
 
-    void RenderPassBuilder::addDepthWriteAfterWriteDependency(uint32_t first, uint32_t second, const std::string& attachment) {
+    void RenderPassBuilder::addDepthWriteAfterWriteDependency(uint32_t first, uint32_t second) {
         VkSubpassDependency dep{};
         dep.srcSubpass = first;
         dep.dstSubpass = second;
@@ -289,7 +299,7 @@ namespace StarryEngine {
         mAutoDependencies.push_back(dep);
     }
 
-    void RenderPassBuilder::generateExternalDependencies(const std::string& name, const AttachmentUsage& usage, bool isDepthStencil) {
+    void RenderPassBuilder::generateExternalDependencies(const AttachmentUsage& usage, bool isDepthStencil) {
         // 找出第一个使用者
         uint32_t firstUser = VK_SUBPASS_EXTERNAL;
         if (!usage.writingSubpasses.empty()) {

@@ -2,9 +2,7 @@
 #include"../vulkanCore/VulkanCore.hpp"
 
 namespace StarryEngine {
-	DescriptorPool::DescriptorPool(const std::shared_ptr<LogicalDevice>& logicalDevice) :mLogicalDevice(logicalDevice) {}
-
-	void DescriptorPool::initialize(const std::vector<VkDescriptorPoolSize>& poolSizes, uint32_t maxSets, VkDescriptorPoolCreateFlags flags = 0) {
+	DescriptorPool::DescriptorPool(const std::shared_ptr<LogicalDevice>& logicalDevice, const std::vector<VkDescriptorPoolSize>& poolSizes, uint32_t maxSets, VkDescriptorPoolCreateFlags flags) :mLogicalDevice(logicalDevice) {
 		VkDescriptorPoolCreateInfo poolInfo{};
 		poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
 		poolInfo.flags = flags;

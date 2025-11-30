@@ -16,6 +16,11 @@ namespace StarryEngine {
         vkCmdBeginRenderPass(mCommandBuffer, renderPassBeginInfo, subpassContents);
     }
 
+
+    void RenderContext::nextSubpass(VkSubpassContents contents) {
+        vkCmdNextSubpass(mCommandBuffer, contents);
+    }
+
     void RenderContext::endRenderPass() {
         vkCmdEndRenderPass(mCommandBuffer);
     }
@@ -62,7 +67,6 @@ namespace StarryEngine {
             return;
         }
 
-        // 检查是否有null buffer
         for (const auto& buffer : buffers) {
             if (buffer == VK_NULL_HANDLE) {
                 throw std::invalid_argument("Vertex buffer in vector cannot be null");
@@ -102,7 +106,6 @@ namespace StarryEngine {
             return;
         }
 
-        // 检查是否有null descriptor set
         for (const auto& set : descriptorSets) {
             if (set == VK_NULL_HANDLE) {
                 throw std::invalid_argument("Descriptor set in vector cannot be null");

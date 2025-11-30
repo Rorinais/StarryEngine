@@ -12,7 +12,7 @@ namespace StarryEngine {
     class SubpassBuilder {
     public:
         SubpassBuilder(std::string name) {
-			mName = std::move(name);
+            mSubpassName = std::move(name);
         }
         ~SubpassBuilder() = default;
 
@@ -29,6 +29,8 @@ namespace StarryEngine {
         SubpassBuilder& setDepthStencilAttachment(const std::string& name,
             VkImageLayout layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL);
 
+        SubpassBuilder& setPipelineName(const std::string& pipelineName);
+
         SubpassBuilder& addPreserveAttachment(const std::string& name);
 
         // 构建 Subpass（需要名称到索引的映射）
@@ -41,14 +43,17 @@ namespace StarryEngine {
         const std::vector<std::string>& getResolveAttachmentNames() const { return mResolveAttachmentNames; }
         const std::optional<std::string>& getDepthStencilAttachmentName() const { return mDepthStencilAttachmentName; }
         const std::vector<std::string>& getPreserveAttachmentNames() const { return mPreserveAttachmentNames; }
-
+        const std::string& getPipelineName() const { return mPipelineName; }
+		const std::string& getSubpassName() const { return mSubpassName; }
     private:
         struct AttachmentInfo {
             std::string name;
             VkImageLayout layout;
         };
 
-		std::string mName;
+		std::string mSubpassName;
+        std::string mPipelineName;
+
         std::vector<std::string> mColorAttachmentNames;
         std::vector<std::string> mInputAttachmentNames;
         std::vector<std::string> mResolveAttachmentNames;

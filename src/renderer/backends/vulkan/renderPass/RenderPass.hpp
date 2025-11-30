@@ -22,6 +22,8 @@ namespace StarryEngine {
 
 		void buildRenderPass();
 
+		VkRenderPass getHandle() const { return mRenderPass; }
+
 	private:
 		std::shared_ptr<LogicalDevice> mLogicalDevice;
 

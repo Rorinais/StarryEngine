@@ -1,8 +1,35 @@
-#include "RenderPassBuilder.hpp"
-#include "SubpassBuilder.hpp"
+#include"DescriptorManager.hpp"
+#include"../vulkanCore/VulkanCore.hpp"
+#include "../renderPass/RenderPassBuilder.hpp"
 
 namespace StarryEngine {
-	void createRenderPass() {
+	void test() {
+		auto device = LogicalDevice::create();
+
+		auto descriptorManager = std::make_shared<DescriptorManager>(device);
+
+		// 定义set 0的布局
+		descriptorManager->beginSetLayout(0);
+		descriptorManager->addUniformBuffer(0, VK_SHADER_STAGE_VERTEX_BIT); // binding 0: uniform buffer
+		descriptorManager->addCombinedImageSampler(1, VK_SHADER_STAGE_FRAGMENT_BIT); // binding 1: texture
+		descriptorManager->endSetLayout();
+
+		// 定义set 1的布局
+		descriptorManager->beginSetLayout(1);
+		descriptorManager->addStorageBuffer(0, VK_SHADER_STAGE_COMPUTE_BIT); // binding 0: storage buffer
+		descriptorManager->endSetLayout();
+
+		// 分配描述符集，每个set分配2个实例（用于双缓冲）
+		descriptorManager->allocateSets(2);
+	}
+
+	void render(std::shared_ptr<DescriptorManager> descriptorManager,uint32_t frameIndex) {
+		descriptorManager->updateUniformBuffer(0, 0, frameIndex, uniformBuffer0);
+		descriptorManager->updateUniformBuffer(0, 1, frameIndex, uniformBuffer1);
+		descriptorManager->updateStorageBuffer(1, 0, frameIndex, storageBuffer0);
+	}
+
+    void createRenderPass() {
         // 创建延迟渲染流程
         auto deferredRenderPass = RenderPassBuilder("mainPass")
             // 1. 定义所有附件
@@ -36,9 +63,10 @@ namespace StarryEngine {
                 SubpassBuilder("postpass")
                 .addInputAttachment("lightingResult")
                 .addColorAttachment("finalOutput")
-            )
-
-            // 3. 构建（自动推导依赖）
-            .build(true);
-	}
+            );
+        auto renderPassResult = deferredRenderPass.build();
+        renderPassResult->name;
+        renderPassResult->renderPass;
+        renderPassResult->pipelineNameToSubpassIndexMap["gbufferpass"];
+    }
 }
