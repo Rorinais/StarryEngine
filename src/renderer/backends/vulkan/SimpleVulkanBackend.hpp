@@ -10,25 +10,25 @@ namespace StarryEngine {
     public:
         SimpleVulkanBackend() = default;
 
-        bool initialize(VulkanCore::Ptr core, WindowContext::Ptr window) ;
+        bool initialize(VulkanCore::Ptr core, WindowContext::Ptr window);
 
-        void shutdown() ;
+        void shutdown();
 
-        void beginFrame() ;
+        void beginFrame();
 
-        VkCommandBuffer getCommandBuffer() ;
+        VkCommandBuffer getCommandBuffer();
 
-        void submitFrame() ;
+        void submitFrame();
 
-        void onSwapchainRecreated() ;
+        void onSwapchainRecreated();
 
-		uint32_t getCurrentFrameIndex() const { return mCurrentFrame; }
+        uint32_t getCurrentFrameIndex() const { return mCurrentFrame; }
 
         uint32_t getCurrentImageIndex() const { return mImageIndex; }
 
-		FrameContext* getCurrentFrameContext() const { return mCurrentFrameContext; }
+        FrameContext* getCurrentFrameContext() const { return mCurrentFrameContext; }
 
-		bool isFrameInProgress() const { return mFrameInProgress; }
+        bool isFrameInProgress() const { return mFrameInProgress; }
 
     private:
         bool createSyncObjects();
