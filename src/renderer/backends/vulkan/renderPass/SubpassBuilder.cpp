@@ -1,5 +1,6 @@
 #include "SubpassBuilder.hpp"
 #include <stdexcept>
+#include <iostream>
 
 namespace StarryEngine {
 
@@ -40,6 +41,7 @@ namespace StarryEngine {
     std::unique_ptr<Subpass> SubpassBuilder::build(const std::unordered_map<std::string, uint32_t>& nameToIndexMap,
         VkPipelineBindPoint bindPoint) {
         auto subpass = std::make_unique<Subpass>();
+        std::cout << "=== Building Subpass ===" << std::endl;
 
         // 构建颜色附件引用
         for (const auto& name : mColorAttachmentNames) {
@@ -47,6 +49,9 @@ namespace StarryEngine {
             if (it == nameToIndexMap.end()) {
                 throw std::runtime_error("Color attachment not found in index map: " + name);
             }
+            std::cout << "Color Attachment - Name: " << name
+                << ", Index: " << it->second
+                << ", Layout: " << mAttachmentLayouts[name] << std::endl;
             subpass->addColorAttachmentRef(it->second, mAttachmentLayouts[name]);
         }
 
@@ -56,6 +61,9 @@ namespace StarryEngine {
             if (it == nameToIndexMap.end()) {
                 throw std::runtime_error("Input attachment not found in index map: " + name);
             }
+            std::cout << "Color Attachment - Name: " << name
+                << ", Index: " << it->second
+                << ", Layout: " << mAttachmentLayouts[name] << std::endl;
             subpass->addInputAttachmentRef(it->second, mAttachmentLayouts[name]);
         }
 
@@ -75,6 +83,9 @@ namespace StarryEngine {
             if (it == nameToIndexMap.end()) {
                 throw std::runtime_error("Depth/stencil attachment not found in index map: " + *mDepthStencilAttachmentName);
             }
+            std::cout << "Color Attachment - Name: " << *mDepthStencilAttachmentName
+                << ", Index: " << it->second
+                << ", Layout: " << mAttachmentLayouts[*mDepthStencilAttachmentName] << std::endl;
             VkAttachmentReference ref{ it->second, mAttachmentLayouts[*mDepthStencilAttachmentName] };
             subpass->setDepthStencilAttachmentRef(ref);
         }

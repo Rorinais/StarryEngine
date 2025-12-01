@@ -1,12 +1,11 @@
 #include "SimpleVulkanBackend.hpp"
-#include "../../interface/IResourceManager.hpp"
 #include "vulkanCore/LogicalDevice.hpp"
 
 namespace StarryEngine {
         bool SimpleVulkanBackend::initialize(VulkanCore::Ptr core, WindowContext::Ptr window) {
             mVulkanCore = core;
             mWindowContext = window;
-
+            mImagesInFlight.resize(mWindowContext->getSwapchainImageCount(), VK_NULL_HANDLE);
             if (!createSyncObjects()) {
                 return false;
             }
@@ -43,6 +42,10 @@ namespace StarryEngine {
                 throw std::runtime_error("Failed to acquire swap chain image!");
             }
 
+
+            if (mImagesInFlight[mImageIndex] != VK_NULL_HANDLE) {
+                vkWaitForFences(mVulkanCore->getLogicalDeviceHandle(), 1, &mImagesInFlight[mImageIndex], VK_TRUE, UINT64_MAX);
+            }
             mFrameInProgress = true;
 
             // 开始命令缓冲区
@@ -61,6 +64,9 @@ namespace StarryEngine {
 
             // 结束命令记录
             ctx.mainCommandBuffer->end();
+
+
+            mImagesInFlight[mImageIndex] = ctx.inFlightFence->getHandle();
 
             // 提交命令缓冲区
             VkSubmitInfo submitInfo{};
@@ -104,26 +110,18 @@ namespace StarryEngine {
                 throw std::runtime_error("Failed to present swap chain image!");
             }
 
+
+
             mFrameInProgress = false;
             mCurrentFrame = (mCurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
         }
 
-        void SimpleVulkanBackend::onSwapchainRecreated(IResourceManager* manager) {
+        void SimpleVulkanBackend::onSwapchainRecreated() {
             vkDeviceWaitIdle(mVulkanCore->getLogicalDeviceHandle());
+            std::fill(mImagesInFlight.begin(), mImagesInFlight.end(), VK_NULL_HANDLE);
             mWindowContext->recreateSwapchain();
-
-            if (manager) {
-                manager->onSwapchainRecreated(mWindowContext.get());
-            }
         }
 
-        uint32_t SimpleVulkanBackend::getCurrentFrameIndex() const {
-            return mCurrentFrame;
-        }
-
-        bool SimpleVulkanBackend::isFrameInProgress() const {
-            return mFrameInProgress;
-        }
         bool SimpleVulkanBackend::createSyncObjects() {
             mFrameContexts.resize(MAX_FRAMES_IN_FLIGHT);
 

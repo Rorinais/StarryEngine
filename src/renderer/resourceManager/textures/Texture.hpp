@@ -1,7 +1,8 @@
 #pragma once
 #include "../../../base.hpp"
-#include "../../core/FrameContext/FrameContext.hpp"
-#include "../../core/WindowContext/swapchain.hpp"
+#include "../../../renderer/backends/vulkan/vulkanCore/VulkanCore.hpp"
+#include "../../../renderer/backends/vulkan/windowContext/Swapchain.hpp"
+#include "../../../renderer/backends/vulkan/renderContext/CommandPool.hpp"
 #include <stdexcept>
 namespace StarryEngine {
     class Texture {

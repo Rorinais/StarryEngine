@@ -72,7 +72,6 @@ namespace StarryEngine {
         VkDescriptorSet getDescriptorSet(uint32_t setIndex, uint32_t frameIndex = 0) const;
         VkDescriptorSetLayout getLayout(uint32_t setIndex) const;
         std::shared_ptr<DescriptorSetLayout> getLayoutObject(uint32_t setIndex) const;
-        std::vector<VkDescriptorSetLayout> getLayoutHandles() const;
         uint32_t getCurrentInstanceCount() const;
 
         // === 获取布局的方法 ===

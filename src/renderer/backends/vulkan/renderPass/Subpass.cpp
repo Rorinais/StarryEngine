@@ -27,7 +27,7 @@ namespace StarryEngine {
 	}
 
 	Subpass& Subpass::addColorAttachmentRef(uint32_t attachmentIndex, VkImageLayout layout) {
-		VkAttachmentReference ref{};
+		VkAttachmentReference ref{}; 
 		ref.attachment = attachmentIndex;
 		ref.layout = layout;
 		return addColorAttachmentRef(ref);

@@ -15,8 +15,9 @@ namespace StarryEngine {
 		mAttachments.push_back(attachment);
 	}
 
-	void RenderPass::addSubpass(const Subpass& subpass) {
-		mSubpasses.push_back(subpass);
+	void RenderPass::addSubpass(std::unique_ptr<Subpass> subpass) {
+		// 接收所有权，转移 unique_ptr
+		mSubpasses.push_back(std::move(subpass));
 	}
 
 	void RenderPass::addDependency(const VkSubpassDependency& dependency) {
@@ -26,7 +27,7 @@ namespace StarryEngine {
 	void RenderPass::buildRenderPass() {
 		std::vector<VkSubpassDescription> subpassDescriptions;
 		for (const auto& subpass : mSubpasses) {
-			subpassDescriptions.push_back(subpass.getSubpassDescription());
+			subpassDescriptions.push_back(subpass->getSubpassDescription());
 		}
 
 		VkRenderPassCreateInfo renderPassInfo{};

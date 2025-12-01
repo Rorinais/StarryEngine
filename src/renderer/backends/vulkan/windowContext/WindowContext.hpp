@@ -1,7 +1,7 @@
 #pragma once
 #include "SwapChain.hpp"
 #include "../vulkanCore/VulkanCore.hpp"
-#include "../../resources/textures/Texture.hpp"
+#include "../../../resourceManager/textures/Texture.hpp"
 #include "../renderContext/RenderContext.hpp"
 
 namespace StarryEngine {

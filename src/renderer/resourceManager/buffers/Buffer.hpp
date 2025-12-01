@@ -1,7 +1,7 @@
 #pragma once
 #include "../../../base.hpp"
-#include "../../core/VulkanCore/VulkanCore.hpp"
-#include "../../core/FrameContext/FrameContext.hpp"
+#include "../../../renderer/backends/vulkan/vulkanCore/VulkanCore.hpp"
+#include "../../../renderer/backends/vulkan/renderContext/CommandPool.hpp"
 #include <stdexcept>
 #include <cstring>
 namespace StarryEngine {

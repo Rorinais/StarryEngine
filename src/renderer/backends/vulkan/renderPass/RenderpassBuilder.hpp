@@ -20,7 +20,7 @@ namespace StarryEngine {
         RenderPassBuilder(std::string name) {
             mName = std::move(name);
         }
-        RenderPassBuilder(std::shared_ptr<LogicalDevice> logicalDevice);
+        RenderPassBuilder(std::string name,std::shared_ptr<LogicalDevice> logicalDevice);
         ~RenderPassBuilder() = default;
 
         // 使用字符串名称添加附件

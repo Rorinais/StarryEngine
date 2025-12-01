@@ -4,8 +4,8 @@
 #include "../boundingBox/BoundingBox.hpp"
 #include "../geometry/Geometry.hpp"
 //#include ".././../materials/DefaultMaterial.hpp"
-#include "../../../core/VulkanCore/VulkanCore.hpp"
-#include "../../../core/FrameContext/FrameContext.hpp"
+#include "../../../../renderer/backends/vulkan/vulkanCore/VulkanCore.hpp"
+#include "../../../../renderer/backends/vulkan/renderContext/CommandPool.hpp"
 
 namespace StarryEngine {
     class Mesh {

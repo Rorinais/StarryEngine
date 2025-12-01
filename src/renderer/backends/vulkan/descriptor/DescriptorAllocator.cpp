@@ -27,7 +27,8 @@ namespace StarryEngine {
         uint32_t maxSets = requirements.getTotalSetCount();
 
         if (!poolSizes.empty() && maxSets > 0) {
-            createPool(poolSizes, maxSets);
+            auto pool = createPool(poolSizes, maxSets);
+            mPools.push_back(pool);  
         }
     }
 
@@ -121,7 +122,7 @@ namespace StarryEngine {
 
         if (!poolSizes.empty() && maxSets > 0) {
             auto pool = createPool(poolSizes, maxSets, flags);
-            mPools.push_back(pool);
+            mPools.push_back(pool); 
         }
     }
 

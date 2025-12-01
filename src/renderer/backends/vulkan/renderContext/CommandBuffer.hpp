@@ -1,4 +1,4 @@
-	#pragma once
+#pragma once
 #include "commandPool.hpp"
 namespace StarryEngine {
 	class CommandBuffer {
@@ -16,9 +16,6 @@ namespace StarryEngine {
 		void begin(VkCommandBufferUsageFlags flag = 0, const VkCommandBufferInheritanceInfo& inheritance = {});
 
 		void end();
-
-		void executeCommands(const std::vector<VkCommandBuffer>& commandBuffers);
-		bool isRecording() const;
 
 		VkCommandBuffer getHandle() { return mCommandBuffer; }
 		const CommandPool::Ptr& getCommandPool() { return mCommandPool; }

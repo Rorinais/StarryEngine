@@ -1,4 +1,4 @@
-#include "../../interface/IVulkanBackend.hpp"
+#pragma once
 #include "VulkanCore/VulkanCore.hpp"
 #include "WindowContext/WindowContext.hpp"
 #include "RenderContext/RenderContext.hpp"
@@ -6,25 +6,29 @@
 
 namespace StarryEngine {
 
-    class SimpleVulkanBackend : public IVulkanBackend {
+    class SimpleVulkanBackend {
     public:
         SimpleVulkanBackend() = default;
 
-        bool initialize(VulkanCore::Ptr core, WindowContext::Ptr window) override;
+        bool initialize(VulkanCore::Ptr core, WindowContext::Ptr window) ;
 
-        void shutdown() override;
+        void shutdown() ;
 
-        void beginFrame() override;
+        void beginFrame() ;
 
-        VkCommandBuffer getCommandBuffer() override;
+        VkCommandBuffer getCommandBuffer() ;
 
-        void submitFrame() override;
+        void submitFrame() ;
 
-        void onSwapchainRecreated(class IResourceManager* manager=nullptr) override;
+        void onSwapchainRecreated() ;
 
-        uint32_t getCurrentFrameIndex() const override;
+		uint32_t getCurrentFrameIndex() const { return mCurrentFrame; }
 
-        bool isFrameInProgress() const override;
+        uint32_t getCurrentImageIndex() const { return mImageIndex; }
+
+		FrameContext* getCurrentFrameContext() const { return mCurrentFrameContext; }
+
+		bool isFrameInProgress() const { return mFrameInProgress; }
 
     private:
         bool createSyncObjects();
@@ -35,6 +39,7 @@ namespace StarryEngine {
         VulkanCore::Ptr mVulkanCore;
         WindowContext::Ptr mWindowContext;
 
+        std::vector<VkFence> mImagesInFlight;
         std::vector<FrameContext> mFrameContexts;
         FrameContext* mCurrentFrameContext = nullptr;
         uint32_t mCurrentFrame = 0;

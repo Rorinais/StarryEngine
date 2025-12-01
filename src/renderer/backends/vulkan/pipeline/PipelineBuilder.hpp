@@ -10,7 +10,7 @@ namespace StarryEngine {
     public:
         using Ptr = std::shared_ptr<PipelineBuilder>;
 
-        PipelineBuilder(VkRenderPass renderPass,VkDevice device);
+        PipelineBuilder(VkRenderPass renderPass, LogicalDevice::Ptr device);
 
         PipelineBuilder& setShaderProgram(ShaderProgram::Ptr program);
         PipelineBuilder& setVertexInput(const VertexInput& vertexInput);

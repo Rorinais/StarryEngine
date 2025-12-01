@@ -1,10 +1,10 @@
 #pragma once
-#include "../../../core/platform/window.hpp"
+#include "../../../../core/platform/window.hpp"
 #include "Instance.hpp"
 #include "LogicalDevice.hpp"
 #include "PhysicalDevice.hpp"
 #include "VulkanDebug.hpp"
-#include "vk_mem_alloc.h" 
+//#include "vk_mem_alloc.h" 
 
 namespace StarryEngine {
     const int MAX_FRAMES_IN_FLIGHT = 2;
@@ -34,7 +34,7 @@ namespace StarryEngine {
 
         VkSurfaceKHR getSurface() const { return mSurface; }
 
-        VmaAllocator getAllocator() const { return mAllocator; }
+        //VmaAllocator getAllocator() const { return mAllocator; }
         bool isInitialized() const;
 
     private:
@@ -48,6 +48,6 @@ namespace StarryEngine {
         VulkanDebug::Ptr vulkanDebug;
 
         VkSurfaceKHR mSurface = VK_NULL_HANDLE;
-        VmaAllocator mAllocator = VK_NULL_HANDLE; 
+        //VmaAllocator mAllocator = VK_NULL_HANDLE; 
     };
 }

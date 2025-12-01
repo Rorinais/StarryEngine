@@ -16,7 +16,7 @@ namespace StarryEngine {
 
 		void addAttachment(const VkAttachmentDescription& attachment);
 
-		void addSubpass(const Subpass& subpass);
+		void addSubpass(std::unique_ptr<Subpass> subpass);
 
 		void addDependency(const VkSubpassDependency& dependency);
 
@@ -28,7 +28,7 @@ namespace StarryEngine {
 		std::shared_ptr<LogicalDevice> mLogicalDevice;
 
 		VkRenderPass mRenderPass = VK_NULL_HANDLE;
-		std::vector<Subpass> mSubpasses{};
+		std::vector<std::unique_ptr<Subpass>> mSubpasses{};
 		std::vector<VkAttachmentDescription> mAttachments{};
 		std::vector<VkSubpassDependency> mDependencies{};
 

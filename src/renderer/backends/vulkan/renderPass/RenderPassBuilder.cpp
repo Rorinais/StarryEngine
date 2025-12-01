@@ -1,10 +1,11 @@
 #include "RenderPassBuilder.hpp"
 #include <stdexcept>
+#include <iostream>
 
 namespace StarryEngine {
 
-    RenderPassBuilder::RenderPassBuilder(std::shared_ptr<LogicalDevice> logicalDevice)
-        : mLogicalDevice(logicalDevice) {
+    RenderPassBuilder::RenderPassBuilder(std::string name,std::shared_ptr<LogicalDevice> logicalDevice)
+        : mName(name),mLogicalDevice(logicalDevice) {
     }
 
     RenderPassBuilder& RenderPassBuilder::addAttachment(const std::string& name, const VkAttachmentDescription& attachment) {
@@ -128,7 +129,7 @@ namespace StarryEngine {
 
             // 构建子流程
             auto subpass = subpassBuilder.build(mAttachmentIndices);
-            renderPass->addSubpass(*subpass);
+            renderPass->addSubpass(std::move(subpass));
 
             result->pipelineNameToSubpassIndexMap[subpassBuilder.getPipelineName()] = subpassIndex;
         }
@@ -137,6 +138,11 @@ namespace StarryEngine {
         auto finalDependencies = mergeDependencies();
         for (const auto& dependency : finalDependencies) {
             renderPass->addDependency(dependency);
+        }
+
+        std::cout << "\n=== Attachment Index Map ===" << std::endl;
+        for (const auto& [name, index] : mAttachmentIndices) {
+            std::cout << "Attachment: " << name << " -> Index: " << index << std::endl;
         }
 
         // 构建 RenderPass

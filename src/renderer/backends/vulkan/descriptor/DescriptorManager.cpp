@@ -90,6 +90,7 @@ namespace StarryEngine {
     // === 分配方法 ===
 
     void DescriptorManager::allocateSets(uint32_t setCount) {
+
         if (mIsBuildingLayout) {
             throw std::runtime_error("Cannot allocate sets while building a layout. Call endSetLayout() first.");
         }
@@ -297,15 +298,6 @@ namespace StarryEngine {
         validateSetIndex(setIndex);
         return mLayouts.at(setIndex);
     }
-
-    std::vector<VkDescriptorSetLayout> DescriptorManager::getLayoutHandles() const {
-        std::vector<VkDescriptorSetLayout> handles;
-        for (const auto& [setIndex, layout] : mLayouts) {
-            handles.push_back(layout->getHandle());
-        }
-        return handles;
-    }
-
     // === 获取布局的方法 ===
 
     std::vector<VkDescriptorSetLayout> DescriptorManager::getLayoutHandles() const {

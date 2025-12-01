@@ -58,9 +58,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     BaseInterface
     window
     application
-    core
-    pipeline
-    resources
+    renderer
 )
 
 # 创建OpenCV调试可执行文件

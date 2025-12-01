@@ -1,3 +1,4 @@
+//#define VMA_IMPLEMENTATION
 #include "VulkanCore.hpp"
 #include "../WindowContext/WindowContext.hpp"
 
@@ -30,7 +31,7 @@ namespace StarryEngine {
         deviceConfig.wideLines = VK_TRUE;
         logicalDevice = LogicalDevice::create(physicalDevice, deviceConfig);
 
-        createAllocator();
+        //createAllocator();
 
         mInitialized = true;
     }
@@ -41,10 +42,10 @@ namespace StarryEngine {
 
     void VulkanCore::cleanup() {
         // 先销毁VMA分配器
-        if (mAllocator != VK_NULL_HANDLE) {
-            vmaDestroyAllocator(mAllocator);
-            mAllocator = VK_NULL_HANDLE;
-        }
+        //if (mAllocator != VK_NULL_HANDLE) {
+        //    vmaDestroyAllocator(mAllocator);
+        //    mAllocator = VK_NULL_HANDLE;
+        //}
 
         logicalDevice.reset();
         physicalDevice.reset();
@@ -68,18 +69,18 @@ namespace StarryEngine {
         }
     }
 
-    void VulkanCore::createAllocator() {
-        VmaAllocatorCreateInfo allocatorInfo = {};
-        allocatorInfo.vulkanApiVersion = instance->getInstanceConfig().apiVersion;
-        allocatorInfo.physicalDevice = physicalDevice->getHandle();
-        allocatorInfo.device = logicalDevice->getHandle();
-        allocatorInfo.instance = instance->getHandle();
+    //void VulkanCore::createAllocator() {
+    //    VmaAllocatorCreateInfo allocatorInfo = {};
+    //    allocatorInfo.vulkanApiVersion = instance->getInstanceConfig().apiVersion;
+    //    allocatorInfo.physicalDevice = physicalDevice->getHandle();
+    //    allocatorInfo.device = logicalDevice->getHandle();
+    //    allocatorInfo.instance = instance->getHandle();
 
-        allocatorInfo.flags = 0;
+    //    allocatorInfo.flags = 0;
 
-        VkResult result = vmaCreateAllocator(&allocatorInfo, &mAllocator);
-        if (result != VK_SUCCESS) {
-            throw std::runtime_error("Failed to create VMA allocator!");
-        }
-    }
+    //    VkResult result = vmaCreateAllocator(&allocatorInfo, &mAllocator);
+    //    if (result != VK_SUCCESS) {
+    //        throw std::runtime_error("Failed to create VMA allocator!");
+    //    }
+    //}
 }

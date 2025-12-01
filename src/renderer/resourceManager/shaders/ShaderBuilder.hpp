@@ -3,9 +3,9 @@
 #include <vector>
 #include <sstream>
 #include <map>
-#include "../../core/VulkanCore/VulkanCore.hpp"
-#include "../../resources/shaders/shaderUtils.hpp"
-#include "../../resources/shaders/ShaderProgram.hpp"
+#include "../../../renderer/backends/vulkan/vulkanCore/VulkanCore.hpp"
+#include "../shaders/ShaderUtils.hpp"
+#include "../shaders/ShaderProgram.hpp"
 namespace StarryEngine {
     class ShaderBuilder {
     public:

@@ -1,6 +1,6 @@
 #pragma once
 #include "../../../base.hpp"
-#include "../../core/VulkanCore/VulkanCore.hpp"
+#include "../../../renderer/backends/vulkan/vulkanCore/VulkanCore.hpp"
 #include <shaderc/shaderc.hpp>
 namespace StarryEngine {
     class ShaderUtils {

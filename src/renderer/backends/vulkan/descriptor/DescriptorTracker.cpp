@@ -3,13 +3,13 @@
 namespace StarryEngine {
 
     // 添加单个绑定的需求
-    void DescriptorTracker::addBinding(VkDescriptorType type, uint32_t count, uint32_t setCount = 1) {
+    void DescriptorTracker::addBinding(VkDescriptorType type, uint32_t count, uint32_t setCount) {
         mTypeCounts[type] += count * setCount;
         mTotalSets += setCount;
     }
 
     // 添加整个布局的需求
-    void DescriptorTracker::addLayout(const std::vector<VkDescriptorSetLayoutBinding>& bindings, uint32_t setCount = 1) {
+    void DescriptorTracker::addLayout(const std::vector<VkDescriptorSetLayoutBinding>& bindings, uint32_t setCount) {
         for (const auto& binding : bindings) {
             mTypeCounts[binding.descriptorType] += binding.descriptorCount * setCount;
         }
