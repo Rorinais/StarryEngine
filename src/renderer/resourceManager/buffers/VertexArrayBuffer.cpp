@@ -1,195 +1,115 @@
 #include "VertexArrayBuffer.hpp"
+#include <algorithm>
+#include <stdexcept>
+
 namespace StarryEngine {
-    VertexArrayBuffer::Ptr VertexArrayBuffer::create(const LogicalDevice::Ptr& logicalDevice, const CommandPool::Ptr& commandPool) {
+
+    // VertexArrayBuffer 静态方法
+    VertexArrayBuffer::Ptr VertexArrayBuffer::create(const LogicalDevice::Ptr& logicalDevice,
+        const CommandPool::Ptr& commandPool) {
         return std::make_shared<VertexArrayBuffer>(logicalDevice, commandPool);
     }
 
-    VertexArrayBuffer::VertexArrayBuffer(
-        const LogicalDevice::Ptr& logicalDevice,
-        const CommandPool::Ptr& commandPool
-    ) : mLogicalDevice(logicalDevice), mCommandPool(commandPool) {
+    VertexArrayBuffer::VertexArrayBuffer(const LogicalDevice::Ptr& logicalDevice,
+        const CommandPool::Ptr& commandPool)
+        : mLogicalDevice(logicalDevice)
+        , mCommandPool(commandPool) {
     }
 
-    VertexArrayBuffer::~VertexArrayBuffer() { cleanup(); }
+    VertexArrayBuffer::~VertexArrayBuffer() {
+        cleanup();
+    }
 
     void VertexArrayBuffer::cleanup() {
-        mBindings.clear();
+        mBuffers.clear();
         mBindingDescriptions.clear();
         mAttributeDescriptions.clear();
+        mSeparatedAttributes.clear();
     }
 
-    // 开始定义顶点绑定
-    void VertexArrayBuffer::beginBinding(uint32_t binding, uint32_t stride) {
-        mCurrentBinding = binding;
-        mBindings[binding] = BindingInfo();
-        mBindings[binding].binding = binding;
-        mBindings[binding].stride = stride;
-        mBindings[binding].attributes.clear();
-        mBindings[binding].buffer = std::make_shared<VertexBuffer>(mLogicalDevice, mCommandPool);
+    // 原始数据上传（非模板函数）
+    void VertexArrayBuffer::upload(uint32_t binding, const void* data, size_t size,
+        const VertexLayout& layout) {
+        uploadInternal(binding, data, size, layout, BufferMode::INTERLEAVED);
     }
 
-    // 完成当前绑定，生成缓冲区
-    void VertexArrayBuffer::finishBinding() {
-        auto& binding = mBindings[mCurrentBinding];
-        if (binding.attributes.empty()) return;
+    // 添加分离属性 - 具体实现
+    void VertexArrayBuffer::addSeparatedAttributeVec3(uint32_t location, VkFormat format,
+        const std::vector<glm::vec3>& data) {
+        SeparatedAttribute attr;
+        attr.location = location;
+        attr.format = format;
+        attr.elementSize = sizeof(glm::vec3);
 
-        // 验证属性一致性
-        validateAttributes(binding);
+        // 复制数据
+        attr.data.resize(data.size() * sizeof(glm::vec3));
+        memcpy(attr.data.data(), data.data(), attr.data.size());
 
-        // 计算布局参数
-        calculateLayout(binding);
-
-        // 生成交错数据
-        std::vector<uint8_t> bufferData = interleaveData(binding);
-
-        // 上传数据到GPU
-        binding.buffer->uploadData(bufferData.data(), bufferData.size());
-
-        // 生成Vulkan描述信息
-        generateVulkanDescriptions(binding);
+        mSeparatedAttributes.push_back(attr);
     }
 
-    // 获取缓冲区句柄列表（按绑定顺序）
+    void VertexArrayBuffer::addSeparatedAttributeVec2(uint32_t location, VkFormat format,
+        const std::vector<glm::vec2>& data) {
+        SeparatedAttribute attr;
+        attr.location = location;
+        attr.format = format;
+        attr.elementSize = sizeof(glm::vec2);
+
+        // 复制数据
+        attr.data.resize(data.size() * sizeof(glm::vec2));
+        memcpy(attr.data.data(), data.data(), attr.data.size());
+
+        mSeparatedAttributes.push_back(attr);
+    }
+
+    // 查询接口实现
+    const std::vector<VkVertexInputBindingDescription>&
+        VertexArrayBuffer::getBindingDescriptions() const {
+        return mBindingDescriptions;
+    }
+
+    const std::vector<VkVertexInputAttributeDescription>&
+        VertexArrayBuffer::getAttributeDescriptions() const {
+        return mAttributeDescriptions;
+    }
+
     std::vector<VkBuffer> VertexArrayBuffer::getBufferHandles() const {
         std::vector<VkBuffer> handles;
-        for (const auto& [id, binding] : mBindings) {
-            handles.push_back(binding.buffer->getBuffer());
+        for (const auto& [binding, bufferData] : mBuffers) {
+            if (bufferData.isValid()) {
+                handles.push_back(bufferData.getHandle());
+            }
         }
         return handles;
     }
 
-    // 获取顶点总数
-    uint32_t VertexArrayBuffer::getVertexCount() const {
-        if (mBindings.empty()) return 0;
-        const auto& firstBinding = mBindings.begin()->second;
-        if (firstBinding.attributes.empty()) return 0;
-        return static_cast<uint32_t>(
-            firstBinding.attributes[0].data.size() /
-            firstBinding.attributes[0].elementSize
-            );
-    }
-
-    // 获取偏移列表（用于vkCmdBindVertexBuffers）
     std::vector<VkDeviceSize> VertexArrayBuffer::getOffsets() const {
-        std::vector<VkDeviceSize> offsets;
-        for (const auto& [id, binding] : mBindings) {
-            offsets.push_back(0); // 所有缓冲区都从0开始
-        }
-        return offsets;
+        return std::vector<VkDeviceSize>(mBuffers.size(), 0);
     }
 
-    void VertexArrayBuffer::validateAttributes(const BindingInfo& binding) {
-        const size_t vertexCount = binding.attributes[0].data.size() /
-            binding.attributes[0].elementSize;
-
-        for (const auto& attr : binding.attributes) {
-            const size_t currentCount = attr.data.size() / attr.elementSize;
-            if (currentCount != vertexCount) {
-                throw std::runtime_error(
-                    "Attribute data count mismatch in binding " +
-                    std::to_string(binding.binding) +
-                    ": expected " + std::to_string(vertexCount) +
-                    ", got " + std::to_string(currentCount)
-                );
-            }
+    uint32_t VertexArrayBuffer::getVertexCount(uint32_t binding) const {
+        auto it = mBuffers.find(binding);
+        if (it != mBuffers.end()) {
+            return it->second.vertexCount;
         }
+        return 0;
     }
 
-    // 计算布局参数（偏移、stride等）
-    void VertexArrayBuffer::calculateLayout(BindingInfo& binding) {
-        // 自动计算stride
-        if (binding.stride == 0) {
-            binding.stride = 0;
-            for (const auto& attr : binding.attributes) {
-                binding.stride += attr.elementSize;
-            }
+    std::map<uint32_t, uint32_t> VertexArrayBuffer::getAllVertexCounts() const {
+        std::map<uint32_t, uint32_t> counts;
+        for (const auto& [binding, bufferData] : mBuffers) {
+            counts[binding] = bufferData.vertexCount;
         }
-
-        // 验证手动设置的stride
-        uint32_t minStride = 0;
-        for (const auto& attr : binding.attributes) {
-            minStride += attr.elementSize;
-        }
-        if (binding.stride < minStride) {
-            throw std::runtime_error(
-                "Stride " + std::to_string(binding.stride) +
-                " is too small for attributes in binding " +
-                std::to_string(binding.binding) +
-                ", minimum is " + std::to_string(minStride)
-            );
-        }
+        return counts;
     }
 
-    // 生成交错数据
-    std::vector<uint8_t> VertexArrayBuffer::interleaveData(const BindingInfo& binding) {
-        const size_t vertexCount = binding.attributes[0].data.size() /
-            binding.attributes[0].elementSize;
-        std::vector<uint8_t> bufferData(vertexCount * binding.stride);
-
-        // 为每个顶点设置数据
-        for (size_t i = 0; i < vertexCount; ++i) {
-            uint32_t offset = 0;
-            for (const auto& attr : binding.attributes) {
-                const uint8_t* src = attr.data.data() + i * attr.elementSize;
-                uint8_t* dst = bufferData.data() + i * binding.stride + offset;
-                memcpy(dst, src, attr.elementSize);
-                offset += attr.elementSize;
-            }
-        }
-
-        return bufferData;
+    bool VertexArrayBuffer::hasBinding(uint32_t binding) const {
+        return mBuffers.find(binding) != mBuffers.end();
     }
 
-    // 生成Vulkan描述符
-    void VertexArrayBuffer::generateVulkanDescriptions(const BindingInfo& binding) {
-        // 绑定描述
-        VkVertexInputBindingDescription bindingDesc{
-            .binding = binding.binding,
-            .stride = binding.stride,
-            .inputRate = VK_VERTEX_INPUT_RATE_VERTEX
-        };
-
-        // 检查是否已存在相同的绑定描述
-        bool bindingExists = false;
-        for (auto& desc : mBindingDescriptions) {
-            if (desc.binding == binding.binding) {
-                bindingExists = true;
-                desc = bindingDesc;
-                break;
-            }
-        }
-
-        if (!bindingExists) {
-            mBindingDescriptions.push_back(bindingDesc);
-        }
-
-        // 属性描述
-        uint32_t offset = 0;
-        for (const auto& attr : binding.attributes) {
-            VkVertexInputAttributeDescription attrDesc{
-                .location = attr.location,
-                .binding = binding.binding,
-                .format = attr.format,
-                .offset = offset
-            };
-
-            // 检查是否已存在相同的属性描述
-            bool attrExists = false;
-            for (auto& desc : mAttributeDescriptions) {
-                if (desc.location == attr.location &&
-                    desc.binding == binding.binding) {
-                    attrExists = true;
-                    desc = attrDesc;
-                    break;
-                }
-            }
-
-            if (!attrExists) {
-                mAttributeDescriptions.push_back(attrDesc);
-            }
-
-            offset += attr.elementSize;
-        }
+    const VertexArrayBuffer::BufferData* VertexArrayBuffer::getBufferData(uint32_t binding) const {
+        auto it = mBuffers.find(binding);
+        return it != mBuffers.end() ? &it->second : nullptr;
     }
 
     uint32_t VertexArrayBuffer::getFormatSize(VkFormat format) {
@@ -198,9 +118,218 @@ namespace StarryEngine {
         case VK_FORMAT_R32G32_SFLOAT: return 8;
         case VK_FORMAT_R32G32B32_SFLOAT: return 12;
         case VK_FORMAT_R32G32B32A32_SFLOAT: return 16;
+        case VK_FORMAT_R8G8B8A8_UNORM: return 4;
+        case VK_FORMAT_R16G16_SFLOAT: return 4;
         default:
-            throw std::runtime_error("Unsupported vertex format: " +
-                std::to_string(format));
+            throw std::runtime_error("Unsupported format");
         }
+    }
+
+    // 兼容性API实现
+    void VertexArrayBuffer::beginSeparated(uint32_t binding) {
+        mCurrentBinding = binding;
+        mSeparatedAttributes.clear();
+    }
+
+    void VertexArrayBuffer::finishSeparated(uint32_t stride) {
+        if (mSeparatedAttributes.empty()) {
+            throw std::runtime_error("No attributes added");
+        }
+
+        size_t vertexCount = mSeparatedAttributes[0].data.size() /
+            mSeparatedAttributes[0].elementSize;
+
+        for (const auto& attr : mSeparatedAttributes) {
+            size_t currentCount = attr.data.size() / attr.elementSize;
+            if (currentCount != vertexCount) {
+                throw std::runtime_error("Attribute data count mismatch");
+            }
+        }
+
+        VertexLayout layout;
+        layout.binding = mCurrentBinding;
+
+        if (stride == 0) {
+            layout.stride = 0;
+            for (const auto& attr : mSeparatedAttributes) {
+                layout.stride += attr.elementSize;
+            }
+        }
+        else {
+            layout.stride = stride;
+        }
+
+        uint32_t offset = 0;
+        for (const auto& attr : mSeparatedAttributes) {
+            layout.addAttribute(attr.location, attr.format, offset);
+            offset += attr.elementSize;
+        }
+
+        std::vector<uint8_t> interleaved(vertexCount * layout.stride);
+        for (size_t i = 0; i < vertexCount; ++i) {
+            uint8_t* vertexPtr = interleaved.data() + i * layout.stride;
+            uint32_t currentOffset = 0;
+
+            for (const auto& attr : mSeparatedAttributes) {
+                const uint8_t* src = attr.data.data() + i * attr.elementSize;
+                uint8_t* dst = vertexPtr + currentOffset;
+                memcpy(dst, src, attr.elementSize);
+                currentOffset += attr.elementSize;
+            }
+        }
+
+        uploadInternal(mCurrentBinding, interleaved.data(),
+            interleaved.size(), layout, BufferMode::SEPARATED);
+
+        mSeparatedAttributes.clear();
+    }
+
+    void VertexArrayBuffer::beginBinding(uint32_t binding, uint32_t stride) {
+        beginSeparated(binding);
+    }
+
+    void VertexArrayBuffer::finishBinding() {
+        finishSeparated();
+    }
+
+    // 内部方法实现
+    void VertexArrayBuffer::uploadInternal(uint32_t binding, const void* data, size_t size,
+        const VertexLayout& layout, BufferMode mode) {
+        validateLayout(layout);
+
+        BufferData bufferData;
+        bufferData.layout = layout;
+        bufferData.mode = mode;
+        bufferData.vertexCount = (layout.stride > 0) ?
+            static_cast<uint32_t>(size / layout.stride) : 0;
+
+        bufferData.buffer = std::make_shared<VertexBuffer>(mLogicalDevice, mCommandPool);
+        bufferData.buffer->uploadData(data, size);
+
+        mBuffers[binding] = std::move(bufferData);
+        updateDescriptions(layout);
+
+        if (mode == BufferMode::SEPARATED) {
+            std::cerr << "[Performance] Using separated vertex data for binding "
+                << binding << ". Consider using upload() with interleaved data."
+                << std::endl;
+        }
+    }
+
+    void VertexArrayBuffer::validateLayout(const VertexLayout& layout) {
+        if (layout.stride == 0) {
+            throw std::runtime_error("Layout stride cannot be zero");
+        }
+
+        for (const auto& attr : layout.attributes) {
+            if (attr.offset >= layout.stride) {
+                throw std::runtime_error("Attribute offset exceeds stride");
+            }
+
+            uint32_t formatSize = getFormatSize(attr.format);
+            if (attr.offset + formatSize > layout.stride) {
+                throw std::runtime_error("Attribute exceeds stride");
+            }
+        }
+    }
+
+    void VertexArrayBuffer::updateDescriptions(const VertexLayout& layout) {
+        bool bindingExists = false;
+        for (auto& desc : mBindingDescriptions) {
+            if (desc.binding == layout.binding) {
+                desc.stride = layout.stride;
+                bindingExists = true;
+                break;
+            }
+        }
+
+        if (!bindingExists) {
+            VkVertexInputBindingDescription bindingDesc = {
+                .binding = layout.binding,
+                .stride = layout.stride,
+                .inputRate = VK_VERTEX_INPUT_RATE_VERTEX
+            };
+            mBindingDescriptions.push_back(bindingDesc);
+        }
+
+        for (const auto& attr : layout.attributes) {
+            bool attrExists = false;
+            for (auto& desc : mAttributeDescriptions) {
+                if (desc.location == attr.location && desc.binding == layout.binding) {
+                    desc.format = attr.format;
+                    desc.offset = static_cast<uint32_t>(attr.offset);
+                    attrExists = true;
+                    break;
+                }
+            }
+
+            if (!attrExists) {
+                VkVertexInputAttributeDescription attrDesc = {
+                    .location = attr.location,
+                    .binding = layout.binding,
+                    .format = attr.format,
+                    .offset = static_cast<uint32_t>(attr.offset)
+                };
+                mAttributeDescriptions.push_back(attrDesc);
+            }
+        }
+
+        std::sort(mBindingDescriptions.begin(), mBindingDescriptions.end(),
+            [](const auto& a, const auto& b) { return a.binding < b.binding; });
+
+        std::sort(mAttributeDescriptions.begin(), mAttributeDescriptions.end(),
+            [](const auto& a, const auto& b) {
+                if (a.binding != b.binding) return a.binding < b.binding;
+                return a.location < b.location;
+            });
+    }
+
+    // 批量设置接口实现
+    VertexArrayBuffer& VertexArrayBuffer::addBindings(
+        const std::vector<VkVertexInputBindingDescription>& bindings) {
+        for (const auto& binding : bindings) {
+            bool exists = false;
+            for (auto& desc : mBindingDescriptions) {
+                if (desc.binding == binding.binding) {
+                    desc = binding;
+                    exists = true;
+                    break;
+                }
+            }
+            if (!exists) {
+                mBindingDescriptions.push_back(binding);
+            }
+        }
+        return *this;
+    }
+
+    VertexArrayBuffer& VertexArrayBuffer::addAttributes(
+        const std::vector<VkVertexInputAttributeDescription>& attributes) {
+        for (const auto& attr : attributes) {
+            bool exists = false;
+            for (auto& desc : mAttributeDescriptions) {
+                if (desc.location == attr.location && desc.binding == attr.binding) {
+                    desc = attr;
+                    exists = true;
+                    break;
+                }
+            }
+            if (!exists) {
+                mAttributeDescriptions.push_back(attr);
+            }
+        }
+        return *this;
+    }
+
+    VertexArrayBuffer& VertexArrayBuffer::setBindings(
+        const std::vector<VkVertexInputBindingDescription>& bindings) {
+        mBindingDescriptions = bindings;
+        return *this;
+    }
+
+    VertexArrayBuffer& VertexArrayBuffer::setAttributes(
+        const std::vector<VkVertexInputAttributeDescription>& attributes) {
+        mAttributeDescriptions = attributes;
+        return *this;
     }
 }
