@@ -4,6 +4,10 @@
 namespace StarryEngine {
     VertexInputComponent::VertexInputComponent(const std::string& name) {
         setName(name);
+        reset();
+    }
+
+    VertexInputComponent& VertexInputComponent::reset() {
         mCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
         mCreateInfo.pNext = nullptr;
         mCreateInfo.flags = 0;
@@ -11,13 +15,6 @@ namespace StarryEngine {
         mCreateInfo.pVertexBindingDescriptions = nullptr;
         mCreateInfo.vertexAttributeDescriptionCount = 0;
         mCreateInfo.pVertexAttributeDescriptions = nullptr;
-    }
-
-    VertexInputComponent& VertexInputComponent::reset() {
-        mBindings.clear();
-        mAttributes.clear();
-        mAttributeLocations.clear();
-        updateCreateInfo();
         return *this;
     }
 
@@ -36,7 +33,7 @@ namespace StarryEngine {
     }
 
     VertexInputComponent& VertexInputComponent::addBinding(uint32_t binding, uint32_t stride,
-        VkVertexInputRate inputRate = VK_VERTEX_INPUT_RATE_VERTEX) {
+        VkVertexInputRate inputRate) {
         VkVertexInputBindingDescription desc{
             .binding = binding,
             .stride = stride,

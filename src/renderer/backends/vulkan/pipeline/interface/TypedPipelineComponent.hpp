@@ -3,9 +3,9 @@
 #include <string>
 #include <memory>
 namespace StarryEngine {
-	template<class Derived,PipelineComponentType Type>
+	template<class Derived, PipelineComponentType Type>
 	class TypedPipelineComponent : public IPipelineStateComponent {
-		public:
+	public:
 		static constexpr PipelineComponentType ComponentType = Type;
 
 		PipelineComponentType getType() const override {

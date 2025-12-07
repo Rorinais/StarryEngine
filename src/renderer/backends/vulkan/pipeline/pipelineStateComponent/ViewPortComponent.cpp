@@ -32,8 +32,12 @@ namespace StarryEngine {
     }
 
 
-    ViewportComponent::ViewportComponent(const std::string&name) {
+    ViewportComponent::ViewportComponent(const std::string& name) {
         setName(name);
+        reset();
+    }
+
+    ViewportComponent& ViewportComponent::reset() {
         mCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
         mCreateInfo.pNext = nullptr;
         mCreateInfo.flags = 0;
@@ -41,12 +45,6 @@ namespace StarryEngine {
         mCreateInfo.pViewports = nullptr;
         mCreateInfo.scissorCount = 0;
         mCreateInfo.pScissors = nullptr;
-    }
-
-    ViewportComponent& ViewportComponent::reset() {
-        mViewports.clear();
-        mScissors.clear();
-        updateCreateInfo();
         return *this;
     }
 

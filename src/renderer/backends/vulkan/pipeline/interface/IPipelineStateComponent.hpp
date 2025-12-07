@@ -4,12 +4,12 @@
 #include <memory>
 namespace StarryEngine {
 	enum class PipelineComponentType :uint32_t {
-		SHADER_STAGES=0,
+		SHADER_STAGE = 0,
 		VERTEX_INPUT,
 		INPUT_ASSEMBLY,
-		VIEWPORT_STAGES,
+		VIEWPORT_STATE,
 		RASTERIZATION,
-		MULTISAMPL,
+		MULTISAMPLE,
 		DEPTH_STENCIL,
 		COLOR_BLEND,
 		DYNAMIC_STATE,
@@ -17,19 +17,19 @@ namespace StarryEngine {
 		COUNT
 	};
 
-	const char* getComponentTypeName(PipelineComponentType type) {
+	static const char* getComponentTypeName(PipelineComponentType type) {
 		switch (type) {
-		case PipelineComponentType::SHADER_STAGES:
+		case PipelineComponentType::SHADER_STAGE:
 			return "ShaderStages";
 		case PipelineComponentType::VERTEX_INPUT:
 			return "VertexInput";
 		case PipelineComponentType::INPUT_ASSEMBLY:
 			return "InputAssembly";
-		case PipelineComponentType::VIEWPORT_STAGES:
+		case PipelineComponentType::VIEWPORT_STATE:
 			return "Viewport";
 		case PipelineComponentType::RASTERIZATION:
 			return "Rasterization";
-		case PipelineComponentType::MULTISAMPL:
+		case PipelineComponentType::MULTISAMPLE:
 			return "Multisample";
 		case PipelineComponentType::DEPTH_STENCIL:
 			return "DepthStencil";
@@ -44,19 +44,19 @@ namespace StarryEngine {
 		}
 	}
 
-	const  char *getComponentTypeDescription(PipelineComponentType type) {
+	static const  char* getComponentTypeDescription(PipelineComponentType type) {
 		switch (type) {
-		case PipelineComponentType::SHADER_STAGES:
+		case PipelineComponentType::SHADER_STAGE:
 			return "Shader Stages Configuration";
 		case PipelineComponentType::VERTEX_INPUT:
 			return "Vertex Input Configuration";
 		case PipelineComponentType::INPUT_ASSEMBLY:
 			return "Input Assembly Configuration";
-		case PipelineComponentType::VIEWPORT_STAGES:
+		case PipelineComponentType::VIEWPORT_STATE:
 			return "Viewport and Scissor Configuration";
 		case PipelineComponentType::RASTERIZATION:
 			return "Rasterization Configuration";
-		case PipelineComponentType::MULTISAMPL:
+		case PipelineComponentType::MULTISAMPLE:
 			return "Multisampling Configuration";
 		case PipelineComponentType::DEPTH_STENCIL:
 			return "Depth and Stencil Configuration";

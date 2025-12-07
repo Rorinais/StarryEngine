@@ -4,11 +4,12 @@
 #include "../../renderer/backends/vulkan/SimpleVulkanBackend.hpp"
 #include "../../renderer/resourceManager/models/mesh/Mesh.hpp"
 #include "../../renderer/resourceManager/shaders/ShaderProgram.hpp"
-#include "../../renderer/backends/vulkan/pipeline/pipeline.hpp"
 #include "../../renderer/backends/vulkan/descriptor/DescriptorManager.hpp"
 #include "../../renderer/backends/vulkan/renderPass/RenderPassBuilder.hpp"
 #include "../../renderer/resourceManager/textures/Texture.hpp"
 #include "../../renderer/resourceManager/buffers/UniformBuffer.hpp"
+#include "../../renderer/backends/vulkan/pipeline/NewPipelineBuilder.hpp"
+#include "../../renderer/backends/vulkan/pipeline/Pipeline.hpp"
 #include <memory>
 
 namespace StarryEngine {
@@ -27,19 +28,25 @@ namespace StarryEngine {
         void run();
 
     private:
+        // 初始化方法
         void initialize();
         void createShaderProgram();
         void createRenderPass();
         void createDescriptorManager();
-        void createUniformBuffers();  
-        void createDepthTexture();   
+        void createUniformBuffers();
+        void createDepthTexture();
         void createGraphicsPipeline();
         void createFramebuffers();
 
+        // 组件注册方法
+        void registerDefaultComponents();
+
+        // 渲染方法
         void drawFrame();
         void recordCommandBuffer(RenderContext& context, uint32_t imageIndex);
         void updateUniformBuffer(uint32_t currentFrame);
 
+        // 清理方法
         void cleanup();
         void cleanupSwapchain();
         void recreateSwapchain();
@@ -64,19 +71,24 @@ namespace StarryEngine {
         std::unique_ptr<RenderPassBuildResult> mRenderPassResult;
         VkRenderPass mRenderPass = VK_NULL_HANDLE;
         std::vector<VkFramebuffer> mSwapchainFramebuffers;
-        Texture::Ptr mDepthTexture;  // 深度纹理
+        Texture::Ptr mDepthTexture;
 
-        // 管线和着色器
-        Pipeline::Ptr mGraphicsPipeline;
+        // 着色器
         ShaderProgram::Ptr mShaderProgram;
         Mesh mMesh;
 
         // 描述符和Uniform Buffer
         DescriptorManager::Ptr mDescriptorManager;
-        std::vector<UniformBuffer::Ptr> mUniformBuffers;  // 改为UniformBuffer指针
+        std::vector<UniformBuffer::Ptr> mUniformBuffers;
 
-        // 同步对象
-        std::vector<VkFence> mImagesInFlight;
+        // 新的管线构建系统
+        std::shared_ptr<ComponentRegistry> mComponentRegistry;
+        std::shared_ptr<PipelineBuilder> mPipelineBuilder;
+
+        // 管线和布局
+        VkPipeline mGraphicsPipeline = VK_NULL_HANDLE;
+        std::shared_ptr<PipelineLayout> mPipelineLayout;
+
     };
 
 } // namespace StarryEngine

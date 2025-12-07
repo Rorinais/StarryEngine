@@ -13,15 +13,15 @@ namespace StarryEngine {
 
         ViewportScissor() = default;
 
-        ViewportScissor(float x, float y, float width, float height,const VkExtent2D& extent, bool isOpenGLCoord = true);
+        ViewportScissor(float x, float y, float width, float height, const VkExtent2D& extent, bool isOpenGLCoord = true);
 
         ViewportScissor(const VkExtent2D& extent, bool isOpenGLCoord = true);
     };
 
-    class ViewportComponent: public 
-        TypedPipelineComponent<ViewportComponent,PipelineComponentType::VIEWPORT_STAGES>{
+    class ViewportComponent : public
+        TypedPipelineComponent<ViewportComponent, PipelineComponentType::VIEWPORT_STATE> {
     public:
-        ViewportComponent(const std::string &name="default");
+        ViewportComponent(const std::string& name = "default");
         ViewportComponent& reset();
 
         ViewportComponent& addViewport(const VkViewport& viewport);

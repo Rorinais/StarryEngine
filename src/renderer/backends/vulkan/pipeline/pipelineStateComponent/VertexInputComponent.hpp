@@ -16,9 +16,9 @@ namespace StarryEngine {
         VertexInputComponent& reset();
 
         VertexInputComponent& addBinding(const VkVertexInputBindingDescription& bindingDesc);
-        VertexInputComponent& addBinding(uint32_t binding, uint32_t stride,VkVertexInputRate inputRate = VK_VERTEX_INPUT_RATE_VERTEX);
+        VertexInputComponent& addBinding(uint32_t binding, uint32_t stride, VkVertexInputRate inputRate = VK_VERTEX_INPUT_RATE_VERTEX);
         VertexInputComponent& addAttribute(const VkVertexInputAttributeDescription& attr);
-        VertexInputComponent& addAttribute(uint32_t location, uint32_t binding,VkFormat format, uint32_t offset);
+        VertexInputComponent& addAttribute(uint32_t location, uint32_t binding, VkFormat format, uint32_t offset);
         VertexInputComponent& addBindings(const std::vector<VkVertexInputBindingDescription>& bindings);
         VertexInputComponent& addAttributes(const std::vector<VkVertexInputAttributeDescription>& attributes);
         VertexInputComponent& setBindings(const std::vector<VkVertexInputBindingDescription>& bindings);
@@ -28,7 +28,7 @@ namespace StarryEngine {
         VertexInputComponent& configureFromVertexBuffer(const VertexBufferType& vertexBuffer);
 
         void apply(VkGraphicsPipelineCreateInfo& pipelineInfo) override {
-            updateCreateInfo(); 
+            updateCreateInfo();
             pipelineInfo.pVertexInputState = &mCreateInfo;
         }
 
@@ -42,7 +42,7 @@ namespace StarryEngine {
     private:
         std::vector<VkVertexInputBindingDescription> mBindings;
         std::vector<VkVertexInputAttributeDescription> mAttributes;
-        std::set<uint32_t> mAttributeLocations;  
+        std::set<uint32_t> mAttributeLocations;
 
         VkPipelineVertexInputStateCreateInfo mCreateInfo{};
 
