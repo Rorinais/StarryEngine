@@ -4,8 +4,8 @@
 
 namespace StarryEngine {
 
-    RenderPassBuilder::RenderPassBuilder(std::string name,std::shared_ptr<LogicalDevice> logicalDevice)
-        : mName(name),mLogicalDevice(logicalDevice) {
+    RenderPassBuilder::RenderPassBuilder(std::string name, std::shared_ptr<LogicalDevice> logicalDevice)
+        : mName(name), mLogicalDevice(logicalDevice) {
     }
 
     RenderPassBuilder& RenderPassBuilder::addAttachment(const std::string& name, const VkAttachmentDescription& attachment) {

@@ -33,7 +33,6 @@ namespace StarryEngine {
         void createShaderProgram();
         void createRenderPass();
         void createDescriptorManager();
-        void createUniformBuffers();
         void createDepthTexture();
         void createGraphicsPipeline();
         void createFramebuffers();
@@ -69,7 +68,6 @@ namespace StarryEngine {
 
         // 渲染资源
         std::unique_ptr<RenderPassBuildResult> mRenderPassResult;
-        VkRenderPass mRenderPass = VK_NULL_HANDLE;
         std::vector<VkFramebuffer> mSwapchainFramebuffers;
         Texture::Ptr mDepthTexture;
 
@@ -79,7 +77,8 @@ namespace StarryEngine {
 
         // 描述符和Uniform Buffer
         DescriptorManager::Ptr mDescriptorManager;
-        std::vector<UniformBuffer::Ptr> mUniformBuffers;
+        std::vector<UniformBuffer::Ptr> mMatrixUniformBuffers;
+        std::vector<UniformBuffer::Ptr> mColorUniformBuffers;
 
         // 新的管线构建系统
         std::shared_ptr<ComponentRegistry> mComponentRegistry;

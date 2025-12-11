@@ -1,4 +1,5 @@
 #include "DynamicStateComponent.hpp"
+#include <algorithm>
 
 namespace StarryEngine {
 

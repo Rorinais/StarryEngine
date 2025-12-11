@@ -1,4 +1,3 @@
-// Application.cpp - 完整修改版
 #include "Application.hpp"
 #include "../../renderer/resourceManager/models/geometry/shape/Cube.hpp"
 #include "../../renderer/resourceManager/shaders/ShaderBuilder.hpp"
@@ -11,7 +10,6 @@
 #include <array>
 #include <iostream>
 
-// 包含所有组件类
 #include "../../renderer/backends/vulkan/pipeline/pipelineStateComponent/ColorBlendComponent.hpp"
 #include "../../renderer/backends/vulkan/pipeline/pipelineStateComponent/DepthStencilComponent.hpp"
 #include "../../renderer/backends/vulkan/pipeline/pipelineStateComponent/DynamicStateComponent.hpp"
@@ -35,7 +33,6 @@ namespace StarryEngine {
     }
 
     void Application::initialize() {
-        // 1. 创建窗口
         Window::Config windowConfig{
             .width = mWidth,
             .height = mHeight,
@@ -48,7 +45,6 @@ namespace StarryEngine {
         };
         mWindow = Window::create(windowConfig);
 
-        // 设置窗口回调
         mWindow->setKeyCallback([this](int key, int action) {
             if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
                 glfwSetWindowShouldClose(mWindow->getHandle(), GLFW_TRUE);
@@ -61,57 +57,36 @@ namespace StarryEngine {
             mHeight = height;
             });
 
-        // 2. 初始化Vulkan核心
         mVulkanCore = VulkanCore::create();
         mVulkanCore->init(mWindow);
 
-        // 3. 创建命令池和窗口上下文
         auto commandPool = CommandPool::create(mVulkanCore->getLogicalDevice());
         mWindowContext = WindowContext::create();
         mWindowContext->init(mVulkanCore, mWindow, commandPool);
 
-        // 4. 初始化Vulkan后端
         if (!mVulkanBackend.initialize(mVulkanCore, mWindowContext)) {
             throw std::runtime_error("Failed to initialize Vulkan backend");
         }
 
-        // 5. 创建组件注册表
-        mComponentRegistry = std::make_shared<ComponentRegistry>();
-
-        // 6. 注册默认组件
         registerDefaultComponents();
 
-        // 7. 创建网格
         auto cube = Cube::create();
         auto geometry = cube->generateGeometry();
         mMesh = Mesh(geometry, mVulkanCore->getLogicalDevice(), mWindowContext->getCommandPool());
 
-        // 8. 创建着色器程序
         createShaderProgram();
-
-        // 9. 创建渲染通道
         createRenderPass();
-
-        // 10. 创建深度纹理
         createDepthTexture();
-
-        // 11. 创建Uniform Buffers
-        createUniformBuffers();
-
-        // 12. 创建描述符管理器
         createDescriptorManager();
-
-        // 13. 创建图形管线
         createGraphicsPipeline();
-
-        // 14. 创建帧缓冲
         createFramebuffers();
     }
 
     void Application::registerDefaultComponents() {
         auto logicalDevice = mVulkanCore->getLogicalDevice();
+        mComponentRegistry = std::make_shared<ComponentRegistry>();
 
-        // 1. 着色器阶段组件（稍后配置具体的着色器）
+        // 1. 着色器阶段组件
         auto shaderComponent = std::make_shared<ShaderStageComponent>("BasicShader");
         mComponentRegistry->registerComponent("BasicShader", shaderComponent);
         mComponentRegistry->setDefaultComponent(PipelineComponentType::SHADER_STAGE, "BasicShader");
@@ -195,53 +170,28 @@ namespace StarryEngine {
     void Application::createShaderProgram() {
         mShaderProgram = ShaderProgram::create(mVulkanCore->getLogicalDevice());
 
-        // 使用 ShaderBuilder 构建顶点着色器
-        ShaderBuilder vertBuilder(ShaderType::Vertex, "#version 450");
-
-        // 添加 uniform buffer
-        vertBuilder.addUniformBuffer("UniformBufferObject", 0, 0,
-            { "mat4 model", "mat4 view", "mat4 proj" });
-
-        // 添加输入
-        vertBuilder.addInput("vec3", "inPosition", 0);
-
-        // 添加输出
-        vertBuilder.addOutput("vec3", "fragColor", 0);
-
-        // 设置 main 函数体
-        vertBuilder.setMainBody(
-            R"(gl_Position = ubo.proj * ubo.view * ubo.model * vec4(inPosition, 1.0);
-            fragColor = vec3(1.0,0.0,1.0);)"
+        mShaderProgram->addGLSLStage(
+            "assets/shaders/core/shader.vert",
+            VK_SHADER_STAGE_VERTEX_BIT,
+            "main",
+            {},
+            "VertexShader"
         );
 
-        std::string vertexShader = vertBuilder.getSource();
-        std::cout << "=== Vertex Shader ===\n" << vertexShader << "\n\n";
-        mShaderProgram->addGLSLStringStage(vertexShader, VK_SHADER_STAGE_VERTEX_BIT, "main", {}, "VertexShader");
+        mShaderProgram->addGLSLStage(
+            "assets/shaders/core/shader.frag",
+            VK_SHADER_STAGE_FRAGMENT_BIT,
+            "main",
+            {},
+            "FragmentShader"
+        );
 
-        // 使用 ShaderBuilder 构建片段着色器
-        ShaderBuilder fragBuilder(ShaderType::Fragment, "#version 450");
-
-        // 添加输入（与顶点着色器的输出匹配）
-        fragBuilder.addInput("vec3", "fragColor", 0);
-
-        // 添加输出
-        fragBuilder.addOutput("vec4", "outColor", 0);
-
-        // 设置 main 函数体
-        fragBuilder.setMainBody(R"(outColor = vec4(fragColor, 1.0);)");
-
-        std::string fragmentShader = fragBuilder.getSource();
-        std::cout << "=== Fragment Shader ===\n" << fragmentShader << "\n";
-        mShaderProgram->addGLSLStringStage(fragmentShader, VK_SHADER_STAGE_FRAGMENT_BIT, "main", {}, "FragmentShader");
-
-        // 注册一个自定义着色器组件
         auto customShaderComponent = std::make_shared<ShaderStageComponent>("CustomShader");
         customShaderComponent->setShaderProgram(mShaderProgram);
         mComponentRegistry->registerComponent("CustomShader", customShaderComponent);
     }
 
     void Application::createRenderPass() {
-        // 使用RenderPassBuilder构建渲染通道
         RenderPassBuilder builder("MainRenderPass", mVulkanCore->getLogicalDevice());
 
         // 添加颜色附件
@@ -275,8 +225,6 @@ namespace StarryEngine {
         if (!mRenderPassResult) {
             throw std::runtime_error("Failed to build render pass");
         }
-
-        mRenderPass = mRenderPassResult->renderPass->getHandle();
     }
 
     void Application::createDepthTexture() {
@@ -291,37 +239,53 @@ namespace StarryEngine {
     }
 
     void Application::createDescriptorManager() {
+        mMatrixUniformBuffers.clear();
+        mColorUniformBuffers.clear();
+
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            // 创建矩阵UniformBuffer
+            auto matrixUniformBuffer = UniformBuffer::create(
+                mVulkanCore->getLogicalDevice(),
+                mWindowContext->getCommandPool(),
+                sizeof(UniformBufferObject)
+            );
+            mMatrixUniformBuffers.push_back(matrixUniformBuffer);
+
+            // 创建颜色UniformBuffer
+            auto colorUniformBuffer = UniformBuffer::create(
+                mVulkanCore->getLogicalDevice(),
+                mWindowContext->getCommandPool(),
+                sizeof(glm::vec3)
+            );
+            mColorUniformBuffers.push_back(colorUniformBuffer);
+        }
+
         mDescriptorManager = std::make_shared<DescriptorManager>(mVulkanCore->getLogicalDevice());
 
-        // 定义描述符集布局
+        // 定义描述符集布局 - set 0有两个binding
         mDescriptorManager->beginSetLayout(0);
-        mDescriptorManager->addUniformBuffer(0, VK_SHADER_STAGE_VERTEX_BIT, 1);
+        mDescriptorManager->addUniformBuffer(0, VK_SHADER_STAGE_VERTEX_BIT, 1);    // binding 0: 矩阵
+        mDescriptorManager->addUniformBuffer(1, VK_SHADER_STAGE_FRAGMENT_BIT, 1); // binding 1: 颜色
         mDescriptorManager->endSetLayout();
 
         // 分配描述符集
         mDescriptorManager->allocateSets(MAX_FRAMES_IN_FLIGHT);
 
-        // 为每个Uniform Buffer更新描述符集
+        // 为每个帧更新描述符集
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            // 更新binding 0（矩阵）
             mDescriptorManager->updateUniformBuffer(
-                0, 0, i,
-                mUniformBuffers[i]->getBuffer(),
+                0, 0, i,  // set 0, binding 0, frame i
+                mMatrixUniformBuffers[i]->getBuffer(),
                 0, sizeof(UniformBufferObject)
             );
-        }
-    }
 
-    void Application::createUniformBuffers() {
-        mUniformBuffers.clear();
-
-        // 为每帧创建一个UniformBuffer
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-            auto uniformBuffer = UniformBuffer::create(
-                mVulkanCore->getLogicalDevice(),
-                mWindowContext->getCommandPool(),
-                sizeof(UniformBufferObject)
+            // 更新binding 1（颜色）
+            mDescriptorManager->updateUniformBuffer(
+                0, 1, i,  // set 0, binding 1, frame i
+                mColorUniformBuffers[i]->getBuffer(),
+                0, sizeof(glm::vec3)
             );
-            mUniformBuffers.push_back(uniformBuffer);
         }
     }
 
@@ -333,41 +297,27 @@ namespace StarryEngine {
                 mComponentRegistry
             );
 
-            std::cout << "Created PipelineBuilder successfully" << std::endl;
-
             // 2. 配置顶点输入组件（基于网格的实际顶点数据）
             auto vertexInputComponent = std::dynamic_pointer_cast<VertexInputComponent>(
                 mComponentRegistry->getComponent(PipelineComponentType::VERTEX_INPUT, "BasicVertex"));
 
             if (vertexInputComponent) {
-                std::cout << "Configuring vertex input component..." << std::endl;
                 auto bindingDescriptions = mMesh.getVertexBuffer()->getBindingDescriptions();
                 auto attributeDescriptions = mMesh.getVertexBuffer()->getAttributeDescriptions();
-
-                std::cout << "Found " << bindingDescriptions.size() << " binding descriptions" << std::endl;
-                std::cout << "Found " << attributeDescriptions.size() << " attribute descriptions" << std::endl;
 
                 vertexInputComponent->reset();
 
                 for (const auto& binding : bindingDescriptions) {
-                    std::cout << "Adding binding: binding=" << binding.binding
-                        << ", stride=" << binding.stride
-                        << ", inputRate=" << binding.inputRate << std::endl;
                     vertexInputComponent->addBinding(binding.binding, binding.stride, binding.inputRate);
                 }
 
                 for (const auto& attr : attributeDescriptions) {
-                    std::cout << "Adding attribute: location=" << attr.location
-                        << ", binding=" << attr.binding
-                        << ", format=" << attr.format
-                        << ", offset=" << attr.offset << std::endl;
                     vertexInputComponent->addAttribute(attr.location, attr.binding, attr.format, attr.offset);
                 }
 
                 if (!vertexInputComponent->isValid()) {
                     throw std::runtime_error("Vertex input component is invalid");
                 }
-                std::cout << "Vertex input component is valid" << std::endl;
             }
             else {
                 throw std::runtime_error("Failed to get vertex input component");
@@ -379,7 +329,6 @@ namespace StarryEngine {
 
             if (viewportComponent) {
                 auto swapchainExtent = mWindowContext->getSwapchainExtent();
-                std::cout << "Swapchain extent: " << swapchainExtent.width << "x" << swapchainExtent.height << std::endl;
 
                 viewportComponent->reset();
 
@@ -398,8 +347,6 @@ namespace StarryEngine {
                     swapchainExtent
                 };
                 viewportComponent->addScissor(scissor);
-
-                std::cout << "Viewport component configured" << std::endl;
             }
             else {
                 throw std::runtime_error("Failed to get viewport component");
@@ -407,50 +354,13 @@ namespace StarryEngine {
 
             // 4. 获取描述符集布局
             auto descriptorSetLayouts = mDescriptorManager->getLayoutHandles();
-            std::cout << "Descriptor set layouts count: " << descriptorSetLayouts.size() << std::endl;
 
             // 5. 创建管线布局
-            std::cout << "Creating pipeline layout..." << std::endl;
             mPipelineLayout = PipelineLayout::create(
                 mVulkanCore->getLogicalDevice(),
                 descriptorSetLayouts
             );
 
-            if (!mPipelineLayout) {
-                throw std::runtime_error("Failed to create pipeline layout");
-            }
-            std::cout << "Pipeline layout created" << std::endl;
-
-            // 6. 验证组件
-            std::cout << "Validating component selections..." << std::endl;
-
-            // 先检查所有组件是否都存在
-            std::vector<std::pair<PipelineComponentType, std::string>> componentsToCheck = {
-                {PipelineComponentType::SHADER_STAGE, "CustomShader"},
-                {PipelineComponentType::VERTEX_INPUT, "BasicVertex"},
-                {PipelineComponentType::INPUT_ASSEMBLY, "TriangleList"},
-                {PipelineComponentType::VIEWPORT_STATE, "Fullscreen"},
-                {PipelineComponentType::RASTERIZATION, "Opaque"},
-                {PipelineComponentType::MULTISAMPLE, "Default"},
-                {PipelineComponentType::DEPTH_STENCIL, "Enabled"},
-                {PipelineComponentType::COLOR_BLEND, "None"},
-                {PipelineComponentType::DYNAMIC_STATE, "Basic"}
-            };
-
-            for (const auto& [type, name] : componentsToCheck) {
-                auto component = mComponentRegistry->getComponent(type, name);
-                if (!component) {
-                    std::cerr << "ERROR: Component not found: type=" << static_cast<int>(type)
-                        << ", name=" << name << std::endl;
-                }
-                else {
-                    std::cout << "Component found: type=" << static_cast<int>(type)
-                        << ", name=" << name << std::endl;
-                }
-            }
-
-            // 7. 使用组件构建管线
-            std::cout << "Building graphics pipeline..." << std::endl;
             mGraphicsPipeline = mPipelineBuilder
                 ->addComponent(PipelineComponentType::SHADER_STAGE, "CustomShader")
                 .addComponent(PipelineComponentType::VERTEX_INPUT, "BasicVertex")
@@ -463,19 +373,13 @@ namespace StarryEngine {
                 .addComponent(PipelineComponentType::DYNAMIC_STATE, "Basic")
                 .buildGraphicsPipeline(
                     mPipelineLayout->getHandle(),
-                    mRenderPass,
-                    0  // subpass
+                    mRenderPassResult->renderPass->getHandle(),
+                    mRenderPassResult->pipelineNameToSubpassIndexMap["MainPipeline"]
                 );
-
-            if (mGraphicsPipeline == VK_NULL_HANDLE) {
-                throw std::runtime_error("Graphics pipeline creation returned VK_NULL_HANDLE");
-            }
-
-            std::cout << "Graphics pipeline created successfully using component system" << std::endl;
         }
         catch (const std::exception& e) {
             std::cerr << "ERROR in createGraphicsPipeline: " << e.what() << std::endl;
-            throw;  // 重新抛出异常
+            throw;
         }
     }
 
@@ -495,7 +399,7 @@ namespace StarryEngine {
 
             VkFramebufferCreateInfo framebufferInfo{};
             framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-            framebufferInfo.renderPass = mRenderPass;
+            framebufferInfo.renderPass = mRenderPassResult->renderPass->getHandle();
             framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
             framebufferInfo.pAttachments = attachments.data();
             framebufferInfo.width = extent.width;
@@ -513,6 +417,7 @@ namespace StarryEngine {
         auto currentTime = std::chrono::high_resolution_clock::now();
         float time = std::chrono::duration<float>(currentTime - startTime).count();
 
+        // 更新矩阵
         UniformBufferObject ubo{};
         ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
         ubo.view = glm::lookAt(
@@ -528,15 +433,22 @@ namespace StarryEngine {
         );
         ubo.proj[1][1] *= -1; // 翻转Y轴
 
-        // 使用UniformBuffer的updateData方法
-        mUniformBuffers[currentFrame]->updateData(&ubo, sizeof(ubo));
+        mMatrixUniformBuffers[currentFrame]->updateData(&ubo, sizeof(ubo));
+
+        // 更新颜色
+        glm::vec3 color = glm::vec3(
+            (sin(time * 0.5f) + 1.0f) / 2.0f,
+            (sin(time * 0.8f + glm::radians(120.0f)) + 1.0f) / 2.0f,
+            (sin(time * 1.1f + glm::radians(240.0f)) + 1.0f) / 2.0f
+        );
+
+        mColorUniformBuffers[currentFrame]->updateData(&color, sizeof(color));
     }
 
     void Application::recordCommandBuffer(RenderContext& context, uint32_t imageIndex) {
-        // 开始渲染通道
         VkRenderPassBeginInfo renderPassInfo{};
         renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        renderPassInfo.renderPass = mRenderPass;
+        renderPassInfo.renderPass = mRenderPassResult->renderPass->getHandle();
         renderPassInfo.framebuffer = mSwapchainFramebuffers[imageIndex];
         renderPassInfo.renderArea.offset = { 0, 0 };
         renderPassInfo.renderArea.extent = mWindowContext->getSwapchainExtent();
@@ -550,7 +462,6 @@ namespace StarryEngine {
 
         context.beginRenderPass(&renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-        // 动态设置视口
         VkViewport viewport{};
         viewport.x = 0.0f;
         viewport.y = 0.0f;
@@ -560,31 +471,24 @@ namespace StarryEngine {
         viewport.maxDepth = 1.0f;
         context.setViewport(viewport);
 
-        // 动态设置裁剪
         VkRect2D scissor{};
         scissor.offset = { 0, 0 };
         scissor.extent = mWindowContext->getSwapchainExtent();
         context.setScissor(scissor);
 
-        // 绑定管线
         context.bindGraphicsPipeline(mGraphicsPipeline);
 
-        // 绑定顶点缓冲区
         auto vertexBuffers = mMesh.getVertexBuffer()->getBufferHandles();
         context.bindVertexBuffers(vertexBuffers);
 
-        // 绑定索引缓冲区
         context.bindIndexBuffer(mMesh.getIndexBuffer()->getBuffer());
 
-        // 绑定描述符集
         uint32_t frameIndex = mVulkanBackend.getCurrentFrameIndex();
         VkDescriptorSet descriptorSet = mDescriptorManager->getDescriptorSet(0, frameIndex);
         context.bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, descriptorSet, 0, mPipelineLayout->getHandle());
 
-        // 绘制
         context.drawIndexed(mMesh.getIndexBuffer()->getIndexCount(), 1, 0, 0, 0);
 
-        // 结束渲染通道
         context.endRenderPass();
     }
 
@@ -603,7 +507,6 @@ namespace StarryEngine {
         while (!glfwWindowShouldClose(mWindow->getHandle())) {
             glfwPollEvents();
 
-            // 绘制帧
             try {
                 drawFrame();
             }
@@ -612,21 +515,18 @@ namespace StarryEngine {
                 continue;
             }
 
-            // 检查是否需要重建交换链
             if (mFramebufferResized) {
                 mFramebufferResized = false;
                 recreateSwapchain();
             }
         }
 
-        // 等待设备空闲
         vkDeviceWaitIdle(mVulkanCore->getLogicalDeviceHandle());
     }
 
     void Application::cleanupSwapchain() {
         auto device = mVulkanCore->getLogicalDeviceHandle();
 
-        // 清理帧缓冲
         for (auto framebuffer : mSwapchainFramebuffers) {
             vkDestroyFramebuffer(device, framebuffer, nullptr);
         }
@@ -634,19 +534,14 @@ namespace StarryEngine {
     }
 
     void Application::recreateSwapchain() {
-        // 等待设备空闲
         vkDeviceWaitIdle(mVulkanCore->getLogicalDeviceHandle());
 
-        // 清理旧交换链资源
         cleanupSwapchain();
 
-        // 重建交换链
         mWindowContext->recreateSwapchain();
 
-        // 重新创建深度纹理（尺寸可能已改变）
         createDepthTexture();
 
-        // 重新配置视口组件
         auto viewportComponent = std::dynamic_pointer_cast<ViewportComponent>(
             mComponentRegistry->getComponent(PipelineComponentType::VIEWPORT_STATE, "Fullscreen"));
 
@@ -654,79 +549,51 @@ namespace StarryEngine {
             auto swapchainExtent = mWindowContext->getSwapchainExtent();
             viewportComponent->reset();
 
-            // 创建 VkViewport 对象
             VkViewport viewport = {
-                0.0f,  // x
-                0.0f,  // y
-                static_cast<float>(swapchainExtent.width),  // width
-                static_cast<float>(swapchainExtent.height), // height
-                0.0f,  // minDepth
-                1.0f   // maxDepth
+                0.0f,
+                0.0f,
+                static_cast<float>(swapchainExtent.width),
+                static_cast<float>(swapchainExtent.height),
+                0.0f,
+                1.0f
             };
             viewportComponent->addViewport(viewport);
 
-            // 创建 VkRect2D 对象
             VkRect2D scissor = {
-                {0, 0},  // offset
-                swapchainExtent  // extent
+                {0, 0},
+                swapchainExtent
             };
             viewportComponent->addScissor(scissor);
         }
-
-        // 重新创建帧缓冲
         createFramebuffers();
     }
 
     void Application::cleanup() {
-        auto device = mVulkanCore->getLogicalDeviceHandle();
-
-        // 清理交换链资源
         cleanupSwapchain();
 
-        // 清理图形管线
         if (mGraphicsPipeline != VK_NULL_HANDLE) {
-            vkDestroyPipeline(device, mGraphicsPipeline, nullptr);
+            vkDestroyPipeline(mVulkanCore->getLogicalDeviceHandle(), mGraphicsPipeline, nullptr);
             mGraphicsPipeline = VK_NULL_HANDLE;
         }
-
-        // 清理管线布局
         if (mPipelineLayout) {
             mPipelineLayout.reset();
         }
 
-        // 清理Uniform Buffers
-        mUniformBuffers.clear();
+        mMatrixUniformBuffers.clear();
+        mColorUniformBuffers.clear();
 
-        // 清理深度纹理
         if (mDepthTexture) {
             mDepthTexture->cleanup();
         }
-
-        // 清理描述符管理器
         if (mDescriptorManager) {
             mDescriptorManager->cleanup();
         }
-
-        // 清理着色器程序
-        if (mShaderProgram) {
-            // ShaderProgram有析构函数会自动清理
-        }
-
-        // 清理组件注册表
         if (mComponentRegistry) {
             mComponentRegistry->clear();
         }
-
-        // 清理管线构建器
         mPipelineBuilder.reset();
-
-        // 清理渲染通道
         mRenderPassResult.reset();
-
-        // 清理后端
         mVulkanBackend.shutdown();
-
-        // 清理窗口上下文和Vulkan核心
         mWindowContext.reset();
         mVulkanCore.reset();
         mWindow.reset();

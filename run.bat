@@ -62,7 +62,7 @@ for %%F in ("%EXECUTABLE_PATH%\%EXECUTABLE_NAME%.exe") do set LAST_BUILD_TIME=%%
 echo 最后构建时间: !LAST_BUILD_TIME!
 
 REM 检查源代码目录中的文件是否比可执行文件新
-for /r "%SCRIPT_DIR%\src" %%F in (*.cpp *.hpp *.h *.c) do (
+for /r "%SCRIPT_DIR%\src" %%F in (*.cpp *.hpp *.h *.c *.cxx *.cc *.ixx *.m *.mm) do (
     for %%G in ("%%F") do (
         if "%%~tG" gtr "!LAST_BUILD_TIME!" (
             echo 检测到源代码更改: %%~nxF
@@ -74,7 +74,18 @@ for /r "%SCRIPT_DIR%\src" %%F in (*.cpp *.hpp *.h *.c) do (
 
 REM 检查资源文件是否更改
 if exist "%SCRIPT_DIR%\assets" (
-    for /r "%SCRIPT_DIR%\assets" %%F in (*.glsl *.vert *.frag *.comp *.png *.jpg *.jpeg *.ico) do (
+    echo 检查资源文件修改情况...
+    REM 扩展资源文件类型检测列表
+    for /r "%SCRIPT_DIR%\assets" %%F in (
+        *.glsl *.vert *.frag *.comp *.geom *.tesc *.tese *.rgen *.rmiss *.rchit *.rahit
+        *.png *.jpg *.jpeg *.bmp *.tga *.tiff *.gif *.ico *.hdr *.exr *.psd
+        *.obj *.fbx *.dae *.gltf *.glb *.blend *.3ds *.max *.ma *.mb
+        *.wav *.mp3 *.ogg *.flac *.m4a *.wma
+        *.ttf *.otf *.fon *.fnt
+        *.json *.xml *.yml *.yaml *.ini *.cfg *.txt *.csv
+        *.lua *.py *.js *.ts
+        *.mat *.mtl
+    ) do (
         for %%G in ("%%F") do (
             if "%%~tG" gtr "!LAST_BUILD_TIME!" (
                 echo 检测到资源文件更改: %%~nxF

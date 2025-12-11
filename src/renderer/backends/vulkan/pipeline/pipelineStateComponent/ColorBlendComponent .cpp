@@ -7,7 +7,6 @@ namespace StarryEngine {
         reset();  // 使用reset初始化默认值
     }
     ColorBlendComponent& ColorBlendComponent::reset() {
-        std::cout << "ColorBlendComponent::reset() called for '" << getName() << "'" << std::endl;
         // 设置Vulkan默认的颜色混合状态
         mCreateInfo = {
             .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
@@ -46,7 +45,6 @@ namespace StarryEngine {
     }
 
     ColorBlendComponent& ColorBlendComponent::addAttachmentState(const VkPipelineColorBlendAttachmentState& attachment) {
-        std::cout << "ColorBlendComponent::addAttachmentState() called for '" << getName() << "'" << std::endl;
         mAttachmentStates.push_back(attachment);
         updateCreateInfo();  // 确保调用这个！
         return *this;
@@ -219,16 +217,12 @@ namespace StarryEngine {
     }
 
     bool ColorBlendComponent::isValid() const {
-        // 添加调试信息
-        std::cout << "=== ColorBlendComponent '" << getName() << "' validation ===" << std::endl;
-
         // 检查基础结构类型
         if (mCreateInfo.sType != VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO) {
             std::cout << "FAIL: Invalid structure type: " << mCreateInfo.sType
                 << " (expected: " << VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO << ")" << std::endl;
             return false;
         }
-        std::cout << "PASS: Structure type is valid" << std::endl;
 
         // 检查逻辑操作是否有效
         if (mCreateInfo.logicOpEnable) {
@@ -277,7 +271,6 @@ namespace StarryEngine {
         }
 
         // 检查附件状态的有效性
-        std::cout << "Checking " << mAttachmentStates.size() << " attachment states..." << std::endl;
         for (size_t i = 0; i < mAttachmentStates.size(); ++i) {
             const auto& state = mAttachmentStates[i];
             std::cout << "  Attachment " << i << ": blendEnable=" << state.blendEnable
@@ -289,13 +282,6 @@ namespace StarryEngine {
             }
             std::cout << "  PASS: Attachment " << i << " is valid" << std::endl;
         }
-
-        // 检查指针一致性
-        std::cout << "Checking pointer consistency..." << std::endl;
-        std::cout << "  mAttachmentStates.size() = " << mAttachmentStates.size() << std::endl;
-        std::cout << "  mCreateInfo.attachmentCount = " << mCreateInfo.attachmentCount << std::endl;
-        std::cout << "  mCreateInfo.pAttachments = " << (void*)mCreateInfo.pAttachments << std::endl;
-        std::cout << "  mAttachmentStates.data() = " << (void*)mAttachmentStates.data() << std::endl;
 
         if (mAttachmentStates.empty()) {
             if (mCreateInfo.attachmentCount != 0 || mCreateInfo.pAttachments != nullptr) {
@@ -316,8 +302,6 @@ namespace StarryEngine {
             }
             std::cout << "PASS: Attachment count and pointer are consistent" << std::endl;
         }
-
-        std::cout << "=== ColorBlendComponent '" << getName() << "' is VALID ===" << std::endl;
         return true;
     }
 
@@ -329,12 +313,6 @@ namespace StarryEngine {
         // 更新附件状态指针和数量
         mCreateInfo.attachmentCount = static_cast<uint32_t>(mAttachmentStates.size());
         mCreateInfo.pAttachments = mAttachmentStates.empty() ? nullptr : mAttachmentStates.data();
-
-        // 调试信息
-        std::cout << "ColorBlendComponent::updateCreateInfo() called for '" << getName() << "'" << std::endl;
-        std::cout << "  attachmentCount = " << mCreateInfo.attachmentCount << std::endl;
-        std::cout << "  pAttachments = " << (void*)mCreateInfo.pAttachments << std::endl;
-        std::cout << "  mAttachmentStates.data() = " << (void*)mAttachmentStates.data() << std::endl;
     }
 
     // 辅助函数：检查颜色混合附件状态是否有效

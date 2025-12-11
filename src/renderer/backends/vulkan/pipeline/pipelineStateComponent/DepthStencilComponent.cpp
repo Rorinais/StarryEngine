@@ -319,7 +319,7 @@ namespace StarryEngine {
     }
 
     // 辅助函数：检查比较操作是否有效
-    bool DepthStencilComponent::isCompareOpValid(VkCompareOp op) const{
+    bool DepthStencilComponent::isCompareOpValid(VkCompareOp op) const {
         switch (op) {
         case VK_COMPARE_OP_NEVER:
         case VK_COMPARE_OP_LESS:
