@@ -1,0 +1,6 @@
+.vs/
+out/
+build/
+/jjkk.png
+external/opencv/
+src/launch/opencv.cpp

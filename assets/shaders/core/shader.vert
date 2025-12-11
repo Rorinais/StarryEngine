@@ -1,0 +1,18 @@
+#version 450
+#extension GL_KHR_vulkan_glsl : enable
+
+layout(location = 0) in vec3 inPosition;
+
+layout(location = 0) out vec4 fragTexCoord;
+
+
+layout(set=0,binding = 0) uniform UniformBufferObject {
+    mat4 model;
+    mat4 view;
+    mat4 proj;
+} ubo;
+
+void main() {
+    gl_Position = ubo.proj * ubo.view * ubo.model * vec4(inPosition, 1.0);
+    fragTexCoord = vec4(inPosition, 1.0);
+}
