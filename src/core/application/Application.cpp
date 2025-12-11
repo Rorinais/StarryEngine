@@ -1,14 +1,15 @@
-#include "Application.hpp"
-#include "../../renderer/resourceManager/models/geometry/shape/Cube.hpp"
-#include "../../renderer/resourceManager/shaders/ShaderBuilder.hpp"
-#include "../../renderer/backends/vulkan/pipeline/NewPipelineBuilder.hpp"
-#include "../../renderer/resourceManager/buffers/UniformBuffer.hpp"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <chrono>
 #include <stdexcept>
 #include <array>
 #include <iostream>
+#include "Application.hpp"
+#include "../../renderer/resourceManager/models/geometry/shape/Cube.hpp"
+#include "../../renderer/resourceManager/shaders/ShaderBuilder.hpp"
+#include "../../renderer/backends/vulkan/pipeline/NewPipelineBuilder.hpp"
+#include "../../renderer/resourceManager/buffers/UniformBuffer.hpp"
+#include "../../renderer/resourceManager/models/ModelLoader.hpp"
 
 #include "../../renderer/backends/vulkan/pipeline/pipelineStateComponent/ColorBlendComponent.hpp"
 #include "../../renderer/backends/vulkan/pipeline/pipelineStateComponent/DepthStencilComponent.hpp"
