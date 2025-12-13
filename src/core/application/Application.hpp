@@ -3,14 +3,15 @@
 #include "../../renderer/backends/vulkan/windowContext/WindowContext.hpp"
 #include "../../renderer/backends/vulkan/SimpleVulkanBackend.hpp"
 #include "../../renderer/resourceManager/models/mesh/Mesh.hpp"
+#include "../../renderer/resourceManager/models/ModelLoader.hpp"
 #include "../../renderer/resourceManager/shaders/ShaderProgram.hpp"
 #include "../../renderer/backends/vulkan/descriptor/DescriptorManager.hpp"
 #include "../../renderer/backends/vulkan/renderPass/RenderPassBuilder.hpp"
+#include "../../renderer/backends/vulkan/renderPass/RenderPassBeginInfo.hpp" 
 #include "../../renderer/resourceManager/textures/Texture.hpp"
 #include "../../renderer/resourceManager/buffers/UniformBuffer.hpp"
 #include "../../renderer/backends/vulkan/pipeline/NewPipelineBuilder.hpp"
 #include "../../renderer/backends/vulkan/pipeline/Pipeline.hpp"
-#include <memory>
 
 namespace StarryEngine {
 
@@ -63,22 +64,27 @@ namespace StarryEngine {
         // 渲染状态
         uint32_t mCurrentFrame = 0;
         bool mFramebufferResized = false;
-        uint32_t mWidth = 800;
-        uint32_t mHeight = 600;
+        uint32_t mWidth = 800*1.3;
+        uint32_t mHeight = 600 * 1.3;
 
         // 渲染资源
         std::unique_ptr<RenderPassBuildResult> mRenderPassResult;
         std::vector<VkFramebuffer> mSwapchainFramebuffers;
         Texture::Ptr mDepthTexture;
+        RenderPassBeginInfo passBeginInfo; 
 
         // 着色器
         ShaderProgram::Ptr mShaderProgram;
         Mesh mMesh;
+        std::shared_ptr<ModelLoader> loader;
 
         // 描述符和Uniform Buffer
         DescriptorManager::Ptr mDescriptorManager;
+        
         std::vector<UniformBuffer::Ptr> mMatrixUniformBuffers;
         std::vector<UniformBuffer::Ptr> mColorUniformBuffers;
+
+        std::unordered_map<std::string,std::array<UniformBuffer::Ptr,MAX_FRAMES_IN_FLIGHT>> mUnifromBuffers;
 
         // 新的管线构建系统
         std::shared_ptr<ComponentRegistry> mComponentRegistry;

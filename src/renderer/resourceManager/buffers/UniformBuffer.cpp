@@ -2,13 +2,6 @@
 
 namespace StarryEngine {
 
-    UniformBuffer::Ptr UniformBuffer::create(const LogicalDevice::Ptr& logicalDevice,
-        const CommandPool::Ptr& commandPool,
-        VkDeviceSize size,
-        const void* initialData) {
-        return std::make_shared<UniformBuffer>(logicalDevice, commandPool, size, initialData);
-    }
-
     UniformBuffer::Ptr UniformBuffer::createAligned(const LogicalDevice::Ptr& logicalDevice,
         const CommandPool::Ptr& commandPool,
         VkDeviceSize size,

@@ -9,10 +9,6 @@
 #include <unordered_map>
 
 namespace StarryEngine {
-#define MYDEBUG
-
-#ifdef MYDEBUG
-
     class ShaderStageComponent : public
         TypedPipelineComponent<ShaderStageComponent, PipelineComponentType::SHADER_STAGE> {
     public:
@@ -78,6 +74,4 @@ namespace StarryEngine {
 
         void updateCreateInfo();
     };
-
-#endif // MYDEBUG
 } // namespace StarryEngine

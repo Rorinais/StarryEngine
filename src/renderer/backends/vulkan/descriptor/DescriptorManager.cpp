@@ -132,22 +132,7 @@ namespace StarryEngine {
     }
 
     // === 更新方法 ===
-
-    void DescriptorManager::updateUniformBuffer(uint32_t setIndex, uint32_t binding, uint32_t frameIndex,
-        VkBuffer buffer, VkDeviceSize offset, VkDeviceSize range) {
-        if (mIsBuildingLayout) {
-            throw std::runtime_error("Cannot update sets while building a layout. Call endSetLayout() first.");
-        }
-
-        validateSetIndex(setIndex);
-        validateAllocated();
-        validateFrameIndex(frameIndex);
-
-        auto set = getDescriptorSet(setIndex, frameIndex);
-        mWriter->updateUniformBuffer(set, binding, buffer, offset, range);
-    }
-
-    void DescriptorManager::updateCombinedImageSampler(uint32_t setIndex, uint32_t binding, uint32_t frameIndex,
+    void DescriptorManager::writeCombinedImageSamplerDescriptor(uint32_t setIndex, uint32_t binding, uint32_t frameIndex,
         VkImageView imageView, VkSampler sampler,
         VkImageLayout imageLayout) {
         if (mIsBuildingLayout) {
@@ -203,7 +188,7 @@ namespace StarryEngine {
         mWriter->updateSampler(set, binding, sampler);
     }
 
-    void DescriptorManager::updateUniformBuffers(uint32_t setIndex, uint32_t frameIndex,
+    void DescriptorManager::writeUniformBufferDescriptors(uint32_t setIndex, uint32_t frameIndex,
         const std::vector<uint32_t>& bindings,
         const std::vector<VkBuffer>& buffers,
         const std::vector<VkDeviceSize>& offsets,
@@ -220,7 +205,7 @@ namespace StarryEngine {
         mWriter->updateUniformBuffers(set, bindings, buffers, offsets, ranges);
     }
 
-    void DescriptorManager::updateCombinedImageSamplers(uint32_t setIndex, uint32_t frameIndex,
+    void DescriptorManager::writeCombinedImageSamplerDescriptors(uint32_t setIndex, uint32_t frameIndex,
         const std::vector<uint32_t>& bindings,
         const std::vector<VkImageView>& imageViews,
         const std::vector<VkSampler>& samplers,
@@ -239,7 +224,7 @@ namespace StarryEngine {
 
     // === 批量更新所有帧 ===
 
-    void DescriptorManager::updateUniformBufferForAllFrames(uint32_t setIndex, uint32_t binding,
+    void DescriptorManager::writeUniformBufferForAllFrameDescriptors(uint32_t setIndex, uint32_t binding,
         VkBuffer buffer, VkDeviceSize offset, VkDeviceSize range) {
         if (mIsBuildingLayout) {
             throw std::runtime_error("Cannot update sets while building a layout. Call endSetLayout() first.");
@@ -255,7 +240,7 @@ namespace StarryEngine {
         }
     }
 
-    void DescriptorManager::updateCombinedImageSamplerForAllFrames(uint32_t setIndex, uint32_t binding,
+    void DescriptorManager::writeCombinedImageSamplerForAllFrameDescriptors(uint32_t setIndex, uint32_t binding,
         VkImageView imageView, VkSampler sampler,
         VkImageLayout imageLayout) {
         if (mIsBuildingLayout) {

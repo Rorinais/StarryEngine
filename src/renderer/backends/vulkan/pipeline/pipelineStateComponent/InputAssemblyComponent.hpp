@@ -8,8 +8,6 @@
 #include <unordered_map>
 
 namespace StarryEngine {
-#define MYDEBUG
-#ifdef MYDEBUG
     class InputAssemblyComponent : public
         TypedPipelineComponent<InputAssemblyComponent, PipelineComponentType::INPUT_ASSEMBLY> {
     public:
@@ -43,5 +41,4 @@ namespace StarryEngine {
 
         void updateCreateInfo(){}
     };
-#endif // MYDEBUG
 } // namespace StarryEngine

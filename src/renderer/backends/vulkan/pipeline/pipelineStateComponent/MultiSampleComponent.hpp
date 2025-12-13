@@ -8,8 +8,6 @@
 #include <unordered_map>
 
 namespace StarryEngine {
-#define MYDEBUG
-#ifdef MYDEBUG
     class MultiSampleComponent : public
         TypedPipelineComponent<MultiSampleComponent, PipelineComponentType::MULTISAMPLE> {
     public:
@@ -37,5 +35,4 @@ namespace StarryEngine {
 
         void updateCreateInfo();
     };
-#endif // MYDEBUG
 } // namespace StarryEngine

@@ -8,8 +8,6 @@
 #include <unordered_map>
 
 namespace StarryEngine {
-#define MYDEBUG
-#ifdef MYDEBUG
     class RasterizationComponent : public
         TypedPipelineComponent<RasterizationComponent, PipelineComponentType::RASTERIZATION> {
     public:
@@ -39,5 +37,4 @@ namespace StarryEngine {
 
         void updateCreateInfo() {}
     };
-#endif 
 } // namespace StarryEngine

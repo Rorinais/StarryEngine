@@ -1,5 +1,6 @@
 #pragma once
 #include <vulkan/vulkan.h>
+#include <stdexcept>
 #include <memory>
 #include <vector>
 #include <unordered_map>
@@ -32,10 +33,22 @@ namespace StarryEngine {
 
         // === 更新阶段 ===
         // 更新指定帧的描述符集
-        void updateUniformBuffer(uint32_t setIndex, uint32_t binding, uint32_t frameIndex,
-            VkBuffer buffer, VkDeviceSize offset = 0, VkDeviceSize range = VK_WHOLE_SIZE);
+        template<class T>
+        void writeUniformBufferDescriptor(uint32_t setIndex, uint32_t binding, uint32_t frameIndex,
+            VkBuffer buffer, VkDeviceSize offset = 0){
+            if (mIsBuildingLayout) {
+                throw std::runtime_error("Cannot update sets while building a layout. Call endSetLayout() first.");
+            }
 
-        void updateCombinedImageSampler(uint32_t setIndex, uint32_t binding, uint32_t frameIndex,
+            validateSetIndex(setIndex);
+            validateAllocated();
+            validateFrameIndex(frameIndex);
+
+            auto set = getDescriptorSet(setIndex, frameIndex);
+            mWriter->updateUniformBuffer(set, binding, buffer, offset, sizeof(T));
+        }
+
+        void writeCombinedImageSamplerDescriptor(uint32_t setIndex, uint32_t binding, uint32_t frameIndex,
             VkImageView imageView, VkSampler sampler,
             VkImageLayout imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
@@ -48,23 +61,23 @@ namespace StarryEngine {
         void updateSampler(uint32_t setIndex, uint32_t binding, uint32_t frameIndex, VkSampler sampler);
 
         // 批量更新多个 Binding（同一帧）
-        void updateUniformBuffers(uint32_t setIndex, uint32_t frameIndex,
+        void writeUniformBufferDescriptors(uint32_t setIndex, uint32_t frameIndex,
             const std::vector<uint32_t>& bindings,
             const std::vector<VkBuffer>& buffers,
             const std::vector<VkDeviceSize>& offsets = {},
             const std::vector<VkDeviceSize>& ranges = {});
 
-        void updateCombinedImageSamplers(uint32_t setIndex, uint32_t frameIndex,
+        void writeCombinedImageSamplerDescriptors(uint32_t setIndex, uint32_t frameIndex,
             const std::vector<uint32_t>& bindings,
             const std::vector<VkImageView>& imageViews,
             const std::vector<VkSampler>& samplers,
             const std::vector<VkImageLayout>& imageLayouts = {});
 
         // 批量更新所有帧的相同 Binding
-        void updateUniformBufferForAllFrames(uint32_t setIndex, uint32_t binding,
+        void writeUniformBufferForAllFrameDescriptors(uint32_t setIndex, uint32_t binding,
             VkBuffer buffer, VkDeviceSize offset = 0, VkDeviceSize range = VK_WHOLE_SIZE);
 
-        void updateCombinedImageSamplerForAllFrames(uint32_t setIndex, uint32_t binding,
+        void writeCombinedImageSamplerForAllFrameDescriptors(uint32_t setIndex, uint32_t binding,
             VkImageView imageView, VkSampler sampler,
             VkImageLayout imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 

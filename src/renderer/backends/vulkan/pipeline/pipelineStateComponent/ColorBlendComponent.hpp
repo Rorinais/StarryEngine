@@ -8,8 +8,6 @@
 #include <unordered_map>
 
 namespace StarryEngine {
-#define MYDEBUG
-#ifdef MYDEBUG
     class ColorBlendComponent : public
         TypedPipelineComponent<ColorBlendComponent, PipelineComponentType::COLOR_BLEND> {
     public:
@@ -77,5 +75,5 @@ namespace StarryEngine {
         bool isBlendFactorValid(VkBlendFactor factor) const;
         bool isBlendOpValid(VkBlendOp op) const;
     };
-#endif // MYDEBUG
+
 } // namespace StarryEngine

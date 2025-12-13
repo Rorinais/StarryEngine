@@ -75,6 +75,10 @@ namespace StarryEngine {
         auto geometry = cube->generateGeometry();
         mMesh = Mesh(geometry, mVulkanCore->getLogicalDevice(), mWindowContext->getCommandPool());
 
+        loader =std::make_shared<ModelLoader>(mVulkanCore, mWindowContext->getCommandPool()); 
+        loader->loadMesh("./assets/models/Griseo.fbx");
+        loader->generateBuffer();
+
         createShaderProgram();
         createRenderPass();
         createDepthTexture();
@@ -244,29 +248,23 @@ namespace StarryEngine {
         mColorUniformBuffers.clear();
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-            // 创建矩阵UniformBuffer
-            auto matrixUniformBuffer = UniformBuffer::create(
-                mVulkanCore->getLogicalDevice(),
-                mWindowContext->getCommandPool(),
-                sizeof(UniformBufferObject)
+            auto matrixUniformBuffer = UniformBuffer::create<UniformBufferObject>(
+                mVulkanCore->getLogicalDevice(),mWindowContext->getCommandPool()
             );
             mMatrixUniformBuffers.push_back(matrixUniformBuffer);
 
-            // 创建颜色UniformBuffer
-            auto colorUniformBuffer = UniformBuffer::create(
-                mVulkanCore->getLogicalDevice(),
-                mWindowContext->getCommandPool(),
-                sizeof(glm::vec3)
-            );
-            mColorUniformBuffers.push_back(colorUniformBuffer);
+            // auto colorUniformBuffer = UniformBuffer::create<glm::vec3>(
+            //     mVulkanCore->getLogicalDevice(),mWindowContext->getCommandPool()
+            // );
+            // mColorUniformBuffers.push_back(colorUniformBuffer);
         }
 
         mDescriptorManager = std::make_shared<DescriptorManager>(mVulkanCore->getLogicalDevice());
 
         // 定义描述符集布局 - set 0有两个binding
         mDescriptorManager->beginSetLayout(0);
-        mDescriptorManager->addUniformBuffer(0, VK_SHADER_STAGE_VERTEX_BIT, 1);    // binding 0: 矩阵
-        mDescriptorManager->addUniformBuffer(1, VK_SHADER_STAGE_FRAGMENT_BIT, 1); // binding 1: 颜色
+        mDescriptorManager->addUniformBuffer(0, VK_SHADER_STAGE_VERTEX_BIT, 1);    
+        mDescriptorManager->addUniformBuffer(1, VK_SHADER_STAGE_FRAGMENT_BIT, 1); 
         mDescriptorManager->endSetLayout();
 
         // 分配描述符集
@@ -274,19 +272,13 @@ namespace StarryEngine {
 
         // 为每个帧更新描述符集
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-            // 更新binding 0（矩阵）
-            mDescriptorManager->updateUniformBuffer(
-                0, 0, i,  // set 0, binding 0, frame i
-                mMatrixUniformBuffers[i]->getBuffer(),
-                0, sizeof(UniformBufferObject)
+            mDescriptorManager->writeUniformBufferDescriptor<UniformBufferObject>(
+                0, 0, i, mMatrixUniformBuffers[i]->getBuffer()
             );
 
-            // 更新binding 1（颜色）
-            mDescriptorManager->updateUniformBuffer(
-                0, 1, i,  // set 0, binding 1, frame i
-                mColorUniformBuffers[i]->getBuffer(),
-                0, sizeof(glm::vec3)
-            );
+            // mDescriptorManager->writeUniformBufferDescriptor<glm::vec3>(
+            //     0, 1, i, mColorUniformBuffers[i]->getBuffer()
+            // );
         }
     }
 
@@ -303,18 +295,19 @@ namespace StarryEngine {
                 mComponentRegistry->getComponent(PipelineComponentType::VERTEX_INPUT, "BasicVertex"));
 
             if (vertexInputComponent) {
-                auto bindingDescriptions = mMesh.getVertexBuffer()->getBindingDescriptions();
-                auto attributeDescriptions = mMesh.getVertexBuffer()->getAttributeDescriptions();
+                // auto bindingDescriptions = mMesh.getVertexBuffer()->getBindingDescriptions();
+                // auto attributeDescriptions = mMesh.getVertexBuffer()->getAttributeDescriptions();
 
                 vertexInputComponent->reset();
 
-                for (const auto& binding : bindingDescriptions) {
-                    vertexInputComponent->addBinding(binding.binding, binding.stride, binding.inputRate);
-                }
+                // for (const auto& binding : bindingDescriptions) {
+                //     vertexInputComponent->addBinding(binding.binding, binding.stride, binding.inputRate);
+                // }
 
-                for (const auto& attr : attributeDescriptions) {
-                    vertexInputComponent->addAttribute(attr.location, attr.binding, attr.format, attr.offset);
-                }
+                // for (const auto& attr : attributeDescriptions) {
+                //     vertexInputComponent->addAttribute(attr.location, attr.binding, attr.format, attr.offset);
+                // }
+                vertexInputComponent->configureFromVertexBuffer(*loader->getVertexBuffers());
 
                 if (!vertexInputComponent->isValid()) {
                     throw std::runtime_error("Vertex input component is invalid");
@@ -329,25 +322,10 @@ namespace StarryEngine {
                 mComponentRegistry->getComponent(PipelineComponentType::VIEWPORT_STATE, "Fullscreen"));
 
             if (viewportComponent) {
-                auto swapchainExtent = mWindowContext->getSwapchainExtent();
-             
                 viewportComponent->reset();
 
-                VkViewport viewport = {
-                    0.0f,
-                    0.0f,
-                    static_cast<float>(swapchainExtent.width),
-                    static_cast<float>(swapchainExtent.height),
-                    0.0f,
-                    1.0f
-                };
-                viewportComponent->addViewport(viewport);
-
-                VkRect2D scissor = {
-                    {0, 0},
-                    swapchainExtent
-                };
-                viewportComponent->addScissor(scissor);
+                ViewportScissor viewport(mWindowContext->getSwapchainExtent(),true);
+                viewportComponent->setViewportScissor(viewport);
             }
             else {
                 throw std::runtime_error("Failed to get viewport component");
@@ -388,7 +366,6 @@ namespace StarryEngine {
         auto swapchain = mWindowContext->getSwapChain();
         auto imageViews = swapchain->getImageViews();
         mSwapchainFramebuffers.resize(imageViews.size());
-
         auto device = mVulkanCore->getLogicalDeviceHandle();
         auto extent = mWindowContext->getSwapchainExtent();
 
@@ -418,77 +395,83 @@ namespace StarryEngine {
         auto currentTime = std::chrono::high_resolution_clock::now();
         float time = std::chrono::duration<float>(currentTime - startTime).count();
 
+        static glm::vec3 position = glm::vec3(0.0f, 0.0f, -0.3f);
+        static glm::vec3 scale = glm::vec3(0.3f, 0.3f, 0.3f);
+
         // 更新矩阵
         UniformBufferObject ubo{};
-        ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+
+        ubo.model = glm::mat4(1.0f);
+        ubo.model = glm::translate(ubo.model, position);  // 平移
+        ubo.model = glm::rotate(ubo.model, time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f));  // 旋转
+        ubo.model = glm::scale(ubo.model, scale);
+
         ubo.view = glm::lookAt(
-            glm::vec3(2.0f, 2.0f, 2.0f),
+            glm::vec3(1.0f, 1.0f, 1.0f),
             glm::vec3(0.0f, 0.0f, 0.0f),
             glm::vec3(0.0f, 0.0f, 1.0f)
         );
         ubo.proj = glm::perspective(
-            glm::radians(45.0f),
+            glm::radians(15.0f),
             mWindow->getAspectRatio(),
             0.1f,
             10.0f
         );
-        ubo.proj[1][1] *= -1; // 翻转Y轴
+
+        //视口已经反转，如果是vulkan坐标系，则要将投影矩阵[1][1]反转
+        //步骤如下：
+        //1.打开注释代码
+        //2.将viewport(mWindowContext->getSwapchainExtent(),true)改成false
+
+        //ubo.proj[1][1] *= -1; 
 
         mMatrixUniformBuffers[currentFrame]->updateData(&ubo, sizeof(ubo));
 
         // 更新颜色
-        glm::vec3 color = glm::vec3(
-            (sin(time * 0.5f) + 1.0f) / 2.0f,
-            (sin(time * 0.8f + glm::radians(120.0f)) + 1.0f) / 2.0f,
-            (sin(time * 1.1f + glm::radians(240.0f)) + 1.0f) / 2.0f
-        );
+        // glm::vec3 color = glm::vec3(
+        //     (sin(time * 0.5f) + 1.0f) / 2.0f,
+        //     (sin(time * 0.8f + glm::radians(120.0f)) + 1.0f) / 2.0f,
+        //     (sin(time * 1.1f + glm::radians(240.0f)) + 1.0f) / 2.0f
+        // );
 
-        mColorUniformBuffers[currentFrame]->updateData(&color, sizeof(color));
+        // mColorUniformBuffers[currentFrame]->updateData(&color, sizeof(color));
     }
 
     void Application::recordCommandBuffer(RenderContext& context, uint32_t imageIndex) {
-        VkRenderPassBeginInfo renderPassInfo{};
-        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        renderPassInfo.renderPass = mRenderPassResult->renderPass->getHandle();
-        renderPassInfo.framebuffer = mSwapchainFramebuffers[imageIndex];
-        renderPassInfo.renderArea.offset = { 0, 0 };
-        renderPassInfo.renderArea.extent = mWindowContext->getSwapchainExtent();
+        auto renderpass = mRenderPassResult->renderPass->getHandle();
+        auto framebuffer =mSwapchainFramebuffers[imageIndex];
+        auto extent = mWindowContext->getSwapchainExtent();
 
-        std::array<VkClearValue, 2> clearValues{};
-        clearValues[0].color = { {0.0f, 0.0f, 0.0f, 1.0f} };
-        clearValues[1].depthStencil = { 1.0f, 0 };
+        passBeginInfo.reset()
+            .addClearColor({0.12f, 0.12f, 0.12f, 1.0f})
+            .addClearDepth({ 1.0f, 0 })
+            .update(renderpass,framebuffer,extent);
 
-        renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
-        renderPassInfo.pClearValues = clearValues.data();
+        context.beginRenderPass(&passBeginInfo.getRenderPassBeginInfo(), VK_SUBPASS_CONTENTS_INLINE);
 
-        context.beginRenderPass(&renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-
-        VkViewport viewport{};
-        viewport.x = 0.0f;
-        viewport.y = 0.0f;
-        viewport.width = static_cast<float>(mWindowContext->getSwapchainExtent().width);
-        viewport.height = static_cast<float>(mWindowContext->getSwapchainExtent().height);
-        viewport.minDepth = 0.0f;
-        viewport.maxDepth = 1.0f;
-        context.setViewport(viewport);
-
-        VkRect2D scissor{};
-        scissor.offset = { 0, 0 };
-        scissor.extent = mWindowContext->getSwapchainExtent();
-        context.setScissor(scissor);
+        auto viewport= std::dynamic_pointer_cast<ViewportComponent>(
+            mComponentRegistry->getComponent(PipelineComponentType::VIEWPORT_STATE,"Fullscreen")
+        );
+        context.setViewport(viewport->getViewports()[0]);
+        context.setScissor(viewport->getScissors()[0]);
 
         context.bindGraphicsPipeline(mGraphicsPipeline);
 
-        auto vertexBuffers = mMesh.getVertexBuffer()->getBufferHandles();
-        context.bindVertexBuffers(vertexBuffers);
+        // auto VBO = mMesh.getVertexBuffer()->getBufferHandles();
+        auto VBO =loader->getVertexBuffers()->getBufferHandles();
+        context.bindVertexBuffers(VBO);
 
-        context.bindIndexBuffer(mMesh.getIndexBuffer()->getBuffer());
+        //auto IBO= mMesh.getIndexBuffer()->getBuffer()；
+        auto IBO =loader->getIndexBuffers()->getBuffer();
+        context.bindIndexBuffer(IBO);
 
         uint32_t frameIndex = mVulkanBackend.getCurrentFrameIndex();
         VkDescriptorSet descriptorSet = mDescriptorManager->getDescriptorSet(0, frameIndex);
         context.bindDescriptorSet(VK_PIPELINE_BIND_POINT_GRAPHICS, descriptorSet, 0, mPipelineLayout->getHandle());
 
-        context.drawIndexed(mMesh.getIndexBuffer()->getIndexCount(), 1, 0, 0, 0);
+        //auto index=mMesh.getIndexBuffer()->getIndexCount();
+        auto index =loader->getIndexCount();
+        context.drawIndexed(index, 1, 0, 0, 0);
 
         context.endRenderPass();
     }
@@ -547,24 +530,10 @@ namespace StarryEngine {
             mComponentRegistry->getComponent(PipelineComponentType::VIEWPORT_STATE, "Fullscreen"));
 
         if (viewportComponent) {
-            auto swapchainExtent = mWindowContext->getSwapchainExtent();
             viewportComponent->reset();
 
-            VkViewport viewport = {
-                0.0f,  
-                0.0f,  
-                static_cast<float>(swapchainExtent.width),
-                static_cast<float>(swapchainExtent.height), 
-                0.0f,  
-                1.0f   
-            };
-            viewportComponent->addViewport(viewport);
-
-            VkRect2D scissor = {
-                {0, 0},  
-                swapchainExtent  
-            };
-            viewportComponent->addScissor(scissor);
+            ViewportScissor viewport(mWindowContext->getSwapchainExtent(),true);
+            viewportComponent->setViewportScissor(viewport);
         }
         createFramebuffers();
     }

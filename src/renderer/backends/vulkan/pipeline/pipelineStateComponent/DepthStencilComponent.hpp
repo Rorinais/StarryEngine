@@ -8,10 +8,6 @@
 #include <unordered_map>
 
 namespace StarryEngine {
-#define MYDEBUG
-
-#ifdef MYDEBUG
-
     class DepthStencilComponent : public
         TypedPipelineComponent<DepthStencilComponent, PipelineComponentType::DEPTH_STENCIL> {
     public:
@@ -96,5 +92,4 @@ namespace StarryEngine {
         bool isCompareOpValid(VkCompareOp op) const;
     };
 
-#endif // MYDEBUG
 } // namespace StarryEngine

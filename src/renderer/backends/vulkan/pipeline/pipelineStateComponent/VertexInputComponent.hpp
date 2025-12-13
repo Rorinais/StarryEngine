@@ -25,7 +25,13 @@ namespace StarryEngine {
         VertexInputComponent& setAttributes(const std::vector<VkVertexInputAttributeDescription>& attributes);
 
         template<typename VertexBufferType>
-        VertexInputComponent& configureFromVertexBuffer(const VertexBufferType& vertexBuffer);
+        VertexInputComponent& configureFromVertexBuffer(const VertexBufferType& vertexBuffer) {
+            auto bindingDescriptions = vertexBuffer.getBindingDescriptions();
+            auto attributeDescriptions = vertexBuffer.getAttributeDescriptions();
+
+            return setBindings(bindingDescriptions)
+                .setAttributes(attributeDescriptions);
+        }
 
         void apply(VkGraphicsPipelineCreateInfo& pipelineInfo) override {
             updateCreateInfo(); 

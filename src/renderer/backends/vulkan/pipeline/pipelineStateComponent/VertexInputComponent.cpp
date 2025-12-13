@@ -95,15 +95,6 @@ namespace StarryEngine {
         return *this;
     }
 
-    template<typename VertexBufferType>
-    VertexInputComponent& VertexInputComponent::configureFromVertexBuffer(const VertexBufferType& vertexBuffer) {
-        auto bindingDescriptions = vertexBuffer.getBindingDescriptions();
-        auto attributeDescriptions = vertexBuffer.getAttributeDescriptions();
-
-        return setBindings(bindingDescriptions)
-            .setAttributes(attributeDescriptions);
-    }
-
     std::string VertexInputComponent::getDescription() const {
         return "Bindings:" + std::to_string(mBindings.size()) +
             ", Attributes:" + std::to_string(mAttributes.size());

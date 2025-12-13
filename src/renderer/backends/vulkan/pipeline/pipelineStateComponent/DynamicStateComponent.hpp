@@ -8,8 +8,6 @@
 #include <unordered_map>
 
 namespace StarryEngine {
-#define MYDEBUG
-#ifdef MYDEBUG
     class DynamicStateComponent : public
         TypedPipelineComponent<DynamicStateComponent, PipelineComponentType::DYNAMIC_STATE> {
     public:
@@ -55,5 +53,4 @@ namespace StarryEngine {
 
         void updateCreateInfo();
     };
-#endif // MYDEBUG
 } // namespace StarryEngine

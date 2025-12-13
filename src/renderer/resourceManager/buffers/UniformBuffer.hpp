@@ -9,10 +9,12 @@ namespace StarryEngine {
         using Ptr = std::shared_ptr<UniformBuffer>;
 
         // 创建UniformBuffer
+        template<class T>
         static Ptr create(const LogicalDevice::Ptr& logicalDevice,
             const CommandPool::Ptr& commandPool,
-            VkDeviceSize size,
-            const void* initialData = nullptr);
+            const void* initialData = nullptr){
+            return std::make_shared<UniformBuffer>(logicalDevice, commandPool, sizeof(T), initialData);
+        }
 
         // 创建对齐的UniformBuffer（考虑最小对齐要求）
         static Ptr createAligned(const LogicalDevice::Ptr& logicalDevice,
