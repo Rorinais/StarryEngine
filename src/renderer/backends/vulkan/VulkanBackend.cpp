@@ -1,8 +1,7 @@
-#include "SimpleVulkanBackend.hpp"
-#include "vulkanCore/LogicalDevice.hpp"
+#include "VulkanBackend.hpp"
 
 namespace StarryEngine {
-    bool SimpleVulkanBackend::initialize(VulkanCore::Ptr core, WindowContext::Ptr window) {
+    bool VulkanBackend::initialize(VulkanCore::Ptr core, WindowContext::Ptr window) {
         mVulkanCore = core;
         mWindowContext = window;
         mImagesInFlight.resize(mWindowContext->getSwapchainImageCount(), VK_NULL_HANDLE);
@@ -13,11 +12,11 @@ namespace StarryEngine {
         return true;
     }
 
-    void SimpleVulkanBackend::shutdown() {
+    void VulkanBackend::shutdown() {
         cleanupSyncObjects();
     }
 
-    void SimpleVulkanBackend::beginFrame() {
+    void VulkanBackend::beginFrame() {
         mCurrentFrameContext = &mFrameContexts[mCurrentFrame];
 
         // 等待上一帧完成
@@ -53,11 +52,11 @@ namespace StarryEngine {
         mCurrentFrameContext->mainCommandBuffer->begin(VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT);
     }
 
-    VkCommandBuffer SimpleVulkanBackend::getCommandBuffer() {
+    VkCommandBuffer VulkanBackend::getCommandBuffer() {
         return mCurrentFrameContext->mainCommandBuffer->getHandle();
     }
 
-    void SimpleVulkanBackend::submitFrame() {
+    void VulkanBackend::submitFrame() {
         if (!mFrameInProgress) return;
 
         auto& ctx = *mCurrentFrameContext;
@@ -116,13 +115,13 @@ namespace StarryEngine {
         mCurrentFrame = (mCurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
     }
 
-    void SimpleVulkanBackend::onSwapchainRecreated() {
+    void VulkanBackend::onSwapchainRecreated() {
         vkDeviceWaitIdle(mVulkanCore->getLogicalDeviceHandle());
         std::fill(mImagesInFlight.begin(), mImagesInFlight.end(), VK_NULL_HANDLE);
         mWindowContext->recreateSwapchain();
     }
 
-    bool SimpleVulkanBackend::createSyncObjects() {
+    bool VulkanBackend::createSyncObjects() {
         mFrameContexts.resize(MAX_FRAMES_IN_FLIGHT);
 
         for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
@@ -149,7 +148,7 @@ namespace StarryEngine {
         return true;
     }
 
-    void SimpleVulkanBackend::cleanupSyncObjects() {
+    void VulkanBackend::cleanupSyncObjects() {
         for (auto& frame : mFrameContexts) {
             frame.imageAvailableSemaphore.reset();
             frame.renderFinishedSemaphore.reset();

@@ -20,7 +20,7 @@ namespace StarryEngine {
 
             glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
             glfwWindowHint(GLFW_RESIZABLE, mConfig.resizable ? GLFW_TRUE : GLFW_FALSE);
-            if (config.highDPI) {
+            if (mConfig.highDPI) {
                 glfwWindowHint(GLFW_SCALE_TO_MONITOR, GLFW_TRUE);
             }
 
@@ -29,7 +29,7 @@ namespace StarryEngine {
             int width = mConfig.width;
             int height = mConfig.height;
 
-            if (config.fullScreen) {
+            if (mConfig.fullScreen) {
                 int monitorCount;
                 GLFWmonitor** monitors = glfwGetMonitors(&monitorCount);
 
@@ -38,15 +38,15 @@ namespace StarryEngine {
                     throw std::runtime_error("No monitors found");
                 }
 
-                if (config.monitorIndex >= 0 && config.monitorIndex < monitorCount) {
-                    monitor = monitors[config.monitorIndex];
+                if (mConfig.monitorIndex >= 0 && mConfig.monitorIndex < monitorCount) {
+                    monitor = monitors[mConfig.monitorIndex];
                     mode = glfwGetVideoMode(monitor);
                     width = mode->width;
                     height = mode->height;
                 }
                 else {
                     terminateGLFW();
-                    throw std::runtime_error("Invalid monitor index: " + std::to_string(config.monitorIndex));
+                    throw std::runtime_error("Invalid monitor index: " + std::to_string(mConfig.monitorIndex));
                 }
             }
 
@@ -58,10 +58,10 @@ namespace StarryEngine {
             }
 
             // 如果配置中指定了图标路径，设置图标
-            if (config.iconPath) {
+            if (mConfig.iconPath) {
 
                 //td::cout << "Setting window icon from file: " << config.iconPath << std::endl;
-                setIcon(config.iconPath);
+                setIcon(mConfig.iconPath);
             }
 
             glfwSetWindowUserPointer(mWindow, this);

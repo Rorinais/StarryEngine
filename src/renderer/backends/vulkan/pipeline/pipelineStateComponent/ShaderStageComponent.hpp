@@ -1,7 +1,7 @@
 #pragma once
 #include "../interface/TypedPipelineComponent.hpp"
-#include "../../../../../renderer/resourceManager/shaders/ShaderProgram.hpp"
-#include "../../../../../renderer/resourceManager/shaders/ShaderBuilder.hpp"
+#include "../../../../../renderer/resource/shaders/ShaderProgram.hpp"
+#include "../../../../../renderer/resource/shaders/ShaderBuilder.hpp"
 #include <vulkan/vulkan.h>
 #include <vector>
 #include <memory>

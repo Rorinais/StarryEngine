@@ -1,11 +1,20 @@
 #pragma once
-#include "./pipelineStateComponent/ComponentRegistry.hpp"
 #include <vulkan/vulkan.h>
 #include <memory>
 #include <string>
 #include <vector>
 #include <unordered_map>
 #include <functional>
+#include "./pipelineStateComponent/ComponentRegistry.hpp"
+#include "./pipelineStateComponent/ColorBlendComponent.hpp"
+#include "./pipelineStateComponent/DepthStencilComponent.hpp"
+#include "./pipelineStateComponent/DynamicStateComponent.hpp"
+#include "./pipelineStateComponent/InputAssemblyComponent.hpp"
+#include "./pipelineStateComponent/MultiSampleComponent.hpp"
+#include "./pipelineStateComponent/RasterizationComponent.hpp"
+#include "./pipelineStateComponent/ShaderStageComponent.hpp"
+#include "./pipelineStateComponent/VertexInputComponent.hpp"
+#include "./pipelineStateComponent/ViewportComponent.hpp"
 
 namespace StarryEngine {
 

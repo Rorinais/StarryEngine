@@ -1,19 +1,36 @@
 #pragma once
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <chrono>
+#include <stdexcept>
+#include <array>
+#include <vector>
+#include <memory>
+#include <iostream>
+
 #include "../../renderer/backends/vulkan/vulkanCore/VulkanCore.hpp"
 #include "../../renderer/backends/vulkan/windowContext/WindowContext.hpp"
-#include "../../renderer/backends/vulkan/SimpleVulkanBackend.hpp"
-#include "../../renderer/resourceManager/models/mesh/Mesh.hpp"
-#include "../../renderer/resourceManager/models/ModelLoader.hpp"
-#include "../../renderer/resourceManager/shaders/ShaderProgram.hpp"
+#include "../../renderer/backends/vulkan/VulkanBackend.hpp"
 #include "../../renderer/backends/vulkan/descriptor/DescriptorManager.hpp"
 #include "../../renderer/backends/vulkan/renderPass/RenderPassBuilder.hpp"
 #include "../../renderer/backends/vulkan/renderPass/RenderPassBeginInfo.hpp" 
-#include "../../renderer/resourceManager/textures/Texture.hpp"
-#include "../../renderer/resourceManager/buffers/UniformBuffer.hpp"
-#include "../../renderer/backends/vulkan/pipeline/NewPipelineBuilder.hpp"
 #include "../../renderer/backends/vulkan/pipeline/Pipeline.hpp"
+#include "../../renderer/backends/vulkan/pipeline/NewPipelineBuilder.hpp"
+
+#include "../../renderer/resource/models/mesh/Mesh.hpp"
+#include "../../renderer/resource/models/ModelLoader.hpp"
+#include "../../renderer/resource/models/geometry/shape/Cube.hpp"
+#include "../../renderer/resource/shaders/ShaderBuilder.hpp"
+#include "../../renderer/resource/shaders/ShaderProgram.hpp"
+#include "../../renderer/resource/buffers/UniformBuffer.hpp"
+#include "../../renderer/resource/buffers/VertexArrayBuffer.hpp"
+#include "../../renderer/resource/buffers/IndexBuffer.hpp"
+#include "../../renderer/resource/textures/Texture.hpp"
+#include "../../renderer/VulkanRenderer.hpp"
 
 namespace StarryEngine {
+    // 前向声明
+    struct MultiMaterialVertex;
 
     class Application {
     public:
@@ -36,7 +53,12 @@ namespace StarryEngine {
         void createDescriptorManager();
         void createDepthTexture();
         void createGraphicsPipeline();
-        void createFramebuffers();
+        //void createFramebuffers();
+
+        // 创建多材质立方体
+        void createMultiMaterialCube();
+        void createMultipleShaders();
+        void createMultiplePipelines();
 
         // 组件注册方法
         void registerDefaultComponents();
@@ -57,15 +79,15 @@ namespace StarryEngine {
 
         // 窗口和核心
         Window::Ptr mWindow;
-        VulkanCore::Ptr mVulkanCore;
-        WindowContext::Ptr mWindowContext;
-        SimpleVulkanBackend mVulkanBackend;
+        std::shared_ptr<VulkanRenderer> mRenderer;
+        LogicalDevice::Ptr mDevice;
+        CommandPool::Ptr mCommandPool;
+        CommandBuffer::Ptr mCommandBuffer;
+        VkExtent2D mExtent={800 ,600 };
 
         // 渲染状态
         uint32_t mCurrentFrame = 0;
         bool mFramebufferResized = false;
-        uint32_t mWidth = 800*1.3;
-        uint32_t mHeight = 600 * 1.3;
 
         // 渲染资源
         std::unique_ptr<RenderPassBuildResult> mRenderPassResult;
@@ -84,9 +106,7 @@ namespace StarryEngine {
         std::vector<UniformBuffer::Ptr> mMatrixUniformBuffers;
         std::vector<UniformBuffer::Ptr> mColorUniformBuffers;
 
-        std::unordered_map<std::string,std::array<UniformBuffer::Ptr,MAX_FRAMES_IN_FLIGHT>> mUnifromBuffers;
-
-        // 新的管线构建系统
+        // 管线构建系统
         std::shared_ptr<ComponentRegistry> mComponentRegistry;
         std::shared_ptr<PipelineBuilder> mPipelineBuilder;
 
@@ -94,6 +114,17 @@ namespace StarryEngine {
         VkPipeline mGraphicsPipeline = VK_NULL_HANDLE;
         std::shared_ptr<PipelineLayout> mPipelineLayout;
 
+        // 多材质立方体相关
+        VertexArrayBuffer::Ptr mMultiMaterialVAO;
+        IndexBuffer::Ptr mMultiMaterialIBO;
+        uint32_t mMultiMaterialIndexCount;
+        std::vector<ShaderProgram::Ptr> mMultiMaterialShaders;
+        std::vector<VkPipeline> mMultiMaterialPipelines;
+        std::vector<std::vector<UniformBuffer::Ptr>> mMaterialColorBuffers;
+        
+        // 材质相关描述符
+        std::shared_ptr<DescriptorManager> mMaterialDescriptorManager;
+        std::shared_ptr<PipelineLayout> mMaterialPipelineLayout;
     };
 
 } // namespace StarryEngine

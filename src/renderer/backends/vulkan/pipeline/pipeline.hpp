@@ -1,6 +1,6 @@
 #pragma once
 #include "../../../../base.hpp"
-#include "../../../resourceManager/shaders/ShaderProgram.hpp"
+#include "../../../resource/shaders/ShaderProgram.hpp"
 #include"../vulkanCore/LogicalDevice.hpp"
 #include"pipelineStates/colorBlend.hpp"
 #include"pipelineStates/depthStencil.hpp"

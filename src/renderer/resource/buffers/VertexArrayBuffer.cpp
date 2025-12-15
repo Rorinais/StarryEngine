@@ -120,7 +120,19 @@ namespace StarryEngine {
         case VK_FORMAT_R32G32B32A32_SFLOAT: return 16;
         case VK_FORMAT_R8G8B8A8_UNORM: return 4;
         case VK_FORMAT_R16G16_SFLOAT: return 4;
+        
+        // 添加整数格式支持
+        case VK_FORMAT_R32_UINT: return 4;
+        case VK_FORMAT_R32_SINT: return 4;
+        case VK_FORMAT_R8_UINT: return 1;
+        case VK_FORMAT_R8G8_UINT: return 2;
+        case VK_FORMAT_R8G8B8A8_UINT: return 4;
+        case VK_FORMAT_R16_UINT: return 2;
+        case VK_FORMAT_R16G16_UINT: return 4;
+        case VK_FORMAT_R32G32_UINT: return 8;
+        
         default:
+            std::cerr << "Unsupported format: " << format << std::endl;
             throw std::runtime_error("Unsupported format");
         }
     }
