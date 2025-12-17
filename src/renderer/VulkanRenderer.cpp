@@ -16,6 +16,7 @@ namespace StarryEngine {
         mWindowContext->init(mVulkanCore, window, commandPool);
 
         mBackend = VulkanBackend::create();
+
         if (!mBackend->initialize(mVulkanCore, mWindowContext)) {
             throw std::runtime_error("Failed to initialize Vulkan backend");
         }

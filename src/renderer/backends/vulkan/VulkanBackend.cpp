@@ -1,11 +1,21 @@
+#define VMA_IMPLEMENTATION
 #include "VulkanBackend.hpp"
+
 
 namespace StarryEngine {
     bool VulkanBackend::initialize(VulkanCore::Ptr core, WindowContext::Ptr window) {
         mVulkanCore = core;
         mWindowContext = window;
         mImagesInFlight.resize(mWindowContext->getSwapchainImageCount(), VK_NULL_HANDLE);
+        
+        // 初始化VMA
+        if (!initializeVMA()) {
+            std::cerr << "Failed to initialize VMA" << std::endl;
+            return false;
+        }
+
         if (!createSyncObjects()) {
+            cleanupVMA();
             return false;
         }
 
@@ -14,6 +24,36 @@ namespace StarryEngine {
 
     void VulkanBackend::shutdown() {
         cleanupSyncObjects();
+        cleanupVMA();
+    }
+
+    // VMA初始化
+    bool VulkanBackend::initializeVMA() {
+        VmaAllocatorCreateInfo allocatorInfo = {};
+        allocatorInfo.vulkanApiVersion = VK_API_VERSION_1_3;
+        allocatorInfo.physicalDevice = mVulkanCore->getPhysicalDeviceHandle();
+        allocatorInfo.device = mVulkanCore->getLogicalDeviceHandle();
+        allocatorInfo.instance = mVulkanCore->getInstanceHandle();
+        
+        // 启用内存预算功能
+        allocatorInfo.flags = VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT;
+        
+        VkResult result = vmaCreateAllocator(&allocatorInfo, &mVmaAllocator);
+        if (result != VK_SUCCESS) {
+            std::cerr << "Failed to create VMA allocator: " << result << std::endl;
+            return false;
+        }
+        
+        std::cout << "VMA allocator created successfully" << std::endl;
+        return true;
+    }
+
+    void VulkanBackend::cleanupVMA() {
+        if (mVmaAllocator != VK_NULL_HANDLE) {
+            vmaDestroyAllocator(mVmaAllocator);
+            mVmaAllocator = VK_NULL_HANDLE;
+            std::cout << "VMA allocator destroyed" << std::endl;
+        }
     }
 
     void VulkanBackend::beginFrame() {
@@ -109,8 +149,6 @@ namespace StarryEngine {
             throw std::runtime_error("Failed to present swap chain image!");
         }
 
-
-
         mFrameInProgress = false;
         mCurrentFrame = (mCurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
     }
@@ -157,5 +195,4 @@ namespace StarryEngine {
         }
         mFrameContexts.clear();
     }
-
 } // namespace StarryEngine

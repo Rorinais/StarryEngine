@@ -1,5 +1,16 @@
-#include"Buffer.hpp"
+#include "Buffer.hpp"
+
+// 包含VMA实现
+#include <vk_mem_alloc.h>
+
 namespace StarryEngine {
+
+    // 初始化静态成员
+    VmaAllocator Buffer::sVMAAllocator = VK_NULL_HANDLE;
+
+    void Buffer::SetVMAAllocator(VmaAllocator allocator) {
+        sVMAAllocator = allocator;
+    }
 
     Buffer::Ptr Buffer::create(const LogicalDevice::Ptr& logicalDevice,
         const CommandPool::Ptr& commandPool,
@@ -24,7 +35,16 @@ namespace StarryEngine {
         VkBufferUsageFlags usage,
         VkMemoryPropertyFlags properties,
         const void* initialData) {
-        // 清理现有资源
+        
+        // 如果VMA分配器可用，使用VMA创建缓冲区
+        if (sVMAAllocator != VK_NULL_HANDLE) {
+            if (createBufferWithVMA(size, usage, properties, initialData)) {
+                return;
+            }
+            std::cerr << "VMA buffer creation failed, falling back to traditional method" << std::endl;
+        }
+        
+        // 传统方式（你原有的代码）
         cleanup();
 
         mBufferSize = size;
@@ -66,7 +86,7 @@ namespace StarryEngine {
             vkMapMemory(mLogicalDevice->getHandle(), mBufferMemory, 0, size, 0, &mapped);
             memcpy(mapped, initialData, size);
 
-            // 如果需要，刷新内存范围（对于非一致性的主机可见内存）
+            // 如果需要，刷新内存范围
             if (!(properties & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) {
                 VkMappedMemoryRange memoryRange{};
                 memoryRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
@@ -78,12 +98,12 @@ namespace StarryEngine {
 
             vkUnmapMemory(mLogicalDevice->getHandle(), mBufferMemory);
         }
-        // 如果有初始数据，但内存不是主机可见的（如设备本地内存），使用暂存缓冲区
+        // 如果有初始数据，但内存不是主机可见的，使用暂存缓冲区
         else if (initialData && !(properties & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)) {
             // 创建主机可见的暂存缓冲区
             Buffer stagingBuffer(mLogicalDevice, mCommandPool);
 
-            // 手动创建暂存缓冲区，避免递归
+            // 手动创建暂存缓冲区
             VkBuffer stagingBufferHandle;
             VkDeviceMemory stagingBufferMemory;
 
@@ -128,6 +148,93 @@ namespace StarryEngine {
             vkDestroyBuffer(mLogicalDevice->getHandle(), stagingBufferHandle, nullptr);
             vkFreeMemory(mLogicalDevice->getHandle(), stagingBufferMemory, nullptr);
         }
+    }
+
+    // VMA创建缓冲区实现
+    bool Buffer::createBufferWithVMA(VkDeviceSize size,
+                                    VkBufferUsageFlags usage,
+                                    VkMemoryPropertyFlags properties,
+                                    const void* initialData) {
+        cleanup();                         
+        mBufferSize = size;
+        mUsage = usage;
+        mProperties = properties;
+
+        VkBufferCreateInfo bufferInfo{};
+        bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+        bufferInfo.size = size;
+        bufferInfo.usage = usage;
+        bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+
+        VmaAllocationCreateInfo allocInfo = {};
+        
+        // 将Vulkan内存属性转换为VMA内存用途
+        if (properties & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
+            allocInfo.usage = VMA_MEMORY_USAGE_CPU_TO_GPU;
+            if (properties & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) {
+                allocInfo.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
+            }
+        } else {
+            allocInfo.usage = VMA_MEMORY_USAGE_GPU_ONLY;
+        }
+
+        // 对于需要上传的数据，添加TRANSFER_DST标志
+        if (initialData && !(properties & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)) {
+            bufferInfo.usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+        }
+
+        VkResult result = vmaCreateBuffer(sVMAAllocator, &bufferInfo, &allocInfo,
+                                         &mBuffer, &mVmaAllocation, nullptr);
+        
+        if (result != VK_SUCCESS) {
+            return false;
+        }
+
+        // 处理初始数据
+        if (initialData) {
+            // CPU可见内存直接映射
+            if (properties & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
+                void* mapped = nullptr;
+                vmaMapMemory(sVMAAllocator, mVmaAllocation, &mapped);
+                memcpy(mapped, initialData, size);
+                if (!(properties & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) {
+                    vmaFlushAllocation(sVMAAllocator, mVmaAllocation, 0, size);
+                }
+                vmaUnmapMemory(sVMAAllocator, mVmaAllocation);
+            } 
+            // GPU专用内存需要暂存缓冲区
+            else {
+                // 创建临时VMA缓冲区用于上传
+                VkBufferCreateInfo stagingInfo = bufferInfo;
+                stagingInfo.usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT;
+                
+                VmaAllocationCreateInfo stagingAllocInfo = {};
+                stagingAllocInfo.usage = VMA_MEMORY_USAGE_CPU_ONLY;
+                
+                VkBuffer stagingBuffer;
+                VmaAllocation stagingAllocation;
+                
+                result = vmaCreateBuffer(sVMAAllocator, &stagingInfo, &stagingAllocInfo,
+                                        &stagingBuffer, &stagingAllocation, nullptr);
+                
+                if (result == VK_SUCCESS) {
+                    // 映射并复制数据
+                    void* mapped = nullptr;
+                    vmaMapMemory(sVMAAllocator, stagingAllocation, &mapped);
+                    memcpy(mapped, initialData, size);
+                    vmaFlushAllocation(sVMAAllocator, stagingAllocation, 0, size);
+                    vmaUnmapMemory(sVMAAllocator, stagingAllocation);
+                    
+                    // 复制数据到GPU缓冲区
+                    copyBuffer(stagingBuffer, mBuffer, size);
+                    
+                    // 清理暂存缓冲区
+                    vmaDestroyBuffer(sVMAAllocator, stagingBuffer, stagingAllocation);
+                }
+            }
+        }
+
+        return true;
     }
 
     // 内存类型查找
@@ -175,6 +282,7 @@ namespace StarryEngine {
 
         vkFreeCommandBuffers(mLogicalDevice->getHandle(), mCommandPool->getHandle(), 1, &cmdBuffer);
     }
+
     void Buffer::uploadData(const void* data, VkDeviceSize size,
         VkBufferUsageFlags usage,
         VkMemoryPropertyFlags properties) {
@@ -191,36 +299,48 @@ namespace StarryEngine {
         unmap();
     }
 
-
     void Buffer::cleanup() noexcept {
         if (mBuffer != VK_NULL_HANDLE) {
-            vkDestroyBuffer(mLogicalDevice->getHandle(), mBuffer, nullptr);
+            if (sVMAAllocator != VK_NULL_HANDLE && mVmaAllocation != VK_NULL_HANDLE) {
+                vmaDestroyBuffer(sVMAAllocator, mBuffer, mVmaAllocation);
+                mVmaAllocation = VK_NULL_HANDLE;
+            } else {
+                vkDestroyBuffer(mLogicalDevice->getHandle(), mBuffer, nullptr);
+                if (mBufferMemory != VK_NULL_HANDLE) {
+                    vkFreeMemory(mLogicalDevice->getHandle(), mBufferMemory, nullptr);
+                    mBufferMemory = VK_NULL_HANDLE;
+                }
+            }
             mBuffer = VK_NULL_HANDLE;
-        }
-        if (mBufferMemory != VK_NULL_HANDLE) {
-            vkFreeMemory(mLogicalDevice->getHandle(), mBufferMemory, nullptr);
-            mBufferMemory = VK_NULL_HANDLE;
         }
         mBufferSize = 0;
     }
 
     void* Buffer::map(VkDeviceSize offset, VkDeviceSize size) {
-        if (mMapped) {
-            return static_cast<char*>(mMapped) + offset;
-        }
+        if (sVMAAllocator != VK_NULL_HANDLE && mVmaAllocation != VK_NULL_HANDLE) {
+            void* mapped = nullptr;
+            vmaMapMemory(sVMAAllocator, mVmaAllocation, &mapped);
+            return static_cast<char*>(mapped) + offset;
+        } else {
+            if (mMapped) {
+                return static_cast<char*>(mMapped) + offset;
+            }
 
-        VkDeviceSize mapSize = (size == VK_WHOLE_SIZE) ? mBufferSize : size;
-        VkResult result = vkMapMemory(mLogicalDevice->getHandle(), mBufferMemory,
-            offset, mapSize, 0, &mMapped);
-        if (result != VK_SUCCESS) {
-            throw std::runtime_error("Failed to map buffer memory");
-        }
+            VkDeviceSize mapSize = (size == VK_WHOLE_SIZE) ? mBufferSize : size;
+            VkResult result = vkMapMemory(mLogicalDevice->getHandle(), mBufferMemory,
+                offset, mapSize, 0, &mMapped);
+            if (result != VK_SUCCESS) {
+                throw std::runtime_error("Failed to map buffer memory");
+            }
 
-        return mMapped;
+            return mMapped;
+        }
     }
 
     void Buffer::unmap() {
-        if (mMapped) {
+        if (sVMAAllocator != VK_NULL_HANDLE && mVmaAllocation != VK_NULL_HANDLE) {
+            vmaUnmapMemory(sVMAAllocator, mVmaAllocation);
+        } else if (mMapped) {
             vkUnmapMemory(mLogicalDevice->getHandle(), mBufferMemory);
             mMapped = nullptr;
         }

@@ -44,7 +44,7 @@ namespace StarryEngine {
 
         mRenderer = std::make_shared<VulkanRenderer>();
         mRenderer->init(mWindow);
-
+        Buffer::SetVMAAllocator(mRenderer->getBackendAs<VulkanBackend>()->getAllocator());
         mDevice =mRenderer->getBackendAs<VulkanBackend>()->getVulkanCore()->getLogicalDevice();
         mCommandPool =mRenderer->getBackendAs<VulkanBackend>()->getWindowContext()->getCommandPool();
         registerDefaultComponents();
