@@ -1,6 +1,6 @@
 #pragma once 
 #include "./interface/IRenderer.hpp"
-#include "./interface/IBackend.hpp"
+#include "./interface/IRHI.hpp"
 #include <memory>
 #include <glm/glm.hpp>
 #include <vector>
@@ -37,7 +37,7 @@ namespace StarryEngine {
         }
 
     private:
-        std::shared_ptr<IBackend> mBackend;
+        std::shared_ptr<RHI::IRHI> mBackend;
         VulkanCore::Ptr mVulkanCore;
         WindowContext::Ptr mWindowContext;
         std::shared_ptr<Window> mWindow;  // 存储窗口引用

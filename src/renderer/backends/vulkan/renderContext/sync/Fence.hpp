@@ -1,14 +1,17 @@
 #pragma once
-#include"../../VulkanCore/LogicalDevice.hpp"
+#include<vulkan/vulkan.h>
+#include<memory>
+#include<stdexcept>
+
 namespace StarryEngine {
 	class Fence {
 	public:
 		using Ptr = std::shared_ptr<Fence>;
-		static Ptr create(const LogicalDevice::Ptr& logicalDevice, bool signaled = true) {
-			return std::make_shared<Fence>(logicalDevice, signaled);
+		static Ptr create(VkDevice device, bool signaled = true) {
+			return std::make_shared<Fence>(device, signaled);
 		}
 
-		Fence(const LogicalDevice::Ptr& logicalDevice, bool signaled = true);
+		Fence(VkDevice device, bool signaled);
 		~Fence();
 
 		void resetFence();
@@ -18,7 +21,7 @@ namespace StarryEngine {
 		VkFence getHandle() { return mFence; }
 
 	private:
-		LogicalDevice::Ptr mLogicalDevice;
+		VkDevice mDevice;
 		VkFence mFence = VK_NULL_HANDLE;
 
 	};

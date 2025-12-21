@@ -7,7 +7,7 @@ namespace StarryEngine {
 		poolCreateInfo.flags = flag;
 
 		auto physicalDevice = mLogicalDevice->getPhysicalDevice();
-		auto queueFamilyIndex = physicalDevice->findQueueFamilies(physicalDevice->getHandle(), physicalDevice->getSurface());
+		auto queueFamilyIndex = physicalDevice->findQueueFamilies(physicalDevice->getHandle(), mLogicalDevice->getSurface());
 		poolCreateInfo.queueFamilyIndex = queueFamilyIndex.graphicsFamily.value();
 
 		if (vkCreateCommandPool(mLogicalDevice->getHandle(), &poolCreateInfo, nullptr, &mCommandPool) != VK_SUCCESS) {

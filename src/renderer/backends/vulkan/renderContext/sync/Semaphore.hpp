@@ -1,21 +1,24 @@
 #pragma once
-#include"../../VulkanCore/LogicalDevice.hpp"
+#include<vulkan/vulkan.h>
+#include<memory>
+#include<stdexcept>
+
 namespace StarryEngine {
 
 	class Semaphore {
 	public:
 		using Ptr = std::shared_ptr<Semaphore>;
-		static Ptr create(const LogicalDevice::Ptr& logicalDevice) {
-			return std::make_shared<Semaphore>(logicalDevice);
+		static Ptr create(VkDevice device) {
+			return std::make_shared<Semaphore>(device);
 		}
 
-		Semaphore(const LogicalDevice::Ptr& logicalDevice);
+		Semaphore(VkDevice device);
 		~Semaphore();
 
 		VkSemaphore getHandle() { return mSemaphore; }
 
 	private:
-		LogicalDevice::Ptr mLogicalDevice;
+		VkDevice mDevice;
 		VkSemaphore mSemaphore = VK_NULL_HANDLE;
 
 	};

@@ -32,20 +32,15 @@
 
 namespace StarryEngine{
 
-#ifdef NDEBUG
-    const bool enableValidationLayers = false;
-#else
-    const bool enableValidationLayers = true;
-#endif 
 
-    struct QueueFamilyIndices {
-        std::optional<uint32_t> graphicsFamily;
-        std::optional<uint32_t> presentFamily;
+    //struct QueueFamilyIndices {
+    //    std::optional<uint32_t> graphicsFamily;
+    //    std::optional<uint32_t> presentFamily;
 
-        bool isComplete() const {
-            return graphicsFamily.has_value() && presentFamily.has_value();
-        }
-    };
+    //    bool isComplete() const {
+    //        return graphicsFamily.has_value() && presentFamily.has_value();
+    //    }
+    //};
 
     const std::vector<const char*> validationLayers = {
         "VK_LAYER_KHRONOS_validation"
