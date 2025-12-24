@@ -114,6 +114,12 @@ namespace StarryEngine {
         void handleRecreateResult(bool success);
         void setAutoRecreate(bool autoRecreate) { mConfig.autoRecreate = autoRecreate; }
 
+        // ==================== 多线程支持 ====================
+
+        VkCommandBuffer allocateThreadCommandBuffer(uint32_t threadIndex, VkCommandBufferLevel level);
+        void freeThreadCommandBuffers(uint32_t threadIndex);
+        VkCommandPool getThreadCommandPool(uint32_t threadIndex);
+
         // === 时间戳查询 ===
         void enableTimestamps(bool enable);
         std::pair<uint64_t, uint64_t> getFrameGPUTimestamps(uint32_t frameIndex) const;

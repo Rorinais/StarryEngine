@@ -3,7 +3,7 @@
 #include <cstring>
 #include <chrono>
 #include <deque>
-#include "VulkanBackend.hpp"
+#include "VulkanRHI.hpp"
 
 #ifdef _WIN32
 #include <windows.h>

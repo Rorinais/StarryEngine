@@ -150,7 +150,7 @@ namespace StarryEngine {
 
     bool SwapChain::createSwapChain(uint32_t width, uint32_t height) {
         // 查询支持信息
-        auto support = querySupport();
+        auto support = mDevice->querySwapChainSupport();
         if (support.formats.empty() || support.presentModes.empty()) {
             return false;
         }
@@ -262,29 +262,6 @@ namespace StarryEngine {
         }
 
         mImages.clear();
-    }
-
-    SwapChain::SupportDetails SwapChain::querySupport() const {
-        SupportDetails details;
-        VkPhysicalDevice physicalDevice = mDevice->getPhysicalDevice();
-
-        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physicalDevice, mSurface, &details.capabilities);
-
-        uint32_t formatCount;
-        vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, mSurface, &formatCount, nullptr);
-        if (formatCount != 0) {
-            details.formats.resize(formatCount);
-            vkGetPhysicalDeviceSurfaceFormatsKHR(physicalDevice, mSurface, &formatCount, details.formats.data());
-        }
-
-        uint32_t presentModeCount;
-        vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, mSurface, &presentModeCount, nullptr);
-        if (presentModeCount != 0) {
-            details.presentModes.resize(presentModeCount);
-            vkGetPhysicalDeviceSurfacePresentModesKHR(physicalDevice, mSurface, &presentModeCount, details.presentModes.data());
-        }
-
-        return details;
     }
 
     VkSurfaceFormatKHR SwapChain::chooseSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& formats) const {

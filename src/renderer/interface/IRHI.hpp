@@ -1,5 +1,6 @@
 #pragma once
-#include "IRHI_STRUCT.hpp"
+#include "RHI_STRUCTS.hpp"
+#include "RHI_ENUMS.hpp"
 #include <cstdint>
 #include <vector>
 #include <memory>

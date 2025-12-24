@@ -84,14 +84,6 @@ namespace StarryEngine {
         bool createImageViews();
         void cleanupSwapChain();
 
-        // 支持信息查询
-        struct SupportDetails {
-            VkSurfaceCapabilitiesKHR capabilities;
-            std::vector<VkSurfaceFormatKHR> formats;
-            std::vector<VkPresentModeKHR> presentModes;
-        };
-
-        SupportDetails querySupport() const;
         VkSurfaceFormatKHR chooseSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& formats) const;
         VkPresentModeKHR choosePresentMode(const std::vector<VkPresentModeKHR>& presentModes) const;
         VkExtent2D chooseExtent(const VkSurfaceCapabilitiesKHR& capabilities, uint32_t width, uint32_t height) const;
