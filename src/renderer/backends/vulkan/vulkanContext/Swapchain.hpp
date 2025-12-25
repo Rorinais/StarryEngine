@@ -5,6 +5,7 @@
 #include <memory>
 
 namespace StarryEngine {
+    class Device;
 
     struct SwapChainConfig {
         VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;
