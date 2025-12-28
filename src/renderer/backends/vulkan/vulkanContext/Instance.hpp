@@ -61,6 +61,12 @@ namespace StarryEngine {
         VkDebugUtilsMessengerEXT getDebugMessenger() const { return mDebugMessenger; }
         bool hasValidationEnabled() const { return mConfig.enableValidation; }
 
+        static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
+            VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
+            VkDebugUtilsMessageTypeFlagsEXT messageType,
+            const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
+            void* pUserData);
+
     private:
         Instance(const Config& config);
 
@@ -70,12 +76,6 @@ namespace StarryEngine {
 
         std::vector<const char*> getRequiredExtensions() const;
         bool checkValidationLayerSupport() const;
-
-        static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
-            VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-            VkDebugUtilsMessageTypeFlagsEXT messageType,
-            const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
-            void* pUserData);
 
     private:
         Config mConfig;
