@@ -1,5 +1,11 @@
-#include "RHI_UTILS.hpp"
 #include "RHI_TYPES.hpp"
+#include <cmath>
+#include <algorithm>
+#include <random>
+#include <cstring>
+#include <array>
+#include <fstream>
+#include <sstream>
 
 namespace StarryEngine::RHI {
 
@@ -608,14 +614,17 @@ namespace StarryEngine::RHI {
         desc.generateMips = generateMips;
         desc.mipLevels = generateMips ? calculateMipLevels(width, height) : 1;
 
-        auto texture = context->createTexture(desc);
+        // 直接返回 context->createTexture 的结果，它应该已经是一个 unique_ptr
+        // 或者返回包装在 unique_ptr 中的指针
+        RHITexture* texture = context->createTexture(desc);
         if (!texture) {
             return nullptr;
         }
 
-        // 这里应该上传数据
-        // 简化实现
-        return std::make_unique<RHITexture>(texture);
+        // 如果有上传数据的逻辑，这里添加
+
+        // 返回 unique_ptr，使用自定义删除器
+        return std::unique_ptr<RHITexture>(texture);
     }
 
     // 管线状态预设

@@ -1,91 +1,322 @@
 #pragma once
 #include "RHI_ENUMS.hpp"
+#include "RHI_HANDLES_SYSTEM.hpp"
 #include <cstdint>
 #include <string>
 #include <vector>
 #include <array>
 #include <functional>
+#include <atomic>
+#include <mutex>
 
 namespace StarryEngine::RHI {
 
     // ==================== 配置结构体 ====================
+    // ==================== 帧数据 ====================
+
+    /**
+     * @brief 帧数据结构体
+     * @details 包含每帧的渲染状态和同步对象
+     */
+    struct FrameData {
+        uint32_t frameIndex = 0;                  ///< 帧索引
+        uint32_t imageIndex = 0;                  ///< 交换链图像索引
+        CommandBufferHandle commandBuffer;        ///< 命令缓冲区句柄
+        SemaphoreHandle imageAvailableSemaphore;  ///< 图像可用信号量
+        SemaphoreHandle renderFinishedSemaphore;  ///< 渲染完成信号量
+        FenceHandle inFlightFence;                ///< 飞行中栅栏
+        float cpuTime = 0.0f;                     ///< CPU时间（毫秒）
+        float gpuTime = 0.0f;                     ///< GPU时间（毫秒）
+        void* userData = nullptr;                 ///< 用户数据
+
+        bool operator==(const FrameData& other) const {
+            return frameIndex == other.frameIndex && imageIndex == other.imageIndex &&
+                commandBuffer == other.commandBuffer &&
+                imageAvailableSemaphore == other.imageAvailableSemaphore &&
+                renderFinishedSemaphore == other.renderFinishedSemaphore &&
+                inFlightFence == other.inFlightFence;
+        }
+
+        bool operator!=(const FrameData& other) const {
+            return !(*this == other);
+        }
+    };
+
+    // ==================== 可比较的函数包装器 ====================
+    template<typename Signature>
+    class ComparableFunction;
+
+    template<typename R, typename... Args>
+    class ComparableFunction<R(Args...)> {
+    public:
+        using FunctionType = std::function<R(Args...)>;
+
+        // 线程安全的ID生成器
+        static size_t getNextId() {
+            static std::atomic<size_t> globalCounter{ 0 };
+            return ++globalCounter;
+        }
+
+        // 默认构造函数
+        ComparableFunction() = default;
+
+        // nullptr_t 构造函数
+        ComparableFunction(std::nullptr_t) : func_(nullptr), id_(0) {}
+
+        // 复制构造函数
+        ComparableFunction(const ComparableFunction& other)
+            : func_(other.func_), id_(other.id_) {}
+
+        // 移动构造函数
+        ComparableFunction(ComparableFunction&& other) noexcept
+            : func_(std::move(other.func_)), id_(other.id_) {
+            other.id_ = 0;
+        }
+
+        // 从std::function构造
+        ComparableFunction(const FunctionType& f) : func_(f), id_(getNextId()) {}
+
+        // 从任何可调用对象构造
+        template<typename F, typename = typename std::enable_if<
+            !std::is_same<typename std::decay<F>::type, ComparableFunction>::value
+        >::type>
+        ComparableFunction(F&& f) : func_(std::forward<F>(f)), id_(getNextId()) {}
+
+        // 赋值运算符
+        ComparableFunction& operator=(const ComparableFunction& other) {
+            if (this != &other) {
+                func_ = other.func_;
+                id_ = other.id_;
+            }
+            return *this;
+        }
+
+        ComparableFunction& operator=(ComparableFunction&& other) noexcept {
+            if (this != &other) {
+                func_ = std::move(other.func_);
+                id_ = other.id_;
+                other.id_ = 0;
+            }
+            return *this;
+        }
+
+        ComparableFunction& operator=(std::nullptr_t) {
+            func_ = nullptr;
+            id_ = 0;
+            return *this;
+        }
+
+        // 调用操作符
+        R operator()(Args... args) const {
+            return func_(std::forward<Args>(args)...);
+        }
+
+        // 比较操作符
+        bool operator==(const ComparableFunction& other) const {
+            return id_ == other.id_;
+        }
+
+        bool operator!=(const ComparableFunction& other) const {
+            return id_ != other.id_;
+        }
+
+        bool operator==(std::nullptr_t) const {
+            return !static_cast<bool>(func_);
+        }
+
+        bool operator!=(std::nullptr_t) const {
+            return static_cast<bool>(func_);
+        }
+
+        // 布尔转换
+        explicit operator bool() const {
+            return static_cast<bool>(func_);
+        }
+
+        // 获取ID，用于调试
+        size_t getId() const { return id_; }
+
+        // 获取底层函数引用
+        const FunctionType& getFunction() const { return func_; }
+        FunctionType& getFunction() { return func_; }
+
+    private:
+        FunctionType func_;
+        size_t id_ = 0;
+    };
+
+    // ==================== 回调函数类型 ====================
+
+    /**
+     * @brief 帧回调函数类型
+     * @details 每帧调用的回调函数
+     */
+    using FrameCallback = ComparableFunction<void(FrameData&)>;
+
+    /**
+     * @brief 窗口大小调整回调函数类型
+     * @details 窗口大小改变时调用的回调函数
+     */
+    using ResizeCallback = ComparableFunction<void(uint32_t width, uint32_t height)>;
+
+    /**
+     * @brief 错误回调函数类型
+     * @details 发生错误时调用的回调函数
+     */
+    using ErrorCallback = ComparableFunction<void(const std::string& error, bool fatal)>;
+
+    /**
+     * @brief 调试回调函数类型
+     * @details 接收调试信息的回调函数
+     */
+    using DebugCallback = ComparableFunction<void(
+        MessageSeverity severity,
+        MessageSource source,
+        const std::string& message)>;
 
     /**
      * @brief RHI初始化配置结构体
      * @details 包含渲染API初始化所需的所有配置参数
      */
     struct RHIInitConfig {
-        API api = API::Vulkan;                    ///< 使用的API
-        FeatureLevel featureLevel = FeatureLevel::VK_1_2; ///< 功能级别
-        bool enableDebug = true;                  ///< 启用调试
-        bool enableGPUValidation = false;         ///< 启用GPU验证
-        bool enableRenderDoc = false;             ///< 启用RenderDoc集成
-        bool enableNsight = false;                ///< 启用Nsight集成
-        bool enableAftermath = false;             ///< 启用Aftermath集成
-        uint32_t frameBuffering = 2;              ///< 帧缓冲数量
-        bool enableMultiThreading = true;         ///< 启用多线程
-        uint32_t maxThreadCount = 4;              ///< 最大线程数
-        bool enablePipelineCache = true;          ///< 启用管线缓存
-        std::string pipelineCacheFile = "pipeline_cache.bin"; ///< 管线缓存文件
-        bool enableShaderCache = true;            ///< 启用着色器缓存
-        std::string shaderCacheDir = "shader_cache"; ///< 着色器缓存目录
-        bool enableMemoryAllocator = true;        ///< 启用内存分配器
-        bool enableDescriptorAllocator = true;    ///< 启用描述符分配器
-        bool enableCommandAllocator = true;       ///< 启用命令分配器
+        // === 核心配置 ===
+        API api = API::Vulkan;
+        FeatureLevel featureLevel = FeatureLevel::VK_1_3;
+        bool enableDebug = true;
 
-        /// @brief 窗口配置
-        struct Window {
-            void* handle = nullptr;               ///< 窗口句柄
-            uint32_t width = 1280;                ///< 窗口宽度
-            uint32_t height = 720;                ///< 窗口高度
-            std::string title = "StarryEngine Application"; ///< 窗口标题
-            bool fullscreen = false;              ///< 是否全屏
-            bool borderless = false;              ///< 是否无边框
-            bool resizable = true;                ///< 是否可调整大小
-            bool vsync = true;                    ///< 是否启用垂直同步
-            uint32_t swapChainImages = 2;         ///< 交换链图像数量
-            bool srgb = true;                     ///< 是否启用sRGB
-            bool hdr = false;                     ///< 是否启用HDR
-            float refreshRate = 60.0f;            ///< 刷新率
-        } window;
+        // === 窗口/显示配置 ===
+        void* windowHandle = nullptr;
+        uint32_t windowWidth = 1280;
+        uint32_t windowHeight = 720;
+        bool vsync = true;
+        uint32_t swapChainImages = 2;
+        bool srgb = true;
+        bool hdr = false;
 
-        /// @brief 设备功能配置
-        struct Features {
-            bool geometryShader = false;          ///< 几何着色器
-            bool tessellationShader = false;      ///< 细分着色器
-            bool meshShader = false;              ///< 网格着色器
-            bool taskShader = false;              ///< 任务着色器
-            bool rayTracing = false;              ///< 光线追踪
-            bool variableRateShading = false;     ///< 可变速率着色
-            bool conservativeRasterization = false; ///< 保守光栅化
-            bool samplerAnisotropy = true;        ///< 采样器各向异性
-            bool textureCompression = true;       ///< 纹理压缩
-            bool computeShader = true;            ///< 计算着色器
-            bool shaderFloat64 = false;           ///< 64位浮点着色器
-            bool shaderInt64 = false;             ///< 64位整型着色器
-            bool shaderInt16 = false;             ///< 16位整型着色器
-            bool shaderInt8 = false;              ///< 8位整型着色器
-            bool shaderFloat16 = false;           ///< 16位浮点着色器
-            bool shaderDemoteToHelper = false;    ///< 降级到辅助着色器
-            bool shaderTerminateInvocation = false; ///< 终止调用
-            bool subgroupOperations = false;      ///< 子组操作
-            bool subgroupSizeControl = false;     ///< 子组大小控制
-            bool computeFullSubgroups = false;    ///< 完整计算子组
-            bool synchronization2 = true;         ///< 同步2
-            bool dynamicRendering = true;         ///< 动态渲染
-            bool shaderObject = false;            ///< 着色器对象
-            bool descriptorBuffer = false;        ///< 描述符缓冲区
-            bool bufferDeviceAddress = false;     ///< 缓冲区设备地址
-        } features;
+        // === 应用版本信息 ===
+        Version appVersion = { 1, 0, 0 };
+        Version engineVersion = { 1, 0, 0 };
+        std::string appName = "StarryEngine App";
+        std::string engineName = "StarryEngine";
+
+        // === 调试配置 ===
+        bool enableGPUValidation = false;
+        bool enableRenderDoc = false;
+        bool enableNsight = false;
+        bool enableAftermath = false;
+        DebugCallback debugCallback;
+
+        // === 实例扩展和层 ===
+        std::vector<std::string> requiredExtensions = {};
+        std::vector<std::string> requiredLayers = { "VK_LAYER_KHRONOS_validation" };
+
+        // === 设备配置 ===
+        struct DeviceFeatures {
+            bool samplerAnisotropy = true;
+            bool geometryShader = false;
+            bool tessellationShader = false;
+            bool meshShader = false;
+            bool rayTracing = false;
+            bool computeShader = true;
+            bool textureCompression = true;
+            bool fillModeNonSolid = false;
+            bool wideLines = false;
+            bool synchronization = true;
+            bool dynamicRendering = true;
+        } deviceFeatures;
+
+        std::vector<std::string> deviceExtensions = { "VK_KHR_swapchain" };
+        float queuePriority = 1.0f;
+        bool enableVMA = true;
+
+        // === 交换链配置 ===
+        enum class PresentMode {
+            FIFO,       // 垂直同步
+            MAILBOX,    // 无垂直同步（邮箱模式）
+            IMMEDIATE   // 立即呈现
+        };
+
+        PresentMode presentMode = PresentMode::FIFO;
+        bool enableMailboxMode = false;
+        bool enableImmediateMode = false;
+
+        // === 帧上下文配置 ===
+        uint32_t frameBuffering = 2;              // 双缓冲/三缓冲
+        bool usePersistentCommandBuffers = true;
+        bool enableTimestamps = false;
+        bool allowCommandBufferReset = true;
+        bool allowCommandPoolReset = true;
+        uint32_t maxRecreateAttempts = 3;
+        bool autoRecreateSwapChain = false;
+
+        // === 多线程配置 ===
+        bool enableMultiThreading = true;
+        uint32_t maxThreadCount = 4;
+
+        // === 缓存配置 ===
+        bool enablePipelineCache = true;
+        std::string pipelineCacheFile = "pipeline_cache.bin";
+        bool enableShaderCache = true;
+        std::string shaderCacheDir = "shader_cache";
+
+        // === 内存配置 ===
+        bool enableMemoryAllocator = true;
+        bool enableDescriptorAllocator = true;
+        bool enableCommandAllocator = true;
+
+        // === 构建时默认配置 ===
+        RHIInitConfig() {
+#ifdef NDEBUG
+            enableDebug = false;
+            enableGPUValidation = false;
+#endif
+        }
 
         bool operator==(const RHIInitConfig& other) const {
-            return api == other.api && featureLevel == other.featureLevel &&
+            return api == other.api &&
+                featureLevel == other.featureLevel &&
                 enableDebug == other.enableDebug &&
+                windowHandle == other.windowHandle &&
+                windowWidth == other.windowWidth &&
+                windowHeight == other.windowHeight &&
+                vsync == other.vsync &&
+                swapChainImages == other.swapChainImages &&
+                srgb == other.srgb &&
+                hdr == other.hdr &&
+                appVersion == other.appVersion &&
+                engineVersion == other.engineVersion &&
+                appName == other.appName &&
+                engineName == other.engineName &&
                 enableGPUValidation == other.enableGPUValidation &&
                 enableRenderDoc == other.enableRenderDoc &&
                 enableNsight == other.enableNsight &&
                 enableAftermath == other.enableAftermath &&
+                requiredExtensions == other.requiredExtensions &&
+                requiredLayers == other.requiredLayers &&
+                deviceFeatures.samplerAnisotropy == other.deviceFeatures.samplerAnisotropy &&
+                deviceFeatures.geometryShader == other.deviceFeatures.geometryShader &&
+                deviceFeatures.tessellationShader == other.deviceFeatures.tessellationShader &&
+                deviceFeatures.meshShader == other.deviceFeatures.meshShader &&
+                deviceFeatures.rayTracing == other.deviceFeatures.rayTracing &&
+                deviceFeatures.computeShader == other.deviceFeatures.computeShader &&
+                deviceFeatures.textureCompression == other.deviceFeatures.textureCompression &&
+                deviceFeatures.fillModeNonSolid == other.deviceFeatures.fillModeNonSolid &&
+                deviceFeatures.wideLines == other.deviceFeatures.wideLines &&
+                deviceFeatures.synchronization == other.deviceFeatures.synchronization &&
+                deviceFeatures.dynamicRendering == other.deviceFeatures.dynamicRendering &&
+                deviceExtensions == other.deviceExtensions &&
+                queuePriority == other.queuePriority &&
+                enableVMA == other.enableVMA &&
+                presentMode == other.presentMode &&
+                enableMailboxMode == other.enableMailboxMode &&
+                enableImmediateMode == other.enableImmediateMode &&
                 frameBuffering == other.frameBuffering &&
+                usePersistentCommandBuffers == other.usePersistentCommandBuffers &&
+                enableTimestamps == other.enableTimestamps &&
+                allowCommandBufferReset == other.allowCommandBufferReset &&
+                allowCommandPoolReset == other.allowCommandPoolReset &&
+                maxRecreateAttempts == other.maxRecreateAttempts &&
+                autoRecreateSwapChain == other.autoRecreateSwapChain &&
                 enableMultiThreading == other.enableMultiThreading &&
                 maxThreadCount == other.maxThreadCount &&
                 enablePipelineCache == other.enablePipelineCache &&
@@ -94,42 +325,11 @@ namespace StarryEngine::RHI {
                 shaderCacheDir == other.shaderCacheDir &&
                 enableMemoryAllocator == other.enableMemoryAllocator &&
                 enableDescriptorAllocator == other.enableDescriptorAllocator &&
-                enableCommandAllocator == other.enableCommandAllocator &&
-                window.width == other.window.width && window.height == other.window.height &&
-                window.title == other.window.title && window.fullscreen == other.window.fullscreen &&
-                window.borderless == other.window.borderless && window.resizable == other.window.resizable &&
-                window.vsync == other.window.vsync && window.swapChainImages == other.window.swapChainImages &&
-                window.srgb == other.window.srgb && window.hdr == other.window.hdr &&
-                window.refreshRate == other.window.refreshRate;
+                enableCommandAllocator == other.enableCommandAllocator;
         }
 
         bool operator!=(const RHIInitConfig& other) const {
             return !(*this == other);
         }
     };
-
-    // ==================== 句柄类型 ====================
-    // 注意：以下句柄类型使用64位ID标识，支持跨API资源引用
-
-    struct BufferHandle { uint64_t id = 0; constexpr bool isValid() const { return id != 0; } constexpr bool operator==(const BufferHandle& other) const { return id == other.id; } constexpr bool operator!=(const BufferHandle& other) const { return id != other.id; } constexpr bool operator<(const BufferHandle& other) const { return id < other.id; } };
-    struct TextureHandle { uint64_t id = 0; constexpr bool isValid() const { return id != 0; } constexpr bool operator==(const TextureHandle& other) const { return id == other.id; } constexpr bool operator!=(const TextureHandle& other) const { return id != other.id; } constexpr bool operator<(const TextureHandle& other) const { return id < other.id; } };
-    struct SamplerHandle { uint64_t id = 0; constexpr bool isValid() const { return id != 0; } constexpr bool operator==(const SamplerHandle& other) const { return id == other.id; } constexpr bool operator!=(const SamplerHandle& other) const { return id != other.id; } };
-    struct ShaderModuleHandle { uint64_t id = 0; constexpr bool isValid() const { return id != 0; } constexpr bool operator==(const ShaderModuleHandle& other) const { return id == other.id; } constexpr bool operator!=(const ShaderModuleHandle& other) const { return id != other.id; } };
-    struct PipelineLayoutHandle { uint64_t id = 0; constexpr bool isValid() const { return id != 0; } constexpr bool operator==(const PipelineLayoutHandle& other) const { return id == other.id; } constexpr bool operator!=(const PipelineLayoutHandle& other) const { return id != other.id; } };
-    struct PipelineHandle { uint64_t id = 0; constexpr bool isValid() const { return id != 0; } constexpr bool operator==(const PipelineHandle& other) const { return id == other.id; } constexpr bool operator!=(const PipelineHandle& other) const { return id != other.id; } };
-    struct RenderPassHandle { uint64_t id = 0; constexpr bool isValid() const { return id != 0; } constexpr bool operator==(const RenderPassHandle& other) const { return id == other.id; } constexpr bool operator!=(const RenderPassHandle& other) const { return id != other.id; } };
-    struct FramebufferHandle { uint64_t id = 0; constexpr bool isValid() const { return id != 0; } constexpr bool operator==(const FramebufferHandle& other) const { return id == other.id; } constexpr bool operator!=(const FramebufferHandle& other) const { return id != other.id; } };
-    struct CommandPoolHandle { uint64_t id = 0; constexpr bool isValid() const { return id != 0; } constexpr bool operator==(const CommandPoolHandle& other) const { return id == other.id; } constexpr bool operator!=(const CommandPoolHandle& other) const { return id != other.id; } };
-    struct CommandBufferHandle { uint64_t id = 0; constexpr bool isValid() const { return id != 0; } constexpr bool operator==(const CommandBufferHandle& other) const { return id == other.id; } constexpr bool operator!=(const CommandBufferHandle& other) const { return id != other.id; } };
-    struct FenceHandle { uint64_t id = 0; constexpr bool isValid() const { return id != 0; } constexpr bool operator==(const FenceHandle& other) const { return id == other.id; } constexpr bool operator!=(const FenceHandle& other) const { return id != other.id; } };
-    struct SemaphoreHandle { uint64_t id = 0; constexpr bool isValid() const { return id != 0; } constexpr bool operator==(const SemaphoreHandle& other) const { return id == other.id; } constexpr bool operator!=(const SemaphoreHandle& other) const { return id != other.id; } };
-    struct EventHandle { uint64_t id = 0; constexpr bool isValid() const { return id != 0; } constexpr bool operator==(const EventHandle& other) const { return id == other.id; } constexpr bool operator!=(const EventHandle& other) const { return id != other.id; } };
-    struct QueryPoolHandle { uint64_t id = 0; constexpr bool isValid() const { return id != 0; } constexpr bool operator==(const QueryPoolHandle& other) const { return id == other.id; } constexpr bool operator!=(const QueryPoolHandle& other) const { return id != other.id; } };
-    struct AccelerationStructureHandle { uint64_t id = 0; constexpr bool isValid() const { return id != 0; } constexpr bool operator==(const AccelerationStructureHandle& other) const { return id == other.id; } constexpr bool operator!=(const AccelerationStructureHandle& other) const { return id != other.id; } };
-    struct DescriptorSetLayoutHandle { uint64_t id = 0; constexpr bool isValid() const { return id != 0; } constexpr bool operator==(const DescriptorSetLayoutHandle& other) const { return id == other.id; } constexpr bool operator!=(const DescriptorSetLayoutHandle& other) const { return id != other.id; } };
-    struct DescriptorSetHandle { uint64_t id = 0; constexpr bool isValid() const { return id != 0; } constexpr bool operator==(const DescriptorSetHandle& other) const { return id == other.id; } constexpr bool operator!=(const DescriptorSetHandle& other) const { return id != other.id; } };
-    struct DescriptorPoolHandle { uint64_t id = 0; constexpr bool isValid() const { return id != 0; } constexpr bool operator==(const DescriptorPoolHandle& other) const { return id == other.id; } constexpr bool operator!=(const DescriptorPoolHandle& other) const { return id != other.id; } };
-    struct SwapChainHandle { uint64_t id = 0; constexpr bool isValid() const { return id != 0; } constexpr bool operator==(const SwapChainHandle& other) const { return id == other.id; } constexpr bool operator!=(const SwapChainHandle& other) const { return id != other.id; } };
-    struct QueueHandle { uint64_t id = 0; constexpr bool isValid() const { return id != 0; } constexpr bool operator==(const QueueHandle& other) const { return id == other.id; } constexpr bool operator!=(const QueueHandle& other) const { return id != other.id; } };
-
 } // namespace StarryEngine::RHI

@@ -2,6 +2,7 @@
 //vuklan相关
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
+#include <vulkan/vulkan.h>
 #include <shaderc/shaderc.hpp>
 //glm相关
 #define GLM_FORCE_RADIANS
@@ -29,34 +30,11 @@
 #include <string>
 #include <chrono>
 #include <array>
+#include <memory>
 
 namespace StarryEngine{
 
-
-    //struct QueueFamilyIndices {
-    //    std::optional<uint32_t> graphicsFamily;
-    //    std::optional<uint32_t> presentFamily;
-
-    //    bool isComplete() const {
-    //        return graphicsFamily.has_value() && presentFamily.has_value();
-    //    }
-    //};
-
-    const std::vector<const char*> validationLayers = {
-        "VK_LAYER_KHRONOS_validation"
-    };
-    const std::vector<const char*> deviceExtensions = {
-        VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-        VK_KHR_MAINTENANCE1_EXTENSION_NAME
-    };
-
-    enum class ShaderType {
-        Vertex,
-        Fragment,
-        Geometry,
-        Compute,
-        Default
-    };
+#define PI 3.1415
 }
 
 
