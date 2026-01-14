@@ -1041,4 +1041,5 @@ namespace StarryEngine::RHI {
         static float randomFloat(float min = 0.0f, float max = 1.0f);
         static uint32_t randomUint(uint32_t min = 0, uint32_t max = UINT32_MAX);
     };
+
 } // namespace StarryEngine::RHI

@@ -22,9 +22,11 @@ namespace StarryEngine::RHI {
         Sampler = 10,
         QueryPool = 11,
         CommandBuffer = 12,
-        Fence = 13,
-        Semaphore = 14,
-        SwapChain = 15,
+        CommandPool = 13,
+        Fence = 14,
+        Semaphore = 15,
+        Event = 16,
+        SwapChain = 17,
         MAX_CATEGORIES
     };
 
@@ -141,8 +143,10 @@ namespace StarryEngine::RHI {
     using SamplerHandle = TypedHandle<ResourceCategory::Sampler>;
     using QueryPoolHandle = TypedHandle<ResourceCategory::QueryPool>;
     using CommandBufferHandle = TypedHandle<ResourceCategory::CommandBuffer>;
+    using CommandPoolHandle = TypedHandle<ResourceCategory::CommandPool>;
     using FenceHandle = TypedHandle<ResourceCategory::Fence>;
     using SemaphoreHandle = TypedHandle<ResourceCategory::Semaphore>;
+    using EventHandle = TypedHandle<ResourceCategory::Event>;
     using SwapChainHandle = TypedHandle<ResourceCategory::SwapChain>;
 
 } // namespace StarryEngine::RHI

@@ -470,6 +470,139 @@ namespace StarryEngine::RHI {
     };
 
     /**
+     * @brief 描述符集描述结构体
+     * @details 描述描述符集的创建参数
+     */
+    struct DescriptorSetDesc {
+        DescriptorPoolHandle pool;                 ///< 描述符池句柄
+        PipelineLayoutHandle layout;               ///< 管线布局句柄
+        uint32_t setIndex = 0;                     ///< 描述符集索引（在管线布局中）
+        std::string debugName;                     ///< 调试名称
+
+        bool operator==(const DescriptorSetDesc& other) const {
+            return pool == other.pool &&
+                layout == other.layout &&
+                setIndex == other.setIndex;
+        }
+
+        bool operator!=(const DescriptorSetDesc& other) const {
+            return !(*this == other);
+        }
+    };
+
+    /**
+     * @brief 描述符写入操作结构体
+     * @details 用于更新描述符集的具体绑定信息
+     */
+    struct DescriptorWrite {
+        uint32_t binding = 0;                      ///< 绑定索引
+        uint32_t arrayElement = 0;                 ///< 数组元素索引
+        DescriptorType type = DescriptorType::UniformBuffer; ///< 描述符类型
+
+        union {
+            struct {
+                BufferHandle buffer;               ///< 缓冲区句柄
+                uint64_t offset = 0;               ///< 偏移量
+                uint64_t range = 0;                ///< 大小（0表示整个缓冲区）
+            } bufferInfo;
+
+            struct {
+                TextureHandle texture;             ///< 纹理句柄
+                SamplerHandle sampler;             ///< 采样器句柄
+                ImageLayout imageLayout = ImageLayout::ShaderReadOnly; ///< 图像布局
+            } imageInfo;
+
+            struct {
+                SamplerHandle sampler;             ///< 采样器句柄
+            } samplerInfo;
+        };
+
+        bool operator==(const DescriptorWrite& other) const {
+            if (binding != other.binding ||
+                arrayElement != other.arrayElement ||
+                type != other.type) {
+                return false;
+            }
+
+            switch (type) {
+            case DescriptorType::UniformBuffer:
+            case DescriptorType::StorageBuffer:
+            case DescriptorType::UniformBufferDynamic:
+            case DescriptorType::StorageBufferDynamic:
+                return bufferInfo.buffer == other.bufferInfo.buffer &&
+                    bufferInfo.offset == other.bufferInfo.offset &&
+                    bufferInfo.range == other.bufferInfo.range;
+
+            case DescriptorType::CombinedImageSampler:
+                return imageInfo.texture == other.imageInfo.texture &&
+                    imageInfo.sampler == other.imageInfo.sampler &&
+                    imageInfo.imageLayout == other.imageInfo.imageLayout;
+
+            case DescriptorType::SampledImage:
+            case DescriptorType::StorageImage:
+                return imageInfo.texture == other.imageInfo.texture &&
+                    imageInfo.imageLayout == other.imageInfo.imageLayout;
+
+            case DescriptorType::Sampler:
+                return samplerInfo.sampler == other.samplerInfo.sampler;
+
+            default:
+                return true; // 其他类型暂不支持比较
+            }
+        }
+
+        bool operator!=(const DescriptorWrite& other) const {
+            return !(*this == other);
+        }
+    };
+
+    /**
+     * @brief 描述符复制操作结构体
+     * @details 用于描述符集之间的复制操作
+     */
+    struct DescriptorCopy {
+        DescriptorSetHandle srcSet;                ///< 源描述符集句柄
+        uint32_t srcBinding = 0;                   ///< 源绑定索引
+        uint32_t srcArrayElement = 0;              ///< 源数组元素索引
+        DescriptorSetHandle dstSet;                ///< 目标描述符集句柄
+        uint32_t dstBinding = 0;                   ///< 目标绑定索引
+        uint32_t dstArrayElement = 0;              ///< 目标数组元素索引
+        uint32_t descriptorCount = 1;              ///< 复制的描述符数量
+
+        bool operator==(const DescriptorCopy& other) const {
+            return srcSet == other.srcSet &&
+                srcBinding == other.srcBinding &&
+                srcArrayElement == other.srcArrayElement &&
+                dstSet == other.dstSet &&
+                dstBinding == other.dstBinding &&
+                dstArrayElement == other.dstArrayElement &&
+                descriptorCount == other.descriptorCount;
+        }
+
+        bool operator!=(const DescriptorCopy& other) const {
+            return !(*this == other);
+        }
+    };
+
+    /**
+     * @brief 描述符集更新结构体
+     * @details 包含一组写操作和复制操作，用于批量更新描述符集
+     */
+    struct DescriptorSetUpdate {
+        std::vector<DescriptorWrite> writes;       ///< 写操作列表
+        std::vector<DescriptorCopy> copies;        ///< 复制操作列表
+        std::string debugName;                     ///< 调试名称
+
+        bool operator==(const DescriptorSetUpdate& other) const {
+            return writes == other.writes && copies == other.copies;
+        }
+
+        bool operator!=(const DescriptorSetUpdate& other) const {
+            return !(*this == other);
+        }
+    };
+
+    /**
      * @brief 推送常量范围结构体
      * @details 描述推送常量的内存布局
      */
