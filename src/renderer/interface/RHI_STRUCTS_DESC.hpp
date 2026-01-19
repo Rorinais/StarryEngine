@@ -1,5 +1,7 @@
 #pragma once
 #include "RHI_ENUMS.hpp"
+#include "RHI_HANDLES_SYSTEM.hpp"
+#include "RHI_STRUCTS_BASE.hpp"
 #include <cstdint>
 #include <array>
 #include <glm/glm.hpp>
@@ -221,9 +223,9 @@ namespace StarryEngine::RHI {
     };
 
     /**
-   * @brief 帧缓冲描述结构体
-   * @details 描述帧缓冲的配置
-   */
+    * @brief 帧缓冲描述结构体
+    * @details 描述帧缓冲的配置
+    */
     struct FramebufferDesc {
         void* renderPass = nullptr;                 ///< 渲染通道句柄
         std::vector<void*> attachments;             ///< 附件句柄列表
@@ -427,14 +429,14 @@ namespace StarryEngine::RHI {
      */
     struct ShaderModuleDesc {
         ShaderStage stage = ShaderStage::Vertex; ///< 着色器阶段
-        std::vector<uint8_t> code;              ///< SPIR-V/HLSL/Metal Shader字节码
+        std::vector<uint8_t> bytecode;              ///< SPIR-V/HLSL/Metal Shader字节码
         std::string entryPoint = "main";        ///< 入口函数名
         std::vector<std::string> defines;       ///< 预处理器定义
         std::vector<std::string> includePaths;  ///< 包含路径
         std::string debugName;                  ///< 调试名称
 
         bool operator==(const ShaderModuleDesc& other) const {
-            return stage == other.stage && code == other.code &&
+            return stage == other.stage && bytecode == other.bytecode &&
                 entryPoint == other.entryPoint && defines == other.defines &&
                 includePaths == other.includePaths;
         }
@@ -474,14 +476,14 @@ namespace StarryEngine::RHI {
      * @details 描述描述符集的创建参数
      */
     struct DescriptorSetDesc {
-        DescriptorPoolHandle pool;                 ///< 描述符池句柄
-        PipelineLayoutHandle layout;               ///< 管线布局句柄
+        DescriptorPoolHandle descriptorPool;       ///< 描述符池句柄
+        PipelineLayoutHandle pipelineLayout;       ///< 管线布局句柄
         uint32_t setIndex = 0;                     ///< 描述符集索引（在管线布局中）
         std::string debugName;                     ///< 调试名称
 
         bool operator==(const DescriptorSetDesc& other) const {
-            return pool == other.pool &&
-                layout == other.layout &&
+            return descriptorPool == other.descriptorPool &&
+                pipelineLayout == other.pipelineLayout &&
                 setIndex == other.setIndex;
         }
 
@@ -675,6 +677,17 @@ namespace StarryEngine::RHI {
         }
     };
 
+    /// @brief 模板操作状态
+    struct StencilOpState {
+        StencilOp failOp = StencilOp::Keep;      ///< 模板测试失败操作
+        StencilOp passOp = StencilOp::Keep;      ///< 模板测试通过操作
+        StencilOp depthFailOp = StencilOp::Keep; ///< 深度测试失败操作
+        CompareOp compareOp = CompareOp::Always; ///< 模板比较操作
+        uint32_t compareMask = 0xFF;             ///< 比较掩码
+        uint32_t writeMask = 0xFF;               ///< 写入掩码
+        uint32_t reference = 0;                  ///< 参考值
+    };
+
     /**
      * @brief 深度模板状态结构体
      * @details 描述深度和模板测试状态
@@ -687,17 +700,6 @@ namespace StarryEngine::RHI {
         float minDepthBounds = 0.0f;                ///< 最小深度边界
         float maxDepthBounds = 1.0f;                ///< 最大深度边界
         bool stencilTestEnable = false;             ///< 是否启用模板测试
-
-        /// @brief 模板操作状态
-        struct StencilOpState {
-            StencilOp failOp = StencilOp::Keep;      ///< 模板测试失败操作
-            StencilOp passOp = StencilOp::Keep;      ///< 模板测试通过操作
-            StencilOp depthFailOp = StencilOp::Keep; ///< 深度测试失败操作
-            CompareOp compareOp = CompareOp::Always; ///< 模板比较操作
-            uint32_t compareMask = 0xFF;             ///< 比较掩码
-            uint32_t writeMask = 0xFF;               ///< 写入掩码
-            uint32_t reference = 0;                  ///< 参考值
-        };
 
         StencilOpState front;                       ///< 正面模板状态
         StencilOpState back;                        ///< 背面模板状态
@@ -947,6 +949,276 @@ namespace StarryEngine::RHI {
 
         bool operator!=(const EventDesc& other) const {
             return false;
+        }
+    };
+
+    // ==================== 描述符集布局结构体 ====================
+
+    /**
+     * @brief 描述符集布局描述结构体
+     * @details 描述描述符集布局的配置
+     */
+    struct DescriptorSetLayoutDesc {
+        std::vector<DescriptorSetLayoutBinding> bindings;  ///< 绑定列表
+        bool pushDescriptors = false;                       ///< 是否支持推送描述符
+        bool updateAfterBind = false;                       ///< 绑定后是否可更新
+        bool updateUnusedWhilePending = false;              ///< 挂起时是否可更新未使用的
+        std::string debugName;                              ///< 调试名称
+
+        bool operator==(const DescriptorSetLayoutDesc& other) const {
+            return bindings == other.bindings &&
+                pushDescriptors == other.pushDescriptors &&
+                updateAfterBind == other.updateAfterBind &&
+                updateUnusedWhilePending == other.updateUnusedWhilePending;
+        }
+
+        bool operator!=(const DescriptorSetLayoutDesc& other) const {
+            return !(*this == other);
+        }
+    };
+
+    // ==================== 加速结构结构体 ====================
+
+    /**
+     * @brief 几何体结构体
+     * @details 描述加速结构的几何体数据
+     */
+    struct GeometryDesc {
+        enum class Type {
+            Triangles,
+            AABBs,
+            Instances
+        };
+
+        Type type = Type::Triangles;                         ///< 几何体类型
+
+        // 三角形几何体数据
+        struct TrianglesData {
+            BufferHandle vertexBuffer;                       ///< 顶点缓冲区
+            uint64_t vertexOffset = 0;                       ///< 顶点偏移
+            uint32_t vertexCount = 0;                        ///< 顶点数量
+            uint32_t vertexStride = 0;                       ///< 顶点步长
+            Format vertexFormat = Format::Undefined;         ///< 顶点格式
+            BufferHandle indexBuffer;                        ///< 索引缓冲区
+            uint64_t indexOffset = 0;                        ///< 索引偏移
+            uint32_t indexCount = 0;                         ///< 索引数量
+            IndexType indexType = IndexType::UInt32;         ///< 索引类型
+            BufferHandle transformBuffer;                    ///< 变换缓冲区
+            uint64_t transformOffset = 0;                    ///< 变换偏移
+        };
+
+        // AABB几何体数据
+        struct AABBsData {
+            BufferHandle aabbBuffer;                         ///< AABB缓冲区
+            uint64_t aabbOffset = 0;                         ///< AABB偏移
+            uint32_t aabbCount = 0;                          ///< AABB数量
+            uint32_t aabbStride = 0;                         ///< AABB步长
+        };
+
+        // 实例几何体数据
+        struct InstancesData {
+            BufferHandle instanceBuffer;                     ///< 实例缓冲区
+            uint64_t instanceOffset = 0;                     ///< 实例偏移
+            uint32_t instanceCount = 0;                      ///< 实例数量
+            bool transformInHostMemory = false;              ///< 变换是否在主机内存
+        };
+
+        union {
+            TrianglesData triangles;                         ///< 三角形数据
+            AABBsData aabbs;                                 ///< AABB数据
+            InstancesData instances;                         ///< 实例数据
+        };
+
+        GeometryFlags flags = GeometryFlags::Opaque;         ///< 几何体标志
+        bool operator==(const GeometryDesc& other) const {
+            if (type != other.type) return false;
+
+            switch (type) {
+            case Type::Triangles:
+                return triangles.vertexBuffer == other.triangles.vertexBuffer &&
+                    triangles.vertexOffset == other.triangles.vertexOffset &&
+                    triangles.vertexCount == other.triangles.vertexCount &&
+                    triangles.vertexStride == other.triangles.vertexStride &&
+                    triangles.vertexFormat == other.triangles.vertexFormat &&
+                    triangles.indexBuffer == other.triangles.indexBuffer &&
+                    triangles.indexOffset == other.triangles.indexOffset &&
+                    triangles.indexCount == other.triangles.indexCount &&
+                    triangles.indexType == other.triangles.indexType &&
+                    triangles.transformBuffer == other.triangles.transformBuffer &&
+                    triangles.transformOffset == other.triangles.transformOffset &&
+                    flags == other.flags;
+
+            case Type::AABBs:
+                return aabbs.aabbBuffer == other.aabbs.aabbBuffer &&
+                    aabbs.aabbOffset == other.aabbs.aabbOffset &&
+                    aabbs.aabbCount == other.aabbs.aabbCount &&
+                    aabbs.aabbStride == other.aabbs.aabbStride &&
+                    flags == other.flags;
+
+            case Type::Instances:
+                return instances.instanceBuffer == other.instances.instanceBuffer &&
+                    instances.instanceOffset == other.instances.instanceOffset &&
+                    instances.instanceCount == other.instances.instanceCount &&
+                    instances.transformInHostMemory == other.instances.transformInHostMemory &&
+                    flags == other.flags;
+            }
+            return false;
+        }
+
+        bool operator!=(const GeometryDesc& other) const {
+            return !(*this == other);
+        }
+    };
+
+    /**
+     * @brief 加速结构构建信息结构体
+     * @details 描述加速结构的构建参数
+     */
+    struct AccelerationStructureBuildInfo {
+        AccelerationStructureType type = AccelerationStructureType::BottomLevel;  ///< 加速结构类型
+        AccelerationStructureBuildFlags flags = AccelerationStructureBuildFlags::None;  ///< 构建标志
+        AccelerationStructureBuildMode mode = AccelerationStructureBuildMode::Build;    ///< 构建模式
+
+        // 构建几何体
+        std::vector<GeometryDesc> geometries;                     ///< 几何体列表
+
+        // 引用其他加速结构
+        std::vector<AccelerationStructureHandle> instances;       ///< 实例列表
+        BufferHandle instanceBuffer;                              ///< 实例缓冲区
+        uint64_t instanceOffset = 0;                              ///< 实例偏移
+        uint32_t instanceCount = 0;                               ///< 实例数量
+
+        // 性能参数
+        uint32_t maxPrimitiveCount = 0;                           ///< 最大图元数量
+        uint32_t maxVertexCount = 0;                              ///< 最大顶点数量
+        uint32_t maxInstanceCount = 0;                            ///< 最大实例数量
+        uint32_t maxAABBCount = 0;                                ///< 最大AABB数量
+
+        // 统计信息
+        uint64_t buildScratchSize = 0;                            ///< 构建临时内存大小
+        uint64_t updateScratchSize = 0;                           ///< 更新临时内存大小
+        uint64_t compactedSize = 0;                               ///< 压缩后大小
+
+        bool operator==(const AccelerationStructureBuildInfo& other) const {
+            return type == other.type &&
+                flags == other.flags &&
+                mode == other.mode &&
+                geometries == other.geometries &&
+                instances == other.instances &&
+                instanceBuffer == other.instanceBuffer &&
+                instanceOffset == other.instanceOffset &&
+                instanceCount == other.instanceCount &&
+                maxPrimitiveCount == other.maxPrimitiveCount &&
+                maxVertexCount == other.maxVertexCount &&
+                maxInstanceCount == other.maxInstanceCount &&
+                maxAABBCount == other.maxAABBCount &&
+                buildScratchSize == other.buildScratchSize &&
+                updateScratchSize == other.updateScratchSize &&
+                compactedSize == other.compactedSize;
+        }
+
+        bool operator!=(const AccelerationStructureBuildInfo& other) const {
+            return !(*this == other);
+        }
+    };
+
+    /**
+     * @brief 加速结构描述结构体
+     * @details 描述加速结构的创建参数
+     */
+    struct AccelerationStructureDesc {
+        AccelerationStructureType type = AccelerationStructureType::BottomLevel;  ///< 加速结构类型
+        AccelerationStructureBuildInfo buildInfo;                                 ///< 构建信息
+        uint64_t size = 0;                                                        ///< 加速结构大小
+        bool allowCompaction = false;                                             ///< 是否允许压缩
+        bool allowUpdate = false;                                                 ///< 是否允许更新
+        bool allowHostBuild = false;                                              ///< 是否允许主机端构建
+        std::string debugName;                                                    ///< 调试名称
+
+        bool operator==(const AccelerationStructureDesc& other) const {
+            return type == other.type &&
+                buildInfo == other.buildInfo &&
+                size == other.size &&
+                allowCompaction == other.allowCompaction &&
+                allowUpdate == other.allowUpdate &&
+                allowHostBuild == other.allowHostBuild;
+        }
+
+        bool operator!=(const AccelerationStructureDesc& other) const {
+            return !(*this == other);
+        }
+    };
+
+    // ==================== 队列结构体 ====================
+
+    /**
+     * @brief 队列描述结构体
+     * @details 描述队列的创建参数
+     */
+    struct QueueDesc {
+        QueueType type = QueueType::Graphics;          ///< 队列类型
+        uint32_t familyIndex = 0;                      ///< 队列族索引
+        uint32_t index = 0;                            ///< 队列索引
+        float priority = 1.0f;                         ///< 队列优先级
+        bool protectedMemory = false;                  ///< 是否使用受保护内存
+        std::string debugName;                         ///< 调试名称
+
+        bool operator==(const QueueDesc& other) const {
+            return type == other.type &&
+                familyIndex == other.familyIndex &&
+                index == other.index &&
+                priority == other.priority &&
+                protectedMemory == other.protectedMemory;
+        }
+
+        bool operator!=(const QueueDesc& other) const {
+            return !(*this == other);
+        }
+    };
+
+    /**
+     * @brief 提交信息结构体
+     * @details 描述命令缓冲区提交到队列的信息
+     */
+    struct SubmitInfo {
+        std::vector<CommandBufferHandle> commandBuffers;         ///< 命令缓冲区列表
+        std::vector<SemaphoreHandle> waitSemaphores;             ///< 等待的信号量
+        std::vector<PipelineStage> waitStages;                   ///< 等待的阶段
+        std::vector<SemaphoreHandle> signalSemaphores;           ///< 发出信号的信号量
+        std::vector<uint64_t> timelineSemaphoreValues;           ///< 时间线信号量值
+        std::string debugName;                                   ///< 调试名称
+
+        bool operator==(const SubmitInfo& other) const {
+            return commandBuffers == other.commandBuffers &&
+                waitSemaphores == other.waitSemaphores &&
+                waitStages == other.waitStages &&
+                signalSemaphores == other.signalSemaphores &&
+                timelineSemaphoreValues == other.timelineSemaphoreValues;
+        }
+
+        bool operator!=(const SubmitInfo& other) const {
+            return !(*this == other);
+        }
+    };
+
+    /**
+    * @brief 呈现信息结构体
+    * @details 描述交换链图像呈现的信息
+    */
+    struct PresentInfo {
+        SwapChainHandle swapChain;                               ///< 交换链句柄
+        uint32_t imageIndex = 0;                                 ///< 图像索引
+        std::vector<SemaphoreHandle> waitSemaphores;             ///< 等待的信号量
+        std::string debugName;                                   ///< 调试名称
+
+        bool operator==(const PresentInfo& other) const {
+            return swapChain == other.swapChain &&
+                imageIndex == other.imageIndex &&
+                waitSemaphores == other.waitSemaphores;
+        }
+
+        bool operator!=(const PresentInfo& other) const {
+            return !(*this == other);
         }
     };
 }

@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <array>
 #include <glm/glm.hpp>
+#include <vector>
 
 namespace StarryEngine::RHI {
 
@@ -379,102 +380,6 @@ namespace StarryEngine::RHI {
         }
 
         bool operator!=(const RenderPassBeginInfo& other) const {
-            return !(*this == other);
-        }
-    };
-
-    /**
-     * @brief 加速结构构建信息结构体
-     * @details 描述加速结构的构建参数
-     */
-    struct AccelerationStructureBuildInfo {
-        AccelerationStructureType type = AccelerationStructureType::BottomLevel;  ///< 加速结构类型
-        BuildAccelerationStructureMode buildMode = BuildAccelerationStructureMode::Build;  ///< 构建模式
-        void* dstAccelerationStructure = nullptr;      ///< 目标加速结构句柄
-        void* srcAccelerationStructure = nullptr;      ///< 源加速结构句柄（用于更新）
-        std::vector<void*> geometries;                 ///< 几何体列表
-        std::vector<void*> instances;                  ///< 实例列表
-        uint64_t scratchDataOffset = 0;                ///< 暂存数据偏移
-
-        bool operator==(const AccelerationStructureBuildInfo& other) const {
-            return type == other.type &&
-                buildMode == other.buildMode &&
-                dstAccelerationStructure == other.dstAccelerationStructure &&
-                srcAccelerationStructure == other.srcAccelerationStructure &&
-                scratchDataOffset == other.scratchDataOffset;
-        }
-
-        bool operator!=(const AccelerationStructureBuildInfo& other) const {
-            return !(*this == other);
-        }
-    };
-
-    /**
-     * @brief 描述符拷贝结构体
-     * @details 描述描述符的拷贝操作
-     */
-    struct DescriptorCopy {
-        void* srcSet = nullptr;                ///< 源描述符集句柄
-        uint32_t srcBinding = 0;               ///< 源绑定索引
-        uint32_t srcArrayElement = 0;          ///< 源数组元素
-        void* dstSet = nullptr;                ///< 目标描述符集句柄
-        uint32_t dstBinding = 0;               ///< 目标绑定索引
-        uint32_t dstArrayElement = 0;          ///< 目标数组元素
-        uint32_t descriptorCount = 1;          ///< 描述符数量
-
-        bool operator==(const DescriptorCopy& other) const {
-            return srcSet == other.srcSet &&
-                srcBinding == other.srcBinding &&
-                srcArrayElement == other.srcArrayElement &&
-                dstSet == other.dstSet &&
-                dstBinding == other.dstBinding &&
-                dstArrayElement == other.dstArrayElement &&
-                descriptorCount == other.descriptorCount;
-        }
-
-        bool operator!=(const DescriptorCopy& other) const {
-            return !(*this == other);
-        }
-    };
-
-    /**
-     * @brief 提交信息结构体
-     * @details 描述命令缓冲区提交到队列的信息
-     */
-    struct SubmitInfo {
-        std::vector<void*> waitSemaphores;                 ///< 等待信号量列表
-        std::vector<PipelineStage> waitDstStageMasks;      ///< 等待阶段掩码
-        std::vector<void*> commandBuffers;                 ///< 命令缓冲区列表
-        std::vector<void*> signalSemaphores;               ///< 信号信号量列表
-
-        bool operator==(const SubmitInfo& other) const {
-            return waitSemaphores == other.waitSemaphores &&
-                waitDstStageMasks == other.waitDstStageMasks &&
-                commandBuffers == other.commandBuffers &&
-                signalSemaphores == other.signalSemaphores;
-        }
-
-        bool operator!=(const SubmitInfo& other) const {
-            return !(*this == other);
-        }
-    };
-
-    /**
-     * @brief 呈现信息结构体
-     * @details 描述交换链呈现的信息
-     */
-    struct PresentInfo {
-        std::vector<void*> waitSemaphores;     ///< 等待信号量列表
-        std::vector<void*> swapChains;         ///< 交换链列表
-        std::vector<uint32_t> imageIndices;    ///< 图像索引列表
-
-        bool operator==(const PresentInfo& other) const {
-            return waitSemaphores == other.waitSemaphores &&
-                swapChains == other.swapChains &&
-                imageIndices == other.imageIndices;
-        }
-
-        bool operator!=(const PresentInfo& other) const {
             return !(*this == other);
         }
     };

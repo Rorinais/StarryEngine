@@ -1,5 +1,5 @@
 #include "QueueHandles.hpp"
-// 移除 #include "Device.hpp" 
+#include <algorithm>
 #include <stdexcept>
 
 namespace StarryEngine {

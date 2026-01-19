@@ -62,16 +62,71 @@ namespace StarryEngine::RHI {
         MT_3_0     // Metal 3.0
     };
 
-    enum class CopyAccelerationStructureMode {
-        Clone,
-        Compact,
-        Serialize,
-        Deserialize
+    // ==================== 加速结构相关枚举 ====================
+
+    /**
+     * @brief 加速结构类型枚举
+     */
+    enum class AccelerationStructureType {
+        BottomLevel = 0,      ///< 底层加速结构
+        TopLevel = 1,         ///< 顶层加速结构
+        Generic = 2           ///< 通用加速结构
     };
 
-    enum class AccelerationStructureType {
-        TopLevel,
-        BottomLevel
+    /**
+     * @brief 加速结构构建标志枚举
+     */
+    enum class AccelerationStructureBuildFlags {
+        None = 0,
+        AllowUpdate = 1 << 0,                ///< 允许更新
+        AllowCompaction = 1 << 1,            ///< 允许压缩
+        PreferFastTrace = 1 << 2,            ///< 优先快速追踪
+        PreferFastBuild = 1 << 3,            ///< 优先快速构建
+        MinimizeMemory = 1 << 4,             ///< 最小化内存使用
+        PerformUpdate = 1 << 5,              ///< 执行更新
+        LowMemory = 1 << 6                   ///< 低内存模式
+    };
+
+    /**
+     * @brief 加速结构构建模式枚举
+     */
+    enum class AccelerationStructureBuildMode {
+        Build = 0,           ///< 构建
+        Update = 1           ///< 更新
+    };
+
+    /**
+     * @brief 几何体标志枚举
+     */
+    enum class GeometryFlags {
+        None = 0,
+        Opaque = 1 << 0,                     ///< 不透明几何体
+        NoDuplicateAnyHitInvocation = 1 << 1, ///< 不复制任何击中调用
+        OpaqueForCulling = 1 << 2,           ///< 剔除时不透明
+        TriangleFrontCounterclockwise = 1 << 3 ///< 三角形正面为逆时针
+    };
+
+    /**
+     * @brief 复制加速结构模式枚举
+     */
+    enum class CopyAccelerationStructureMode {
+        Clone = 0,           ///< 克隆
+        Compact = 1,         ///< 压缩
+        Serialize = 2,       ///< 序列化
+        Deserialize = 3      ///< 反序列化
+    };
+
+    // ==================== 队列相关枚举 ====================
+
+    /**
+     * @brief 队列类型枚举
+     */
+    enum class QueueType {
+        Graphics = 0,        ///< 图形队列
+        Compute = 1,         ///< 计算队列
+        Transfer = 2,        ///< 传输队列
+        SparseBinding = 3,   ///< 稀疏绑定队列
+        Protected = 4        ///< 受保护队列
     };
 
     enum class ColorSpace {
@@ -588,15 +643,15 @@ namespace StarryEngine::RHI {
         Present
     };
 
-    enum class QueueType {
-        Graphics,
-        Compute,
-        Transfer,
-        Present,
-        VideoDecode,
-        VideoEncode,
-        OpticalFlow
-    };
+    //enum class QueueType {
+    //    Graphics,
+    //    Compute,
+    //    Transfer,
+    //    Present,
+    //    VideoDecode,
+    //    VideoEncode,
+    //    OpticalFlow
+    //};
 
     enum class PipelineStage {
         TopOfPipe = 0x00000001,

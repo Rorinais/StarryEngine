@@ -19,14 +19,17 @@ namespace StarryEngine::RHI {
         Framebuffer = 7,
         DescriptorSet = 8,
         DescriptorPool = 9,
-        Sampler = 10,
-        QueryPool = 11,
-        CommandBuffer = 12,
-        CommandPool = 13,
-        Fence = 14,
-        Semaphore = 15,
-        Event = 16,
-        SwapChain = 17,
+        DescriptorSetLayout = 10,  
+        Sampler = 11,
+        QueryPool = 12,
+        CommandBuffer = 13,
+        CommandPool = 14,
+        Fence = 15,
+        Semaphore = 16,
+        Event = 17,
+        SwapChain = 18,
+        AccelerationStructure = 19,  
+        Queue = 20,                 
         MAX_CATEGORIES
     };
 
@@ -113,6 +116,36 @@ namespace StarryEngine::RHI {
 
         static TypedHandle Null() noexcept { return TypedHandle(ResourceHandle::Null()); }
 
+        static TypedHandle Create(uint8_t api, uint32_t index, uint32_t generation) {
+            return TypedHandle(ResourceHandle::Create(
+                api,
+                static_cast<uint8_t>(Category),
+                index,
+                generation
+            ));
+        }
+
+        static TypedHandle Create(uint32_t index, uint32_t generation) {
+            return Create(0, index, generation); 
+        }
+
+        // 添加获取句柄信息的方法
+        uint8_t getAPI() const noexcept {
+            return handle.getAPI();
+        }
+
+        uint32_t getIndex() const noexcept {
+            return handle.getIndex();
+        }
+
+        uint32_t getGeneration() const noexcept {
+            return handle.getGeneration();
+        }
+
+        uint8_t getCategoryRaw() const noexcept {
+            return handle.getCategory();
+        }
+
         // 调试信息
         std::string toString() const {
             if (!isValid()) return "Null";
@@ -148,5 +181,8 @@ namespace StarryEngine::RHI {
     using SemaphoreHandle = TypedHandle<ResourceCategory::Semaphore>;
     using EventHandle = TypedHandle<ResourceCategory::Event>;
     using SwapChainHandle = TypedHandle<ResourceCategory::SwapChain>;
+    using DescriptorSetLayoutHandle = TypedHandle<ResourceCategory::DescriptorSetLayout>;
+    using AccelerationStructureHandle = TypedHandle<ResourceCategory::AccelerationStructure>;
+    using QueueHandle = TypedHandle<ResourceCategory::Queue>;
 
 } // namespace StarryEngine::RHI
