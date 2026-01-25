@@ -20,8 +20,7 @@
 namespace StarryEngine::RHI {
     template<typename HandleType, typename ResourceType>
     class TypedResourceStorage {
-        static_assert(std::is_base_of<IResource, ResourceType>::value,
-            "ResourceType must inherit from IResource");
+        static_assert(std::is_base_of<IResource, ResourceType>::value,"ResourceType must inherit from IResource");
     public:
         using Handle = HandleType;
         using ResourcePtr = std::unique_ptr<ResourceType>;
@@ -51,8 +50,7 @@ namespace StarryEngine::RHI {
         TypedResourceStorage& operator=(TypedResourceStorage&&) = delete;
 
         // 创建资源
-        Handle create(ResourcePtr data, const std::string& name = "",
-            const std::string& debugTag = "");
+        Handle create(ResourcePtr data, const std::string& name = "",const std::string& debugTag = "");
 
         // 批量创建资源
         template<typename... Args>
@@ -158,7 +156,7 @@ namespace StarryEngine::RHI {
 
     private:
         bool debugMode_ = false;
-        mutable std::mutex mutex_;
+        //mutable std::mutex mutex_;
         std::vector<Chunk> chunks_;
         std::unordered_map<std::string, uint32_t> nameToIndex_;
         std::unordered_map<std::string, uint32_t> debugTagToIndex_;
@@ -208,7 +206,7 @@ namespace StarryEngine::RHI {
             size_t peakMemoryUsage = 0;
         };
 
-        ResourceManager(std::unique_ptr<IResourceFactory> factory);
+        ResourceManager(std::shared_ptr<IResourceFactory> factory);
         ~ResourceManager();
 
         // 禁止拷贝和移动
@@ -597,7 +595,7 @@ namespace StarryEngine::RHI {
         std::unordered_map<std::thread::id, TimingInfo> activeOperations_;
 
     private:
-        std::unique_ptr<IResourceFactory> factory_;
+        std::shared_ptr<IResourceFactory> factory_;
         bool debugMode_ = false;
 
         // 分类型存储
@@ -623,7 +621,7 @@ namespace StarryEngine::RHI {
         TypedResourceStorage<QueueHandle, RHIQueue> queues_;
 
         // 统计信息
-        mutable std::mutex statsMutex_;
+       // mutable std::mutex statsMutex_;
         Statistics stats_;
         mutable std::atomic<size_t> peakResourceCount_{ 0 };  // 添加 mutable
         mutable std::atomic<size_t> peakMemoryUsage_{ 0 };    // 添加 mutable
@@ -636,7 +634,8 @@ namespace StarryEngine::RHI {
     typename TypedResourceStorage<HandleType, ResourceType>::Handle
         TypedResourceStorage<HandleType, ResourceType>::create(ResourcePtr data, const std::string& name,
             const std::string& debugTag) {
-        std::lock_guard<std::mutex> lock(mutex_);
+
+        //std::lock_guard<std::mutex> lock(mutex_);
 
         // 检查名称是否已存在
         if (!name.empty()) {
@@ -680,10 +679,20 @@ namespace StarryEngine::RHI {
 
                     totalCreated_++;
 
-                    // 更新最大内存使用
-                    size_t currentMemory = getTotalMemoryUsage();
-                    if (currentMemory > maxMemoryUsage_) {
-                        maxMemoryUsage_ = currentMemory;
+                    size_t currentMemory = 0;
+                    for (const auto& chunk : chunks_) {
+                        for (const auto& entry : chunk.entries) {
+                            if (entry.alive) {
+                                currentMemory += entry.memoryUsage;
+                            }
+                        }
+                    }
+
+                    size_t oldMax = maxMemoryUsage_.load();
+                    while (currentMemory > oldMax) {
+                        if (maxMemoryUsage_.compare_exchange_weak(oldMax, currentMemory)) {
+                            break;
+                        }
                     }
 
                     return Handle::Create(globalIdx, entry.generation);
@@ -691,9 +700,8 @@ namespace StarryEngine::RHI {
             }
         }
 
-        // 没有空闲位置，创建新chunk
         chunks_.push_back(Chunk{});
-        return create(std::move(data), name, debugTag);
+        return create(ResourcePtr{}, name, debugTag);
     }
 
     template<typename HandleType, typename ResourceType>
@@ -714,7 +722,7 @@ namespace StarryEngine::RHI {
     ResourceType* TypedResourceStorage<HandleType, ResourceType>::getData(Handle handle) {
         if (!handle.isValid()) return nullptr;
 
-        std::lock_guard<std::mutex> lock(mutex_);
+        //std::lock_guard<std::mutex> lock(mutex_);
         return getEntryData(handle);
     }
 
@@ -745,7 +753,7 @@ namespace StarryEngine::RHI {
 
     template<typename HandleType, typename ResourceType>
     void TypedResourceStorage<HandleType, ResourceType>::clear() {
-        std::lock_guard<std::mutex> lock(mutex_);
+        //std::lock_guard<std::mutex> lock(mutex_);
 
         for (auto& chunk : chunks_) {
             for (auto& entry : chunk.entries) {
@@ -765,7 +773,7 @@ namespace StarryEngine::RHI {
 
     template<typename HandleType, typename ResourceType>
     size_t TypedResourceStorage<HandleType, ResourceType>::size() const {
-        std::lock_guard<std::mutex> lock(mutex_);
+        //std::lock_guard<std::mutex> lock(mutex_);
         return totalCreated_ - totalDestroyed_;
     }
 
@@ -777,7 +785,7 @@ namespace StarryEngine::RHI {
     template<typename HandleType, typename ResourceType>
     typename TypedResourceStorage<HandleType, ResourceType>::Handle
         TypedResourceStorage<HandleType, ResourceType>::findByName(const std::string& name) const {
-        std::lock_guard<std::mutex> lock(mutex_);
+        //std::lock_guard<std::mutex> lock(mutex_);
 
         auto it = nameToIndex_.find(name);
         if (it == nameToIndex_.end()) return Handle::Null();
@@ -788,7 +796,7 @@ namespace StarryEngine::RHI {
     template<typename HandleType, typename ResourceType>
     typename TypedResourceStorage<HandleType, ResourceType>::Handle
         TypedResourceStorage<HandleType, ResourceType>::findByDebugTag(const std::string& debugTag) const {
-        std::lock_guard<std::mutex> lock(mutex_);
+        //std::lock_guard<std::mutex> lock(mutex_);
 
         auto it = debugTagToIndex_.find(debugTag);
         if (it == debugTagToIndex_.end()) return Handle::Null();
@@ -800,7 +808,7 @@ namespace StarryEngine::RHI {
     bool TypedResourceStorage<HandleType, ResourceType>::addRef(Handle handle) {
         if (!handle.isValid()) return false;
 
-        std::lock_guard<std::mutex> lock(mutex_);
+        //std::lock_guard<std::mutex> lock(mutex_);
 
         Entry* entry = getEntry(handle);
         if (!entry) return false;
@@ -813,7 +821,7 @@ namespace StarryEngine::RHI {
     bool TypedResourceStorage<HandleType, ResourceType>::release(Handle handle) {
         if (!handle.isValid()) return false;
 
-        std::lock_guard<std::mutex> lock(mutex_);
+        //std::lock_guard<std::mutex> lock(mutex_);
 
         Entry* entry = getEntry(handle);
         if (!entry) return false;
@@ -834,7 +842,7 @@ namespace StarryEngine::RHI {
     bool TypedResourceStorage<HandleType, ResourceType>::destroy(Handle handle) {
         if (!handle.isValid()) return false;
 
-        std::lock_guard<std::mutex> lock(mutex_);
+        //std::lock_guard<std::mutex> lock(mutex_);
 
         Entry* entry = getEntry(handle);
         if (!entry) return false;
@@ -846,7 +854,7 @@ namespace StarryEngine::RHI {
     template<typename HandleType, typename ResourceType>
     template<typename Func>
     void TypedResourceStorage<HandleType, ResourceType>::forEach(Func&& func) {
-        std::lock_guard<std::mutex> lock(mutex_);
+        //std::lock_guard<std::mutex> lock(mutex_);
 
         for (size_t chunkIdx = 0; chunkIdx < chunks_.size(); ++chunkIdx) {
             auto& chunk = chunks_[chunkIdx];
@@ -864,7 +872,7 @@ namespace StarryEngine::RHI {
     template<typename HandleType, typename ResourceType>
     template<typename Func>
     void TypedResourceStorage<HandleType, ResourceType>::forEach(Func&& func) const {
-        std::lock_guard<std::mutex> lock(mutex_);
+        //std::lock_guard<std::mutex> lock(mutex_);
 
         for (size_t chunkIdx = 0; chunkIdx < chunks_.size(); ++chunkIdx) {
             const auto& chunk = chunks_[chunkIdx];
@@ -882,7 +890,7 @@ namespace StarryEngine::RHI {
     template<typename HandleType, typename ResourceType>
     template<typename Func, typename Filter>
     void TypedResourceStorage<HandleType, ResourceType>::forEachFiltered(Func&& func, Filter&& filter) {
-        std::lock_guard<std::mutex> lock(mutex_);
+        //std::lock_guard<std::mutex> lock(mutex_);
 
         for (size_t chunkIdx = 0; chunkIdx < chunks_.size(); ++chunkIdx) {
             auto& chunk = chunks_[chunkIdx];
@@ -901,7 +909,7 @@ namespace StarryEngine::RHI {
 
     template<typename HandleType, typename ResourceType>
     size_t TypedResourceStorage<HandleType, ResourceType>::getTotalMemoryUsage() const {
-        std::lock_guard<std::mutex> lock(mutex_);
+        //std::lock_guard<std::mutex> lock(mutex_);
 
         size_t total = 0;
         for (const auto& chunk : chunks_) {
@@ -917,7 +925,7 @@ namespace StarryEngine::RHI {
     template<typename HandleType, typename ResourceType>
     std::vector<typename TypedResourceStorage<HandleType, ResourceType>::Handle>
         TypedResourceStorage<HandleType, ResourceType>::getAllHandles() const {
-        std::lock_guard<std::mutex> lock(mutex_);
+        //std::lock_guard<std::mutex> lock(mutex_);
         std::vector<Handle> handles;
 
         for (size_t chunkIdx = 0; chunkIdx < chunks_.size(); ++chunkIdx) {
@@ -937,7 +945,7 @@ namespace StarryEngine::RHI {
     template<typename HandleType, typename ResourceType>
     std::optional<typename TypedResourceStorage<HandleType, ResourceType>::EntryInfo>
         TypedResourceStorage<HandleType, ResourceType>::getEntryInfo(Handle handle) const {
-        std::lock_guard<std::mutex> lock(mutex_);
+        //std::lock_guard<std::mutex> lock(mutex_);
 
         const Entry* entry = getEntry(handle);
         if (!entry) return std::nullopt;
@@ -956,13 +964,23 @@ namespace StarryEngine::RHI {
     template<typename HandleType, typename ResourceType>
     typename TypedResourceStorage<HandleType, ResourceType>::Statistics
         TypedResourceStorage<HandleType, ResourceType>::getStatistics() const {
-        std::lock_guard<std::mutex> lock(mutex_);
+        //std::lock_guard<std::mutex> lock(mutex_);
 
         Statistics stats;
         stats.totalCreated = totalCreated_;
         stats.totalDestroyed = totalDestroyed_;
         stats.currentCount = totalCreated_ - totalDestroyed_;
-        stats.totalMemoryUsage = getTotalMemoryUsage();
+
+        // 直接计算内存，避免调用 getTotalMemoryUsage()
+        stats.totalMemoryUsage = 0;
+        for (const auto& chunk : chunks_) {
+            for (const auto& entry : chunk.entries) {
+                if (entry.alive && entry.data) {
+                    stats.totalMemoryUsage += entry.memoryUsage;
+                }
+            }
+        }
+
         stats.maxMemoryUsage = maxMemoryUsage_.load();
         stats.chunkCount = chunks_.size();
 
@@ -982,7 +1000,7 @@ namespace StarryEngine::RHI {
     template<typename HandleType, typename ResourceType>
     std::optional<typename TypedResourceStorage<HandleType, ResourceType>::Handle>
         TypedResourceStorage<HandleType, ResourceType>::getOldestResource() const {
-        std::lock_guard<std::mutex> lock(mutex_);
+        //std::lock_guard<std::mutex> lock(mutex_);
 
         std::optional<Handle> oldest;
         std::chrono::steady_clock::time_point oldestTime =
@@ -1054,6 +1072,8 @@ namespace StarryEngine::RHI {
     template<typename HandleType, typename ResourceType>
     void TypedResourceStorage<HandleType, ResourceType>::destroyEntry(Entry* entry) {
         if (entry->data) {
+            // 先获取内存使用量，然后再释放
+            size_t memoryToFree = entry->memoryUsage;
             entry->data->release();
         }
 
@@ -1079,9 +1099,25 @@ namespace StarryEngine::RHI {
 
         totalDestroyed_++;
 
-        // 检查是否需要收缩内存
         if (chunks_.size() > 1 && totalDestroyed_ > totalCreated_ / 2) {
-            tryShrink();
+            while (!chunks_.empty()) {
+                auto& lastChunk = chunks_.back();
+                bool empty = true;
+
+                for (const auto& e : lastChunk.entries) {
+                    if (e.alive) {
+                        empty = false;
+                        break;
+                    }
+                }
+
+                if (empty) {
+                    chunks_.pop_back();
+                }
+                else {
+                    break;
+                }
+            }
         }
     }
 

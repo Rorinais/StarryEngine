@@ -3,7 +3,7 @@
 namespace StarryEngine::RHI {
 
     // ==================== ResourceManager 构造函数/析构函数 ====================
-    ResourceManager::ResourceManager(std::unique_ptr<IResourceFactory> factory)
+    ResourceManager::ResourceManager(std::shared_ptr<IResourceFactory> factory)
         : factory_(std::move(factory)) {
         assert(factory_ != nullptr && "Resource factory must be provided");
         initStatistics();
@@ -83,6 +83,7 @@ namespace StarryEngine::RHI {
         logResourceCreation(ResourceCategory::PipelineLayout, name);
         return pipelineLayouts_.create(std::move(resource), name, debugTag);
     }
+
 
     ShaderHandle ResourceManager::createShader(const ShaderModuleDesc& desc,
         const std::string& name,
@@ -1022,7 +1023,7 @@ namespace StarryEngine::RHI {
 
     // ==================== ResourceManager::getStatistics() 方法修复 ====================
     ResourceManager::Statistics ResourceManager::getStatistics() const {
-        std::lock_guard<std::mutex> lock(statsMutex_);
+        //std::lock_guard<std::mutex> lock(statsMutex_);
 
         Statistics stats = stats_;
         stats.bufferCount = buffers_.size();
@@ -1243,14 +1244,14 @@ namespace StarryEngine::RHI {
     void ResourceManager::updateStatistics() {
         // 更新统计信息
         auto stats = getStatistics();
-        std::lock_guard<std::mutex> lock(statsMutex_);
+        //std::lock_guard<std::mutex> lock(statsMutex_);
         stats_ = stats;
     }
 
     void ResourceManager::logResourceCreation(ResourceCategory category, const std::string& name) {
         if (!debugMode_) return;
 
-        std::lock_guard<std::mutex> lock(statsMutex_);
+        //std::lock_guard<std::mutex> lock(statsMutex_);
         std::cout << "[ResourceManager] Created resource: Category="
             << static_cast<int>(category)
             << ", Name='" << name << "'"
@@ -1260,7 +1261,7 @@ namespace StarryEngine::RHI {
     void ResourceManager::logResourceDestruction(ResourceCategory category, const std::string& name) {
         if (!debugMode_) return;
 
-        std::lock_guard<std::mutex> lock(statsMutex_);
+        //std::lock_guard<std::mutex> lock(statsMutex_);
         std::cout << "[ResourceManager] Destroyed resource: Category="
             << static_cast<int>(category)
             << ", Name='" << name << "'"

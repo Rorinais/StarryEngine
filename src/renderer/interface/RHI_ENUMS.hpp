@@ -969,34 +969,34 @@ namespace StarryEngine::RHI {
         ShadingRateImage
     };
 
-    // ==================== 混合状态枚举 ====================
-    enum class ColorBlend {
-        Opaque,
-        AlphaBlend,
-        Additive,
-        Multiply,
-        PremultipliedAlpha
-    };
+    //// ==================== 混合状态枚举 ====================
+    //enum class ColorBlend {
+    //    Opaque,
+    //    AlphaBlend,
+    //    Additive,
+    //    Multiply,
+    //    PremultipliedAlpha
+    //};
 
-    // ==================== 深度模板状态枚举 ====================
-    enum class DepthStencil {
-        None,
-        DepthRead,
-        DepthWrite,
-        DepthReadWrite,
-        DepthReadStencilRead,
-        DepthWriteStencilWrite
-    };
+    //// ==================== 深度模板状态枚举 ====================
+    //enum class DepthStencil {
+    //    None,
+    //    DepthRead,
+    //    DepthWrite,
+    //    DepthReadWrite,
+    //    DepthReadStencilRead,
+    //    DepthWriteStencilWrite
+    //};
 
-    // ==================== 光栅化状态枚举 ====================
-    enum class Rasterizer {
-        CullNone,
-        CullFront,
-        CullBack,
-        CullFrontAndBack,
-        Wireframe,
-        NoDepthClip
-    };
+    //// ==================== 光栅化状态枚举 ====================
+    //enum class Rasterizer {
+    //    CullNone,
+    //    CullFront,
+    //    CullBack,
+    //    CullFrontAndBack,
+    //    Wireframe,
+    //    NoDepthClip
+    //};
 
     /**
      * @brief 管线类型枚举

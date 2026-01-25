@@ -400,6 +400,10 @@ uint32_t ConfigConverter::convertFeatureLevel(StarryEngine::RHI::FeatureLevel le
             );
         }
 
+        auto factory = std::make_shared<StarryEngine::RHI::VKResourceFactory>(mDevice);
+        mResourceManager = std::make_shared<StarryEngine::RHI::ResourceManager>(factory);
+        mResourceManager->setDebugMode(config.enableDebug);
+
         return true;
     }
 

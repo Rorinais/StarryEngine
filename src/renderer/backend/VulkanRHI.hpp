@@ -6,7 +6,8 @@
 #include "FrameContext.hpp"
 
 #include "../interface/RHI_TYPES.hpp"
-#include "../interface/RHI_VK_RESOURCE.hpp"
+#include "../interface/RHI_RESOURCE_MANAGER.hpp"
+
 
 namespace StarryEngine{
 
@@ -32,10 +33,12 @@ namespace StarryEngine{
 
         bool initialize(const StarryEngine::RHI::RHIInitConfig& config);
 
-        StarryEngine::RHI::PipelineHandle createGraphicsPipeline(StarryEngine::RHI::GraphicsPipelineDesc pipelineDesc) {
-            
+        StarryEngine::RHI::PipelineLayoutHandle createPipelineLayout(StarryEngine::RHI::PipelineLayoutDesc desc) {
+            return mResourceManager->createPipelineLayout(desc);
+        }
 
-            return StarryEngine::RHI::PipelineHandle::Null();
+        StarryEngine::RHI::PipelineHandle createGraphicsPipeline(StarryEngine::RHI::GraphicsPipelineDesc desc) {
+            return mResourceManager->createGraphicsPipeline(desc);
         }
         
         void clear();
@@ -47,8 +50,6 @@ namespace StarryEngine{
         FrameContext::Ptr mFrameContext;
         VkSurfaceKHR mSurface = VK_NULL_HANDLE;
 
-        
-
-        std::vector<RHI::RHI_VK_Pipeline> mPipelinePools;
+        std::shared_ptr<RHI::ResourceManager> mResourceManager;
     };
 }
