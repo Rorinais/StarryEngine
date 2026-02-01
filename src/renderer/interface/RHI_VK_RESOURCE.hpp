@@ -49,6 +49,157 @@ namespace StarryEngine::RHI {
         shaderc::Compiler mCompiler;
     };
 
+    class RHI_VK_Buffer : public RHIBuffer {
+    public:
+        RHI_VK_Buffer(std::shared_ptr<Device> device, const BufferDesc& desc);
+        ~RHI_VK_Buffer() override;
+
+        // 映射/取消映射
+        void* map(uint64_t offset = 0, uint64_t size = 0) override;
+        void unmap() override;
+
+        // 数据更新
+        void update(const void* data, uint64_t size, uint64_t offset = 0) override;
+        void flush(uint64_t offset = 0, uint64_t size = 0) override;
+        void invalidate(uint64_t offset = 0, uint64_t size = 0) override;
+
+        void release() override;
+        bool isValid() const override;
+        void* getNativeHandle() const override;
+        size_t getMemoryUsage() const override;
+        const char* getTypeName() const override { return "Vulkan_Buffer"; }
+
+        // 信息查询
+        BufferType getType() const override { return mDesc.type; }
+        uint64_t getSize() const override { return mDesc.size; }
+        uint64_t getAlignment() const override { return mDesc.alignment; }
+        bool isCPUVisible() const override;
+        bool isGPUOnly() const override;
+        bool isPersistentMapped() const override { return mDesc.persistentMapped; }
+
+        // 视图创建
+        void* createView(Format format, uint64_t offset = 0, uint64_t size = 0) override;
+        void destroyView(void* view) override;
+
+        // 屏障
+        void transitionState(AccessFlag newAccess, PipelineStage newStage) override{
+            
+        }
+
+    private:
+        void createBuffer();
+        void destroyBuffer();
+        
+        // 辅助函数
+        VkBufferUsageFlags getBufferUsageFlags() const;
+        void uploadInitialData();
+        void updateDataViaStagingBuffer(const void* data, uint64_t size, uint64_t offset);
+        void updateDataViaDirectMapping(const void* data, uint64_t size, uint64_t offset);
+        
+        // 内存映射管理
+        void ensureMapped();
+        void syncMappedMemory(bool flush);
+
+        VkFormat convertFormatToVk(Format format) {
+            switch (format) {
+                case Format::R8_UNorm: return VK_FORMAT_R8_UNORM;
+                case Format::R8_SNorm: return VK_FORMAT_R8_SNORM;
+                case Format::R8_UInt: return VK_FORMAT_R8_UINT;
+                case Format::R8_SInt: return VK_FORMAT_R8_SINT;
+                case Format::R8_sRGB: return VK_FORMAT_R8_SRGB;
+                case Format::R16_UNorm: return VK_FORMAT_R16_UNORM;
+                case Format::R16_SNorm: return VK_FORMAT_R16_SNORM;
+                case Format::R16_UInt: return VK_FORMAT_R16_UINT;
+                case Format::R16_SInt: return VK_FORMAT_R16_SINT;
+                case Format::R16_Float: return VK_FORMAT_R16_SFLOAT;
+                case Format::RG8_UNorm: return VK_FORMAT_R8G8_UNORM;
+                case Format::RG8_SNorm: return VK_FORMAT_R8G8_SNORM;
+                case Format::RG8_UInt: return VK_FORMAT_R8G8_UINT;
+                case Format::RG8_SInt: return VK_FORMAT_R8G8_SINT;
+                case Format::R32_UInt: return VK_FORMAT_R32_UINT;
+                case Format::R32_SInt: return VK_FORMAT_R32_SINT;
+                case Format::R32_Float: return VK_FORMAT_R32_SFLOAT;
+                case Format::RG16_UNorm: return VK_FORMAT_R16G16_UNORM;
+                case Format::RG16_SNorm: return VK_FORMAT_R16G16_SNORM;
+                case Format::RG16_UInt: return VK_FORMAT_R16G16_UINT;
+                case Format::RG16_SInt: return VK_FORMAT_R16G16_SINT;
+                case Format::RG16_Float: return VK_FORMAT_R16G16_SFLOAT;
+                case Format::RGBA8_UNorm: return VK_FORMAT_R8G8B8A8_UNORM;
+                case Format::RGBA8_SNorm: return VK_FORMAT_R8G8B8A8_SNORM;
+                case Format::RGBA8_UInt: return VK_FORMAT_R8G8B8A8_UINT;
+                case Format::RGBA8_SInt: return VK_FORMAT_R8G8B8A8_SINT;
+                case Format::BGRA8_UNorm: return VK_FORMAT_B8G8R8A8_UNORM;
+                case Format::BGRA8_SNorm: return VK_FORMAT_B8G8R8A8_SNORM;
+                case Format::BGRA8_UInt: return VK_FORMAT_B8G8R8A8_UINT;
+                case Format::BGRA8_SInt: return VK_FORMAT_B8G8R8A8_SINT;
+                case Format::RGBA8_sRGB: return VK_FORMAT_R8G8B8A8_SRGB;
+                case Format::BGRA8_sRGB: return VK_FORMAT_B8G8R8A8_SRGB;
+                case Format::D16_UNorm: return VK_FORMAT_D16_UNORM;
+                case Format::D32_Float: return VK_FORMAT_D32_SFLOAT;
+                default: return VK_FORMAT_UNDEFINED;
+            }
+        }
+
+        VmaMemoryUsage convertMemoryTypeToVma(MemoryType memoryType) {
+            switch (memoryType) {
+                case MemoryType::GPU_Only:
+                    return VMA_MEMORY_USAGE_GPU_ONLY;
+                case MemoryType::CPU_To_GPU:
+                    return VMA_MEMORY_USAGE_CPU_TO_GPU;
+                case MemoryType::CPU_Only:
+                    return VMA_MEMORY_USAGE_CPU_ONLY;
+                case MemoryType::GPU_To_CPU:
+                    return VMA_MEMORY_USAGE_GPU_TO_CPU;
+                default:
+                    return VMA_MEMORY_USAGE_AUTO;
+            }
+        }
+
+        VkMemoryPropertyFlags convertMemoryTypeToVkProperties(MemoryType memoryType) {
+            switch (memoryType) {
+                case MemoryType::GPU_Only:
+                    return VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+                case MemoryType::CPU_To_GPU:
+                    return VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | 
+                        VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+                case MemoryType::CPU_Only:
+                    return VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | 
+                        VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
+                        VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+                case MemoryType::GPU_To_CPU:
+                    return VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
+                        VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+                default:
+                    return VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+            }
+        }
+        
+        // 视图管理
+        struct BufferViewInfo {
+            VkBufferView view;
+            Format format;
+            uint64_t offset;
+            uint64_t size;
+        };
+        
+        std::shared_ptr<Device> mDevice;
+        BufferDesc mDesc;
+        
+        VkBuffer mBuffer = VK_NULL_HANDLE;
+        VmaAllocation mVmaAllocation = VK_NULL_HANDLE;      
+        VkDeviceMemory mTraditionalMemory = VK_NULL_HANDLE; 
+        bool mUsingVMA = false;
+        
+        void* mMappedPointer = nullptr;
+        bool mIsMapped = false;
+        bool mPersistentlyMapped = false;
+        
+        std::unordered_map<uint64_t, BufferViewInfo> mViews; // 使用唯一的key
+        uint64_t mNextViewKey = 1;
+        
+        AccessFlag mCurrentAccess = AccessFlag::None;
+        PipelineStage mCurrentStage = PipelineStage::TopOfPipe;
+    };
 
     class RHI_VK_PipelineLayout : public RHIPipelineLayout {
     public:

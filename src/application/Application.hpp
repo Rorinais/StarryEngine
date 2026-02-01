@@ -5,7 +5,7 @@
 
 #include "../renderer/interface/RHI_TYPES.hpp"
 #include "../renderer/interface/RHI_STRUCTS_CONFIG.hpp"
-#include "../renderer/interface/RHI_STRUCTS_BASE.hpp"
+#include "../renderer/interface/RHI_STRUCTS_DESC.hpp"
 
 
 namespace StarryEngine {

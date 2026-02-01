@@ -62,6 +62,31 @@ namespace StarryEngine::RHI {
         MT_3_0     // Metal 3.0
     };
 
+    // ==================== 资源类别 ====================
+    enum class ResourceCategory : uint8_t {
+        Buffer = 1,
+        Texture = 2,
+        Pipeline = 3,
+        PipelineLayout = 4,
+        Shader = 5,
+        RenderPass = 6,
+        Framebuffer = 7,
+        DescriptorSet = 8,
+        DescriptorPool = 9,
+        DescriptorSetLayout = 10,  
+        Sampler = 11,
+        QueryPool = 12,
+        CommandBuffer = 13,
+        CommandPool = 14,
+        Fence = 15,
+        Semaphore = 16,
+        Event = 17,
+        SwapChain = 18,
+        AccelerationStructure = 19,  
+        Queue = 20,                 
+        MAX_CATEGORIES
+    };
+
     // ==================== 加速结构相关枚举 ====================
 
     /**

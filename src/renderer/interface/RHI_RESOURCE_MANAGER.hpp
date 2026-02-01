@@ -1,8 +1,4 @@
 #pragma once
-#include "RHI_HANDLES_SYSTEM.hpp"
-#include "RHI_STRUCTS_DESC.hpp"
-#include "RHI_STRUCTS_RESOURCE.hpp"
-#include "RHI_RESOURCE_FACTORY.hpp"
 #include <unordered_map>
 #include <iostream>
 #include <vector>
@@ -16,6 +12,11 @@
 #include <optional>
 #include <chrono>
 #include <thread>
+
+#include "RHI_HANDLES_SYSTEM.hpp"
+#include "RHI_STRUCTS_DESC.hpp"
+#include "RHI_STRUCTS_RESOURCE.hpp"
+#include "RHI_RESOURCE_FACTORY.hpp"
 
 namespace StarryEngine::RHI {
     template<typename HandleType, typename ResourceType>

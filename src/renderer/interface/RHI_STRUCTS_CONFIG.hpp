@@ -1,6 +1,4 @@
 #pragma once
-#include "RHI_ENUMS.hpp"
-#include "RHI_HANDLES_SYSTEM.hpp"
 #include <cstdint>
 #include <string>
 #include <vector>
@@ -9,39 +7,11 @@
 #include <atomic>
 #include <mutex>
 
+#include "RHI_ENUMS.hpp"
+#include "RHI_HANDLES_SYSTEM.hpp"
+#include "RHI_STRUCTS_DESC.hpp"
+
 namespace StarryEngine::RHI {
-
-    // ==================== 配置结构体 ====================
-    // ==================== 帧数据 ====================
-
-    /**
-     * @brief 帧数据结构体
-     * @details 包含每帧的渲染状态和同步对象
-     */
-    struct FrameData {
-        uint32_t frameIndex = 0;                  ///< 帧索引
-        uint32_t imageIndex = 0;                  ///< 交换链图像索引
-        CommandBufferHandle commandBuffer;        ///< 命令缓冲区句柄
-        SemaphoreHandle imageAvailableSemaphore;  ///< 图像可用信号量
-        SemaphoreHandle renderFinishedSemaphore;  ///< 渲染完成信号量
-        FenceHandle inFlightFence;                ///< 飞行中栅栏
-        float cpuTime = 0.0f;                     ///< CPU时间（毫秒）
-        float gpuTime = 0.0f;                     ///< GPU时间（毫秒）
-        void* userData = nullptr;                 ///< 用户数据
-
-        bool operator==(const FrameData& other) const {
-            return frameIndex == other.frameIndex && imageIndex == other.imageIndex &&
-                commandBuffer == other.commandBuffer &&
-                imageAvailableSemaphore == other.imageAvailableSemaphore &&
-                renderFinishedSemaphore == other.renderFinishedSemaphore &&
-                inFlightFence == other.inFlightFence;
-        }
-
-        bool operator!=(const FrameData& other) const {
-            return !(*this == other);
-        }
-    };
-
     // ==================== 可比较的函数包装器 ====================
     template<typename Signature>
     class ComparableFunction;

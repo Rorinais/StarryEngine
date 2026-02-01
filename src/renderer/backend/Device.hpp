@@ -110,7 +110,6 @@ namespace StarryEngine {
             bool enableVMA = true;
         };
 
-
         using Ptr = std::shared_ptr<Device>;
 
         static Ptr create(std::shared_ptr<Instance> instance, VkSurfaceKHR surface, const Config& config) {
@@ -135,44 +134,64 @@ namespace StarryEngine {
         VkQueue getTransferQueue() const { return mQueueHandles->getTransferQueue(); }
 
         // === 内存分配器 ===
-        bool initializeVMA();
-
-        void cleanupVMA();
-
-        VmaAllocator getAllocator() const { return mVmaAllocator; }
+        VmaAllocator getVmaAllocator() const { return mVmaAllocator; }
 
         bool isVMAEnabled() const { return mVmaAllocator != VK_NULL_HANDLE; }
 
         // ==================== 缓冲区创建和管理 ====================
+        bool initializeVMA();             
+        void cleanupVMA();             
 
-        // VMA 方式创建缓冲区
+        // ==================== VMA缓冲区管理 ====================
+        // 创建VMA缓冲区（支持初始数据上传）
         VMABuffer createBufferWithVMA(VkDeviceSize size, VkBufferUsageFlags usage,
             VmaMemoryUsage memoryUsage, VmaAllocationCreateFlags flags = 0,
-            const void* initialData = nullptr, size_t initialDataSize = 0);
+            const void* initialData = nullptr, size_t initialDataSize = 0,
+            VmaAllocationInfo* allocationInfo = nullptr);
 
-        VMABuffer createBufferWithVMA(VkDeviceSize size, VkBufferUsageFlags usage,
-            VmaMemoryUsage memoryUsage, VmaAllocationCreateFlags flags,
-            VmaAllocationInfo* allocationInfo);
-
+        // 上传数据到VMA缓冲区（已映射内存）
         void uploadDataToVmaBuffer(VkBuffer buffer, VmaAllocation allocation,
-            const void* data, size_t dataSize);
+            const void* data, size_t dataSize, VkDeviceSize offset = 0);
 
+        // 销毁VMA缓冲区
         void destroyBufferWithVMA(const VMABuffer& buffer);
         void destroyBufferWithVMA(VkBuffer buffer, VmaAllocation allocation);
 
-        // 传统方式创建缓冲区
+        // ==================== 传统缓冲区管理 ====================
         VMATraditionalBuffer createBufferTraditional(VkDeviceSize size, VkBufferUsageFlags usage,
-            VkMemoryPropertyFlags properties);
+            VkMemoryPropertyFlags properties, const void* initialData = nullptr,
+            size_t initialDataSize = 0, VkCommandPool commandPool = VK_NULL_HANDLE);
 
         VMATraditionalBuffer createBufferTraditionalWithData(VkCommandPool commandPool,
-            VkDeviceSize size, VkBufferUsageFlags usage,
-            VkMemoryPropertyFlags properties, const void* initialData);
+            VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties,
+            const void* initialData);
 
+        // 销毁传统缓冲区
         void destroyBufferTraditional(const VMATraditionalBuffer& buffer);
         void destroyBufferTraditional(VkBuffer buffer, VkDeviceMemory memory);
 
-        // ==================== 图像创建和管理 ====================
+        // ==================== 内存操作函数 ====================
+        // 上传数据到传统内存
+        void uploadDataToTraditionalMemory(VkDeviceMemory memory, const void* data, 
+            size_t dataSize, VkDeviceSize offset = 0, bool hostCoherent = true);
 
+        // 通过暂存缓冲区上传数据
+        void uploadDataViaStagingBuffer(VkCommandPool commandPool,
+            const VMATraditionalBuffer& dstBuffer, const void* data, size_t dataSize);
+
+        // ==================== 批量缓冲区操作 ====================
+        // 批量创建VMA缓冲区
+        std::vector<VMABuffer> createVmaBuffers(uint32_t count, VkDeviceSize size,
+            VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage, VmaAllocationCreateFlags flags = 0);
+
+        // 批量创建传统缓冲区
+        std::vector<VMATraditionalBuffer> createTraditionalBuffers(uint32_t count,
+            VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties);
+
+        void destroyVmaBuffers(const std::vector<VMABuffer>& buffers);
+        void destroyTraditionalBuffers(const std::vector<VMATraditionalBuffer>& buffers);
+
+        // ==================== 图像创建和管理 ====================
         // VMA 方式创建图像
         VMAImage createImageWithVMA(uint32_t width, uint32_t height, VkFormat format,
             VkImageTiling tiling, VkImageUsageFlags usage,
@@ -236,6 +255,8 @@ namespace StarryEngine {
         void destroyRenderPass(VkRenderPass renderPass);
 
         // ==================== 命令系统 ====================
+        VkCommandPool getTransferCommandPool();
+
         VkCommandPool createCommandPool(uint32_t queueFamilyIndex,
             VkCommandPoolCreateFlags flags = 0);
         void destroyCommandPool(VkCommandPool commandPool);
@@ -300,6 +321,8 @@ namespace StarryEngine {
         void destroySampler(VkSampler sampler);
 
         // ==================== 实用功能 ====================
+        
+
         VkCommandBuffer beginSingleTimeCommands(VkCommandPool commandPool);
         void endSingleTimeCommands(VkCommandPool commandPool, VkCommandBuffer commandBuffer);
 
@@ -411,6 +434,10 @@ namespace StarryEngine {
             return mQueueFamilyIndices.presentFamily.value_or(VK_QUEUE_FAMILY_IGNORED);
         }
 
+        uint32_t getTransferQueueFamilyIndex() const {
+            return mQueueFamilyIndices.transferFamily.value_or(VK_QUEUE_FAMILY_IGNORED);
+        }
+
         // ==================== 实用方法 ====================
 
         // 检查是否支持扩展
@@ -484,6 +511,12 @@ namespace StarryEngine {
         void initializePerformanceCounters();
         void cleanupPerformanceCounters();
 
+        template<typename Func>
+        void executeSingleTimeCommands(VkCommandPool commandPool, Func&& func) {
+            VkCommandBuffer commandBuffer = beginSingleTimeCommands(commandPool);
+            func(commandBuffer);
+            endSingleTimeCommands(commandPool, commandBuffer);
+        }
     private:
         // 外部引用
         std::shared_ptr<Instance> mInstance;
@@ -505,6 +538,8 @@ namespace StarryEngine {
 
         // 内存分配器
         VmaAllocator mVmaAllocator = VK_NULL_HANDLE;
+
+        VkCommandPool mTransferCommandPool = VK_NULL_HANDLE;
 
         // 性能计数器支持
         bool mPerformanceCounterSupported = false;

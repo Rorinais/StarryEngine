@@ -76,6 +76,11 @@ namespace StarryEngine {
         // 清理内存分配器
         cleanupVMA();
 
+        if (mTransferCommandPool != VK_NULL_HANDLE) {
+            vkDestroyCommandPool(mLogicalDevice, mTransferCommandPool, nullptr);
+            mTransferCommandPool = VK_NULL_HANDLE;
+        }
+
         // 销毁逻辑设备
         if (mLogicalDevice != VK_NULL_HANDLE) {
             vkDestroyDevice(mLogicalDevice, nullptr);
@@ -86,6 +91,9 @@ namespace StarryEngine {
     // ==================== 内存分配器相关 ====================
 
     bool Device::initializeVMA() {
+        if (mVmaAllocator != VK_NULL_HANDLE) {
+            return true; 
+        }
 
         VmaAllocatorCreateInfo allocatorInfo = {};
         allocatorInfo.physicalDevice = mPhysicalDevice;
@@ -110,7 +118,9 @@ namespace StarryEngine {
         if (mVmaAllocator != VK_NULL_HANDLE) {
             vmaDestroyAllocator(mVmaAllocator);
             mVmaAllocator = VK_NULL_HANDLE;
-            std::cout << "VMA allocator destroyed" << std::endl;
+            if (mConfig.enableVMA) {
+                std::cout << "[Device] VMA allocator destroyed" << std::endl;
+            }
         }
     }
 
@@ -118,9 +128,10 @@ namespace StarryEngine {
 
     // VMA 方式创建缓冲区
     VMABuffer Device::createBufferWithVMA(VkDeviceSize size, VkBufferUsageFlags usage,
-        VmaMemoryUsage memoryUsage, VmaAllocationCreateFlags flags,
-        const void* initialData, size_t initialDataSize) {
-
+    VmaMemoryUsage memoryUsage, VmaAllocationCreateFlags flags,
+    const void* initialData, size_t initialDataSize,
+    VmaAllocationInfo* allocationInfo) {  
+        
         if (mVmaAllocator == VK_NULL_HANDLE) {
             throw std::runtime_error("VMA not initialized!");
         }
@@ -138,12 +149,12 @@ namespace StarryEngine {
         VkBuffer buffer;
         VmaAllocation allocation;
 
-        if (vmaCreateBuffer(mVmaAllocator, &bufferInfo, &allocInfo,
-            &buffer, &allocation, nullptr) != VK_SUCCESS) {
+        VkResult result = vmaCreateBuffer(mVmaAllocator, &bufferInfo, &allocInfo,
+            &buffer, &allocation, allocationInfo);
+        if (result != VK_SUCCESS) {
             throw std::runtime_error("Failed to create buffer with VMA!");
         }
 
-        // 如果有初始数据，上传
         if (initialData && initialDataSize > 0) {
             uploadDataToVmaBuffer(buffer, allocation, initialData, initialDataSize);
         }
@@ -151,56 +162,33 @@ namespace StarryEngine {
         return { buffer, allocation };
     }
 
-    VMABuffer Device::createBufferWithVMA(VkDeviceSize size, VkBufferUsageFlags usage,
-        VmaMemoryUsage memoryUsage, VmaAllocationCreateFlags flags,
-        VmaAllocationInfo* allocationInfo) {
-
-        if (mVmaAllocator == VK_NULL_HANDLE) {
-            throw std::runtime_error("VMA not initialized!");
-        }
-
-        VkBufferCreateInfo bufferInfo = {};
-        bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-        bufferInfo.size = size;
-        bufferInfo.usage = usage;
-        bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-        VmaAllocationCreateInfo allocInfo = {};
-        allocInfo.usage = memoryUsage;
-        allocInfo.flags = flags;
-
-        VkBuffer buffer;
-        VmaAllocation allocation;
-
-        if (vmaCreateBuffer(mVmaAllocator, &bufferInfo, &allocInfo,
-            &buffer, &allocation, allocationInfo) != VK_SUCCESS) {
-            throw std::runtime_error("Failed to create buffer with VMA!");
-        }
-
-        return { buffer, allocation };
-    }
-
     void Device::uploadDataToVmaBuffer(VkBuffer buffer, VmaAllocation allocation,
-        const void* data, size_t dataSize) {
+        const void* data, size_t dataSize, VkDeviceSize offset) {
+        
+        if (!data || dataSize == 0) {
+            return;
+        }
 
-        void* mapped;
-        if (vmaMapMemory(mVmaAllocator, allocation, &mapped) == VK_SUCCESS) {
-            memcpy(mapped, data, dataSize);
+        void* mapped = nullptr;
+        VkResult result = vmaMapMemory(mVmaAllocator, allocation, &mapped);
+        if (result == VK_SUCCESS && mapped) {
+            // 添加offset支持
+            void* target = reinterpret_cast<uint8_t*>(mapped) + offset;
+            memcpy(target, data, dataSize);
 
-            // 获取内存属性来判断是否需要刷新
             VmaAllocationInfo allocInfo;
             vmaGetAllocationInfo(mVmaAllocator, allocation, &allocInfo);
 
-            // 获取内存类型属性
             VkMemoryPropertyFlags memProperties;
             vmaGetMemoryTypeProperties(mVmaAllocator, allocInfo.memoryType, &memProperties);
 
-            // 检查是否不是主机一致的内存，需要手动刷新
             if (!(memProperties & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) {
-                vmaFlushAllocation(mVmaAllocator, allocation, 0, dataSize);
+                vmaFlushAllocation(mVmaAllocator, allocation, offset, dataSize);
             }
 
             vmaUnmapMemory(mVmaAllocator, allocation);
+        } else {
+            std::cerr << "Failed to map VMA memory: " << result << std::endl;
         }
     }
 
@@ -214,10 +202,65 @@ namespace StarryEngine {
         }
     }
 
+    void Device::uploadDataToTraditionalMemory(VkDeviceMemory memory, const void* data, 
+                            size_t dataSize, VkDeviceSize offset,
+                            bool hostCoherent) {
+        if (!data || dataSize == 0) return;
+        
+        void* mapped = nullptr;
+        VkResult result = vkMapMemory(mLogicalDevice, memory, offset, dataSize, 0, &mapped);
+        if (result == VK_SUCCESS && mapped) {
+            memcpy(mapped, data, dataSize);
+            
+            if (!hostCoherent) {
+                VkMappedMemoryRange mappedRange = {};
+                mappedRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
+                mappedRange.memory = memory;
+                mappedRange.offset = offset;
+                mappedRange.size = dataSize;
+                vkFlushMappedMemoryRanges(mLogicalDevice, 1, &mappedRange);
+            }
+            
+            vkUnmapMemory(mLogicalDevice, memory);
+        } else {
+            std::cerr << "[Device] Failed to map memory: " << result << std::endl;
+        }
+    }
+
+    void Device::uploadDataViaStagingBuffer(VkCommandPool commandPool,
+                                    const VMATraditionalBuffer& dstBuffer,
+                                    const void* data, size_t dataSize) {
+        if (!data || dataSize == 0) {
+            return;
+        }
+        
+        try {
+            // 1. 创建暂存缓冲区
+            VMATraditionalBuffer stagingBuffer = createBufferTraditional(
+                dataSize,
+                VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                data,      // 直接上传数据
+                dataSize   // 数据大小
+            );
+            
+            // 2. 复制缓冲区（从暂存缓冲区复制到目标缓冲区）
+            copyBuffer(commandPool, stagingBuffer.buffer, dstBuffer.buffer, dataSize);
+            
+            // 3. 销毁暂存缓冲区
+            destroyBufferTraditional(stagingBuffer);
+            
+        } catch (const std::exception& e) {
+            std::cerr << "[Device] Failed to upload data via staging buffer: " << e.what() << std::endl;
+            throw;
+        }
+    }
+
     // 传统方式创建缓冲区
     VMATraditionalBuffer Device::createBufferTraditional(VkDeviceSize size, VkBufferUsageFlags usage,
-        VkMemoryPropertyFlags properties) {
-
+        VkMemoryPropertyFlags properties, const void* initialData,
+        size_t initialDataSize, VkCommandPool commandPool) {
+        
         VkBufferCreateInfo bufferInfo = {};
         bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
         bufferInfo.size = size;
@@ -246,6 +289,25 @@ namespace StarryEngine {
 
         vkBindBufferMemory(mLogicalDevice, buffer, bufferMemory, 0);
 
+        // 处理初始数据
+        if (initialData && initialDataSize > 0) {
+            // 如果是主机可见内存，直接映射上传
+            if (properties & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
+                bool hostCoherent = (properties & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != 0;
+                uploadDataToTraditionalMemory(bufferMemory, initialData, initialDataSize, 0, hostCoherent);
+            } 
+            // 如果是设备本地内存，需要暂存缓冲区
+            else if (commandPool != VK_NULL_HANDLE) {
+                uploadDataViaStagingBuffer(commandPool, {buffer, bufferMemory}, initialData, initialDataSize);
+            }
+            // 如果是设备本地内存但没有提供命令池，抛出异常
+            else {
+                vkFreeMemory(mLogicalDevice, bufferMemory, nullptr);
+                vkDestroyBuffer(mLogicalDevice, buffer, nullptr);
+                throw std::runtime_error("Command pool required for uploading data to device local memory!");
+            }
+        }
+
         return { buffer, bufferMemory };
     }
 
@@ -253,46 +315,17 @@ namespace StarryEngine {
     VMATraditionalBuffer Device::createBufferTraditionalWithData(VkCommandPool commandPool,
         VkDeviceSize size, VkBufferUsageFlags usage,
         VkMemoryPropertyFlags properties, const void* initialData) {
-
+        
         // 创建缓冲区
         auto buffer = createBufferTraditional(size, usage, properties);
 
         // 上传数据
         if (initialData) {
             if (properties & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
-                // 直接映射上传
-                void* mapped;
-                vkMapMemory(mLogicalDevice, buffer.memory, 0, size, 0, &mapped);
-                memcpy(mapped, initialData, size);
-
-                if (!(properties & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) {
-                    VkMappedMemoryRange mappedRange = {};
-                    mappedRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
-                    mappedRange.memory = buffer.memory;
-                    mappedRange.offset = 0;
-                    mappedRange.size = size;
-                    vkFlushMappedMemoryRanges(mLogicalDevice, 1, &mappedRange);
-                }
-
-                vkUnmapMemory(mLogicalDevice, buffer.memory);
-            }
-            else {
-                // 使用暂存缓冲区
-                VMATraditionalBuffer stagingBuffer = createBufferTraditional(size,
-                    VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-                    VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-
-                // 上传数据到暂存缓冲区
-                void* mapped;
-                vkMapMemory(mLogicalDevice, stagingBuffer.memory, 0, size, 0, &mapped);
-                memcpy(mapped, initialData, size);
-                vkUnmapMemory(mLogicalDevice, stagingBuffer.memory);
-
-                // 复制到设备本地缓冲区
-                copyBuffer(commandPool, stagingBuffer.buffer, buffer.buffer, size);
-
-                // 清理暂存缓冲区
-                destroyBufferTraditional(stagingBuffer);
+                bool hostCoherent = (properties & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != 0;
+                uploadDataToTraditionalMemory(buffer.memory, initialData, size, 0, hostCoherent);
+            } else {
+                uploadDataViaStagingBuffer(commandPool, buffer, initialData, size);
             }
         }
 
@@ -309,6 +342,47 @@ namespace StarryEngine {
         if (memory != VK_NULL_HANDLE) {
             vkFreeMemory(mLogicalDevice, memory, nullptr);
             memory = VK_NULL_HANDLE;
+        }
+    }
+
+    std::vector<VMABuffer> Device::createVmaBuffers(uint32_t count,
+                                        VkDeviceSize size,
+                                        VkBufferUsageFlags usage,
+                                        VmaMemoryUsage memoryUsage,
+                                        VmaAllocationCreateFlags flags) {
+        std::vector<VMABuffer> buffers;
+        buffers.reserve(count);
+        
+        for (uint32_t i = 0; i < count; ++i) {
+            buffers.push_back(createBufferWithVMA(size, usage, memoryUsage, flags));
+        }
+        
+        return buffers;
+    }
+
+    std::vector<VMATraditionalBuffer> Device::createTraditionalBuffers(uint32_t count,
+                                                            VkDeviceSize size,
+                                                            VkBufferUsageFlags usage,
+                                                            VkMemoryPropertyFlags properties) {
+        std::vector<VMATraditionalBuffer> buffers;
+        buffers.reserve(count);
+        
+        for (uint32_t i = 0; i < count; ++i) {
+            buffers.push_back(createBufferTraditional(size, usage, properties));
+        }
+        
+        return buffers;
+    }
+
+    void Device::destroyVmaBuffers(const std::vector<VMABuffer>& buffers) {
+        for (const auto& buffer : buffers) {
+            destroyBufferWithVMA(buffer);
+        }
+    }
+
+    void Device::destroyTraditionalBuffers(const std::vector<VMATraditionalBuffer>& buffers) {
+        for (const auto& buffer : buffers) {
+            destroyBufferTraditional(buffer);
         }
     }
 
@@ -589,6 +663,19 @@ namespace StarryEngine {
     }
 
     // ==================== 命令系统 ====================
+    VkCommandPool Device::getTransferCommandPool() {
+        if (mTransferCommandPool == VK_NULL_HANDLE) {
+            VkCommandPoolCreateInfo poolInfo = {};
+            poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+            poolInfo.queueFamilyIndex = getTransferQueueFamilyIndex();
+            poolInfo.flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
+            
+            if (vkCreateCommandPool(mLogicalDevice, &poolInfo, nullptr, &mTransferCommandPool) != VK_SUCCESS) {
+                throw std::runtime_error("Failed to create transfer command pool!");
+            }
+        }
+        return mTransferCommandPool;
+    }
 
     VkCommandPool Device::createCommandPool(uint32_t queueFamilyIndex, VkCommandPoolCreateFlags flags) {
         VkCommandPoolCreateInfo poolInfo = {};
@@ -947,40 +1034,38 @@ namespace StarryEngine {
         vkFreeCommandBuffers(mLogicalDevice, commandPool, 1, &commandBuffer);
     }
 
-    void Device::copyBuffer(VkCommandPool commandPool, VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) {
-        VkCommandBuffer commandBuffer = beginSingleTimeCommands(commandPool);
-
-        VkBufferCopy copyRegion = {};
-        copyRegion.size = size;
-        vkCmdCopyBuffer(commandBuffer, srcBuffer, dstBuffer, 1, &copyRegion);
-
-        endSingleTimeCommands(commandPool, commandBuffer);
+    void Device::copyBuffer(VkCommandPool commandPool, VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size){
+        executeSingleTimeCommands(commandPool, [&](VkCommandBuffer cmd) {
+            VkBufferCopy copyRegion = {};
+            copyRegion.size = size;
+            vkCmdCopyBuffer(cmd, srcBuffer, dstBuffer, 1, &copyRegion);
+        });
     }
 
-    void Device::copyBufferToImage(VkCommandPool commandPool, VkBuffer buffer, VkImage image,
+    void Device::copyBufferToImage(
+        VkCommandPool commandPool, 
+        VkBuffer buffer, VkImage image,
         uint32_t width, uint32_t height,
         uint32_t layerCount) {
-
-        VkCommandBuffer commandBuffer = beginSingleTimeCommands(commandPool);
-
-        VkBufferImageCopy region = {};
-        region.bufferOffset = 0;
-        region.bufferRowLength = 0;
-        region.bufferImageHeight = 0;
-        region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        region.imageSubresource.mipLevel = 0;
-        region.imageSubresource.baseArrayLayer = 0;
-        region.imageSubresource.layerCount = layerCount;
-        region.imageOffset = { 0, 0, 0 };
-        region.imageExtent = { width, height, 1 };
-
-        vkCmdCopyBufferToImage(commandBuffer, buffer, image,
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
-
-        endSingleTimeCommands(commandPool, commandBuffer);
+        executeSingleTimeCommands(commandPool, [&](VkCommandBuffer cmd) {
+            VkBufferImageCopy region = {};
+            region.bufferOffset = 0;
+            region.bufferRowLength = 0;
+            region.bufferImageHeight = 0;
+            region.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            region.imageSubresource.mipLevel = 0;
+            region.imageSubresource.baseArrayLayer = 0;
+            region.imageSubresource.layerCount = layerCount;
+            region.imageOffset = { 0, 0, 0 };
+            region.imageExtent = { width, height, 1 };
+            
+            vkCmdCopyBufferToImage(cmd, buffer, image,
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+        });
     }
 
-    void Device::transitionImageLayout(VkCommandPool commandPool,
+    void Device::transitionImageLayout(
+        VkCommandPool commandPool,
         VkImage image,
         VkImageLayout oldLayout,
         VkImageLayout newLayout,
@@ -989,48 +1074,42 @@ namespace StarryEngine {
         uint32_t layerCount,
         uint32_t baseMipLevel,
         uint32_t baseArrayLayer) {
-
-        if (oldLayout == newLayout) {
-            return;  // 布局相同，不需要转换
-        }
-
-        VkCommandBuffer commandBuffer = beginSingleTimeCommands(commandPool);
-
-        VkAccessFlags srcAccessMask = 0;
-        VkAccessFlags dstAccessMask = 0;
-        VkPipelineStageFlags srcStageMask = 0;
-        VkPipelineStageFlags dstStageMask = 0;
-
-        getLayoutTransitionInfo(oldLayout, newLayout,
-            srcAccessMask, dstAccessMask,
-            srcStageMask, dstStageMask);
-
-        VkImageMemoryBarrier barrier = {};
-        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        barrier.oldLayout = oldLayout;
-        barrier.newLayout = newLayout;
-        barrier.srcAccessMask = srcAccessMask;
-        barrier.dstAccessMask = dstAccessMask;
-        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.image = image;
-        barrier.subresourceRange.aspectMask = aspectMask;
-        barrier.subresourceRange.baseMipLevel = baseMipLevel;
-        barrier.subresourceRange.levelCount = mipLevels;
-        barrier.subresourceRange.baseArrayLayer = baseArrayLayer;
-        barrier.subresourceRange.layerCount = layerCount;
-
-        vkCmdPipelineBarrier(commandBuffer,
-            srcStageMask, dstStageMask,
-            0,
-            0, nullptr,
-            0, nullptr,
-            1, &barrier);
-
-        endSingleTimeCommands(commandPool, commandBuffer);
+        if (oldLayout == newLayout) return;
+        
+        executeSingleTimeCommands(commandPool, [&](VkCommandBuffer cmd) {
+            VkAccessFlags srcAccessMask, dstAccessMask;
+            VkPipelineStageFlags srcStageMask, dstStageMask;
+            
+            getLayoutTransitionInfo(oldLayout, newLayout,
+                srcAccessMask, dstAccessMask,
+                srcStageMask, dstStageMask);
+            
+            VkImageMemoryBarrier barrier = {};
+            barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            barrier.oldLayout = oldLayout;
+            barrier.newLayout = newLayout;
+            barrier.srcAccessMask = srcAccessMask;
+            barrier.dstAccessMask = dstAccessMask;
+            barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.image = image;
+            barrier.subresourceRange.aspectMask = aspectMask;
+            barrier.subresourceRange.baseMipLevel = baseMipLevel;
+            barrier.subresourceRange.levelCount = mipLevels;
+            barrier.subresourceRange.baseArrayLayer = baseArrayLayer;
+            barrier.subresourceRange.layerCount = layerCount;
+            
+            vkCmdPipelineBarrier(cmd,
+                srcStageMask, dstStageMask,
+                0,
+                0, nullptr,
+                0, nullptr,
+                1, &barrier);
+        });
     }
 
-    void Device::getLayoutTransitionInfo(VkImageLayout oldLayout,
+    void Device::getLayoutTransitionInfo(
+        VkImageLayout oldLayout,
         VkImageLayout newLayout,
         VkAccessFlags& srcAccessMask,
         VkAccessFlags& dstAccessMask,
@@ -1085,95 +1164,107 @@ namespace StarryEngine {
         }
     }
 
-    void Device::generateMipmaps(VkCommandPool commandPool,VkImage image, VkFormat imageFormat,
-        int32_t width, int32_t height, uint32_t mipLevels) {
-
+    void Device::generateMipmaps(
+        VkCommandPool commandPool, 
+        VkImage image, 
+        VkFormat imageFormat,               
+        int32_t width, 
+        int32_t height, 
+        uint32_t mipLevels) {
+        
         // 检查图像格式是否支持线性过滤
         VkFormatProperties formatProperties;
         vkGetPhysicalDeviceFormatProperties(mPhysicalDevice, imageFormat, &formatProperties);
-
+        
         if (!(formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT)) {
             throw std::runtime_error("Texture image format does not support linear filtering!");
         }
-
-        VkCommandBuffer commandBuffer = beginSingleTimeCommands(commandPool);
-
-        VkImageMemoryBarrier barrier = {};
-        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        barrier.image = image;
-        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        barrier.subresourceRange.baseArrayLayer = 0;
-        barrier.subresourceRange.layerCount = 1;
-        barrier.subresourceRange.levelCount = 1;
-
-        int32_t mipWidth = width;
-        int32_t mipHeight = height;
-
-        for (uint32_t i = 1; i < mipLevels; i++) {
-            barrier.subresourceRange.baseMipLevel = i - 1;
+        
+        // 使用统一执行器
+        executeSingleTimeCommands(commandPool, [&](VkCommandBuffer commandBuffer) {
+            VkImageMemoryBarrier barrier = {};
+            barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+            barrier.image = image;
+            barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+            barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            barrier.subresourceRange.baseArrayLayer = 0;
+            barrier.subresourceRange.layerCount = 1;
+            barrier.subresourceRange.levelCount = 1;
+            
+            int32_t mipWidth = width;
+            int32_t mipHeight = height;
+            
+            for (uint32_t i = 1; i < mipLevels; i++) {
+                // 将当前mip级别从TRANSFER_DST转换为TRANSFER_SRC
+                barrier.subresourceRange.baseMipLevel = i - 1;
+                barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+                barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+                barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+                barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+                
+                vkCmdPipelineBarrier(commandBuffer,
+                    VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
+                    0, nullptr,
+                    0, nullptr,
+                    1, &barrier);
+                
+                // 从当前mip级别blit到下一级
+                VkImageBlit blit = {};
+                blit.srcOffsets[0] = { 0, 0, 0 };
+                blit.srcOffsets[1] = { mipWidth, mipHeight, 1 };
+                blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                blit.srcSubresource.mipLevel = i - 1;
+                blit.srcSubresource.baseArrayLayer = 0;
+                blit.srcSubresource.layerCount = 1;
+                blit.dstOffsets[0] = { 0, 0, 0 };
+                blit.dstOffsets[1] = { 
+                    mipWidth > 1 ? mipWidth / 2 : 1, 
+                    mipHeight > 1 ? mipHeight / 2 : 1, 
+                    1 
+                };
+                blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+                blit.dstSubresource.mipLevel = i;
+                blit.dstSubresource.baseArrayLayer = 0;
+                blit.dstSubresource.layerCount = 1;
+                
+                vkCmdBlitImage(commandBuffer,
+                    image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                    image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                    1, &blit,
+                    VK_FILTER_LINEAR);
+                
+                // 将当前mip级别从TRANSFER_SRC转换为SHADER_READ_ONLY
+                barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+                barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+                barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+                
+                vkCmdPipelineBarrier(commandBuffer,
+                    VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
+                    0, nullptr,
+                    0, nullptr,
+                    1, &barrier);
+                
+                // 更新下一级mip尺寸
+                if (mipWidth > 1) mipWidth /= 2;
+                if (mipHeight > 1) mipHeight /= 2;
+            }
+            
+            // 将最后一个mip级别从TRANSFER_DST转换为SHADER_READ_ONLY
+            barrier.subresourceRange.baseMipLevel = mipLevels - 1;
             barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-            barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-            barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-            barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-
-            vkCmdPipelineBarrier(commandBuffer,
-                VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
-                0, nullptr,
-                0, nullptr,
-                1, &barrier);
-
-            VkImageBlit blit = {};
-            blit.srcOffsets[0] = { 0, 0, 0 };
-            blit.srcOffsets[1] = { mipWidth, mipHeight, 1 };
-            blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            blit.srcSubresource.mipLevel = i - 1;
-            blit.srcSubresource.baseArrayLayer = 0;
-            blit.srcSubresource.layerCount = 1;
-            blit.dstOffsets[0] = { 0, 0, 0 };
-            blit.dstOffsets[1] = { mipWidth > 1 ? mipWidth / 2 : 1, mipHeight > 1 ? mipHeight / 2 : 1, 1 };
-            blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            blit.dstSubresource.mipLevel = i;
-            blit.dstSubresource.baseArrayLayer = 0;
-            blit.dstSubresource.layerCount = 1;
-
-            vkCmdBlitImage(commandBuffer,
-                image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-                1, &blit,
-                VK_FILTER_LINEAR);
-
-            barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
             barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+            barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
             barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-
+            
             vkCmdPipelineBarrier(commandBuffer,
                 VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
                 0, nullptr,
                 0, nullptr,
                 1, &barrier);
-
-            if (mipWidth > 1) mipWidth /= 2;
-            if (mipHeight > 1) mipHeight /= 2;
-        }
-
-        barrier.subresourceRange.baseMipLevel = mipLevels - 1;
-        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-
-        vkCmdPipelineBarrier(commandBuffer,
-            VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
-            0, nullptr,
-            0, nullptr,
-            1, &barrier);
-
-        endSingleTimeCommands(commandPool, commandBuffer);
+        });
     }
-
     // ==================== 调试功能 ====================
 
     void Device::setObjectName(uint64_t object, VkObjectType objectType, const char* name) {
