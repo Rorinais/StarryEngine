@@ -117,7 +117,7 @@ namespace StarryEngine::RHI {
             case ShaderStage::Compute:
                 return VK_SHADER_STAGE_COMPUTE_BIT;
             default:
-                return VK_SHADER_STAGE_VERTEX_BIT;
+                return VK_SHADER_STAGE_FRAGMENT_BIT;
             }
         }
     private:
