@@ -14,8 +14,7 @@ target_link_libraries(BaseInterface INTERFACE
     shaderc
 )
 
-add_subdirectory(core/application)
-add_subdirectory(core/platform)
+add_subdirectory(application)
 add_subdirectory(renderer)
 
 set(ICON_FILE "${CMAKE_CURRENT_SOURCE_DIR}/../assets/icons/app_icon.ico")
@@ -37,7 +36,7 @@ if(MINGW)
 endif()
 
 set(EDITOR_OUTPUT_DIR ${BASE_OUTPUT_DIR}/${PROJECT_NAME})
-set(VULKAN_MAIN_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/launch/vkTest1.cpp)
+set(VULKAN_MAIN_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/application/Application.cpp)
 
 add_executable(${PROJECT_NAME} ${VULKAN_MAIN_SOURCE} ${CMAKE_CURRENT_BINARY_DIR}/generated.rc)
 
@@ -47,42 +46,21 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 
 target_link_libraries(${PROJECT_NAME} PRIVATE 
     BaseInterface
-    window
     application
     renderer
 )
 
-# 创建OpenCV调试可执行文件
-#set(OPENCV_OUTPUT_DIR ${BASE_OUTPUT_DIR}/OpenCV_Debug)
-#set(OPENCV_MAIN_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/launch/opencv.cpp)
-
-#add_executable(opencv_debug ${OPENCV_MAIN_SOURCE})
-# 设置输出目录
-#set_target_properties(opencv_debug PROPERTIES
-#    RUNTIME_OUTPUT_DIRECTORY ${OPENCV_OUTPUT_DIR}
-#)
-
-#target_link_libraries(opencv_debug PRIVATE 
-#    opencv
-#)
-
-
-# 资源复制函数（增强版，使用BYPRODUCTS确保重新构建）
 function(copy_target_resources TARGET_NAME RESOURCES_OUTPUT_DIR)
     cmake_parse_arguments(ARG "" "SHADERS;FONTS;MODELS;TEXTURES;ICONS" "" ${ARGN})
-    
-    # 获取目标的输出目录
+
     get_target_property(TARGET_OUTPUT_DIR ${TARGET_NAME} RUNTIME_OUTPUT_DIRECTORY)
     set(ASSETS_DEST "${TARGET_OUTPUT_DIR}/assets")
 
-    # 确保资源目录存在
     file(MAKE_DIRECTORY "${ASSETS_DEST}")
 
-    # 收集所有需要复制的文件
     set(ALL_RESOURCE_FILES "")
     set(ALL_COPY_COMMANDS "")
-    
-    # 处理Shader资源
+
     if(ARG_SHADERS)
         file(GLOB_RECURSE SHADER_FILES CONFIGURE_DEPENDS
             "${ARG_SHADERS}/*.vert"
@@ -98,13 +76,11 @@ function(copy_target_resources TARGET_NAME RESOURCES_OUTPUT_DIR)
             file(RELATIVE_PATH relative_path "${ARG_SHADERS}" "${shader_file}")
             set(final_dest "${ASSETS_DEST}/shaders/${relative_path}")
             get_filename_component(final_dir "${final_dest}" DIRECTORY)
-            
-            # 创建目录（如果不存在）
+
             list(APPEND ALL_COPY_COMMANDS
                 COMMAND ${CMAKE_COMMAND} -E make_directory "${final_dir}"
             )
-            
-            # 复制文件
+
             list(APPEND ALL_COPY_COMMANDS
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
                     "${shader_file}"
@@ -115,7 +91,6 @@ function(copy_target_resources TARGET_NAME RESOURCES_OUTPUT_DIR)
         endforeach()
     endif()
 
-    # 处理图标资源
     if(ARG_ICONS)
         file(GLOB_RECURSE ICON_FILES CONFIGURE_DEPENDS
             "${ARG_ICONS}/*.ico"
@@ -128,13 +103,11 @@ function(copy_target_resources TARGET_NAME RESOURCES_OUTPUT_DIR)
             file(RELATIVE_PATH relative_path "${ARG_ICONS}" "${icon_file}")
             set(final_dest "${ASSETS_DEST}/icons/${relative_path}")
             get_filename_component(final_dir "${final_dest}" DIRECTORY)
-            
-            # 创建目录（如果不存在）
+
             list(APPEND ALL_COPY_COMMANDS
                 COMMAND ${CMAKE_COMMAND} -E make_directory "${final_dir}"
             )
-            
-            # 复制文件
+
             list(APPEND ALL_COPY_COMMANDS
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
                     "${icon_file}"
@@ -145,7 +118,6 @@ function(copy_target_resources TARGET_NAME RESOURCES_OUTPUT_DIR)
         endforeach()
     endif()
 
-    # 处理字体资源
     if(ARG_FONTS)
         file(GLOB_RECURSE FONT_FILES CONFIGURE_DEPENDS
             "${ARG_FONTS}/*.ttf"
@@ -158,13 +130,11 @@ function(copy_target_resources TARGET_NAME RESOURCES_OUTPUT_DIR)
             file(RELATIVE_PATH relative_path "${ARG_FONTS}" "${font_file}")
             set(final_dest "${ASSETS_DEST}/fonts/${relative_path}")
             get_filename_component(final_dir "${final_dest}" DIRECTORY)
-            
-            # 创建目录（如果不存在）
+
             list(APPEND ALL_COPY_COMMANDS
                 COMMAND ${CMAKE_COMMAND} -E make_directory "${final_dir}"
             )
-            
-            # 复制文件
+
             list(APPEND ALL_COPY_COMMANDS
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
                     "${font_file}"
@@ -175,7 +145,6 @@ function(copy_target_resources TARGET_NAME RESOURCES_OUTPUT_DIR)
         endforeach()
     endif()
 
-    # 处理模型资源
     if(ARG_MODELS)
         file(GLOB_RECURSE MODEL_FILES CONFIGURE_DEPENDS
             "${ARG_MODELS}/*.obj"
@@ -189,13 +158,11 @@ function(copy_target_resources TARGET_NAME RESOURCES_OUTPUT_DIR)
             file(RELATIVE_PATH relative_path "${ARG_MODELS}" "${model_file}")
             set(final_dest "${ASSETS_DEST}/models/${relative_path}")
             get_filename_component(final_dir "${final_dest}" DIRECTORY)
-            
-            # 创建目录（如果不存在）
+
             list(APPEND ALL_COPY_COMMANDS
                 COMMAND ${CMAKE_COMMAND} -E make_directory "${final_dir}"
             )
-            
-            # 复制文件
+
             list(APPEND ALL_COPY_COMMANDS
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
                     "${model_file}"
@@ -206,7 +173,6 @@ function(copy_target_resources TARGET_NAME RESOURCES_OUTPUT_DIR)
         endforeach()
     endif()
 
-    # 处理纹理资源
     if(ARG_TEXTURES)
         file(GLOB_RECURSE TEXTURE_FILES CONFIGURE_DEPENDS
             "${ARG_TEXTURES}/*.png"
@@ -224,13 +190,11 @@ function(copy_target_resources TARGET_NAME RESOURCES_OUTPUT_DIR)
             file(RELATIVE_PATH relative_path "${ARG_TEXTURES}" "${texture_file}")
             set(final_dest "${ASSETS_DEST}/textures/${relative_path}")
             get_filename_component(final_dir "${final_dest}" DIRECTORY)
-            
-            # 创建目录（如果不存在）
+
             list(APPEND ALL_COPY_COMMANDS
                 COMMAND ${CMAKE_COMMAND} -E make_directory "${final_dir}"
             )
             
-            # 复制文件
             list(APPEND ALL_COPY_COMMANDS
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
                     "${texture_file}"
@@ -241,13 +205,11 @@ function(copy_target_resources TARGET_NAME RESOURCES_OUTPUT_DIR)
         endforeach()
     endif()
 
-    # 如果没有需要复制的资源，则直接返回
     list(LENGTH ALL_COPY_COMMANDS NUM_COMMANDS)
     if(NUM_COMMANDS EQUAL 0)
         return()
     endif()
 
-    # 创建一个自定义命令来复制所有资源
     add_custom_command(
         OUTPUT ${ALL_RESOURCE_FILES}
         COMMAND ${CMAKE_COMMAND} -E echo "复制资源文件到 ${ASSETS_DEST}/"
@@ -257,16 +219,13 @@ function(copy_target_resources TARGET_NAME RESOURCES_OUTPUT_DIR)
         VERBATIM
     )
     
-    # 创建一个自定义目标来触发资源复制
     add_custom_target(${TARGET_NAME}_copy_resources ALL
         DEPENDS ${ALL_RESOURCE_FILES}
     )
     
-    # 让主目标依赖于资源复制目标
     add_dependencies(${TARGET_NAME} ${TARGET_NAME}_copy_resources)
 endfunction()
 
-# 为编辑器复制资源
 copy_target_resources(${PROJECT_NAME} ${EDITOR_OUTPUT_DIR}
     SHADERS    ${SHADERS_DIR}
     FONTS      ${FONTS_DIR}
@@ -275,7 +234,6 @@ copy_target_resources(${PROJECT_NAME} ${EDITOR_OUTPUT_DIR}
     ICONS      ${ICONS_DIR}
 )
 
-# 通用DLL复制函数
 function(copy_target_dll target dll_path)
     get_target_property(TARGET_OUTPUT_DIR ${target} RUNTIME_OUTPUT_DIRECTORY)
     add_custom_command(TARGET ${target} POST_BUILD
@@ -286,7 +244,6 @@ function(copy_target_dll target dll_path)
     )
 endfunction()
 
-# 为编辑器复制依赖DLL
 if(WIN32)
     if(MSVC)
         copy_target_dll(${PROJECT_NAME} "${CMAKE_SOURCE_DIR}/external/glfw/glfw3.dll")
@@ -301,26 +258,6 @@ if(WIN32)
     endif()
 endif()
 
-# 为OpenCV调试程序复制依赖DLL
-#if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-#    if(WIN32)
-#        if(MSVC)
-#            copy_target_dll(opencv_debug "${CMAKE_SOURCE_DIR}/external/opencv/vc16/bin/opencv_world4110d.dll")
-#            copy_target_dll(opencv_debug "${CMAKE_SOURCE_DIR}/external/opencv/vc16/bin/opencv_videoio_msmf4110_64d.dll")
-#        endif()
-#    endif()
-#elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
-#    if(WIN32)
-#        if(MSVC)
-#            copy_target_dll(opencv_debug "${CMAKE_SOURCE_DIR}/external/opencv/vc16/bin/opencv_world4110.dll")
-#            copy_target_dll(opencv_debug "${CMAKE_SOURCE_DIR}/external/opencv/vc16/bin/opencv_videoio_msmf4110_64.dll")
-#        endif()
-#    endif()
-#endif()
-
-
-
-# Vulkan验证层配置
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     target_compile_definitions(${PROJECT_NAME} PRIVATE
         ENABLE_VALIDATION_LAYERS

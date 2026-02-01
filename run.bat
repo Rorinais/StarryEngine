@@ -126,13 +126,8 @@ if not exist "%EXECUTABLE_PATH%\%EXECUTABLE_NAME%.exe" (
 )
 
 REM 运行可执行文件
-echo.
-echo 运行: %EXECUTABLE_PATH%\%EXECUTABLE_NAME%.exe
+rem echo 正在运行: %EXECUTABLE_NAME%.exe
 cd /d "%EXECUTABLE_PATH%"
 "%EXECUTABLE_NAME%.exe"
 cd /d "%SCRIPT_DIR%"
-
-echo ========================================
-echo       程序执行完毕
-echo ========================================
 pause
