@@ -256,6 +256,11 @@ if(WIN32)
         copy_target_dll(${PROJECT_NAME} "${CMAKE_SOURCE_DIR}/external/assimp/assimp/lib/libassimp-6.dll")
         copy_target_dll(${PROJECT_NAME} "${CMAKE_SOURCE_DIR}/external/vulkan/lib/shaderc/shaderc_sharedd.dll")
     endif()
+elseif(UNIX)
+        copy_target_dll(${PROJECT_NAME} "${CMAKE_SOURCE_DIR}/external/glfw/libglfw.so.3.3")
+        copy_target_dll(${PROJECT_NAME} "${CMAKE_SOURCE_DIR}/external/vulkan/lib/libvulkan.so.1.4.304")
+        copy_target_dll(${PROJECT_NAME} "${CMAKE_SOURCE_DIR}/external/assimp/assimp/lib/libassimp.so.5.3.0")
+        copy_target_dll(${PROJECT_NAME} "${CMAKE_SOURCE_DIR}/external/vulkan/lib/shaderc/libshaderc_shared.so.1")
 endif()
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
@@ -265,25 +270,76 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
 
     # 验证层文件处理
     set(VK_LAYER_SRC "${CMAKE_SOURCE_DIR}/external/vulkan/lib/layers")
-    set(VK_LAYER_DEST "$<TARGET_FILE_DIR:${PROJECT_NAME}>")
+    
+    # 设置目标目录为可执行文件所在目录
+    if(CMAKE_RUNTIME_OUTPUT_DIRECTORY)
+        set(VK_LAYER_DEST "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
+    else()
+        if(WIN32)
+            set(VK_LAYER_DEST "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>")
+        else()
+            set(VK_LAYER_DEST "${CMAKE_BINARY_DIR}/bin/StarryEngine")
+        endif()
+    endif()
+    
+    message(STATUS "VK_LAYER_SRC: ${VK_LAYER_SRC}")
+    message(STATUS "VK_LAYER_DEST: ${VK_LAYER_DEST}")
     
     if(WIN32)
+        # Windows: 复制验证层文件
         add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E make_directory "${VK_LAYER_DEST}/layers"        
-            COMMAND ${CMAKE_COMMAND} -E copy
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 "${VK_LAYER_SRC}/VkLayer_khronos_validation.dll"
                 "${VK_LAYER_DEST}/"
-            COMMAND ${CMAKE_COMMAND} -E copy
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 "${VK_LAYER_SRC}/VkLayer_khronos_validation.json"
                 "${VK_LAYER_DEST}/layers"
-            COMMENT "Copying Vulkan validation layers"
+            COMMENT "复制Vulkan验证层"
         )
-
-        set_target_properties(${PROJECT_NAME} PROPERTIES
-            VS_DEBUGGER_ENVIRONMENT 
-            "VK_LAYER_PATH=${VK_LAYER_DEST};%VK_LAYER_PATH%"
+        
+    elseif(UNIX AND NOT APPLE)
+        # Linux: 配置时复制
+        file(MAKE_DIRECTORY "${VK_LAYER_DEST}/layers")
+        file(COPY 
+            "${VK_LAYER_SRC}/libVkLayer_khronos_validation.so"
+            DESTINATION "${VK_LAYER_DEST}"
+        )
+        file(COPY 
+            "${VK_LAYER_SRC}/libVkLayer_khronos_validation.json"
+            DESTINATION "${VK_LAYER_DEST}/layers"
+        )
+        
+        # 构建时也复制
+        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory "${VK_LAYER_DEST}/layers"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${VK_LAYER_SRC}/libVkLayer_khronos_validation.so"
+                "${VK_LAYER_DEST}/"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${VK_LAYER_SRC}/libVkLayer_khronos_validation.json"
+                "${VK_LAYER_DEST}/layers"
+            COMMENT "复制Vulkan验证层"
         )
         
     endif()
     
+    # 为所有平台创建简单的运行目标
+    if(WIN32)
+        add_custom_target(run
+            COMMAND echo "运行 StarryEngine..."
+            COMMAND "${VK_LAYER_DEST}/${PROJECT_NAME}.exe"
+            DEPENDS ${PROJECT_NAME}
+            COMMENT "运行程序"
+        )
+    else()
+        add_custom_target(run
+            COMMAND echo "运行 StarryEngine..."
+            COMMAND "${VK_LAYER_DEST}/${PROJECT_NAME}"
+            DEPENDS ${PROJECT_NAME}
+            COMMENT "运行程序"
+        )
+    endif()
+    
+    message(STATUS "创建运行目标: make run")
 endif()

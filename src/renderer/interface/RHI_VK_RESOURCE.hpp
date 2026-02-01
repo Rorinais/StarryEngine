@@ -9,8 +9,46 @@
 #include <vector>
 #include <memory>
 #include <stdexcept>
+#include <shaderc/shaderc.hpp>
 
 namespace StarryEngine::RHI {
+    class RHI_VK_ShaderModule : public RHIShaderModule {
+    public:
+        RHI_VK_ShaderModule(Device::Ptr device, ShaderModuleDesc desc);
+
+        ~RHI_VK_ShaderModule() = default;
+
+        void release() override;
+
+        bool isValid() const { return true; }
+        void* getNativeHandle() const { return mShaderModule; }
+        size_t getMemoryUsage() const { return 0; }
+        const char* getTypeName() const { return ""; }
+
+        ShaderStage getStage() const override { return mDesc.stage; }
+        const std::string& getEntryPoint() const override { return mDesc.entryPoint; }
+
+        // TODO
+        bool hasReflectionData() const override { return false; }
+        const void* getReflectionData() const override { return nullptr; }
+        void setDefines(const std::vector<std::string>& defines) override{}
+        void setIncludePaths(const std::vector<std::string>& includePaths) override{}
+        bool recompile(const std::vector<uint8_t>& newBytecode) override { return false; }
+
+        std::vector<uint32_t> compileGLSL(
+            const std::string& source,
+            shaderc_shader_kind kind,
+            const std::vector<std::pair<std::string, std::string>>& macros,
+            const std::string& debugName);
+
+
+    private:
+        Device::Ptr mDevice;
+        ShaderModuleDesc mDesc;
+        VkShaderModule mShaderModule = VK_NULL_HANDLE;
+        shaderc::Compiler mCompiler;
+    };
+
 
     class RHI_VK_PipelineLayout : public RHIPipelineLayout {
     public:
@@ -70,17 +108,15 @@ namespace StarryEngine::RHI {
             std::unique_ptr<RHI_VK_PipelineLayout> layout = nullptr
         );
 
-        ~RHI_VK_Pipeline() override {destroy();}
+        ~RHI_VK_Pipeline() override { release();}
 
         PipelineType getType() const override { return mType; }
 
         RHIPipelineLayout* getLayout() const override { return mLayout.get(); }
 
-        void setLayout(std::unique_ptr<RHI_VK_PipelineLayout> layout) {mLayout = std::move(layout);}
+        void setLayout(std::unique_ptr<RHI_VK_PipelineLayout> layout) { mLayout = std::move(layout); }
 
         void* getNativeHandle() const override { return reinterpret_cast<void*>(mPipeline); }
-
-        void release() override { destroy(); }
 
         bool isValid() const override { return mPipeline != VK_NULL_HANDLE; }
 
@@ -98,14 +134,14 @@ namespace StarryEngine::RHI {
 
         bool reload(const void* newPipelineData) override { return false; }
 
-        void destroy();
+        void release() override;
+
+        void setShaderState();
 
     private:
         void createGraphicsPipeline();
 
         VkStencilOpState convertStencilOpState(const StencilOpState& state);
-
-        VkShaderModule createShaderModule(const ShaderModuleDesc& desc);
 
     private:
         Device::Ptr mDevice;

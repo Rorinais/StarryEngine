@@ -1,14 +1,22 @@
 #include "Application.hpp"
 
+#ifdef __linux__
+#include <unistd.h>
+#include <limits.h>
+#include <string.h>
+#include <dlfcn.h>
+#endif
+
 namespace StarryEngine {
     Application::Application() {
         // 1. 创建窗口
-        Window::Config config;
-        config.width = m_width;
-        config.height = m_height;
-        config.title = m_title;
-        config.iconPath = m_icon_path;
-        m_window = Window::create(config);
+    Window::Config config;
+    config.width = m_width;
+    config.height = m_height;
+    config.title = m_title;
+    config.iconPath = m_icon_path;       
+    config.highDPI = true;                    
+    m_window = Window::create(config);
 
         // 2. 设置回调
         m_window->setKeyCallback([this](int key, int action) {
@@ -40,11 +48,8 @@ namespace StarryEngine {
         rhiConfig.appVersion = { 1, 0, 0 };
         rhiConfig.engineName = "StarryEngine";
         rhiConfig.engineVersion = { 1, 0, 0 };
-
-        // **重要：先禁用调试，等设备创建成功后再启用**
         rhiConfig.enableDebug = true;
 
-        // **设置调试回调**
         rhiConfig.debugCallback = [](StarryEngine::RHI::MessageSeverity severity,
             StarryEngine::RHI::MessageSource source,
             const std::string& message) {
@@ -101,6 +106,13 @@ namespace StarryEngine {
     void Application::run() {
         std::cout << "Starting application main loop..." << std::endl;
 
+        createShaderProgram();
+
+        for (auto handle: shaderHandles) {
+            m_rhi->release(handle);
+        }
+        
+
         while (!glfwWindowShouldClose(m_window->getHandle())) {
             glfwPollEvents();
 
@@ -146,9 +158,25 @@ namespace StarryEngine {
 } // namespace StarryEngine
 
 int main() {
-#ifdef _WIN32
+#ifdef __linux__
+    char exePath[PATH_MAX];
+    ssize_t count = readlink("/proc/self/exe", exePath, sizeof(exePath)-1);
+    if (count != -1) {
+        exePath[count] = '\0';
+        char* lastSlash = strrchr(exePath, '/');
+        if (lastSlash) {
+            *lastSlash = '\0'; 
+            std::string layerPath = std::string(exePath) + "/layers";
+            setenv("VK_LAYER_PATH", layerPath.c_str(), 1);
+            std::string libPath = std::string(exePath);
+            std::string currentLdPath = getenv("LD_LIBRARY_PATH") ? getenv("LD_LIBRARY_PATH") : "";
+            setenv("LD_LIBRARY_PATH", (libPath + ":" + currentLdPath).c_str(), 1);
+        }
+    }
+#elif _WIN32
     _putenv_s("VK_LAYER_PATH", "layers");
-#endif 
+#endif
+    
     StarryEngine::Application app;
     app.run();
 }

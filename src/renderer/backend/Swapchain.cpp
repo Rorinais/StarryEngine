@@ -1,5 +1,5 @@
 #include "Device.hpp"
-#include "SwapChain.hpp"
+#include "Swapchain.hpp"
 
 namespace StarryEngine {
 

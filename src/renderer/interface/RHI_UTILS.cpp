@@ -778,14 +778,6 @@ namespace StarryEngine::RHI {
 
     // 验证和检查
     bool RHIUtils::validatePipelineState(const GraphicsPipelineDesc& desc) {
-        // 简单的验证逻辑
-        if (desc.vertexLayout.attributes.empty() && desc.vertexShader.bytecode.empty()) {
-            return false;
-        }
-
-        if (desc.renderTargetFormats.empty() && desc.depthStencilFormat == Format::Undefined) {
-            return false;
-        }
 
         return true;
     }

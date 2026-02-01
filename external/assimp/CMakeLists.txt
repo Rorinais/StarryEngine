@@ -18,5 +18,11 @@ if(WIN32)
             INTERFACE_INCLUDE_DIRECTORIES "${ASSIMP_INC_DIR}"
         )
     endif()
+elseif(UNIX AND NOT APPLE)
+    set_target_properties(assimp PROPERTIES
+        #IMPORTED_IMPLIB "${ASSIMP_LIB_DIR}/libunit.dll.a"   
+        IMPORTED_LOCATION "${ASSIMP_LIB_DIR}/libassimp.so.5.3.0"
+        INTERFACE_INCLUDE_DIRECTORIES "${ASSIMP_INC_DIR}"
+    )
 endif()
 

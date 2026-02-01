@@ -40,7 +40,16 @@ namespace StarryEngine{
         StarryEngine::RHI::PipelineHandle createGraphicsPipeline(StarryEngine::RHI::GraphicsPipelineDesc desc) {
             return mResourceManager->createGraphicsPipeline(desc);
         }
+
+        StarryEngine::RHI::ShaderHandle createShaderHandle(StarryEngine::RHI::ShaderModuleDesc desc) {
+            return mResourceManager->createShader(desc);
+        }
         
+
+        void release(RHI::ShaderHandle handle) {
+            mResourceManager->destroy(handle);
+        }
+
         void clear();
 
     private:

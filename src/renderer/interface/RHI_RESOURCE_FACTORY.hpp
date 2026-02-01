@@ -17,6 +17,8 @@
 #include "RHI_VK_RESOURCE.hpp"
 
 namespace StarryEngine::RHI {
+    class ResourceManager;
+
     class IResourceFactory {
     public:
         virtual ~IResourceFactory() = default;
@@ -45,6 +47,8 @@ namespace StarryEngine::RHI {
 
         virtual std::vector<std::unique_ptr<RHICommandBuffer>> createCommandBuffers(uint32_t count,const CommandBufferDesc& desc) = 0;
         virtual std::vector<std::unique_ptr<RHIDescriptorSet>> createDescriptorSets(uint32_t count,const DescriptorSetDesc& desc) = 0;
+
+        virtual void setResourceManager(ResourceManager * ptr) = 0;
     };
 
     class VKResourceFactory : public IResourceFactory {
@@ -99,7 +103,26 @@ namespace StarryEngine::RHI {
 
         std::vector<std::unique_ptr<RHIDescriptorSet>> createDescriptorSets(uint32_t count, const DescriptorSetDesc& desc) override;
 
+        void setResourceManager(ResourceManager* ptr) override;
+
+        VkShaderStageFlagBits RHI_TO_VK_SHADERSTAGEFLAG(ShaderStage stage) {
+            switch (stage)
+            {
+            case ShaderStage::Vertex:
+                return VK_SHADER_STAGE_VERTEX_BIT;
+            case ShaderStage::Fragment:
+                return VK_SHADER_STAGE_FRAGMENT_BIT;
+            case ShaderStage::Geometry:
+                return VK_SHADER_STAGE_GEOMETRY_BIT;
+            case ShaderStage::Compute:
+                return VK_SHADER_STAGE_COMPUTE_BIT;
+            default:
+                return VK_SHADER_STAGE_VERTEX_BIT;
+            }
+        }
     private:
         Device::Ptr mDevice;
+
+        ResourceManager* mResourceManager = nullptr;
     };
 }

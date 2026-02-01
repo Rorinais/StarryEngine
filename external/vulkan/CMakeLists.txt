@@ -17,5 +17,17 @@ if(WIN32)
         IMPORTED_LOCATION "${VULKAN_LIB_DIR}/shaderc/shaderc_sharedd.dll"
         INTERFACE_INCLUDE_DIRECTORIES "${VULKAN_INC_DIR}"
     )
+elseif(UNIX AND NOT APPLE)
+    set_target_properties(vulkan PROPERTIES
+        #IMPORTED_IMPLIB "${VULKAN_LIB_DIR}/libvulkan.so" 
+        IMPORTED_LOCATION "${VULKAN_LIB_DIR}/libvulkan.so" 
+        INTERFACE_INCLUDE_DIRECTORIES "${VULKAN_INC_DIR}"
+    )
+
+    set_target_properties(shaderc PROPERTIES
+        #IMPORTED_IMPLIB "${VULKAN_LIB_DIR}/shaderc/libshaderc.a"
+        IMPORTED_LOCATION "${VULKAN_LIB_DIR}/shaderc/libshaderc_shared.so.1"
+        INTERFACE_INCLUDE_DIRECTORIES "${VULKAN_INC_DIR}"
+    )
 endif()
 

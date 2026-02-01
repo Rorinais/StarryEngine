@@ -257,6 +257,15 @@ namespace StarryEngine {
         VkPipeline createComputePipeline(const VkComputePipelineCreateInfo& createInfo);
         void destroyPipeline(VkPipeline pipeline);
 
+        VkShaderModule createShaderModule(const std::vector<uint32_t>& code, const std::string& debugName);
+
+        void destroyShaderModule(VkShaderModule module);
+
+        VkPipelineShaderStageCreateInfo createShaderStageInfo(
+            VkShaderModule module,
+            VkShaderStageFlagBits stage,
+            const char* entryPoint);
+
         // ==================== 描述符系统 ====================
         VkDescriptorPool createDescriptorPool(const std::vector<VkDescriptorPoolSize>& poolSizes,
             uint32_t maxSets);

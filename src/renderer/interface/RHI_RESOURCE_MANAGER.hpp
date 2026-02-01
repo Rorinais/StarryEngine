@@ -634,8 +634,10 @@ namespace StarryEngine::RHI {
     typename TypedResourceStorage<HandleType, ResourceType>::Handle
         TypedResourceStorage<HandleType, ResourceType>::create(ResourcePtr data, const std::string& name,
             const std::string& debugTag) {
-
-        //std::lock_guard<std::mutex> lock(mutex_);
+        if (!data) {
+            std::cerr << "[TypedResourceStorage] ERROR: Cannot create resource with null data!" << std::endl;
+            return Handle::Null();
+        }
 
         // 检查名称是否已存在
         if (!name.empty()) {
@@ -655,6 +657,11 @@ namespace StarryEngine::RHI {
                     uint32_t globalIdx = static_cast<uint32_t>(chunkIdx * CHUNK_SIZE + i);
 
                     Entry& entry = chunk.entries[i];
+
+                    std::cout << "[TypedResourceStorage] Moving data to entry at index " << globalIdx
+                        << ", data pointer: " << data.get() << std::endl;
+
+                    // 移动数据到entry
                     entry.data = std::move(data);
                     entry.name = name;
                     entry.debugTag = debugTag;
@@ -667,33 +674,22 @@ namespace StarryEngine::RHI {
                         entry.memoryUsage = entry.data->getMemoryUsage();
                     }
 
+                    std::cout << "[TypedResourceStorage] Created entry at index " << globalIdx
+                        << ", generation " << entry.generation
+                        << ", entry.data pointer: " << entry.data.get()
+                        << ", alive: " << entry.alive << std::endl;
+
                     // 添加到名称映射
                     if (!name.empty()) {
                         nameToIndex_[name] = globalIdx;
                     }
 
-                    // 添加到调试映射
+                    // 添加到调试标签映射
                     if (!debugTag.empty()) {
                         debugTagToIndex_[debugTag] = globalIdx;
                     }
 
                     totalCreated_++;
-
-                    size_t currentMemory = 0;
-                    for (const auto& chunk : chunks_) {
-                        for (const auto& entry : chunk.entries) {
-                            if (entry.alive) {
-                                currentMemory += entry.memoryUsage;
-                            }
-                        }
-                    }
-
-                    size_t oldMax = maxMemoryUsage_.load();
-                    while (currentMemory > oldMax) {
-                        if (maxMemoryUsage_.compare_exchange_weak(oldMax, currentMemory)) {
-                            break;
-                        }
-                    }
 
                     return Handle::Create(globalIdx, entry.generation);
                 }
@@ -701,7 +697,13 @@ namespace StarryEngine::RHI {
         }
 
         chunks_.push_back(Chunk{});
-        return create(ResourcePtr{}, name, debugTag);
+
+        if (!data) {
+            std::cerr << "[TypedResourceStorage] ERROR: Data is null after attempting to create new chunk!" << std::endl;
+            return Handle::Null();
+        }
+
+        return create(std::move(data), name, debugTag);
     }
 
     template<typename HandleType, typename ResourceType>

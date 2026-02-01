@@ -1,5 +1,6 @@
 #include "RHI_RESOURCE_FACTORY.hpp"
 #include "RHI_VK_RESOURCE.hpp"
+#include "RHI_RESOURCE_MANAGER.hpp"
 #include <stdexcept>
 
 namespace StarryEngine::RHI {
@@ -17,7 +18,17 @@ namespace StarryEngine::RHI {
         // 创建管线布局
         auto layout = std::make_unique<RHI_VK_PipelineLayout>(mDevice, desc.layoutDesc);
 
-        // 创建管线
+        auto rhiVertexShader = mResourceManager->getShader(desc.vertexShader);
+        auto vertexShader = static_cast<VkShaderModule>(rhiVertexShader->getNativeHandle());
+
+        auto rhiFragmentShader = mResourceManager->getShader(desc.fragmentShader);
+        auto fragmentShader = static_cast<VkShaderModule>(rhiFragmentShader->getNativeHandle());
+        
+        std::vector<VkPipelineShaderStageCreateInfo> shaderStage{
+            mDevice->createShaderStageInfo(vertexShader,RHI_TO_VK_SHADERSTAGEFLAG(rhiVertexShader->getStage()),rhiVertexShader->getEntryPoint().c_str()),
+            mDevice->createShaderStageInfo(fragmentShader,RHI_TO_VK_SHADERSTAGEFLAG(rhiFragmentShader->getStage()),rhiFragmentShader->getEntryPoint().c_str())
+        };
+
         auto pipeline = std::make_unique<RHI_VK_Pipeline>(
             mDevice,
             desc,
@@ -38,8 +49,7 @@ namespace StarryEngine::RHI {
     }
 
     std::unique_ptr<RHIShaderModule> VKResourceFactory::createShader(const ShaderModuleDesc& desc) {
-        // TODO: 实现着色器模块创建
-        throw std::runtime_error("Not implemented: createShader");
+        return std::make_unique<RHI_VK_ShaderModule>(mDevice, desc);
     }
 
     std::unique_ptr<RHISampler> VKResourceFactory::createSampler(const SamplerDesc& desc) {
@@ -143,6 +153,10 @@ namespace StarryEngine::RHI {
         }
 
         return sets;
+    }
+
+    void VKResourceFactory::setResourceManager(ResourceManager* ptr) {
+        mResourceManager = ptr;
     }
 
 } // namespace StarryEngine::RHI

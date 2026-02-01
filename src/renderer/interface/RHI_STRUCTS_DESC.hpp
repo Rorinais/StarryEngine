@@ -429,14 +429,14 @@ namespace StarryEngine::RHI {
      */
     struct ShaderModuleDesc {
         ShaderStage stage = ShaderStage::Vertex; ///< 着色器阶段
-        std::vector<uint8_t> bytecode;              ///< SPIR-V/HLSL/Metal Shader字节码
+        std::string sourcecode;                 ///< SPIR-V/HLSL/Metal Shader字节码
         std::string entryPoint = "main";        ///< 入口函数名
-        std::vector<std::string> defines;       ///< 预处理器定义
+        std::vector<std::pair<std::string, std::string>> defines;       ///< 预处理器定义
         std::vector<std::string> includePaths;  ///< 包含路径
         std::string debugName;                  ///< 调试名称
 
         bool operator==(const ShaderModuleDesc& other) const {
-            return stage == other.stage && bytecode == other.bytecode &&
+            return stage == other.stage && sourcecode == other.sourcecode &&
                 entryPoint == other.entryPoint && defines == other.defines &&
                 includePaths == other.includePaths;
         }
@@ -627,7 +627,7 @@ namespace StarryEngine::RHI {
      * @details 描述管线的资源绑定布局
      */
     struct PipelineLayoutDesc {
-        std::vector<std::vector<DescriptorSetLayoutBinding>> descriptorSets; ///< 描述符集布局
+        std::vector<DescriptorPoolHandle> descriptorSets; ///< 描述符集布局
         std::vector<PushConstantRange> pushConstants; ///< 推送常量范围
         std::string debugName;                        ///< 调试名称
 
@@ -785,11 +785,11 @@ namespace StarryEngine::RHI {
      */
     struct GraphicsPipelineDesc {
         // 着色器阶段
-        ShaderModuleDesc vertexShader;
-        ShaderModuleDesc tessellationControlShader;
-        ShaderModuleDesc tessellationEvaluationShader;
-        ShaderModuleDesc geometryShader;
-        ShaderModuleDesc fragmentShader;
+        ShaderHandle vertexShader;
+        ShaderHandle tessellationControlShader;
+        ShaderHandle tessellationEvaluationShader;
+        ShaderHandle geometryShader;
+        ShaderHandle fragmentShader;
 
         // 顶点输入
         VertexLayout vertexLayout;

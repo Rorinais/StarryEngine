@@ -82,7 +82,7 @@ namespace StarryEngine::RHI {
                 static_cast<uint64_t>(generation)
             );
         }
-
+         
         // 哈希支持
         struct Hash {
             size_t operator()(ResourceHandle h) const noexcept {

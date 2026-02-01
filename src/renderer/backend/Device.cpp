@@ -710,6 +710,41 @@ namespace StarryEngine {
         }
     }
 
+    VkShaderModule Device::createShaderModule(const std::vector<uint32_t>& code, const std::string& debugName) {
+        VkShaderModuleCreateInfo createInfo{};
+        createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+        createInfo.codeSize = code.size() * sizeof(uint32_t);
+        createInfo.pCode = code.data();
+
+        VkShaderModule module;
+        if (vkCreateShaderModule(mLogicalDevice, &createInfo, nullptr, &module) != VK_SUCCESS) {
+            throw std::runtime_error("Failed to create shader module: " + debugName);
+        }
+        return module;
+    }
+
+    void Device::destroyShaderModule(VkShaderModule module) {
+        if (module!=VK_NULL_HANDLE){
+            vkDestroyShaderModule(mLogicalDevice, module, nullptr);
+        }
+        module = VK_NULL_HANDLE;
+    }
+
+    VkPipelineShaderStageCreateInfo Device::createShaderStageInfo(
+        VkShaderModule module,
+        VkShaderStageFlagBits stage,
+        const char* entryPoint) {
+        return VkPipelineShaderStageCreateInfo{
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .stage = stage,
+            .module = module,
+            .pName = entryPoint,
+            .pSpecializationInfo = nullptr
+        };
+    }
+
     // ==================== 描述符系统 ====================
 
     VkDescriptorPool Device::createDescriptorPool(const std::vector<VkDescriptorPoolSize>& poolSizes,

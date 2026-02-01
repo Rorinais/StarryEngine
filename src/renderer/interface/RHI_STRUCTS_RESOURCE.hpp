@@ -124,7 +124,9 @@ namespace StarryEngine::RHI {
 
         virtual ShaderStage getStage() const = 0;
         virtual const std::string& getEntryPoint() const = 0;
-        virtual const std::vector<uint8_t>& getBytecode() const = 0;
+        //virtual const std::vector<uint8_t>& getBytecode() const = 0;
+
+        virtual void release() = 0;
 
         // 反射信息
         virtual bool hasReflectionData() const = 0;

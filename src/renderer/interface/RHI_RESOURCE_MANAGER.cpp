@@ -7,6 +7,8 @@ namespace StarryEngine::RHI {
         : factory_(std::move(factory)) {
         assert(factory_ != nullptr && "Resource factory must be provided");
         initStatistics();
+
+        factory_->setResourceManager(this);
     }
 
     ResourceManager::~ResourceManager() {
@@ -88,15 +90,42 @@ namespace StarryEngine::RHI {
     ShaderHandle ResourceManager::createShader(const ShaderModuleDesc& desc,
         const std::string& name,
         const std::string& debugTag) {
+
+        std::cout << "[ResourceManager] Creating shader: name='" << name
+            << "', debugName='" << desc.debugName << "'" << std::endl;
+
+        // 创建资源
         auto resource = factory_->createShader(desc);
+
+        // 打印资源指针
+        std::cout << "[ResourceManager] Factory created resource pointer: " << resource.get() << std::endl;
+
         if (!resource) {
-            if (debugMode_) {
-                std::cerr << "[ResourceManager] Failed to create shader: " << name << std::endl;
-            }
+            std::cerr << "[ResourceManager] ERROR: Factory returned null resource for shader: "
+                << desc.debugName << std::endl;
             return ShaderHandle::Null();
         }
+
+        // 检查资源是否有效
+        if (!resource->isValid()) {
+            std::cerr << "[ResourceManager] WARNING: Created shader is not valid: "
+                << desc.debugName << std::endl;
+        }
+
         logResourceCreation(ResourceCategory::Shader, name);
-        return shaders_.create(std::move(resource), name, debugTag);
+
+        // 创建handle
+        auto handle = shaders_.create(std::move(resource), name, debugTag);
+
+        if (!handle.isValid()) {
+            std::cerr << "[ResourceManager] ERROR: Failed to create handle for shader: "
+                << desc.debugName << std::endl;
+        }
+        else {
+            std::cout << "[ResourceManager] Created shader handle: " << handle.toString() << std::endl << std::endl;;
+        }
+
+        return handle;
     }
 
     SamplerHandle ResourceManager::createSampler(const SamplerDesc& desc,

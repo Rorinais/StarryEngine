@@ -17,23 +17,52 @@ namespace StarryEngine {
 
         void run();
 
+        void createShaderProgram() {
+            RHI::ShaderModuleDesc vertexshaderDesc;
+            vertexshaderDesc.stage = RHI::ShaderStage::Vertex;
+            vertexshaderDesc.sourcecode = R"(
+            #version 450
+            #extension GL_KHR_vulkan_glsl : enable
+
+            layout(location = 0) in vec3 inPosition;
+
+            layout(location = 0) out vec3 fragTexCoord;
+
+            void main() {
+                gl_Position = vec4(inPosition, 1.0);
+                fragTexCoord = inPosition;
+            }
+            )";
+
+            vertexshaderDesc.includePaths = {};
+            vertexshaderDesc.debugName = "vertexShader";
+            shaderHandles.push_back(m_rhi->createShaderHandle(vertexshaderDesc));
+
+            RHI::ShaderModuleDesc fragmentshaderDesc;
+            fragmentshaderDesc.stage = RHI::ShaderStage::Fragment;
+            fragmentshaderDesc.sourcecode = R"(
+            #version 450
+            #extension GL_KHR_vulkan_glsl : enable
+
+            layout(location = 0) in vec3 fragTexCoord;
+
+            layout(location = 0) out vec4 outColor;
+
+            void main() {
+                outColor = vec4(fragTexCoord, 1.0);
+            }
+            )";
+            fragmentshaderDesc.includePaths = {};
+            fragmentshaderDesc.debugName = "fragmentShader";
+            shaderHandles.push_back(m_rhi->createShaderHandle(fragmentshaderDesc));
+
+        }
 
         void createPipline() {
             RHI::GraphicsPipelineDesc desc;
 
-            RHI::ShaderModuleDesc vertexshaderDesc;
-            vertexshaderDesc.stage = RHI::ShaderStage::Vertex;
-            vertexshaderDesc.bytecode = {};
-            vertexshaderDesc.includePaths = {};
-            vertexshaderDesc.debugName = "vertexShader";
-            desc.vertexShader =vertexshaderDesc;
-
-            RHI::ShaderModuleDesc fragmentshaderDesc;
-            fragmentshaderDesc.stage = RHI::ShaderStage::Fragment;
-            fragmentshaderDesc.bytecode = {};
-            fragmentshaderDesc.includePaths = {};
-            fragmentshaderDesc.debugName = "fragmentShader";
-            desc.fragmentShader = fragmentshaderDesc;
+            desc.vertexShader =shaderHandles[0];
+            desc.fragmentShader = shaderHandles[1];
 
             RHI::PipelineLayoutDesc layoutDesc;
             layoutDesc.descriptorSets = {};
@@ -89,6 +118,8 @@ namespace StarryEngine {
         bool mFramebufferResized = false;
 
         std::shared_ptr<VulkanRHI> m_rhi;
+
+        std::vector<RHI::ShaderHandle> shaderHandles;
     };
 
 } // namespace StarryEngine
