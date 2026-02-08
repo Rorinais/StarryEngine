@@ -5,8 +5,7 @@
 
 namespace StarryEngine::RHI {
     std::unique_ptr<RHIBuffer> VKResourceFactory::createBuffer(const BufferDesc& desc) {
-        // TODO: 实现Vulkan缓冲区创建
-        throw std::runtime_error("Not implemented: createBuffer");
+		return std::make_unique<RHI_VK_Buffer>(mDevice, desc);
     }
 
     std::unique_ptr<RHITexture> VKResourceFactory::createTexture(const TextureDesc& desc) {
@@ -25,18 +24,16 @@ namespace StarryEngine::RHI {
         auto fragmentShader = static_cast<VkShaderModule>(rhiFragmentShader->getNativeHandle());
         
         std::vector<VkPipelineShaderStageCreateInfo> shaderStage{
-            mDevice->createShaderStageInfo(vertexShader,RHI_TO_VK_SHADERSTAGEFLAG(rhiVertexShader->getStage()),rhiVertexShader->getEntryPoint().c_str()),
-            mDevice->createShaderStageInfo(fragmentShader,RHI_TO_VK_SHADERSTAGEFLAG(rhiFragmentShader->getStage()),rhiFragmentShader->getEntryPoint().c_str())
+            mDevice->createShaderStageInfo(vertexShader,FUNC::RHI_TO_VK_ShaderStageFlag(rhiVertexShader->getStage()),rhiVertexShader->getEntryPoint().c_str()),
+            mDevice->createShaderStageInfo(fragmentShader,FUNC::RHI_TO_VK_ShaderStageFlag(rhiFragmentShader->getStage()),rhiFragmentShader->getEntryPoint().c_str())
         };
 
-        auto pipeline = std::make_unique<RHI_VK_Pipeline>(
+        return std::make_unique<RHI_VK_Pipeline>(
             mDevice,
             desc,
             PipelineType::Graphics,
             std::move(layout)
         );
-
-        return pipeline;
     }
 
     std::unique_ptr<RHIPipeline> VKResourceFactory::createComputePipeline(const ComputePipelineDesc& desc) {

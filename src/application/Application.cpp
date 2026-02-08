@@ -1,12 +1,5 @@
 #include "Application.hpp"
 
-#ifdef __linux__
-#include <unistd.h>
-#include <limits.h>
-#include <string.h>
-#include <dlfcn.h>
-#endif
-
 namespace StarryEngine {
     Application::Application() {
         // 1. 创建窗口
@@ -107,6 +100,7 @@ namespace StarryEngine {
         std::cout << "Starting application main loop..." << std::endl;
 
         createShaderProgram();
+		createBuffer();
 
         for (auto handle: shaderHandles) {
             m_rhi->release(handle);
@@ -145,6 +139,10 @@ namespace StarryEngine {
     }
 
     Application::~Application() {
+        if (mVertexBuffer){
+            delete mVertexBuffer;
+            mVertexBuffer = nullptr;
+        }
         if (m_rhi) {
             m_rhi->clear();
         }

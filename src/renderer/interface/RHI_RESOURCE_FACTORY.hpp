@@ -15,6 +15,7 @@
 
 #include "RHI_HANDLES_SYSTEM.hpp"
 #include "RHI_VK_RESOURCE.hpp"
+#include "RHI_TO_VK_FUNC.hpp"
 
 namespace StarryEngine::RHI {
     class ResourceManager;
@@ -104,22 +105,6 @@ namespace StarryEngine::RHI {
         std::vector<std::unique_ptr<RHIDescriptorSet>> createDescriptorSets(uint32_t count, const DescriptorSetDesc& desc) override;
 
         void setResourceManager(ResourceManager* ptr) override;
-
-        VkShaderStageFlagBits RHI_TO_VK_SHADERSTAGEFLAG(ShaderStage stage) {
-            switch (stage)
-            {
-            case ShaderStage::Vertex:
-                return VK_SHADER_STAGE_VERTEX_BIT;
-            case ShaderStage::Fragment:
-                return VK_SHADER_STAGE_FRAGMENT_BIT;
-            case ShaderStage::Geometry:
-                return VK_SHADER_STAGE_GEOMETRY_BIT;
-            case ShaderStage::Compute:
-                return VK_SHADER_STAGE_COMPUTE_BIT;
-            default:
-                return VK_SHADER_STAGE_FRAGMENT_BIT;
-            }
-        }
     private:
         Device::Ptr mDevice;
 

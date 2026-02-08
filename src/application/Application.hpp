@@ -1,4 +1,11 @@
 #pragma once
+#ifdef __linux__
+#include <unistd.h>
+#include <limits.h>
+#include <string.h>
+#include <dlfcn.h>
+#endif
+
 #include "../base.hpp"
 #include "Window.hpp"
 #include "../renderer//backend/VulkanRHI.hpp"
@@ -21,17 +28,27 @@ namespace StarryEngine {
             RHI::ShaderModuleDesc vertexshaderDesc;
             vertexshaderDesc.stage = RHI::ShaderStage::Vertex;
             vertexshaderDesc.sourcecode = R"(
-            #version 450
-            #extension GL_KHR_vulkan_glsl : enable
+                #version 450
+                #extension GL_KHR_vulkan_glsl : enable
 
-            layout(location = 0) in vec3 inPosition;
+                layout(location = 0) out vec3 fragColor;
 
-            layout(location = 0) out vec3 fragTexCoord;
+                vec2 positions[3] = vec2[](
+                    vec2(0.0, -0.5),
+                    vec2(0.5, 0.5),
+                    vec2(-0.5, 0.5)
+                );
 
-            void main() {
-                gl_Position = vec4(inPosition, 1.0);
-                fragTexCoord = inPosition;
-            }
+                vec3 colors[3] = vec3[](
+                    vec3(1.0, 0.0, 0.0),
+                    vec3(0.0, 1.0, 0.0),
+                    vec3(0.0, 0.0, 1.0)
+                );
+
+                void main() {
+                    gl_Position = vec4(positions[gl_VertexIndex], 0.0, 1.0);
+                    fragColor = colors[gl_VertexIndex];
+                }
             )";
 
             vertexshaderDesc.includePaths = {};
@@ -41,16 +58,16 @@ namespace StarryEngine {
             RHI::ShaderModuleDesc fragmentshaderDesc;
             fragmentshaderDesc.stage = RHI::ShaderStage::Fragment;
             fragmentshaderDesc.sourcecode = R"(
-            #version 450
-            #extension GL_KHR_vulkan_glsl : enable
+                #version 450
+                #extension GL_KHR_vulkan_glsl : enable
 
-            layout(location = 0) in vec3 fragTexCoord;
+                layout(location = 0) in vec3 fragColor;
 
-            layout(location = 0) out vec4 outColor;
+                layout(location = 0) out vec4 outColor;
 
-            void main() {
-                outColor = vec4(fragTexCoord, 1.0);
-            }
+                void main() {
+                    outColor = vec4(fragColor, 1.0);
+                }
             )";
             fragmentshaderDesc.includePaths = {};
             fragmentshaderDesc.debugName = "fragmentShader";
@@ -108,6 +125,49 @@ namespace StarryEngine {
             
             m_rhi->createGraphicsPipeline(desc);
         }
+
+        void createBuffer() {
+            // 创建顶点缓冲区描述
+            RHI::BufferDesc bufferDesc;
+            bufferDesc.size = 1024;  // 1KB
+            bufferDesc.type = RHI::BufferType::Vertex;
+            bufferDesc.memoryType = RHI::MemoryType::CPU_To_GPU;
+            bufferDesc.stride = sizeof(float) * 3;  // vec3 position
+            bufferDesc.allowUpdate = true;
+            bufferDesc.debugName = "MyVertexBuffer";
+
+            // 通过资源管理器创建缓冲区
+            mVertexBufferHandle = m_rhi->createBuffer(bufferDesc);
+
+            if (!mVertexBufferHandle.isValid()) {
+                std::cerr << "Failed to create vertex buffer!" << std::endl;
+                return;
+            }
+
+            std::cout << "Vertex buffer created successfully!" << std::endl;
+
+            if (mVertexBufferHandle.isValid()) {
+                StarryEngine::RHI::RHIBuffer* mVertexBuffer = m_rhi->getBuffer(mVertexBufferHandle);
+                if (mVertexBuffer) {
+                    // 顶点数据
+                    std::vector<float> vertices = {
+                        -0.5f, -0.5f, 0.0f,
+                         0.5f, -0.5f, 0.0f,
+                         0.0f,  0.5f, 0.0f
+                    };
+
+                    // 使用update方法填充数据
+                    mVertexBuffer->update(vertices.data(), vertices.size() * sizeof(float));
+
+                    std::cout << "Vertex data uploaded successfully!" << std::endl;
+                }
+            }
+        }
+
+        void createRenderPass() {
+
+        }
+
     private:
         // 窗口相关
         uint32_t m_width = 800;
@@ -120,6 +180,9 @@ namespace StarryEngine {
         std::shared_ptr<VulkanRHI> m_rhi;
 
         std::vector<RHI::ShaderHandle> shaderHandles;
+
+		StarryEngine::RHI::BufferHandle mVertexBufferHandle = RHI::BufferHandle::Null();
+		StarryEngine::RHI::RHIBuffer* mVertexBuffer = nullptr;
     };
 
 } // namespace StarryEngine

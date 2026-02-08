@@ -1,28 +1,41 @@
 #include"RHI_VK_RESOURCE.hpp"
 
 namespace StarryEngine::RHI {
+    // ANSI 颜色代码定义
+    namespace ANSIColor {
+        const std::string RESET = "\033[0m";
+        const std::string BLACK = "\033[30m";
+        const std::string RED = "\033[31m";
+        const std::string GREEN = "\033[32m";
+        const std::string YELLOW = "\033[33m";
+        const std::string BLUE = "\033[34m";
+        const std::string MAGENTA = "\033[35m";
+        const std::string CYAN = "\033[36m";
+        const std::string WHITE = "\033[37m";
+
+        // 背景色
+        const std::string BG_BLACK = "\033[40m";
+        const std::string BG_RED = "\033[41m";
+        const std::string BG_GREEN = "\033[42m";
+        const std::string BG_YELLOW = "\033[43m";
+        const std::string BG_BLUE = "\033[44m";
+        const std::string BG_MAGENTA = "\033[45m";
+        const std::string BG_CYAN = "\033[46m";
+        const std::string BG_WHITE = "\033[47m";
+
+        // 样式
+        const std::string BOLD = "\033[1m";
+        const std::string UNDERLINE = "\033[4m";
+        const std::string INVERSE = "\033[7m";
+    }
 
     RHI_VK_ShaderModule::RHI_VK_ShaderModule(Device::Ptr device, ShaderModuleDesc desc)
         : mDevice(device), mDesc(desc), mShaderModule(VK_NULL_HANDLE) {
 
         try {
-            shaderc_shader_kind kind;
-            switch (mDesc.stage) {
-            case ShaderStage::Vertex:   kind = shaderc_vertex_shader; break;
-            case ShaderStage::Fragment: kind = shaderc_fragment_shader; break;
-            case ShaderStage::Compute:  kind = shaderc_compute_shader; break;
-            case ShaderStage::Geometry: kind = shaderc_geometry_shader; break;
-            case ShaderStage::TessellationControl: kind = shaderc_tess_control_shader; break;
-            case ShaderStage::TessellationEvaluation: kind = shaderc_tess_evaluation_shader; break;
-            default:
-                throw std::runtime_error("Unsupported shader stage: " + std::to_string(static_cast<int>(mDesc.stage)));
-            }
-
-            auto spirv = compileGLSL(mDesc.sourcecode, kind, mDesc.defines, mDesc.debugName);
-
+            auto spirv = compileGLSL(mDesc.sourcecode, FUNC::RHI_TO_Shaderc_ShaderKind(mDesc.stage), mDesc.defines, mDesc.debugName);
             mShaderModule = mDevice->createShaderModule(spirv, mDesc.debugName);
             std::cout << "[RHI_VK_ShaderModule] Created shader module: "<< mShaderModule << " for " << mDesc.debugName << std::endl;
-
         }
         catch (const std::exception& e) {
             std::cerr << "[RHI_VK_ShaderModule] ERROR: Failed to create shader: "<< mDesc.debugName << " - " << e.what() << std::endl;
@@ -85,6 +98,8 @@ namespace StarryEngine::RHI {
         , mCurrentAccess(AccessFlag::None)
         , mCurrentStage(PipelineStage::TopOfPipe) {
         createBuffer();
+
+		std::cout << ANSIColor::BG_RED<<"[RHI_VK_Buffer] Created buffer: " << ANSIColor::RESET<< mBuffer << " of size " << mDesc.size << " bytes with VMA: " << (mUsingVMA ? "Yes" : "No") << std::endl;
     }
 
     RHI_VK_Buffer::~RHI_VK_Buffer() {
@@ -98,7 +113,7 @@ namespace StarryEngine::RHI {
         try {
             if (mUsingVMA) {
                 // VMA方式
-                VmaMemoryUsage vmaUsage = convertMemoryTypeToVma(mDesc.memoryType);
+                VmaMemoryUsage vmaUsage = FUNC::RHI_TO_VK_VmaMemoryUsage(mDesc.memoryType);
                 VmaAllocationCreateFlags flags = 0;
                 
                 // 持久映射标志
@@ -121,7 +136,7 @@ namespace StarryEngine::RHI {
                 mVmaAllocation = vmaBuffer.allocation;
             } else {
                 // 传统方式
-                VkMemoryPropertyFlags memoryProperties = convertMemoryTypeToVkProperties(mDesc.memoryType);
+                VkMemoryPropertyFlags memoryProperties = FUNC::RHI_TO_VK_MemoryProperties(mDesc.memoryType);
                 
                 // 获取传输命令池（如果需要）
                 VkCommandPool commandPool = VK_NULL_HANDLE;
@@ -218,7 +233,7 @@ namespace StarryEngine::RHI {
             mDevice->uploadDataToVmaBuffer(mBuffer, mVmaAllocation, data, size, offset);
         } else {
             // 判断内存一致性
-            bool hostCoherent = (convertMemoryTypeToVkProperties(mDesc.memoryType) & 
+            bool hostCoherent = (FUNC::RHI_TO_VK_MemoryProperties(mDesc.memoryType) & 
                             VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != 0;
             
             // 使用Device的统一上传函数
@@ -352,7 +367,7 @@ namespace StarryEngine::RHI {
         VkBufferViewCreateInfo viewInfo = {};
         viewInfo.sType = VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO;
         viewInfo.buffer = mBuffer;
-        viewInfo.format = convertFormatToVk(format);
+        viewInfo.format = FUNC::RHI_TO_VK_Format(format);
         viewInfo.offset = offset;
         viewInfo.range = size;
         
@@ -407,7 +422,7 @@ namespace StarryEngine::RHI {
         }
         
         // 根据内存类型决定是否需要刷新
-        VkMemoryPropertyFlags properties = convertMemoryTypeToVkProperties(mDesc.memoryType);
+        VkMemoryPropertyFlags properties = FUNC::RHI_TO_VK_MemoryProperties(mDesc.memoryType);
         bool hostCoherent = (properties & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != 0;
         
         if (!hostCoherent) {
@@ -431,7 +446,7 @@ namespace StarryEngine::RHI {
             size = mDesc.size - offset;
         }
         
-        VkMemoryPropertyFlags properties = convertMemoryTypeToVkProperties(mDesc.memoryType);
+        VkMemoryPropertyFlags properties = FUNC::RHI_TO_VK_MemoryProperties(mDesc.memoryType);
         bool hostCoherent = (properties & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != 0;
         
         if (!hostCoherent) {

@@ -45,10 +45,17 @@ namespace StarryEngine{
             return mResourceManager->createShader(desc);
         }
         
+        StarryEngine::RHI::BufferHandle createBuffer(StarryEngine::RHI::BufferDesc desc) {
+            return mResourceManager->createBuffer(desc);
+		}
 
         void release(RHI::ShaderHandle handle) {
             mResourceManager->destroy(handle);
         }
+
+        RHI::RHIBuffer * getBuffer(RHI::BufferHandle handle) {
+            return mResourceManager->getBuffer(handle);
+		}
 
         void clear();
 

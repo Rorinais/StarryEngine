@@ -268,18 +268,12 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
         ENABLE_VALIDATION_LAYERS
     )
 
-    # 验证层文件处理
     set(VK_LAYER_SRC "${CMAKE_SOURCE_DIR}/external/vulkan/lib/layers")
     
-    # 设置目标目录为可执行文件所在目录
     if(CMAKE_RUNTIME_OUTPUT_DIRECTORY)
         set(VK_LAYER_DEST "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
     else()
-        if(WIN32)
-            set(VK_LAYER_DEST "${CMAKE_CURRENT_BINARY_DIR}/$<CONFIG>")
-        else()
-            set(VK_LAYER_DEST "${CMAKE_BINARY_DIR}/bin/StarryEngine")
-        endif()
+        set(VK_LAYER_DEST "${CMAKE_BINARY_DIR}/bin/${PROJECT_NAME}")
     endif()
     
     message(STATUS "VK_LAYER_SRC: ${VK_LAYER_SRC}")
