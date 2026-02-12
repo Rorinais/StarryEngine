@@ -120,35 +120,85 @@ namespace StarryEngine::RHI {
         bool mIsMapped = false;
         bool mPersistentlyMapped = false;
         
-        std::unordered_map<uint64_t, BufferViewInfo> mViews; // 使用唯一的key
+        std::unordered_map<uint64_t, BufferViewInfo> mViews; 
         uint64_t mNextViewKey = 1;
         
         AccessFlag mCurrentAccess = AccessFlag::None;
         PipelineStage mCurrentStage = PipelineStage::TopOfPipe;
     };
 
+
+    class RHI_VK_RenderPass : public RHIRenderPass {
+    public:
+        RHI_VK_RenderPass(
+            Device::Ptr device,
+            const RenderPassDesc& desc
+        );
+
+        ~RHI_VK_RenderPass() { release(); };
+
+        void release() override;
+
+        bool isValid() const override {
+            return mVkRenderPass != VK_NULL_HANDLE;
+        }
+
+        void* getNativeHandle() const override {
+            return reinterpret_cast<void*>(mVkRenderPass);
+        }
+
+        size_t getMemoryUsage() const override {
+            // 粗略估计：对象本身大小 + 描述字符串大小 + Vulkan 对象占用
+            size_t usage = sizeof(*this) + mDesc.debugName.size();
+            usage += mVkRenderPass != VK_NULL_HANDLE ? 1024 : 0;
+            return usage;
+        }
+
+        const char* getTypeName() const override {
+			return "VK_RenderPass";
+        }
+
+        const RenderPassDesc& getDesc() const override {
+			return mDesc;
+        }
+
+        uint32_t getAttachmentCount() const override {
+			return static_cast<uint32_t>(mDesc.attachments.size());
+        }
+
+        uint32_t getSubpassCount() const override {
+			return static_cast<uint32_t>(mDesc.subpasses.size());
+        }
+        
+        bool isCompatibleWith(const RHIRenderPass* other) const override {
+            // 简单实现：比较描述结构体是否完全相等
+            const RHI_VK_RenderPass* vkOther = dynamic_cast<const RHI_VK_RenderPass*>(other);
+            if (!vkOther) return false;
+            return mDesc == vkOther->mDesc;
+        }
+
+    private:
+        Device::Ptr mDevice;
+        RenderPassDesc mDesc;
+
+		VkRenderPass mVkRenderPass = VK_NULL_HANDLE; 
+    };
+
     class RHI_VK_PipelineLayout : public RHIPipelineLayout {
     public:
         RHI_VK_PipelineLayout(
             Device::Ptr device,
-            const PipelineLayoutDesc& desc
-        ) : mDevice(device), mDesc(desc) {
-            createPipelineLayout();
-        }
+            const PipelineLayoutDesc& desc,
+            std::vector<VkDescriptorSetLayout> vkDescriptorSetLayouts = {}
+        );
 
-        ~RHI_VK_PipelineLayout() override { destroy(); }
-
-        void destroy();
+        ~RHI_VK_PipelineLayout() override { release(); }
 
         const PipelineLayoutDesc& getDesc() const override { return mDesc; }
 
-        uint32_t getDescriptorSetCount() const override {return static_cast<uint32_t>(mDesc.descriptorSets.size());}
-
-        const std::vector<DescriptorSetLayoutBinding>& getDescriptorSetLayout(uint32_t set) const override;
+        uint32_t getDescriptorSetCount() const override {return static_cast<uint32_t>(mDesc.descriptorSetLayouts.size());}
 
         uint32_t getPushConstantRangeCount() const override {return static_cast<uint32_t>(mDesc.pushConstants.size());}
-
-        const PushConstantRange& getPushConstantRange(uint32_t index) const override;
 
         uint32_t getBindingPoint(uint32_t set, uint32_t binding) const override;
 
@@ -156,24 +206,18 @@ namespace StarryEngine::RHI {
 
         void* getNativeHandle() const override { return reinterpret_cast<void*>(mPipelineLayout); }
 
-        void release() override { destroy(); }
+        void release() override;
 
         size_t getMemoryUsage() const override;
 
         const char* getTypeName() const override { return "VK_PipelineLayout"; }
 
         VkPipelineLayout getVkPipelineLayout() const { return mPipelineLayout; }
-
-        VkDescriptorSetLayout getVkDescriptorSetLayout(uint32_t set) const;
-
-    private:
-        void createPipelineLayout();
-
     private:
         Device::Ptr mDevice;
         VkPipelineLayout mPipelineLayout = VK_NULL_HANDLE;
         PipelineLayoutDesc mDesc;
-        std::vector<VkDescriptorSetLayout> mVkDescriptorSetLayouts;
+        std::vector<VkDescriptorSetLayout> mDescriptorSetLayouts;
     };
 
     class RHI_VK_Pipeline : public RHIPipeline {

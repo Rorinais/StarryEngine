@@ -463,61 +463,120 @@ namespace StarryEngine::RHI {
         }
     }
 
+    RHI_VK_RenderPass::RHI_VK_RenderPass(Device::Ptr device, const RenderPassDesc& desc): mDevice(device), mDesc(desc) {
+        // ---------- 附件描述转换 ----------
+        std::vector<VkAttachmentDescription> vkAttachments;
+        vkAttachments.reserve(mDesc.attachments.size());
+        for (const auto& att : mDesc.attachments) {
+            VkAttachmentDescription vkAtt = {};
+            vkAtt.format = FUNC::RHI_TO_VK_Format(att.format);                      
+            vkAtt.samples = static_cast<VkSampleCountFlagBits>(att.sampleCount); 
+            vkAtt.loadOp = FUNC::RHI_TO_VK_AttachmentLoadOp(att.loadOp);            
+            vkAtt.storeOp = FUNC::RHI_TO_VK_AttachmentStoreOp(att.storeOp);        
+            vkAtt.stencilLoadOp = FUNC::RHI_TO_VK_AttachmentLoadOp(att.stencilLoadOp); 
+            vkAtt.stencilStoreOp = FUNC::RHI_TO_VK_AttachmentStoreOp(att.stencilStoreOp); 
+            vkAtt.initialLayout = FUNC::RHI_TO_VK_ImageLayout(att.initialLayout); 
+            vkAtt.finalLayout = FUNC::RHI_TO_VK_ImageLayout(att.finalLayout);     
+            vkAttachments.push_back(vkAtt);
+        }
+
+        // ---------- 子通道转换 ----------
+        std::vector<VkSubpassDescription> vkSubpasses;
+        std::vector<std::vector<VkAttachmentReference>> vkInputRefs;
+        std::vector<std::vector<VkAttachmentReference>> vkColorRefs;
+        std::vector<std::vector<VkAttachmentReference>> vkResolveRefs;
+        std::vector<VkAttachmentReference> vkDepthStencilRefs;
+        vkSubpasses.reserve(mDesc.subpasses.size());
+
+        for (const auto& subpass : mDesc.subpasses) {
+            // 输入附件
+            vkInputRefs.emplace_back();
+            auto& inputRefs = vkInputRefs.back();
+            inputRefs.reserve(subpass.inputAttachments.size());
+            for (const auto& ref : subpass.inputAttachments) {
+                VkAttachmentReference vkRef = {
+                    ref.attachment,
+                    FUNC::RHI_TO_VK_ImageLayout(ref.layout)   
+                };
+                inputRefs.push_back(vkRef);
+            }
+
+            // 颜色附件
+            vkColorRefs.emplace_back();
+            auto& colorRefs = vkColorRefs.back();
+            colorRefs.reserve(subpass.colorAttachments.size());
+            for (const auto& ref : subpass.colorAttachments) {
+                VkAttachmentReference vkRef = {
+                    ref.attachment,
+                    FUNC::RHI_TO_VK_ImageLayout(ref.layout)   
+                };
+                colorRefs.push_back(vkRef);
+            }
+
+            // 解析附件
+            vkResolveRefs.emplace_back();
+            auto& resolveRefs = vkResolveRefs.back();
+            resolveRefs.reserve(subpass.resolveAttachments.size());
+            for (const auto& ref : subpass.resolveAttachments) {
+                VkAttachmentReference vkRef = {
+                    ref.attachment,
+                    FUNC::RHI_TO_VK_ImageLayout(ref.layout)  
+                };
+                resolveRefs.push_back(vkRef);
+            }
+
+            // 深度模板附件
+            VkAttachmentReference depthRef = {
+                VK_ATTACHMENT_UNUSED,
+                VK_IMAGE_LAYOUT_UNDEFINED
+            };
+            if (subpass.depthStencilAttachment.attachment != VK_ATTACHMENT_UNUSED) {
+                depthRef.attachment = subpass.depthStencilAttachment.attachment;
+                depthRef.layout = FUNC::RHI_TO_VK_ImageLayout(subpass.depthStencilAttachment.layout); // 映射
+            }
+            vkDepthStencilRefs.push_back(depthRef);
+
+            VkSubpassDescription vkSubpass = {};
+            vkSubpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+            vkSubpass.inputAttachmentCount = static_cast<uint32_t>(inputRefs.size());
+            vkSubpass.pInputAttachments = inputRefs.empty() ? nullptr : inputRefs.data();
+            vkSubpass.colorAttachmentCount = static_cast<uint32_t>(colorRefs.size());
+            vkSubpass.pColorAttachments = colorRefs.empty() ? nullptr : colorRefs.data();
+            vkSubpass.pResolveAttachments = resolveRefs.empty() ? nullptr : resolveRefs.data();
+            vkSubpass.pDepthStencilAttachment = &vkDepthStencilRefs.back();
+            vkSubpass.preserveAttachmentCount = static_cast<uint32_t>(subpass.preserveAttachments.size());
+            vkSubpass.pPreserveAttachments = subpass.preserveAttachments.empty() ? nullptr : subpass.preserveAttachments.data();
+            vkSubpasses.push_back(vkSubpass);
+        }
+
+        // ---------- 依赖关系转换 ----------
+        std::vector<VkSubpassDependency> vkDependencies;
+        vkDependencies.reserve(mDesc.dependencies.size());
+        for (const auto& dep : mDesc.dependencies) {
+            VkSubpassDependency vkDep = {};
+            vkDep.srcSubpass = dep.srcSubpass;
+            vkDep.dstSubpass = dep.dstSubpass;
+            vkDep.srcStageMask = FUNC::RHI_TO_VK_PipelineStageFlags(dep.srcStageMask);
+            vkDep.dstStageMask = FUNC::RHI_TO_VK_PipelineStageFlags(dep.dstStageMask); 
+            vkDep.srcAccessMask = FUNC::RHI_TO_VK_AccessFlags(dep.srcAccessMask);      
+            vkDep.dstAccessMask = FUNC::RHI_TO_VK_AccessFlags(dep.dstAccessMask);      
+            vkDep.dependencyFlags = dep.byRegion ? VK_DEPENDENCY_BY_REGION_BIT : 0;
+            vkDependencies.push_back(vkDep);
+        }
+
+        mVkRenderPass = mDevice->createRenderPass(vkAttachments, vkSubpasses, vkDependencies);
+    }
+
+    void RHI_VK_RenderPass::release() {
+		mDevice->destroyRenderPass(mVkRenderPass);
+    }
+
     //RHI_VK_PipelineLayout
-    void RHI_VK_PipelineLayout::destroy() {
-        if (mDevice && mDevice->getLogicalDevice() != VK_NULL_HANDLE) {
-            if (mPipelineLayout != VK_NULL_HANDLE) {
-                mDevice->destroyPipelineLayout(mPipelineLayout);
-                mPipelineLayout = VK_NULL_HANDLE;
-            }
-
-            // 销毁描述符集布局
-            for (auto layout : mVkDescriptorSetLayouts) {
-                vkDestroyDescriptorSetLayout(mDevice->getLogicalDevice(), layout, nullptr);
-            }
-            mVkDescriptorSetLayouts.clear();
-        }
-    }
-
-    const std::vector<RHI::DescriptorSetLayoutBinding>& RHI_VK_PipelineLayout::getDescriptorSetLayout(uint32_t set) const  {
-        //if (set < mDesc.descriptorSets.size()) {
-            //return mDesc.descriptorSets[set];
-        //}
-        static const std::vector<RHI::DescriptorSetLayoutBinding> empty;
-        return empty;
-    }
-
-    const RHI::PushConstantRange& RHI_VK_PipelineLayout::getPushConstantRange(uint32_t index) const  {
-        if (index < mDesc.pushConstants.size()) {
-            return mDesc.pushConstants[index];
-        }
-        throw std::out_of_range("Push constant range index out of range");
-    }
-
-    uint32_t RHI_VK_PipelineLayout::getBindingPoint(uint32_t set, uint32_t binding) const  {
-        // 简化实现：返回绑定索引本身
-        // 实际实现中可能需要从Vulkan反射数据中获取
-        return binding;
-    }
-
-    size_t RHI_VK_PipelineLayout::getMemoryUsage() const  {
-        size_t size = sizeof(*this);
-        // 计算描述符集布局的内存使用
-
-        return size;
-    }
-
-    VkDescriptorSetLayout RHI_VK_PipelineLayout::getVkDescriptorSetLayout(uint32_t set) const {
-        if (set < mVkDescriptorSetLayouts.size()) {
-            return mVkDescriptorSetLayouts[set];
-        }
-        return VK_NULL_HANDLE;
-    }
-
-    void RHI_VK_PipelineLayout::createPipelineLayout() {
-        // 创建Vulkan描述符集布局
-        mVkDescriptorSetLayouts.reserve(mDesc.descriptorSets.size());
-        // 创建Vulkan推送常量范围
+    RHI_VK_PipelineLayout::RHI_VK_PipelineLayout(
+        Device::Ptr device,
+        const PipelineLayoutDesc& desc,
+        std::vector<VkDescriptorSetLayout> vkDescriptorSetLayouts 
+    ) :mDevice(device), mDesc(desc), mDescriptorSetLayouts(vkDescriptorSetLayouts) {
         std::vector<VkPushConstantRange> vkPushConstants;
         vkPushConstants.reserve(mDesc.pushConstants.size());
 
@@ -528,10 +587,24 @@ namespace StarryEngine::RHI {
             vkRange.size = range.size;
             vkPushConstants.push_back(vkRange);
         }
+        mPipelineLayout = mDevice->createPipelineLayout(vkDescriptorSetLayouts, vkPushConstants);
+    }
 
-        mDevice->createPipelineLayout(mVkDescriptorSetLayouts, vkPushConstants);
+    void RHI_VK_PipelineLayout::release() {
+        mDevice->destroyPipelineLayout(mPipelineLayout);
+    }
 
+    uint32_t RHI_VK_PipelineLayout::getBindingPoint(uint32_t set, uint32_t binding) const  {
+        // 简化实现：返回绑定索引本身
 
+        return binding;
+    }
+
+    size_t RHI_VK_PipelineLayout::getMemoryUsage() const  {
+        size_t size = sizeof(*this);
+        // 计算描述符集布局的内存使用
+
+        return size;
     }
 
     //RHI_VK_Pipeline

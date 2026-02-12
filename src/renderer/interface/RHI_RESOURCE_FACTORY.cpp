@@ -42,7 +42,15 @@ namespace StarryEngine::RHI {
     }
 
     std::unique_ptr<RHIPipelineLayout> VKResourceFactory::createPipelineLayout(const PipelineLayoutDesc& desc) {
-        return std::make_unique<RHI_VK_PipelineLayout>(mDevice, desc);
+        std::vector<VkDescriptorSetLayout> vkDescSetlayouts{};
+		/* //TODO: 描述符未实现
+        for (auto desSet : desc.descriptorSetlayouts) {
+			 auto rhiDesSetlayout = mResourceManager->getDescriptorSet(desSet);
+             auto desSetlayout = static_cast<VkDescriptorSetLayout>(rhiDesSetlayout->getNativeHandle());
+			 vkDescSetlayouts.push_back(desSetlayout);
+        }
+        */
+        return std::make_unique<RHI_VK_PipelineLayout>(mDevice, desc, vkDescSetlayouts);
     }
 
     std::unique_ptr<RHIShaderModule> VKResourceFactory::createShader(const ShaderModuleDesc& desc) {
@@ -55,8 +63,7 @@ namespace StarryEngine::RHI {
     }
 
     std::unique_ptr<RHIRenderPass> VKResourceFactory::createRenderPass(const RenderPassDesc& desc) {
-        // TODO: 实现渲染通道创建
-        throw std::runtime_error("Not implemented: createRenderPass");
+		return std::make_unique<RHI_VK_RenderPass>(mDevice, desc);
     }
 
     std::unique_ptr<RHIFramebuffer> VKResourceFactory::createFramebuffer(const FramebufferDesc& desc) {

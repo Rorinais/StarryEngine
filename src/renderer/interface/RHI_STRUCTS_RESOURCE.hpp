@@ -148,11 +148,9 @@ namespace StarryEngine::RHI {
 
         // 描述符集布局
         virtual uint32_t getDescriptorSetCount() const = 0;
-        virtual const std::vector<DescriptorSetLayoutBinding>& getDescriptorSetLayout(uint32_t set) const = 0;
 
         // 推送常量
         virtual uint32_t getPushConstantRangeCount() const = 0;
-        virtual const PushConstantRange& getPushConstantRange(uint32_t index) const = 0;
 
         // 绑定点
         virtual uint32_t getBindingPoint(uint32_t set, uint32_t binding) const = 0;

@@ -87,6 +87,29 @@ namespace StarryEngine::RHI {
         MAX_CATEGORIES
     };
 
+    enum class DynamicState : uint32_t {
+        Viewport = 0,
+        Scissor,
+        LineWidth,
+        DepthBias,
+        BlendConstants,
+        DepthBounds,
+        StencilCompareMask,
+        StencilWriteMask,
+        StencilReference,
+        VertexInputBindingStride,
+        PrimitiveTopology,
+        CullMode,
+        FrontFace,
+        PolygonMode,
+        ColorWriteEnable,
+        SampleLocations,
+        DiscardRectangle,
+        ConservativeRasterization,
+
+        Count  
+    };
+
     // ==================== 加速结构相关枚举 ====================
 
     /**

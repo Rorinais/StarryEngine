@@ -6,7 +6,29 @@
 #include <glm/glm.hpp>
 
 namespace StarryEngine::RHI {
-        // ==================== 基础几何和数学结构体 ====================
+    using PipelineStageFlags = uint32_t;
+    using AccessFlags = uint32_t;
+
+    inline PipelineStageFlags operator|(PipelineStage a, PipelineStage b) {
+        return static_cast<PipelineStageFlags>(a) | static_cast<PipelineStageFlags>(b);
+    }
+    inline PipelineStageFlags operator|(PipelineStageFlags a, PipelineStage b) {
+        return a | static_cast<PipelineStageFlags>(b);
+    }
+    inline PipelineStageFlags operator|(PipelineStage a, PipelineStageFlags b) {
+        return static_cast<PipelineStageFlags>(a) | b;
+    }
+    inline AccessFlags operator|(AccessFlag a, AccessFlag b) {
+        return static_cast<AccessFlags>(a) | static_cast<AccessFlags>(b);
+    }
+    inline AccessFlags operator|(AccessFlags a, AccessFlag b) {
+        return a | static_cast<AccessFlags>(b);
+    }
+    inline AccessFlags operator|(AccessFlag a, AccessFlags b) {
+        return static_cast<AccessFlags>(a) | b;
+    }
+
+    // ==================== 基础几何和数学结构体 ====================
     /**
      * @brief 版本号结构体
      * @details 用于表示API版本，支持打包为32位整数
@@ -806,13 +828,13 @@ namespace StarryEngine::RHI {
      * @details 描述子通道之间的执行依赖关系
      */
     struct SubpassDependency {
-        uint32_t srcSubpass = 0;                     ///< 源子通道索引
-        uint32_t dstSubpass = 0;                     ///< 目标子通道索引
-        PipelineStage srcStageMask = PipelineStage::TopOfPipe; ///< 源阶段掩码
-        PipelineStage dstStageMask = PipelineStage::BottomOfPipe; ///< 目标阶段掩码
-        AccessFlag srcAccessMask = AccessFlag::None; ///< 源访问掩码
-        AccessFlag dstAccessMask = AccessFlag::None; ///< 目标访问掩码
-        bool byRegion = false;                       ///< 是否为区域依赖
+        uint32_t srcSubpass = 0;
+        uint32_t dstSubpass = 0;
+        PipelineStageFlags srcStageMask = PipelineStageFlags(PipelineStage::TopOfPipe);
+        PipelineStageFlags dstStageMask = PipelineStageFlags(PipelineStage::BottomOfPipe);
+        AccessFlags srcAccessMask = AccessFlags(AccessFlag::None);
+        AccessFlags dstAccessMask = AccessFlags(AccessFlag::None);
+        bool byRegion = false;
 
         bool operator==(const SubpassDependency& other) const {
             return srcSubpass == other.srcSubpass && dstSubpass == other.dstSubpass &&
@@ -1008,20 +1030,39 @@ namespace StarryEngine::RHI {
     // ==================== 着色器和管线结构体 ====================
 
     /**
-     * @brief 顶点属性结构体
-     * @details 描述顶点输入布局中的单个属性
+     * @brief 顶点绑定描述
+     * @details 描述顶点缓冲区的绑定信息
+     */
+    struct VertexBinding {
+        uint32_t binding = 0;           ///< 绑定索引
+        uint32_t stride = 0;            ///< 顶点步长（字节）
+        VertexInputRate inputRate = VertexInputRate::PerVertex; ///< 顶点/实例
+
+        bool operator==(const VertexBinding& other) const {
+            return binding == other.binding && stride == other.stride &&
+                inputRate == other.inputRate;
+        }
+
+        bool operator!=(const VertexBinding& other) const {
+            return !(*this == other);
+        }
+    };
+
+    /**
+     * @brief 顶点属性描述
+     * @details 描述顶点属性的格式和位置
      */
     struct VertexAttribute {
         uint32_t location = 0;          ///< 着色器中的位置索引
-        uint32_t binding = 0;           ///< 绑定索引
+        uint32_t binding = 0;           ///< 关联的绑定索引
+        uint32_t offset = 0;            ///< 缓冲区中的偏移量（字节）
         Format format = Format::Undefined; ///< 数据格式
-        uint32_t offset = 0;            ///< 缓冲区中的偏移量
-        std::string semanticName;       ///< 语义名称（DX兼容）
+        std::string debugName;       
 
         bool operator==(const VertexAttribute& other) const {
             return location == other.location && binding == other.binding &&
-                format == other.format && offset == other.offset &&
-                semanticName == other.semanticName;
+                offset == other.offset && format == other.format &&
+                debugName == other.debugName;
         }
 
         bool operator!=(const VertexAttribute& other) const {
@@ -1030,22 +1071,35 @@ namespace StarryEngine::RHI {
     };
 
     /**
-     * @brief 顶点布局结构体
-     * @details 描述完整的顶点输入布局
+     * @brief 顶点输入状态
+     * @details 完整的顶点输入描述，对应Vulkan的VkPipelineVertexInputStateCreateInfo
      */
-    struct VertexLayout {
-        std::vector<VertexAttribute> attributes; ///< 属性列表
-        uint32_t stride = 0;                     ///< 顶点步长
-        VertexInputRate inputRate = VertexInputRate::PerVertex; ///< 输入速率
-        uint32_t instanceStepRate = 1;           ///< 每N个实例步进一次
+    struct VertexInputState {
+        std::vector<VertexBinding> bindings;      ///< 绑定列表
+        std::vector<VertexAttribute> attributes;  ///< 属性列表
 
-        bool operator==(const VertexLayout& other) const {
-            return attributes == other.attributes && stride == other.stride &&
-                inputRate == other.inputRate && instanceStepRate == other.instanceStepRate;
+        bool operator==(const VertexInputState& other) const {
+            return bindings == other.bindings && attributes == other.attributes;
         }
 
-        bool operator!=(const VertexLayout& other) const {
+        bool operator!=(const VertexInputState& other) const {
             return !(*this == other);
+        }
+
+        // 辅助函数：获取指定绑定的步长
+        uint32_t getStride(uint32_t binding) const {
+            for (const auto& b : bindings) {
+                if (b.binding == binding) return b.stride;
+            }
+            return 0;
+        }
+
+        // 辅助函数：检查是否有指定绑定
+        bool hasBinding(uint32_t binding) const {
+            for (const auto& b : bindings) {
+                if (b.binding == binding) return true;
+            }
+            return false;
         }
     };
 
@@ -1253,12 +1307,12 @@ namespace StarryEngine::RHI {
      * @details 描述管线的资源绑定布局
      */
     struct PipelineLayoutDesc {
-        std::vector<DescriptorPoolHandle> descriptorSets; ///< 描述符集布局
+        std::vector<DescriptorSetLayoutHandle> descriptorSetLayouts; ///< 描述符集布局
         std::vector<PushConstantRange> pushConstants; ///< 推送常量范围
         std::string debugName;                        ///< 调试名称
 
         bool operator==(const PipelineLayoutDesc& other) const {
-            return descriptorSets == other.descriptorSets &&
+            return descriptorSetLayouts == other.descriptorSetLayouts &&
                 pushConstants == other.pushConstants;
         }
 
@@ -1359,8 +1413,8 @@ namespace StarryEngine::RHI {
      */
     struct BlendAttachmentState {
         bool blendEnable = false;                          ///< 是否启用混合
-        BlendFactor srcColorBlendFactor = BlendFactor::One; ///< 源颜色混合因子
-        BlendFactor dstColorBlendFactor = BlendFactor::Zero; ///< 目标颜色混合因子
+        BlendFactor srcColorBlendFactor = BlendFactor::SrcAlpha; ///< 源颜色混合因子
+        BlendFactor dstColorBlendFactor = BlendFactor::OneMinusSrcAlpha; ///< 目标颜色混合因子
         BlendOp colorBlendOp = BlendOp::Add;               ///< 颜色混合操作
         BlendFactor srcAlphaBlendFactor = BlendFactor::One; ///< 源Alpha混合因子
         BlendFactor dstAlphaBlendFactor = BlendFactor::Zero; ///< 目标Alpha混合因子
@@ -1406,6 +1460,47 @@ namespace StarryEngine::RHI {
     };
 
     /**
+     * @brief 多重采样状态结构体
+     * @details 对应VkPipelineMultisampleStateCreateInfo，用于配置抗锯齿
+     */
+    struct MultisampleState {
+        uint32_t rasterizationSamples = 1;     ///< 每个像素的采样数 (1, 2, 4, 8...)[citation:1]
+        bool sampleShadingEnable = false;      ///< 是否启用采样着色（提升质量）[citation:1]
+        float minSampleShading = 1.0f;         ///< 启用采样着色时的最小着色比例[citation:1]
+        std::vector<uint32_t> sampleMask;      ///< 采样遮罩，用于启用/禁用特定采样[citation:4]
+        bool alphaToCoverageEnable = false;    ///< 是否将Alpha值转换为覆盖遮罩[citation:1]
+        bool alphaToOneEnable = false;         ///< 是否将Alpha值强制设为1.0[citation:1]
+
+        bool operator==(const MultisampleState& other) const {
+            return rasterizationSamples == other.rasterizationSamples &&
+                sampleShadingEnable == other.sampleShadingEnable &&
+                minSampleShading == other.minSampleShading &&
+                sampleMask == other.sampleMask &&
+                alphaToCoverageEnable == other.alphaToCoverageEnable &&
+                alphaToOneEnable == other.alphaToOneEnable;
+        }
+        bool operator!=(const MultisampleState& other) const { return !(*this == other); }
+    };
+
+    /**
+     * @brief 视口状态结构体
+     * @details 集中管理视口和裁剪器设置，对应Vulkan的 VkPipelineViewportStateCreateInfo。
+     *          注意：是否为动态状态，由 GraphicsPipelineDesc::dynamicStates 列表决定，
+     *          本结构体只负责存储静态数据。
+     */
+    struct ViewportState {
+        std::vector<Viewport> viewports;    ///< 视口数组
+        std::vector<Rect2D>   scissors;     ///< 裁剪矩形数组
+
+        bool operator==(const ViewportState& other) const {
+            return viewports == other.viewports && scissors == other.scissors;
+        }
+        bool operator!=(const ViewportState& other) const {
+            return !(*this == other);
+        }
+    };
+
+    /**
      * @brief 图形管线描述结构体
      * @details 描述完整的图形渲染管线配置
      */
@@ -1418,7 +1513,7 @@ namespace StarryEngine::RHI {
         ShaderHandle fragmentShader;
 
         // 顶点输入
-        VertexLayout vertexLayout;
+        VertexInputState vertexInput;
 
         // 输入装配
         PrimitiveTopology topology = PrimitiveTopology::TriangleList;
@@ -1428,36 +1523,36 @@ namespace StarryEngine::RHI {
         RasterizerState rasterizer;
         DepthStencilState depthStencil;
         ColorBlendState colorBlend;
+		ViewportState viewport;  
+		MultisampleState multisample;
 
         // 动态状态
-        std::vector<std::string> dynamicStates;  // "Viewport", "Scissor", "LineWidth", etc.
+        std::vector<DynamicState> dynamicStates;  
 
         // 渲染目标
         std::vector<Format> renderTargetFormats;
         Format depthStencilFormat = Format::Undefined;
-        uint32_t sampleCount = 1;
-        uint32_t sampleMask = 0xFFFFFFFF;
-        bool alphaToCoverageEnable = false;
-        bool alphaToOneEnable = false;
 
         // 管线布局
         PipelineLayoutDesc layoutDesc;
 
         // 渲染子通道
-        void* renderPass = nullptr;
+		RenderPassHandle renderPass;
         uint32_t subpass = 0;
 
         std::string debugName;
 
         bool operator==(const GraphicsPipelineDesc& other) const {
-            return vertexLayout == other.vertexLayout &&
+            return vertexInput == other.vertexInput &&
                 topology == other.topology &&
                 rasterizer == other.rasterizer &&
                 depthStencil == other.depthStencil &&
                 colorBlend == other.colorBlend &&
+                multisample == other.multisample &&
+                dynamicStates == other.dynamicStates &&
                 renderTargetFormats == other.renderTargetFormats &&
                 depthStencilFormat == other.depthStencilFormat &&
-                sampleCount == other.sampleCount &&
+                viewport == other.viewport &&
                 layoutDesc == other.layoutDesc;
         }
 

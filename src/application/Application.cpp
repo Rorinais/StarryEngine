@@ -101,11 +101,16 @@ namespace StarryEngine {
 
         createShaderProgram();
 		createBuffer();
+		createRenderPass();
+		createPipelineLayout();
+
+        m_rhi->release(mPipelineLayoutHandle);
 
         for (auto handle: shaderHandles) {
             m_rhi->release(handle);
         }
         
+
 
         while (!glfwWindowShouldClose(m_window->getHandle())) {
             glfwPollEvents();

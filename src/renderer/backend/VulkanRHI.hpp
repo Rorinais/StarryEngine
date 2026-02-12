@@ -41,6 +41,10 @@ namespace StarryEngine{
             return mResourceManager->createGraphicsPipeline(desc);
         }
 
+        StarryEngine::RHI::RenderPassHandle createRenderPass(StarryEngine::RHI::RenderPassDesc desc) {
+            return mResourceManager->createRenderPass(desc);
+		}
+
         StarryEngine::RHI::ShaderHandle createShaderHandle(StarryEngine::RHI::ShaderModuleDesc desc) {
             return mResourceManager->createShader(desc);
         }
@@ -52,6 +56,10 @@ namespace StarryEngine{
         void release(RHI::ShaderHandle handle) {
             mResourceManager->destroy(handle);
         }
+
+        void release(RHI::PipelineLayoutHandle handle) {
+            mResourceManager->destroy(handle);
+		}
 
         RHI::RHIBuffer * getBuffer(RHI::BufferHandle handle) {
             return mResourceManager->getBuffer(handle);

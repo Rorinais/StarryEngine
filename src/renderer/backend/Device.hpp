@@ -219,7 +219,7 @@ namespace StarryEngine {
             uint32_t mipLevels = 1, uint32_t baseArrayLayer = 0,
             uint32_t layerCount = 1, const char* debugName ="");
 
-        void destroyImageView(VkImageView imageView);
+        void destroyImageView(VkImageView& imageView);
 
         // ==================== 组合函数 ====================
 
@@ -231,7 +231,7 @@ namespace StarryEngine {
             uint32_t mipLevels = 1, uint32_t arrayLayers = 1,
             VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_2D);
 
-        void destroyImageWithVMAFull(const VMAImageFull& image);
+        void destroyImageWithVMAFull(VMAImageFull& image);
 
         // 创建完整的图像资源（传统方式：图像+内存+视图）
         TraditionalImageFull createImageTraditionalFull(uint32_t width, uint32_t height, VkFormat format,
@@ -240,26 +240,26 @@ namespace StarryEngine {
             uint32_t mipLevels = 1, uint32_t arrayLayers = 1,
             VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_2D);
 
-        void destroyImageTraditionalFull(const TraditionalImageFull& image);
+        void destroyImageTraditionalFull(TraditionalImageFull& image);
 
         // ==================== 帧缓冲创建和管理 ====================
         VkFramebuffer createFramebuffer(VkRenderPass renderPass,
             const std::vector<VkImageView>& attachments,
             uint32_t width, uint32_t height, uint32_t layers = 1);
-        void destroyFramebuffer(VkFramebuffer framebuffer);
+        void destroyFramebuffer(VkFramebuffer& framebuffer);
 
         // ==================== 渲染通道创建和管理 ====================
         VkRenderPass createRenderPass(const std::vector<VkAttachmentDescription>& attachments,
             const std::vector<VkSubpassDescription>& subpasses,
             const std::vector<VkSubpassDependency>& dependencies);
-        void destroyRenderPass(VkRenderPass renderPass);
+        void destroyRenderPass(VkRenderPass& renderPass);
 
         // ==================== 命令系统 ====================
         VkCommandPool getTransferCommandPool();
 
         VkCommandPool createCommandPool(uint32_t queueFamilyIndex,
             VkCommandPoolCreateFlags flags = 0);
-        void destroyCommandPool(VkCommandPool commandPool);
+        void destroyCommandPool(VkCommandPool& commandPool);
 
         VkCommandBuffer allocateCommandBuffer(VkCommandPool pool,
             VkCommandBufferLevel level = VK_COMMAND_BUFFER_LEVEL_PRIMARY);
@@ -272,15 +272,15 @@ namespace StarryEngine {
         
         VkPipelineLayout createPipelineLayout(const std::vector<VkDescriptorSetLayout>& setLayouts = {},
             const std::vector<VkPushConstantRange>& pushConstants = {});
-        void destroyPipelineLayout(VkPipelineLayout layout);
+        void destroyPipelineLayout(VkPipelineLayout& layout);
 
         VkPipeline createGraphicsPipeline(const VkGraphicsPipelineCreateInfo& createInfo);
         VkPipeline createComputePipeline(const VkComputePipelineCreateInfo& createInfo);
-        void destroyPipeline(VkPipeline pipeline);
+        void destroyPipeline(VkPipeline& pipeline);
 
         VkShaderModule createShaderModule(const std::vector<uint32_t>& code, const std::string& debugName);
 
-        void destroyShaderModule(VkShaderModule module);
+        void destroyShaderModule(VkShaderModule& module);
 
         VkPipelineShaderStageCreateInfo createShaderStageInfo(
             VkShaderModule module,
@@ -290,10 +290,10 @@ namespace StarryEngine {
         // ==================== 描述符系统 ====================
         VkDescriptorPool createDescriptorPool(const std::vector<VkDescriptorPoolSize>& poolSizes,
             uint32_t maxSets);
-        void destroyDescriptorPool(VkDescriptorPool pool);
+        void destroyDescriptorPool(VkDescriptorPool& pool);
 
         VkDescriptorSetLayout createDescriptorSetLayout(const std::vector<VkDescriptorSetLayoutBinding>& bindings);
-        void destroyDescriptorSetLayout(VkDescriptorSetLayout layout);
+        void destroyDescriptorSetLayout(VkDescriptorSetLayout& layout);
 
         VkDescriptorSet allocateDescriptorSet(VkDescriptorPool pool, VkDescriptorSetLayout layout);
         void updateDescriptorSet(VkDescriptorSet set,
@@ -301,12 +301,12 @@ namespace StarryEngine {
 
         // ==================== 同步对象 ====================
         VkSemaphore createSemaphore();
-        void destroySemaphore(VkSemaphore semaphore);
+        void destroySemaphore(VkSemaphore& semaphore);
 
         VkFence createFence(VkFenceCreateFlags flags = 0);
-        void resetFence(VkFence fence);
-        void blockFence(VkFence fence, uint64_t timeout = UINT64_MAX);
-        void destroyFence(VkFence fence);
+        void resetFence(VkFence& fence);
+        void blockFence(VkFence& fence, uint64_t timeout = UINT64_MAX);
+        void destroyFence(VkFence& fence);
 
         // ==================== 采样器 ====================
         VkSampler createSampler(VkFilter magFilter = VK_FILTER_LINEAR,

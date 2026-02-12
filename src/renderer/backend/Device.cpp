@@ -553,7 +553,7 @@ namespace StarryEngine {
         return imageView;
     }
 
-    void Device::destroyImageView(VkImageView imageView) {
+    void Device::destroyImageView(VkImageView& imageView) {
         if (imageView != VK_NULL_HANDLE) {
             vkDestroyImageView(mLogicalDevice, imageView, nullptr);
             imageView = VK_NULL_HANDLE;
@@ -577,7 +577,7 @@ namespace StarryEngine {
         return { image.image, view, image.allocation };
     }
 
-    void Device::destroyImageWithVMAFull(const VMAImageFull& image) {
+    void Device::destroyImageWithVMAFull(VMAImageFull& image) {
         destroyImageView(image.view);
         destroyImageWithVMA(image.image, image.allocation);
     }
@@ -597,7 +597,7 @@ namespace StarryEngine {
         return { image.image, view, image.memory };
     }
 
-    void Device::destroyImageTraditionalFull(const TraditionalImageFull& image) {
+    void Device::destroyImageTraditionalFull(TraditionalImageFull& image) {
         destroyImageView(image.view);
         destroyImageTraditional(image.image, image.memory);
     }
@@ -625,7 +625,7 @@ namespace StarryEngine {
         return framebuffer;
     }
 
-    void Device::destroyFramebuffer(VkFramebuffer framebuffer) {
+    void Device::destroyFramebuffer(VkFramebuffer& framebuffer) {
         if (framebuffer != VK_NULL_HANDLE) {
             vkDestroyFramebuffer(mLogicalDevice, framebuffer, nullptr);
             framebuffer = VK_NULL_HANDLE;
@@ -637,7 +637,7 @@ namespace StarryEngine {
     VkRenderPass Device::createRenderPass(const std::vector<VkAttachmentDescription>& attachments,
         const std::vector<VkSubpassDescription>& subpasses,
         const std::vector<VkSubpassDependency>& dependencies) {
-
+        
         VkRenderPassCreateInfo renderPassInfo = {};
         renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
         renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
@@ -647,7 +647,7 @@ namespace StarryEngine {
         renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
         renderPassInfo.pDependencies = dependencies.data();
 
-        VkRenderPass renderPass;
+        VkRenderPass renderPass = VK_NULL_HANDLE;
         if (vkCreateRenderPass(mLogicalDevice, &renderPassInfo, nullptr, &renderPass) != VK_SUCCESS) {
             throw std::runtime_error("Failed to create render pass!");
         }
@@ -655,7 +655,7 @@ namespace StarryEngine {
         return renderPass;
     }
 
-    void Device::destroyRenderPass(VkRenderPass renderPass) {
+    void Device::destroyRenderPass(VkRenderPass& renderPass) {
         if (renderPass != VK_NULL_HANDLE) {
             vkDestroyRenderPass(mLogicalDevice, renderPass, nullptr);
             renderPass = VK_NULL_HANDLE;
@@ -691,7 +691,7 @@ namespace StarryEngine {
         return commandPool;
     }
 
-    void Device::destroyCommandPool(VkCommandPool commandPool) {
+    void Device::destroyCommandPool(VkCommandPool& commandPool) {
         if (commandPool != VK_NULL_HANDLE) {
             vkDestroyCommandPool(mLogicalDevice, commandPool, nullptr);
             commandPool = VK_NULL_HANDLE;
@@ -765,7 +765,7 @@ namespace StarryEngine {
         return pipelineLayout;
     }
 
-    void Device::destroyPipelineLayout(VkPipelineLayout layout) {
+    void Device::destroyPipelineLayout(VkPipelineLayout& layout) {
         if (layout != VK_NULL_HANDLE) {
             vkDestroyPipelineLayout(mLogicalDevice, layout, nullptr);
             layout = VK_NULL_HANDLE;
@@ -790,7 +790,7 @@ namespace StarryEngine {
         return pipeline;
     }
 
-    void Device::destroyPipeline(VkPipeline pipeline) {
+    void Device::destroyPipeline(VkPipeline& pipeline) {
         if (pipeline != VK_NULL_HANDLE) {
             vkDestroyPipeline(mLogicalDevice, pipeline, nullptr);
             pipeline = VK_NULL_HANDLE;
@@ -810,7 +810,7 @@ namespace StarryEngine {
         return module;
     }
 
-    void Device::destroyShaderModule(VkShaderModule module) {
+    void Device::destroyShaderModule(VkShaderModule& module) {
         if (module!=VK_NULL_HANDLE){
             vkDestroyShaderModule(mLogicalDevice, module, nullptr);
         }
@@ -851,7 +851,7 @@ namespace StarryEngine {
         return descriptorPool;
     }
 
-    void Device::destroyDescriptorPool(VkDescriptorPool pool) {
+    void Device::destroyDescriptorPool(VkDescriptorPool& pool) {
         if (pool != VK_NULL_HANDLE) {
             vkDestroyDescriptorPool(mLogicalDevice, pool, nullptr);
             pool = VK_NULL_HANDLE;
@@ -872,7 +872,7 @@ namespace StarryEngine {
         return layout;
     }
 
-    void Device::destroyDescriptorSetLayout(VkDescriptorSetLayout layout) {
+    void Device::destroyDescriptorSetLayout(VkDescriptorSetLayout& layout) {
         if (layout != VK_NULL_HANDLE) {
             vkDestroyDescriptorSetLayout(mLogicalDevice, layout, nullptr);
             layout = VK_NULL_HANDLE;
@@ -917,7 +917,7 @@ namespace StarryEngine {
         return semaphore;
     }
 
-    void Device::destroySemaphore(VkSemaphore semaphore) {
+    void Device::destroySemaphore(VkSemaphore& semaphore) {
         if (semaphore != VK_NULL_HANDLE) {
             vkDestroySemaphore(mLogicalDevice, semaphore, nullptr);
             semaphore = VK_NULL_HANDLE;
@@ -936,19 +936,19 @@ namespace StarryEngine {
         return fence;
     }
 
-    void Device::resetFence(VkFence fence) {
+    void Device::resetFence(VkFence& fence) {
         if (fence != VK_NULL_HANDLE) {
             vkResetFences(mLogicalDevice, 1, &fence);
         }
     }
 
-    void Device::blockFence(VkFence fence,uint64_t timeout) {
+    void Device::blockFence(VkFence& fence,uint64_t timeout) {
         if (fence != VK_NULL_HANDLE) {
             vkWaitForFences(mLogicalDevice, 1, &fence, VK_TRUE, timeout);
         }
     }
 
-    void Device::destroyFence(VkFence fence) {
+    void Device::destroyFence(VkFence& fence) {
         if (fence != VK_NULL_HANDLE) {
             vkDestroyFence(mLogicalDevice, fence, nullptr);
             fence = VK_NULL_HANDLE;

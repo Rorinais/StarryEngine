@@ -16,6 +16,8 @@
 
 
 namespace StarryEngine {
+    static constexpr uint32_t SUBPASS_EXTERNAL = ~0U;
+    static constexpr uint32_t SUBPASS_MAX_ENUM = 0x7FFFFFFF;
 
     class Application {
     public:
@@ -75,57 +77,6 @@ namespace StarryEngine {
 
         }
 
-        void createPipline() {
-            RHI::GraphicsPipelineDesc desc;
-
-            desc.vertexShader =shaderHandles[0];
-            desc.fragmentShader = shaderHandles[1];
-
-            RHI::PipelineLayoutDesc layoutDesc;
-            layoutDesc.descriptorSets = {};
-            layoutDesc.pushConstants = {};
-            desc.layoutDesc = layoutDesc;
-
-            RHI::VertexLayout vertexLayout;
-            RHI::VertexAttribute vertexAttribute;
-            vertexAttribute.location = 0;
-            vertexAttribute.binding = 0;
-            vertexAttribute.format = RHI::Format::RGBA32_Float;
-            vertexAttribute.offset = 0;
-            vertexLayout.attributes.push_back(vertexAttribute);
-            desc.vertexLayout = vertexLayout;
-
-            desc.topology = RHI::PrimitiveTopology::TriangleList;
-            desc.primitiveRestartEnable = false;
-
-            RHI::RasterizerState rasterizerState;
-            rasterizerState.cullMode = RHI::CullMode::None;
-            rasterizerState.frontFace = RHI::FrontFace::CounterClockwise;
-            rasterizerState.lineWidth = 1.0f;
-            desc.rasterizer = rasterizerState;
-
-            RHI::DepthStencilState depthStencilState;
-            depthStencilState.depthTestEnable = true;
-            depthStencilState.depthWriteEnable = true;
-            depthStencilState.depthCompareOp = RHI::CompareOp::Less;
-            desc.depthStencil = depthStencilState;
-
-            RHI::ColorBlendState colorBlendState;
-            RHI::BlendAttachmentState attachment;
-            colorBlendState.attachments.push_back(attachment);
-    
-            desc.dynamicStates.push_back("Viewport");
-            desc.dynamicStates.push_back("Scissor");
-
-            desc.renderTargetFormats.push_back(RHI::Format::BGRA8_sRGB);
-            desc.depthStencilFormat = RHI::Format::D32_Float;
-
-            desc.renderPass = nullptr;
-            desc.subpass = 0;
-            
-            m_rhi->createGraphicsPipeline(desc);
-        }
-
         void createBuffer() {
             // 创建顶点缓冲区描述
             RHI::BufferDesc bufferDesc;
@@ -165,7 +116,160 @@ namespace StarryEngine {
         }
 
         void createRenderPass() {
+            // 1. 定义附件
+            RHI::AttachmentDesc colorAttachment{
+                .format = RHI::Format::BGRA8_sRGB,
+                .sampleCount = 1,
+                .loadOp = RHI::AttachmentLoadOp::Clear,
+                .storeOp = RHI::AttachmentStoreOp::Store,
+                .stencilLoadOp = RHI::AttachmentLoadOp::DontCare,
+                .stencilStoreOp = RHI::AttachmentStoreOp::DontCare,
+                .initialLayout = RHI::ImageLayout::Undefined,
+                .finalLayout = RHI::ImageLayout::PresentSrc
+            };
 
+            RHI::AttachmentDesc depthAttachment{
+                .format = RHI::Format::D24_UNorm_S8_UInt,
+                .sampleCount = 1,
+                .loadOp = RHI::AttachmentLoadOp::Clear,
+                .storeOp = RHI::AttachmentStoreOp::DontCare,
+                .stencilLoadOp = RHI::AttachmentLoadOp::Clear,
+                .stencilStoreOp = RHI::AttachmentStoreOp::DontCare,
+                .initialLayout = RHI::ImageLayout::Undefined,
+                .finalLayout = RHI::ImageLayout::DepthStencilAttachment
+            };
+
+            // 2. 定义附件引用
+            RHI::AttachmentReference colorAttachmentRef{
+                .attachment = 0,
+                .layout = RHI::ImageLayout::ColorAttachment
+            };
+
+            RHI::AttachmentReference depthAttachmentRef{
+                .attachment = 1,
+                .layout = RHI::ImageLayout::DepthStencilAttachment
+            };
+
+            // 3. 定义子通道
+            RHI::SubpassDesc subpass{
+                .inputAttachments = {},
+                .colorAttachments = { colorAttachmentRef },
+                .resolveAttachments = {},
+                .depthStencilAttachment = depthAttachmentRef,
+                .preserveAttachments = {}
+            };
+
+            // 4. 定义依赖（使用位运算）
+            RHI::SubpassDependency dependency1{
+                .srcSubpass = SUBPASS_EXTERNAL,
+                .dstSubpass = 0,
+                .srcStageMask = static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::BottomOfPipe),
+                .dstStageMask = static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::ColorAttachmentOutput) |
+                                static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::EarlyFragmentTests),
+                .srcAccessMask = static_cast<RHI::AccessFlags>(RHI::AccessFlag::None),
+                .dstAccessMask = static_cast<RHI::AccessFlags>(RHI::AccessFlag::ColorAttachmentWrite) |
+                                 static_cast<RHI::AccessFlags>(RHI::AccessFlag::DepthStencilAttachmentWrite),
+                .byRegion = true
+            };
+
+            RHI::SubpassDependency dependency2{
+                .srcSubpass = 0,
+                .dstSubpass = SUBPASS_EXTERNAL,
+                .srcStageMask = static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::ColorAttachmentOutput) |
+                                static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::LateFragmentTests),
+                .dstStageMask = static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::BottomOfPipe),
+                .srcAccessMask = static_cast<RHI::AccessFlags>(RHI::AccessFlag::ColorAttachmentWrite) |
+                                 static_cast<RHI::AccessFlags>(RHI::AccessFlag::DepthStencilAttachmentWrite),
+                .dstAccessMask = static_cast<RHI::AccessFlags>(RHI::AccessFlag::None),
+                .byRegion = true
+            };
+
+            // 5. 组装渲染通道
+            RHI::RenderPassDesc renderPassDesc{
+                .attachments = { colorAttachment, depthAttachment },
+                .subpasses = { subpass },
+                .dependencies = { dependency1, dependency2 },
+                .debugName = "MainPass"
+            };
+
+            mRenderPassHandle = m_rhi->createRenderPass(renderPassDesc);
+        }
+
+        void createPipelineLayout() {
+            RHI::PipelineLayoutDesc layoutDesc;
+            layoutDesc.descriptorSetLayouts = {};
+            layoutDesc.pushConstants = {};
+            mPipelineLayoutHandle = m_rhi->createPipelineLayout(layoutDesc);
+		}
+
+        void createPipline() {
+            RHI::GraphicsPipelineDesc desc;
+
+            RHI::VertexInputState vertexInputState;
+            RHI::VertexBinding vertexBinding;
+            vertexBinding.binding = 0;
+            vertexBinding.stride = RHI::RHIUtils::getFormatSize(RHI::Format::RGB32_Float);
+            vertexBinding.inputRate = RHI::VertexInputRate::PerVertex;
+            vertexInputState.bindings.push_back(vertexBinding);
+
+            RHI::VertexAttribute vertexAttribute;
+            vertexAttribute.location = 0;
+            vertexAttribute.binding = 0;
+            vertexAttribute.format = RHI::Format::RGB32_Float;
+            vertexAttribute.offset = 0;
+            vertexAttribute.debugName = "POSITION";
+            vertexInputState.attributes.push_back(vertexAttribute);
+            //desc.vertexInput = vertexInputState;
+
+            desc.vertexShader =shaderHandles[0];
+            desc.fragmentShader = shaderHandles[1];
+
+            desc.topology = RHI::PrimitiveTopology::TriangleList;
+            desc.primitiveRestartEnable = false;
+
+            desc.dynamicStates = { RHI::DynamicState::Viewport,RHI::DynamicState::Scissor };
+            desc.viewport.viewports = { {0.0f, 0.0f,static_cast<float>(m_width),static_cast<float>(m_height), 0.0f, 1.0f } };
+            desc.viewport.scissors = { {{0, 0},{m_width, m_height}} };
+
+            RHI::RasterizerState rasterizerState;
+            rasterizerState.cullMode = RHI::CullMode::None;
+            rasterizerState.frontFace = RHI::FrontFace::CounterClockwise;
+            rasterizerState.lineWidth = 1.0f;
+            desc.rasterizer = rasterizerState;
+
+			RHI::MultisampleState multisampleState;
+			multisampleState.rasterizationSamples = 1;
+			multisampleState.sampleShadingEnable = false;
+			desc.multisample = multisampleState;
+
+            RHI::DepthStencilState depthStencilState;
+            depthStencilState.depthTestEnable = true;
+            depthStencilState.depthWriteEnable = true;
+            depthStencilState.depthCompareOp = RHI::CompareOp::Less;
+            desc.depthStencil = depthStencilState;
+
+            RHI::ColorBlendState colorBlendState;
+            RHI::BlendAttachmentState attachment;
+            attachment.blendEnable = true;
+            colorBlendState.attachments = { attachment };
+
+            colorBlendState.logicOpEnable = false;  
+            colorBlendState.logicOp = RHI::LogicOp::Copy; 
+            colorBlendState.blendConstants = { 0.0f, 0.0f, 0.0f, 0.0f };
+			desc.colorBlend = colorBlendState;
+
+            desc.renderTargetFormats = { RHI::Format::BGRA8_sRGB };
+            desc.depthStencilFormat = RHI::Format::D32_Float;
+
+            RHI::PipelineLayoutDesc layoutDesc;
+            layoutDesc.descriptorSetLayouts = {};
+            layoutDesc.pushConstants = {};
+            desc.layoutDesc = layoutDesc;
+
+            desc.renderPass = mRenderPassHandle;
+            desc.subpass = 0;
+            
+            m_rhi->createGraphicsPipeline(desc);
         }
 
     private:
@@ -182,7 +286,10 @@ namespace StarryEngine {
         std::vector<RHI::ShaderHandle> shaderHandles;
 
 		StarryEngine::RHI::BufferHandle mVertexBufferHandle = RHI::BufferHandle::Null();
+		StarryEngine::RHI::RenderPassHandle mRenderPassHandle = RHI::RenderPassHandle::Null();
 		StarryEngine::RHI::RHIBuffer* mVertexBuffer = nullptr;
+
+		StarryEngine::RHI::PipelineLayoutHandle mPipelineLayoutHandle = RHI::PipelineLayoutHandle::Null();
     };
 
 } // namespace StarryEngine
