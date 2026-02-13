@@ -610,23 +610,150 @@ namespace StarryEngine::RHI {
     //RHI_VK_Pipeline
     RHI_VK_Pipeline::RHI_VK_Pipeline(
         Device::Ptr device,
-        const GraphicsPipelineDesc& pipelineDesc,
-        PipelineType type,
-        std::unique_ptr<RHI_VK_PipelineLayout> layout 
-    ) : mDevice(device), mType(type), mDesc(pipelineDesc), mLayout(std::move(layout)) {
+        const GraphicsPipelineDesc& desc,
+        std::vector<VkPipelineShaderStageCreateInfo> shaderStages,
+        VkPipelineLayout pipelineLayout,
+        VkRenderPass renderPass
+    ) : mDevice(device), mDesc(desc), mShaderStages(shaderStages),
+        mPipelineLayout(pipelineLayout), mRenderPass(renderPass) {
 
-        if (!mLayout) {
-            // 如果没有提供布局，使用描述符中的布局描述
-            mLayout = std::make_unique<RHI_VK_PipelineLayout>(mDevice, pipelineDesc.layoutDesc);
+        // 2. 顶点输入状态
+        VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
+        vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+
+        std::vector<VkVertexInputBindingDescription> bindingDescs;
+        std::vector<VkVertexInputAttributeDescription> attributeDescs;
+        // 从 mDesc.vertexInput 转换（注意 createPipeline 中需取消注释）
+        for (const auto& binding : mDesc.vertexInput.bindings) {
+            VkVertexInputBindingDescription b{};
+            b.binding = binding.binding;
+            b.stride = binding.stride;
+            b.inputRate = (binding.inputRate == RHI::VertexInputRate::PerVertex)
+                ? VK_VERTEX_INPUT_RATE_VERTEX : VK_VERTEX_INPUT_RATE_INSTANCE;
+            bindingDescs.push_back(b);
         }
+        for (const auto& attr : mDesc.vertexInput.attributes) {
+            VkVertexInputAttributeDescription a{};
+            a.location = attr.location;
+            a.binding = attr.binding;
+            a.format = FUNC::RHI_TO_VK_Format(attr.format);
+            a.offset = attr.offset;
+            attributeDescs.push_back(a);
+        }
+        vertexInputInfo.vertexBindingDescriptionCount = static_cast<uint32_t>(bindingDescs.size());
+        vertexInputInfo.pVertexBindingDescriptions = bindingDescs.data();
+        vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescs.size());
+        vertexInputInfo.pVertexAttributeDescriptions = attributeDescs.data();
+
+        // 3. 输入装配状态
+        VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
+        inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+        inputAssembly.topology = static_cast<VkPrimitiveTopology>(mDesc.topology);
+        inputAssembly.primitiveRestartEnable = mDesc.primitiveRestartEnable ? VK_TRUE : VK_FALSE;
+
+        // 4. 动态状态（可选）
+        std::vector<VkDynamicState> dynamicStates;
+        for (auto ds : mDesc.dynamicStates) {
+            dynamicStates.push_back(static_cast<VkDynamicState>(ds));
+        }
+        VkPipelineDynamicStateCreateInfo dynamicState{};
+        dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+        dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
+        dynamicState.pDynamicStates = dynamicStates.data();
+
+        // 5. 视口和剪刀（若动态则无需指定具体值，但需提供数量）
+        VkPipelineViewportStateCreateInfo viewportState{};
+        viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+        // 如果视口是动态的，这里只需设置数量，实际值在绘制命令中提供
+        viewportState.viewportCount = static_cast<uint32_t>(mDesc.viewport.viewports.size());
+        viewportState.scissorCount = static_cast<uint32_t>(mDesc.viewport.scissors.size());
+        // 如果非动态，则需要提供具体数据，此处简化处理（假设动态）
+
+        // 6. 光栅化状态
+        VkPipelineRasterizationStateCreateInfo rasterizer{};
+        rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+        rasterizer.depthClampEnable = mDesc.rasterizer.depthClampEnable ? VK_TRUE : VK_FALSE;
+        rasterizer.rasterizerDiscardEnable = mDesc.rasterizer.discardEnable ? VK_TRUE : VK_FALSE;
+        rasterizer.polygonMode = static_cast<VkPolygonMode>(mDesc.rasterizer.polygonMode);
+        rasterizer.cullMode = static_cast<VkCullModeFlags>(mDesc.rasterizer.cullMode);
+        rasterizer.frontFace = static_cast<VkFrontFace>(mDesc.rasterizer.frontFace);
+        rasterizer.depthBiasEnable = mDesc.rasterizer.depthBiasEnable ? VK_TRUE : VK_FALSE;
+        rasterizer.depthBiasConstantFactor = mDesc.rasterizer.depthBiasConstantFactor;
+        rasterizer.depthBiasClamp = mDesc.rasterizer.depthBiasClamp;
+        rasterizer.depthBiasSlopeFactor = mDesc.rasterizer.depthBiasSlopeFactor;
+        rasterizer.lineWidth = mDesc.rasterizer.lineWidth;
+
+        // 7. 多重采样
+        VkPipelineMultisampleStateCreateInfo multisampling{};
+        multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+        multisampling.rasterizationSamples = static_cast<VkSampleCountFlagBits>(mDesc.multisample.rasterizationSamples);
+        multisampling.sampleShadingEnable = mDesc.multisample.sampleShadingEnable ? VK_TRUE : VK_FALSE;
+        multisampling.minSampleShading = mDesc.multisample.minSampleShading;
+        multisampling.pSampleMask = mDesc.multisample.sampleMask.data();
+        multisampling.alphaToCoverageEnable = mDesc.multisample.alphaToCoverageEnable ? VK_TRUE : VK_FALSE;
+        multisampling.alphaToOneEnable = mDesc.multisample.alphaToOneEnable ? VK_TRUE : VK_FALSE;
+
+        // 8. 深度模板状态
+        VkPipelineDepthStencilStateCreateInfo depthStencil{};
+        depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+        depthStencil.depthTestEnable = mDesc.depthStencil.depthTestEnable ? VK_TRUE : VK_FALSE;
+        depthStencil.depthWriteEnable = mDesc.depthStencil.depthWriteEnable ? VK_TRUE : VK_FALSE;
+        depthStencil.depthCompareOp = static_cast<VkCompareOp>(mDesc.depthStencil.depthCompareOp);
+        depthStencil.depthBoundsTestEnable = mDesc.depthStencil.depthBoundsTestEnable ? VK_TRUE : VK_FALSE;
+        depthStencil.stencilTestEnable = mDesc.depthStencil.stencilTestEnable ? VK_TRUE : VK_FALSE;
+        depthStencil.front = convertStencilOpState(mDesc.depthStencil.front);
+        depthStencil.back = convertStencilOpState(mDesc.depthStencil.back);
+        depthStencil.minDepthBounds = mDesc.depthStencil.minDepthBounds;
+        depthStencil.maxDepthBounds = mDesc.depthStencil.maxDepthBounds;
+
+        // 9. 颜色混合状态
+        std::vector<VkPipelineColorBlendAttachmentState> blendAttachments;
+        for (const auto& att : mDesc.colorBlend.attachments) {
+            VkPipelineColorBlendAttachmentState blendAtt{};
+            blendAtt.blendEnable = att.blendEnable ? VK_TRUE : VK_FALSE;
+            blendAtt.srcColorBlendFactor = static_cast<VkBlendFactor>(att.srcColorBlendFactor);
+            blendAtt.dstColorBlendFactor = static_cast<VkBlendFactor>(att.dstColorBlendFactor);
+            blendAtt.colorBlendOp = static_cast<VkBlendOp>(att.colorBlendOp);
+            blendAtt.srcAlphaBlendFactor = static_cast<VkBlendFactor>(att.srcAlphaBlendFactor);
+            blendAtt.dstAlphaBlendFactor = static_cast<VkBlendFactor>(att.dstAlphaBlendFactor);
+            blendAtt.alphaBlendOp = static_cast<VkBlendOp>(att.alphaBlendOp);
+            blendAtt.colorWriteMask = static_cast<VkColorComponentFlags>(att.colorWriteMask);
+            blendAttachments.push_back(blendAtt);
+        }
+
+        VkPipelineColorBlendStateCreateInfo colorBlending{};
+        colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+        colorBlending.logicOpEnable = mDesc.colorBlend.logicOpEnable ? VK_TRUE : VK_FALSE;
+        colorBlending.logicOp = static_cast<VkLogicOp>(mDesc.colorBlend.logicOp);
+        colorBlending.attachmentCount = static_cast<uint32_t>(blendAttachments.size());
+        colorBlending.pAttachments = blendAttachments.data();
+        memcpy(colorBlending.blendConstants, mDesc.colorBlend.blendConstants.data(), 4 * sizeof(float));
+
+        // 12. 创建图形管线
+        VkGraphicsPipelineCreateInfo pipelineInfo{};
+        pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+        pipelineInfo.stageCount = static_cast<uint32_t>(shaderStages.size());
+        pipelineInfo.pStages = shaderStages.data();
+        pipelineInfo.pVertexInputState = &vertexInputInfo;
+        pipelineInfo.pInputAssemblyState = &inputAssembly;
+        pipelineInfo.pViewportState = &viewportState;
+        pipelineInfo.pRasterizationState = &rasterizer;
+        pipelineInfo.pMultisampleState = &multisampling;
+        pipelineInfo.pDepthStencilState = &depthStencil;
+        pipelineInfo.pColorBlendState = &colorBlending;
+        pipelineInfo.pDynamicState = dynamicStates.empty() ? nullptr : &dynamicState;
+        pipelineInfo.layout = pipelineLayout;
+        pipelineInfo.renderPass = renderPass;
+        pipelineInfo.subpass = mDesc.subpass;
+
+        // 调用设备创建管线
+        mPipeline = mDevice->createGraphicsPipeline(pipelineInfo);
+
+		std::cout << ANSIColor::BG_YELLOW<<"[RHI_VK_Pipeline] Created graphics pipeline: "<<ANSIColor::RESET << mPipeline << " for subpass " << mDesc.subpass << std::endl;
     }
 
-    void RHI_VK_Pipeline::release(){
+    void RHI_VK_Pipeline::release() {
         mDevice->destroyPipeline(mPipeline);
-        mLayout.reset();
-    }
-
-    void RHI_VK_Pipeline::createGraphicsPipeline() {
     }
 
     // 辅助函数：转换模板操作状态

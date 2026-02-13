@@ -167,6 +167,7 @@ namespace StarryEngine::RHI {
         std::atomic<size_t> totalDestroyed_{ 0 };
         std::atomic<size_t> maxMemoryUsage_{ 0 };
         size_t memoryWarningThreshold_ = 0;
+		std::atomic<size_t> currentMemoryUsage_{ 0 };
     };
 
     // ==================== 全局资源管理器 ====================
@@ -630,39 +631,31 @@ namespace StarryEngine::RHI {
     };
 
     // ==================== 模板方法实现 ====================
-
     template<typename HandleType, typename ResourceType>
     typename TypedResourceStorage<HandleType, ResourceType>::Handle
-        TypedResourceStorage<HandleType, ResourceType>::create(ResourcePtr data, const std::string& name,
+        TypedResourceStorage<HandleType, ResourceType>::create(ResourcePtr data,
+            const std::string& name,
             const std::string& debugTag) {
-        if (!data) {
-            std::cerr << "[TypedResourceStorage] ERROR: Cannot create resource with null data!" << std::endl;
-            return Handle::Null();
-        }
-
-        // 检查名称是否已存在
+        // 1. 名称唯一性检查（与原有逻辑一致）
         if (!name.empty()) {
             if (nameToIndex_.find(name) != nameToIndex_.end()) {
                 if (debugMode_) {
-                    std::cerr << "[ResourceStorage] Resource with name '" << name << "' already exists!" << std::endl;
+                    std::cerr << "[ResourceStorage] Resource with name '"
+                        << name << "' already exists!" << std::endl;
                 }
                 return Handle::Null();
             }
         }
 
-        // 查找空闲槽位
+        // 2. 遍历现有块，寻找空闲槽位
         for (size_t chunkIdx = 0; chunkIdx < chunks_.size(); ++chunkIdx) {
             auto& chunk = chunks_[chunkIdx];
             for (uint32_t i = 0; i < CHUNK_SIZE; ++i) {
                 if (!chunk.entries[i].alive) {
                     uint32_t globalIdx = static_cast<uint32_t>(chunkIdx * CHUNK_SIZE + i);
-
                     Entry& entry = chunk.entries[i];
 
-                    std::cout << "[TypedResourceStorage] Moving data to entry at index " << globalIdx
-                        << ", data pointer: " << data.get() << std::endl;
-
-                    // 移动数据到entry
+                    // 填充条目数据
                     entry.data = std::move(data);
                     entry.name = name;
                     entry.debugTag = debugTag;
@@ -670,41 +663,66 @@ namespace StarryEngine::RHI {
                     entry.refCount = 1;
                     entry.alive = true;
                     entry.createTime = std::chrono::steady_clock::now();
+                    entry.memoryUsage = entry.data ? entry.data->getMemoryUsage() : 0;
 
-                    if (entry.data) {
-                        entry.memoryUsage = entry.data->getMemoryUsage();
-                    }
-
-                    std::cout << "[TypedResourceStorage] Created entry at index " << globalIdx
-                        << ", generation " << entry.generation
-                        << ", entry.data pointer: " << entry.data.get()
-                        << ", alive: " << entry.alive << std::endl;
-
-                    // 添加到名称映射
+                    // 更新索引映射（此时 name 已保证不重复）
                     if (!name.empty()) {
                         nameToIndex_[name] = globalIdx;
                     }
-
-                    // 添加到调试标签映射
                     if (!debugTag.empty()) {
                         debugTagToIndex_[debugTag] = globalIdx;
                     }
 
+                    // 统计信息：总创建数、内存使用
                     totalCreated_++;
+                    size_t memIncrease = entry.memoryUsage;
+                    size_t newTotal = currentMemoryUsage_.fetch_add(memIncrease) + memIncrease;
+                    size_t oldMax = maxMemoryUsage_.load();
+                    while (newTotal > oldMax) {
+                        if (maxMemoryUsage_.compare_exchange_weak(oldMax, newTotal)) {
+                            break;
+                        }
+                    }
 
                     return Handle::Create(globalIdx, entry.generation);
                 }
             }
         }
 
+        // 3. 无空闲槽位 → 添加新块，直接分配第 0 个槽位
         chunks_.push_back(Chunk{});
+        Chunk& newChunk = chunks_.back();
+        uint32_t globalIdx = static_cast<uint32_t>((chunks_.size() - 1) * CHUNK_SIZE);
+        Entry& entry = newChunk.entries[0];
 
-        if (!data) {
-            std::cerr << "[TypedResourceStorage] ERROR: Data is null after attempting to create new chunk!" << std::endl;
-            return Handle::Null();
+        // 填充条目（与上面分支完全一致）
+        entry.data = std::move(data);
+        entry.name = name;
+        entry.debugTag = debugTag;
+        entry.generation++;
+        entry.refCount = 1;
+        entry.alive = true;
+        entry.createTime = std::chrono::steady_clock::now();
+        entry.memoryUsage = entry.data ? entry.data->getMemoryUsage() : 0;
+
+        if (!name.empty()) {
+            nameToIndex_[name] = globalIdx;
+        }
+        if (!debugTag.empty()) {
+            debugTagToIndex_[debugTag] = globalIdx;
         }
 
-        return create(std::move(data), name, debugTag);
+        totalCreated_++;
+        size_t memIncrease = entry.memoryUsage;
+        size_t newTotal = currentMemoryUsage_.fetch_add(memIncrease) + memIncrease;
+        size_t oldMax = maxMemoryUsage_.load();
+        while (newTotal > oldMax) {
+            if (maxMemoryUsage_.compare_exchange_weak(oldMax, newTotal)) {
+                break;
+            }
+        }
+
+        return Handle::Create(globalIdx, entry.generation);
     }
 
     template<typename HandleType, typename ResourceType>

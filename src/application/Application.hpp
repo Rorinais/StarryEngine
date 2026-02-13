@@ -202,7 +202,7 @@ namespace StarryEngine {
             mPipelineLayoutHandle = m_rhi->createPipelineLayout(layoutDesc);
 		}
 
-        void createPipline() {
+        void createPipeline() {
             RHI::GraphicsPipelineDesc desc;
 
             RHI::VertexInputState vertexInputState;
@@ -261,10 +261,7 @@ namespace StarryEngine {
             desc.renderTargetFormats = { RHI::Format::BGRA8_sRGB };
             desc.depthStencilFormat = RHI::Format::D32_Float;
 
-            RHI::PipelineLayoutDesc layoutDesc;
-            layoutDesc.descriptorSetLayouts = {};
-            layoutDesc.pushConstants = {};
-            desc.layoutDesc = layoutDesc;
+			desc.pipelineLayoutHandle = mPipelineLayoutHandle;
 
             desc.renderPass = mRenderPassHandle;
             desc.subpass = 0;

@@ -15,7 +15,7 @@ namespace StarryEngine::RHI {
 
     std::unique_ptr<RHIPipeline> VKResourceFactory::createPipeline(const GraphicsPipelineDesc& desc) {
         // 创建管线布局
-        auto layout = std::make_unique<RHI_VK_PipelineLayout>(mDevice, desc.layoutDesc);
+        auto layout = static_cast<VkPipelineLayout>(mResourceManager->getPipelineLayout(desc.pipelineLayoutHandle)->getNativeHandle());
 
         auto rhiVertexShader = mResourceManager->getShader(desc.vertexShader);
         auto vertexShader = static_cast<VkShaderModule>(rhiVertexShader->getNativeHandle());
@@ -28,11 +28,14 @@ namespace StarryEngine::RHI {
             mDevice->createShaderStageInfo(fragmentShader,FUNC::RHI_TO_VK_ShaderStageFlag(rhiFragmentShader->getStage()),rhiFragmentShader->getEntryPoint().c_str())
         };
 
+		auto renderPass = static_cast<VkRenderPass>(mResourceManager->getRenderPass(desc.renderPass)->getNativeHandle());
+
         return std::make_unique<RHI_VK_Pipeline>(
             mDevice,
             desc,
-            PipelineType::Graphics,
-            std::move(layout)
+            shaderStage,
+            layout,
+            renderPass
         );
     }
 

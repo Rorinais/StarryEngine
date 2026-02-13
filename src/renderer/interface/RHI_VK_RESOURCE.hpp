@@ -224,18 +224,21 @@ namespace StarryEngine::RHI {
     public:
         RHI_VK_Pipeline(
             Device::Ptr device,
-            const GraphicsPipelineDesc& pipelineDesc,
-            PipelineType type,
-            std::unique_ptr<RHI_VK_PipelineLayout> layout = nullptr
+            const GraphicsPipelineDesc& desc,
+			std::vector<VkPipelineShaderStageCreateInfo> shaderStages,
+			VkPipelineLayout pipelineLayout = VK_NULL_HANDLE,
+			VkRenderPass renderPass = VK_NULL_HANDLE
         );
 
         ~RHI_VK_Pipeline() override { release();}
 
-        PipelineType getType() const override { return mType; }
+        PipelineType getType() const override { return mDesc.type; }
 
-        RHIPipelineLayout* getLayout() const override { return mLayout.get(); }
+        RHIPipelineLayout* getLayout() const override { return nullptr; }
 
-        void setLayout(std::unique_ptr<RHI_VK_PipelineLayout> layout) { mLayout = std::move(layout); }
+        void setLayout(RHI_VK_PipelineLayout* layout) {
+			
+		}
 
         void* getNativeHandle() const override { return reinterpret_cast<void*>(mPipeline); }
 
@@ -243,13 +246,13 @@ namespace StarryEngine::RHI {
 
         size_t getMemoryUsage() const override {return sizeof(*this) + mDesc.debugName.size();}
 
-        const char* getTypeName() const override {return mType == PipelineType::Graphics ? "VK_GraphicsPipeline" : "VK_ComputePipeline";}
+        const char* getTypeName() const override {return mDesc.type == PipelineType::Graphics ? "VK_GraphicsPipeline" : "VK_ComputePipeline";}
 
-        bool isComputePipeline() const override { return mType == PipelineType::Compute; }
+        bool isComputePipeline() const override { return mDesc.type == PipelineType::Compute; }
 
-        bool isGraphicsPipeline() const override { return mType == PipelineType::Graphics; }
+        bool isGraphicsPipeline() const override { return mDesc.type == PipelineType::Graphics; }
 
-        bool isRayTracingPipeline() const override { return mType == PipelineType::RayTracing; }
+        bool isRayTracingPipeline() const override { return mDesc.type == PipelineType::RayTracing; }
 
         bool canBeReloaded() const override { return false; } 
 
@@ -267,9 +270,10 @@ namespace StarryEngine::RHI {
     private:
         Device::Ptr mDevice;
         VkPipeline mPipeline = VK_NULL_HANDLE;
-        std::unique_ptr<RHI_VK_PipelineLayout> mLayout;
-        PipelineType mType;
         GraphicsPipelineDesc mDesc;
+		std::vector<VkPipelineShaderStageCreateInfo> mShaderStages;
+		VkPipelineLayout mPipelineLayout = VK_NULL_HANDLE;
+		VkRenderPass mRenderPass = VK_NULL_HANDLE;
     };
 
 } // namespace StarryEngine::RHI

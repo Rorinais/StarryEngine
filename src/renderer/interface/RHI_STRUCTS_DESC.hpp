@@ -1505,6 +1505,7 @@ namespace StarryEngine::RHI {
      * @details 描述完整的图形渲染管线配置
      */
     struct GraphicsPipelineDesc {
+		PipelineType type = PipelineType::Graphics;     ///< 管线类型
         // 着色器阶段
         ShaderHandle vertexShader;
         ShaderHandle tessellationControlShader;
@@ -1534,7 +1535,7 @@ namespace StarryEngine::RHI {
         Format depthStencilFormat = Format::Undefined;
 
         // 管线布局
-        PipelineLayoutDesc layoutDesc;
+        PipelineLayoutHandle pipelineLayoutHandle;
 
         // 渲染子通道
 		RenderPassHandle renderPass;
@@ -1553,7 +1554,7 @@ namespace StarryEngine::RHI {
                 renderTargetFormats == other.renderTargetFormats &&
                 depthStencilFormat == other.depthStencilFormat &&
                 viewport == other.viewport &&
-                layoutDesc == other.layoutDesc;
+                pipelineLayoutHandle == other.pipelineLayoutHandle;
         }
 
         bool operator!=(const GraphicsPipelineDesc& other) const {

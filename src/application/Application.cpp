@@ -103,8 +103,7 @@ namespace StarryEngine {
 		createBuffer();
 		createRenderPass();
 		createPipelineLayout();
-
-        m_rhi->release(mPipelineLayoutHandle);
+		createPipeline();
 
         for (auto handle: shaderHandles) {
             m_rhi->release(handle);
