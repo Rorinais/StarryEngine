@@ -173,8 +173,9 @@ namespace StarryEngine::RHI {
         Graphics = 0,        ///< 图形队列
         Compute = 1,         ///< 计算队列
         Transfer = 2,        ///< 传输队列
-        SparseBinding = 3,   ///< 稀疏绑定队列
-        Protected = 4        ///< 受保护队列
+		Present = 3,		 ///< 显示队列
+        SparseBinding = 4,   ///< 稀疏绑定队列
+        Protected = 5        ///< 受保护队列
     };
 
     enum class ColorSpace {

@@ -768,5 +768,95 @@ namespace StarryEngine::RHI {
         vkState.reference = state.reference;
         return vkState;
     }
+    
 
+    RHI_VK_CommandPool::RHI_VK_CommandPool(Device::Ptr device, CommandPoolDesc desc):mDevice(device),mDesc(desc) {
+		uint32_t queueFamilyIndex = mDevice->getQueueFamilyIndex(static_cast<uint32_t>(mDesc.queueType));   
+		VkCommandPoolCreateFlags flags = 0;
+        if (mDesc.transient) {
+			flags |= VK_COMMAND_POOL_CREATE_TRANSIENT_BIT;
+        }
+        if (mDesc.resetCommandBuffer) {
+            flags |= VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+        }
+		if (mDesc.protectedMemory) {
+			flags |= VK_COMMAND_POOL_CREATE_PROTECTED_BIT;
+		}
+		if (queueFamilyIndex == INT_MAX) {
+			throw std::runtime_error("Failed to find suitable queue family for command pool");
+		}
+
+		mCommandPool = mDevice->createCommandPool(queueFamilyIndex, flags);
+    }
+    void RHI_VK_CommandPool::release() {
+		mDevice->destroyCommandPool(mCommandPool);
+    }
+
+    const std::vector<VkCommandBuffer> &RHI_VK_CommandPool::allocateCommandBuffers(uint32_t count, CommandBufferLevel level) {
+        if (!isValid() || count == 0) return {};
+
+        VkCommandBufferLevel vkLevel = (level == CommandBufferLevel::Primary)
+            ? VK_COMMAND_BUFFER_LEVEL_PRIMARY : VK_COMMAND_BUFFER_LEVEL_SECONDARY;
+
+        return mDevice->allocateCommandBuffers(mCommandPool, count, vkLevel); 
+    }
+
+    void RHI_VK_CommandPool::freeCommandBuffers(const std::vector<VkCommandBuffer>& commandBuffers) {
+        if (!isValid() || commandBuffers.empty()) return;
+        mDevice->freeCommandBuffers(mCommandPool, commandBuffers);
+    }
+
+    const VkCommandBuffer& RHI_VK_CommandPool::allocateCommandBuffer(CommandBufferLevel level) {
+		return allocateCommandBuffers(0,level)[0];
+    }
+    void RHI_VK_CommandPool::freeCommandBuffer(const VkCommandBuffer& commandBuffer) {
+		freeCommandBuffers({ commandBuffer });
+    }
+
+    void RHI_VK_CommandPool::reset(bool releaseResources) {
+        if (!isValid()) return;
+        VkCommandPoolResetFlags flags = releaseResources ? VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT : static_cast<VkCommandPoolResetFlags>(0);
+        vkResetCommandPool(mDevice->getLogicalDevice(), mCommandPool, flags);
+    }
+
+	RHI_VK_CommandBuffer::RHI_VK_CommandBuffer(Device::Ptr device, CommandBufferDesc desc, RHI_VK_CommandPool* cmdPool)
+		: mDevice(device), mDesc(desc), mCommandPool(cmdPool) {
+		mCommandBuffer = mCommandPool->allocateCommandBuffer(desc.level);
+	}
+
+	void RHI_VK_CommandBuffer::release() {
+		// Command buffers are freed by the command pool, so we don't destroy them here
+		mCommandPool->allocateCommandBuffers(0, mDesc.level); 
+	}
+
+    // 生命周期
+    void RHI_VK_CommandBuffer::begin() {
+		VkCommandBufferBeginInfo beginInfo{};
+		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+		beginInfo.flags = 0; 
+		if (mDesc.oneTimeSubmit) beginInfo.flags |= VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+		if (mDesc.simultaneousUse) beginInfo.flags |= VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT;
+
+		if (mDesc.level == CommandBufferLevel::Primary) {
+			beginInfo.pInheritanceInfo = nullptr;
+        }else{
+			throw std::runtime_error("Secondary command buffers are not supported in this implementation");
+        }
+		if (vkBeginCommandBuffer(mCommandBuffer, &beginInfo) != VK_SUCCESS) {
+			throw std::runtime_error("Failed to begin recording command buffer");
+		}
+
+    }
+    void RHI_VK_CommandBuffer::end() {
+        if (vkEndCommandBuffer(mCommandBuffer) != VK_SUCCESS) {
+            throw std::runtime_error("Failed to end recording command buffer");
+        }
+    }
+    void RHI_VK_CommandBuffer::reset(bool releaseResources) {
+		VkCommandBufferResetFlags flags = releaseResources 
+            ? VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT : static_cast<VkCommandBufferResetFlags>(0);
+		if (vkResetCommandBuffer(mCommandBuffer, flags) != VK_SUCCESS) {
+			throw std::runtime_error("Failed to reset command buffer");
+		}
+    }
 }

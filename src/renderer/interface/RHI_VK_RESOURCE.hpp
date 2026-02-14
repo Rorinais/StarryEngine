@@ -276,4 +276,62 @@ namespace StarryEngine::RHI {
 		VkRenderPass mRenderPass = VK_NULL_HANDLE;
     };
 
+
+    class RHI_VK_CommandPool : public RHICommandPool {
+    public:
+
+		RHI_VK_CommandPool(Device::Ptr device, CommandPoolDesc desc);
+		~RHI_VK_CommandPool() { release(); }
+
+        void release() override;
+		bool isValid() const override { return mCommandPool != VK_NULL_HANDLE; }
+		void* getNativeHandle() const override { return reinterpret_cast<void*>(mCommandPool); }
+		size_t getMemoryUsage() const override { return sizeof(*this) + mDesc.debugName.size(); }
+		const char* getTypeName() const override { return "VK_CommandPool"; }
+
+        const std::vector<VkCommandBuffer> &allocateCommandBuffers(uint32_t count,CommandBufferLevel level);
+        void freeCommandBuffers(const std::vector<VkCommandBuffer>& commandBuffers);
+
+        const VkCommandBuffer& allocateCommandBuffer(CommandBufferLevel level);
+        void freeCommandBuffer(const VkCommandBuffer& commandBuffer);
+
+        void reset(bool releaseResources = false) override;
+
+		QueueType getQueueType() const override { return mDesc.queueType; }
+
+    private:
+		Device::Ptr mDevice;
+		CommandPoolDesc mDesc;
+		VkCommandPool mCommandPool = VK_NULL_HANDLE;
+    };
+
+    class RHI_VK_CommandBuffer : public RHICommandBuffer {
+    public:
+        RHI_VK_CommandBuffer(Device::Ptr device, CommandBufferDesc desc, RHI_VK_CommandPool* cmdPool);
+        ~RHI_VK_CommandBuffer() override { release(); }
+
+        bool isValid() const override { return mCommandBuffer != VK_NULL_HANDLE; }
+        void* getNativeHandle() const override { return reinterpret_cast<void*>(mCommandBuffer); }
+        size_t getMemoryUsage() const override { return sizeof(*this) + mDesc.debugName.size(); }
+        const char* getTypeName() const override { return "VK_CommandBuffer"; }
+        CommandBufferLevel getLevel() const override { return mDesc.level; }
+        CommandBufferType getType() const override { return mDesc.type; }
+        bool isOneTimeSubmit() const override { return mDesc.oneTimeSubmit; }
+        bool isSimultaneousUse() const override { return mDesc.simultaneousUse; }
+
+        void release() override;
+
+
+        // 生命周期
+        void begin()override;
+        void end()override;
+        void reset(bool releaseResources = false)override;
+
+    private:
+        Device::Ptr mDevice;
+        CommandBufferDesc mDesc;
+        VkCommandBuffer mCommandBuffer = VK_NULL_HANDLE;
+		RHI_VK_CommandPool* mCommandPool;
+    };
+
 } // namespace StarryEngine::RHI

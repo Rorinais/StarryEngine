@@ -261,11 +261,11 @@ namespace StarryEngine {
             VkCommandPoolCreateFlags flags = 0);
         void destroyCommandPool(VkCommandPool& commandPool);
 
-        VkCommandBuffer allocateCommandBuffer(VkCommandPool pool,
+        VkCommandBuffer allocateCommandBuffer(VkCommandPool& pool,
             VkCommandBufferLevel level = VK_COMMAND_BUFFER_LEVEL_PRIMARY);
-        std::vector<VkCommandBuffer> allocateCommandBuffers(VkCommandPool pool,
+        std::vector<VkCommandBuffer> allocateCommandBuffers(VkCommandPool& pool,
             uint32_t count, VkCommandBufferLevel level = VK_COMMAND_BUFFER_LEVEL_PRIMARY);
-        void freeCommandBuffers(VkCommandPool pool, const std::vector<VkCommandBuffer>& commandBuffers);
+        void freeCommandBuffers(VkCommandPool& pool, const std::vector<VkCommandBuffer>& commandBuffers);
 
         // ==================== 管道创建和管理 ====================
         VkPipelineLayout createPipelineLayout(const VkPipelineLayoutCreateInfo& pipelineLayoutInfo);
@@ -437,6 +437,25 @@ namespace StarryEngine {
         uint32_t getTransferQueueFamilyIndex() const {
             return mQueueFamilyIndices.transferFamily.value_or(VK_QUEUE_FAMILY_IGNORED);
         }
+
+		uint32_t getComputeQueueFamilyIndex() const {
+			return mQueueFamilyIndices.computeFamily.value_or(VK_QUEUE_FAMILY_IGNORED);
+		}
+
+		uint32_t getQueueFamilyIndex(uint32_t queueType) const {
+			switch (queueType) {
+			case 0:
+				return getGraphicsQueueFamilyIndex();
+			case 1:
+                return getComputeQueueFamilyIndex();
+			case 2:
+				return getTransferQueueFamilyIndex();
+			case 3:
+                return getPresentQueueFamilyIndex();
+			default:
+				return INT_MAX;
+			}
+		}
 
         // ==================== 实用方法 ====================
 

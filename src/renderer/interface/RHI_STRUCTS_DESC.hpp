@@ -661,6 +661,7 @@ namespace StarryEngine::RHI {
      * @details 描述命令缓冲区的属性和行为
      */
     struct CommandBufferDesc {
+		CommandPoolHandle commandPool;                   ///< 命令池句柄
         CommandBufferLevel level = CommandBufferLevel::Primary; ///< 命令缓冲区级别
         CommandBufferType type = CommandBufferType::Graphics;   ///< 命令缓冲区类型
         bool oneTimeSubmit = true;               ///< 是否为一次性提交

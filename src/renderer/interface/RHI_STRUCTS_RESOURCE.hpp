@@ -207,10 +207,212 @@ namespace StarryEngine::RHI {
     public:
         virtual ~RHICommandBuffer() = default;
 
+        virtual CommandBufferLevel getLevel() const = 0;
+        virtual CommandBufferType getType() const = 0;
+		virtual bool isOneTimeSubmit() const = 0;
+		virtual bool isSimultaneousUse() const = 0;
+
         // 生命周期
-        virtual void begin(const CommandBufferDesc& desc = {}) = 0;
+        virtual void begin() = 0;
         virtual void end() = 0;
         virtual void reset(bool releaseResources = false) = 0;
+    };
+
+    // ==================== 命令池接口 ====================
+    class RHICommandPool : public IResource {
+    public:
+        virtual ~RHICommandPool() = default;
+
+        //virtual std::vector<RHICommandBuffer*> allocateCommandBuffers(uint32_t count,CommandBufferLevel level) = 0;
+        //virtual void freeCommandBuffers(const std::vector<RHICommandBuffer*>& commandBuffers) = 0;
+        virtual void reset(bool releaseResources = false) = 0;
+
+        virtual QueueType getQueueType() const = 0;
+    };
+
+    // ==================== 栅栏接口 ====================
+    class RHIFence : public IResource {
+    public:
+        virtual ~RHIFence() = default;
+
+        virtual bool wait(uint64_t timeout = UINT64_MAX) = 0;
+        virtual void reset() = 0;
+        virtual bool isSignaled() const = 0;
+
+        virtual uint64_t getValue() const = 0;
+        virtual void signal(uint64_t value) = 0;
+        virtual bool waitForValue(uint64_t value, uint64_t timeout = UINT64_MAX) = 0;
+    };
+
+    // ==================== 信号量接口 ====================
+    class RHISemaphore : public IResource {
+    public:
+        virtual ~RHISemaphore() = default;
+
+        virtual uint64_t getValue() const = 0;
+        virtual void signal(uint64_t value) = 0;
+        virtual bool wait(uint64_t value, uint64_t timeout = UINT64_MAX) = 0;
+    };
+
+    // ==================== 事件接口 ====================
+    class RHIEvent : public IResource {
+    public:
+        virtual ~RHIEvent() = default;
+
+        virtual bool isSet() const = 0;
+        virtual void set() = 0;
+        virtual void reset() = 0;
+    };
+
+    // ==================== 查询池接口 ====================
+    class RHIQueryPool : public IResource {
+    public:
+        virtual ~RHIQueryPool() = default;
+
+        virtual QueryType getType() const = 0;
+        virtual uint32_t getCount() const = 0;
+
+        virtual std::vector<uint64_t> getResults(
+            uint32_t firstQuery,
+            uint32_t queryCount,
+            uint64_t stride,
+            QueryResultFlags flags) const = 0;
+    };
+
+    // ==================== 加速结构接口 ====================
+    class RHIAccelerationStructure : public IResource {
+    public:
+        virtual ~RHIAccelerationStructure() = default;
+
+        virtual AccelerationStructureType getType() const = 0;
+        virtual uint64_t getSize() const = 0;
+        virtual uint64_t getBuildScratchSize() const = 0;
+        virtual uint64_t getUpdateScratchSize() const = 0;
+
+        virtual void* getDeviceAddress() const = 0;
+    };
+
+    // ==================== 描述符集布局接口 ====================
+    class RHIDescriptorSetLayout : public IResource {
+    public:
+        virtual ~RHIDescriptorSetLayout() = default;
+
+        virtual const std::vector<DescriptorSetLayoutBinding>& getBindings() const = 0;
+        virtual uint32_t getBindingCount() const = 0;
+
+        virtual bool isCompatibleWith(const RHIDescriptorSetLayout* other) const = 0;
+    };
+
+    // ==================== 描述符池接口 ====================
+    class RHIDescriptorPool : public IResource {
+    public:
+        virtual ~RHIDescriptorPool() = default;
+
+        virtual std::vector<DescriptorSetHandle> allocateDescriptorSets(
+            const std::vector<RHIDescriptorSetLayout*>& layouts) = 0;
+
+        virtual void freeDescriptorSets(const std::vector<DescriptorSetHandle>& descriptorSets) = 0;
+        virtual void reset() = 0;
+
+        virtual uint32_t getMaxSets() const = 0;
+        virtual uint32_t getRemainingSets() const = 0;
+    };
+
+    // ==================== 描述符集接口 ====================
+    class RHIDescriptorSet : public IResource {
+    public:
+        virtual ~RHIDescriptorSet() = default;
+
+        virtual void writeBuffer(
+            uint32_t binding,
+            uint32_t arrayElement,
+            RHIBuffer* buffer,
+            uint64_t offset = 0,
+            uint64_t range = 0) = 0;
+
+        virtual void writeTexture(
+            uint32_t binding,
+            uint32_t arrayElement,
+            RHITexture* texture,
+            RHISampler* sampler = nullptr,
+            ImageLayout layout = ImageLayout::ShaderReadOnly) = 0;
+
+        virtual void writeSampler(
+            uint32_t binding,
+            uint32_t arrayElement,
+            RHISampler* sampler) = 0;
+
+        virtual void writeAccelerationStructure(
+            uint32_t binding,
+            uint32_t arrayElement,
+            RHIAccelerationStructure* accelerationStructure) = 0;
+
+        virtual void writeInlineUniformBlock(
+            uint32_t binding,
+            uint32_t offset,
+            uint32_t size,
+            const void* data) = 0;
+
+        virtual void update() = 0;
+        virtual void copyFrom(const RHIDescriptorSet* src, const std::vector<DescriptorCopy>& copies) = 0;
+    };
+
+    // ==================== 交换链接口 ====================
+    class RHISwapChain : public IResource {
+    public:
+        virtual ~RHISwapChain() = default;
+
+        virtual bool acquireNextImage(
+            uint64_t timeout = UINT64_MAX,
+            RHISemaphore* semaphore = nullptr,
+            RHIFence* fence = nullptr) = 0;
+
+        virtual bool present(
+            const std::vector<RHISemaphore*>& waitSemaphores = {}) = 0;
+
+        virtual bool resize(uint32_t width, uint32_t height) = 0;
+        virtual void setVSync(bool enabled) = 0;
+        virtual void setFullscreen(bool enabled) = 0;
+        virtual void setHDR(bool enabled) = 0;
+
+        virtual uint32_t getCurrentImageIndex() const = 0;
+        virtual RHITexture* getCurrentImage() const = 0;
+        virtual RHITexture* getImage(uint32_t index) const = 0;
+        virtual uint32_t getImageCount() const = 0;
+
+        virtual Extent2D getExtent() const = 0;
+        virtual Format getFormat() const = 0;
+        virtual ColorSpace getColorSpace() const = 0;
+        virtual bool isVSyncEnabled() const = 0;
+        virtual bool isFullscreen() const = 0;
+        virtual bool isHDREnabled() const = 0;
+    };
+
+    // ==================== 队列接口 ====================
+    class RHIQueue : public IResource {
+    public:
+        virtual ~RHIQueue() = default;
+
+        virtual QueueType getType() const = 0;
+        virtual uint32_t getFamilyIndex() const = 0;
+        virtual uint32_t getIndex() const = 0;
+        virtual uint64_t getTimestampFrequency() const = 0;
+
+        virtual void submit(
+            const std::vector<SubmitInfo>& submits,
+            RHIFence* fence = nullptr) = 0;
+
+        virtual void present(const PresentInfo& presentInfo) = 0;
+        virtual void waitIdle() = 0;
+
+        virtual uint64_t getLastSubmitId() const = 0;
+        virtual bool isSameFamily(const RHIQueue* other) const = 0;
+    };
+
+    class RHICommandEncoder {
+    public:
+		virtual ~RHICommandEncoder() = default;
+		virtual void end() = 0;
 
         // 状态设置
         virtual void setViewport(const Viewport& viewport) = 0;
@@ -438,199 +640,5 @@ namespace StarryEngine::RHI {
         virtual void beginDebugLabel(const char* label, const float color[4]) = 0;
         virtual void endDebugLabel() = 0;
         virtual void insertDebugLabel(const char* label, const float color[4]) = 0;
-    };
-
-    // ==================== 命令池接口 ====================
-    class RHICommandPool : public IResource {
-    public:
-        virtual ~RHICommandPool() = default;
-
-        virtual std::vector<RHICommandBuffer*> allocateCommandBuffers(
-            uint32_t count,
-            CommandBufferLevel level = CommandBufferLevel::Primary) = 0;
-
-        virtual void freeCommandBuffers(const std::vector<RHICommandBuffer*>& commandBuffers) = 0;
-        virtual void reset(bool releaseResources = false) = 0;
-
-        virtual QueueType getQueueType() const = 0;
-    };
-
-    // ==================== 栅栏接口 ====================
-    class RHIFence : public IResource {
-    public:
-        virtual ~RHIFence() = default;
-
-        virtual bool wait(uint64_t timeout = UINT64_MAX) = 0;
-        virtual void reset() = 0;
-        virtual bool isSignaled() const = 0;
-
-        virtual uint64_t getValue() const = 0;
-        virtual void signal(uint64_t value) = 0;
-        virtual bool waitForValue(uint64_t value, uint64_t timeout = UINT64_MAX) = 0;
-    };
-
-    // ==================== 信号量接口 ====================
-    class RHISemaphore : public IResource {
-    public:
-        virtual ~RHISemaphore() = default;
-
-        virtual uint64_t getValue() const = 0;
-        virtual void signal(uint64_t value) = 0;
-        virtual bool wait(uint64_t value, uint64_t timeout = UINT64_MAX) = 0;
-    };
-
-    // ==================== 事件接口 ====================
-    class RHIEvent : public IResource {
-    public:
-        virtual ~RHIEvent() = default;
-
-        virtual bool isSet() const = 0;
-        virtual void set() = 0;
-        virtual void reset() = 0;
-    };
-
-    // ==================== 查询池接口 ====================
-    class RHIQueryPool : public IResource {
-    public:
-        virtual ~RHIQueryPool() = default;
-
-        virtual QueryType getType() const = 0;
-        virtual uint32_t getCount() const = 0;
-
-        virtual std::vector<uint64_t> getResults(
-            uint32_t firstQuery,
-            uint32_t queryCount,
-            uint64_t stride,
-            QueryResultFlags flags) const = 0;
-    };
-
-    // ==================== 加速结构接口 ====================
-    class RHIAccelerationStructure : public IResource {
-    public:
-        virtual ~RHIAccelerationStructure() = default;
-
-        virtual AccelerationStructureType getType() const = 0;
-        virtual uint64_t getSize() const = 0;
-        virtual uint64_t getBuildScratchSize() const = 0;
-        virtual uint64_t getUpdateScratchSize() const = 0;
-
-        virtual void* getDeviceAddress() const = 0;
-    };
-
-    // ==================== 描述符集布局接口 ====================
-    class RHIDescriptorSetLayout : public IResource {
-    public:
-        virtual ~RHIDescriptorSetLayout() = default;
-
-        virtual const std::vector<DescriptorSetLayoutBinding>& getBindings() const = 0;
-        virtual uint32_t getBindingCount() const = 0;
-
-        virtual bool isCompatibleWith(const RHIDescriptorSetLayout* other) const = 0;
-    };
-
-    // ==================== 描述符池接口 ====================
-    class RHIDescriptorPool : public IResource {
-    public:
-        virtual ~RHIDescriptorPool() = default;
-
-        virtual std::vector<DescriptorSetHandle> allocateDescriptorSets(
-            const std::vector<RHIDescriptorSetLayout*>& layouts) = 0;
-
-        virtual void freeDescriptorSets(const std::vector<DescriptorSetHandle>& descriptorSets) = 0;
-        virtual void reset() = 0;
-
-        virtual uint32_t getMaxSets() const = 0;
-        virtual uint32_t getRemainingSets() const = 0;
-    };
-
-    // ==================== 描述符集接口 ====================
-    class RHIDescriptorSet : public IResource {
-    public:
-        virtual ~RHIDescriptorSet() = default;
-
-        virtual void writeBuffer(
-            uint32_t binding,
-            uint32_t arrayElement,
-            RHIBuffer* buffer,
-            uint64_t offset = 0,
-            uint64_t range = 0) = 0;
-
-        virtual void writeTexture(
-            uint32_t binding,
-            uint32_t arrayElement,
-            RHITexture* texture,
-            RHISampler* sampler = nullptr,
-            ImageLayout layout = ImageLayout::ShaderReadOnly) = 0;
-
-        virtual void writeSampler(
-            uint32_t binding,
-            uint32_t arrayElement,
-            RHISampler* sampler) = 0;
-
-        virtual void writeAccelerationStructure(
-            uint32_t binding,
-            uint32_t arrayElement,
-            RHIAccelerationStructure* accelerationStructure) = 0;
-
-        virtual void writeInlineUniformBlock(
-            uint32_t binding,
-            uint32_t offset,
-            uint32_t size,
-            const void* data) = 0;
-
-        virtual void update() = 0;
-        virtual void copyFrom(const RHIDescriptorSet* src, const std::vector<DescriptorCopy>& copies) = 0;
-    };
-
-    // ==================== 交换链接口 ====================
-    class RHISwapChain : public IResource {
-    public:
-        virtual ~RHISwapChain() = default;
-
-        virtual bool acquireNextImage(
-            uint64_t timeout = UINT64_MAX,
-            RHISemaphore* semaphore = nullptr,
-            RHIFence* fence = nullptr) = 0;
-
-        virtual bool present(
-            const std::vector<RHISemaphore*>& waitSemaphores = {}) = 0;
-
-        virtual bool resize(uint32_t width, uint32_t height) = 0;
-        virtual void setVSync(bool enabled) = 0;
-        virtual void setFullscreen(bool enabled) = 0;
-        virtual void setHDR(bool enabled) = 0;
-
-        virtual uint32_t getCurrentImageIndex() const = 0;
-        virtual RHITexture* getCurrentImage() const = 0;
-        virtual RHITexture* getImage(uint32_t index) const = 0;
-        virtual uint32_t getImageCount() const = 0;
-
-        virtual Extent2D getExtent() const = 0;
-        virtual Format getFormat() const = 0;
-        virtual ColorSpace getColorSpace() const = 0;
-        virtual bool isVSyncEnabled() const = 0;
-        virtual bool isFullscreen() const = 0;
-        virtual bool isHDREnabled() const = 0;
-    };
-
-    // ==================== 队列接口 ====================
-    class RHIQueue : public IResource {
-    public:
-        virtual ~RHIQueue() = default;
-
-        virtual QueueType getType() const = 0;
-        virtual uint32_t getFamilyIndex() const = 0;
-        virtual uint32_t getIndex() const = 0;
-        virtual uint64_t getTimestampFrequency() const = 0;
-
-        virtual void submit(
-            const std::vector<SubmitInfo>& submits,
-            RHIFence* fence = nullptr) = 0;
-
-        virtual void present(const PresentInfo& presentInfo) = 0;
-        virtual void waitIdle() = 0;
-
-        virtual uint64_t getLastSubmitId() const = 0;
-        virtual bool isSameFamily(const RHIQueue* other) const = 0;
     };
 }

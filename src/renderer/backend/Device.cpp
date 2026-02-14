@@ -698,7 +698,7 @@ namespace StarryEngine {
         }
     }
 
-    VkCommandBuffer Device::allocateCommandBuffer(VkCommandPool pool, VkCommandBufferLevel level) {
+    VkCommandBuffer Device::allocateCommandBuffer(VkCommandPool& pool, VkCommandBufferLevel level) {
         VkCommandBufferAllocateInfo allocInfo = {};
         allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
         allocInfo.commandPool = pool;
@@ -713,7 +713,7 @@ namespace StarryEngine {
         return commandBuffer;
     }
 
-    std::vector<VkCommandBuffer> Device::allocateCommandBuffers(VkCommandPool pool,
+    std::vector<VkCommandBuffer> Device::allocateCommandBuffers(VkCommandPool& pool,
         uint32_t count,
         VkCommandBufferLevel level) {
         VkCommandBufferAllocateInfo allocInfo = {};
@@ -730,7 +730,7 @@ namespace StarryEngine {
         return commandBuffers;
     }
 
-    void Device::freeCommandBuffers(VkCommandPool pool, const std::vector<VkCommandBuffer>& commandBuffers) {
+    void Device::freeCommandBuffers(VkCommandPool& pool, const std::vector<VkCommandBuffer>& commandBuffers) {
         vkFreeCommandBuffers(mLogicalDevice, pool,
             static_cast<uint32_t>(commandBuffers.size()),
             commandBuffers.data());

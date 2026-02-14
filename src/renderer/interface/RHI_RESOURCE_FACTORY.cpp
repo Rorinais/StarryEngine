@@ -90,13 +90,12 @@ namespace StarryEngine::RHI {
     }
 
     std::unique_ptr<RHICommandBuffer> VKResourceFactory::createCommandBuffer(const CommandBufferDesc& desc) {
-        // TODO: 实现命令缓冲区创建
-        throw std::runtime_error("Not implemented: createCommandBuffer");
+        auto rhicmdPool = static_cast<RHI_VK_CommandPool*>(mResourceManager->getCommandPool(desc.commandPool));
+		return std::make_unique<RHI_VK_CommandBuffer>(mDevice, desc, rhicmdPool);
     }
 
     std::unique_ptr<RHICommandPool> VKResourceFactory::createCommandPool(const CommandPoolDesc& desc) {
-        // TODO: 实现命令池创建
-        throw std::runtime_error("Not implemented: createCommandPool");
+		return std::make_unique<RHI_VK_CommandPool>(mDevice, desc);
     }
 
     std::unique_ptr<RHIFence> VKResourceFactory::createFence(const FenceDesc& desc) {
@@ -137,14 +136,13 @@ namespace StarryEngine::RHI {
     std::vector<std::unique_ptr<RHICommandBuffer>> VKResourceFactory::createCommandBuffers(
         uint32_t count,
         const CommandBufferDesc& desc) {
+        auto rhicmdPool = static_cast<RHI_VK_CommandPool*>(mResourceManager->getCommandPool(desc.commandPool));
+        std::vector<VkCommandBuffer> cmdBuffers = rhicmdPool->allocateCommandBuffers(count, desc.level);
 
-        std::vector<std::unique_ptr<RHICommandBuffer>> buffers;
-        buffers.reserve(count);
-
-        for (uint32_t i = 0; i < count; ++i) {
-            buffers.push_back(createCommandBuffer(desc));
+		std::vector<std::unique_ptr<RHICommandBuffer>> buffers;
+        for (auto cmdBuffer: cmdBuffers) {
+			buffers.push_back(std::make_unique<RHI_VK_CommandBuffer>(mDevice, desc, rhicmdPool));
         }
-
         return buffers;
     }
 
@@ -165,5 +163,387 @@ namespace StarryEngine::RHI {
     void VKResourceFactory::setResourceManager(ResourceManager* ptr) {
         mResourceManager = ptr;
     }
+
+    // 状态设置
+    void RHI_VK_CommandEncoder::setViewport(const Viewport& viewport) {
+        VkViewport vkViewport{};
+        vkViewport.x = viewport.x;
+        vkViewport.y = viewport.y;
+        vkViewport.width = viewport.width;
+        vkViewport.height = viewport.height;
+        vkViewport.minDepth = viewport.minDepth;
+        vkViewport.maxDepth = viewport.maxDepth;
+        vkCmdSetViewport(getVkCommandBuffer(), 0, 1, &vkViewport);
+    }
+
+    void RHI_VK_CommandEncoder::setViewports(const std::vector<Viewport>& viewports) {
+        std::vector<VkViewport> vkViewports;
+        for (const auto& vp : viewports) {
+            VkViewport vkVp{};
+            vkVp.x = vp.x;
+            vkVp.y = vp.y;
+            vkVp.width = vp.width;
+            vkVp.height = vp.height;
+            vkVp.minDepth = vp.minDepth;
+            vkVp.maxDepth = vp.maxDepth;
+            vkViewports.push_back(vkVp);
+        }
+        vkCmdSetViewport(getVkCommandBuffer(), 0, static_cast<uint32_t>(vkViewports.size()), vkViewports.data());
+    }
+
+    void RHI_VK_CommandEncoder::setScissor(const Rect2D& scissor) {
+        VkRect2D vkScissor{};
+        vkScissor.offset.x = scissor.offset.x;
+        vkScissor.offset.y = scissor.offset.y;
+        vkScissor.extent.width = scissor.extent.width;
+        vkScissor.extent.height = scissor.extent.height;
+        vkCmdSetScissor(getVkCommandBuffer(), 0, 1, &vkScissor);
+    }
+
+    void RHI_VK_CommandEncoder::setScissors(const std::vector<Rect2D>& scissors) {
+        std::vector<VkRect2D> vkScissors;
+        for (const auto& sc : scissors) {
+            VkRect2D vkSc{};
+            vkSc.offset.x = sc.offset.x;
+            vkSc.offset.y = sc.offset.y;
+            vkSc.extent.width = sc.extent.width;
+            vkSc.extent.height = sc.extent.height;
+            vkScissors.push_back(vkSc);
+        }
+        vkCmdSetScissor(getVkCommandBuffer(), 0, static_cast<uint32_t>(vkScissors.size()), vkScissors.data());
+    }
+
+    void RHI_VK_CommandEncoder::setLineWidth(float width) {
+        vkCmdSetLineWidth(getVkCommandBuffer(), width);
+    }
+
+    void RHI_VK_CommandEncoder::setDepthBias(float constantFactor, float clamp, float slopeFactor) {
+        vkCmdSetDepthBias(getVkCommandBuffer(), constantFactor, clamp, slopeFactor);
+    }
+
+    void RHI_VK_CommandEncoder::setBlendConstants(const float constants[4]) {
+        vkCmdSetBlendConstants(getVkCommandBuffer(), constants);
+    }
+
+    void RHI_VK_CommandEncoder::setDepthBounds(float minDepth, float maxDepth) {
+        vkCmdSetDepthBounds(getVkCommandBuffer(), minDepth, maxDepth);
+    }
+
+    void RHI_VK_CommandEncoder::setStencilCompareMask(StencilFace face, uint32_t compareMask) {
+        VkStencilFaceFlags vkFaceFlags = 0;
+        switch (face) {
+        case StencilFace::Front:
+            vkFaceFlags = VK_STENCIL_FACE_FRONT_BIT;
+            break;
+        case StencilFace::Back:
+            vkFaceFlags = VK_STENCIL_FACE_BACK_BIT;
+            break;
+        case StencilFace::FrontAndBack:
+            vkFaceFlags = VK_STENCIL_FACE_FRONT_AND_BACK;
+            break;
+        default:
+            throw std::runtime_error("Invalid stencil face specified");
+        }
+
+        vkCmdSetStencilCompareMask(getVkCommandBuffer(), vkFaceFlags, compareMask);
+    }
+
+    void RHI_VK_CommandEncoder::setStencilWriteMask(StencilFace face, uint32_t writeMask) {
+        VkStencilFaceFlags vkFaceFlags = 0;
+        switch (face) {
+        case StencilFace::Front:
+            vkFaceFlags = VK_STENCIL_FACE_FRONT_BIT;
+            break;
+        case StencilFace::Back:
+            vkFaceFlags = VK_STENCIL_FACE_BACK_BIT;
+            break;
+        case StencilFace::FrontAndBack:
+            vkFaceFlags = VK_STENCIL_FACE_FRONT_AND_BACK;
+            break;
+        default:
+            throw std::runtime_error("Invalid stencil face specified");
+        }
+        vkCmdSetStencilWriteMask(getVkCommandBuffer(), vkFaceFlags, writeMask);
+    }
+
+    void RHI_VK_CommandEncoder::setStencilReference(StencilFace face, uint32_t reference) {
+        VkStencilFaceFlags vkFaceFlags = 0;
+        switch (face) {
+        case StencilFace::Front:
+            vkFaceFlags = VK_STENCIL_FACE_FRONT_BIT;
+            break;
+        case StencilFace::Back:
+            vkFaceFlags = VK_STENCIL_FACE_BACK_BIT;
+            break;
+        case StencilFace::FrontAndBack:
+            vkFaceFlags = VK_STENCIL_FACE_FRONT_AND_BACK;
+            break;
+        default:
+            throw std::runtime_error("Invalid stencil face specified");
+        }
+        vkCmdSetStencilReference(getVkCommandBuffer(), vkFaceFlags, reference);
+    }
+
+    // 管线绑定
+    void RHI_VK_CommandEncoder::bindPipeline(RHIPipeline* pipeline) {
+        auto vkPipeline = static_cast<VkPipeline>(static_cast<RHI_VK_Pipeline*>(pipeline)->getNativeHandle());
+        vkCmdBindPipeline(getVkCommandBuffer(), VK_PIPELINE_BIND_POINT_GRAPHICS, vkPipeline);
+    }
+
+    void RHI_VK_CommandEncoder::bindVertexBuffers(
+        uint32_t firstBinding,
+        const std::vector<RHIBuffer*>& buffers,
+        const std::vector<uint64_t>& offsets) {
+        std::vector<VkBuffer> vkBuffers;
+        for (const auto& buf : buffers) {
+            vkBuffers.push_back(static_cast<VkBuffer>(static_cast<RHI_VK_Buffer*>(buf)->getNativeHandle()));
+        }
+        vkCmdBindVertexBuffers(getVkCommandBuffer(), firstBinding, static_cast<uint32_t>(vkBuffers.size()), vkBuffers.data(), offsets.data());
+    }
+    void RHI_VK_CommandEncoder::bindIndexBuffer(
+        RHIBuffer* buffer,
+        uint64_t offset,
+        IndexType indexType) {
+        VkBuffer vkBuffer = static_cast<VkBuffer>(static_cast<RHI_VK_Buffer*>(buffer)->getNativeHandle());
+        VkIndexType vkIndexType = (indexType == IndexType::UInt16) ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
+        vkCmdBindIndexBuffer(getVkCommandBuffer(), vkBuffer, offset, vkIndexType);
+    }
+
+    // 描述符集绑定
+    void RHI_VK_CommandEncoder::bindDescriptorSets(
+        PipelineBindPoint bindPoint,
+        RHIPipelineLayout* layout,
+        uint32_t firstSet,
+        const std::vector<DescriptorSetHandle>& descriptorSets,
+        const std::vector<uint32_t>& dynamicOffsets) {
+        std::vector<VkDescriptorSet> vkDescriptorSets;
+    }
+
+    // 推送常量
+    void RHI_VK_CommandEncoder::pushConstants(
+        RHIPipelineLayout* layout,
+        ShaderStage stage,
+        uint32_t offset,
+        uint32_t size,
+        const void* values) {
+        RHI_VK_PipelineLayout* rhiLayout = static_cast<RHI_VK_PipelineLayout*>(layout);
+        auto vkLayout = static_cast<VkPipelineLayout>(rhiLayout->getNativeHandle());
+        vkCmdPushConstants(getVkCommandBuffer(), vkLayout, static_cast<VkShaderStageFlags>(stage), offset, size, values);
+    }
+
+    // 绘图命令
+    void RHI_VK_CommandEncoder::draw(
+        uint32_t vertexCount,
+        uint32_t instanceCount,
+        uint32_t firstVertex,
+        uint32_t firstInstance) {
+    }
+
+    void RHI_VK_CommandEncoder::drawIndexed(
+        uint32_t indexCount,
+        uint32_t instanceCount,
+        uint32_t firstIndex,
+        int32_t vertexOff,
+        uint32_t firstInstance) {
+    }
+
+    void RHI_VK_CommandEncoder::drawIndirect(
+        RHIBuffer* buffer,
+        uint64_t offset,
+        uint32_t drawCount,
+        uint32_t stride) {
+    }
+
+    void RHI_VK_CommandEncoder::drawIndexedIndirect(
+        RHIBuffer* buffer,
+        uint64_t offset,
+        uint32_t drawCount,
+        uint32_t stride) {
+    }
+
+    void RHI_VK_CommandEncoder::drawIndirectCount(
+        RHIBuffer* buffer,
+        uint64_t offset,
+        RHIBuffer* countBuffer,
+        uint64_t countOffset,
+        uint32_t maxDrawCount,
+        uint32_t stride) {
+    }
+
+    void RHI_VK_CommandEncoder::drawIndexedIndirectCount(
+        RHIBuffer* buffer,
+        uint64_t offset,
+        RHIBuffer* countBuffer,
+        uint64_t countOffset,
+        uint32_t maxDrawCount,
+        uint32_t stride) {
+    }
+
+    // 计算命令
+    void RHI_VK_CommandEncoder::dispatch(
+        uint32_t groupCountX,
+        uint32_t groupCountY,
+        uint32_t groupCountZ) {
+    }
+
+    void RHI_VK_CommandEncoder::dispatchIndirect(
+        RHIBuffer* buffer,
+        uint64_t offset) {
+    }
+
+    // 光线追踪命令
+    void RHI_VK_CommandEncoder::traceRays(
+        RHIBuffer* raygenTable,
+        RHIBuffer* missTable,
+        RHIBuffer* hitTable,
+        RHIBuffer* callableTable,
+        uint32_t width,
+        uint32_t height,
+        uint32_t depth) {
+    }
+
+    void RHI_VK_CommandEncoder::buildAccelerationStructure(
+        const AccelerationStructureBuildInfo& buildInfo,
+        RHIBuffer* scratchBuffer,
+        uint64_t scratchOffset) {
+    }
+
+    void RHI_VK_CommandEncoder::copyAccelerationStructure(
+        RHIBuffer* src,
+        RHIBuffer* dst,
+        CopyAccelerationStructureMode mode) {
+    }
+
+    // 渲染通道
+    void RHI_VK_CommandEncoder::beginRenderPass(
+        const RenderPassBeginInfo& beginInfo,
+        SubpassContents contents) {
+    }
+
+    void RHI_VK_CommandEncoder::nextSubpass(SubpassContents contents) {}
+    void RHI_VK_CommandEncoder::endRenderPass() {}
+
+    // 执行次命令缓冲区
+    void RHI_VK_CommandEncoder::executeCommands(const std::vector<RHICommandBuffer*>& commandBuffers) {}
+
+    // 资源屏障
+    void RHI_VK_CommandEncoder::pipelineBarrier(
+        PipelineStage srcStage,
+        PipelineStage dstStage,
+        DependencyFlags flags,
+        const std::vector<MemoryBarrier>& memoryBarriers,
+        const std::vector<BufferBarrier>& bufferBarriers,
+        const std::vector<ImageBarrier>& imageBarriers) {
+    }
+
+    // 拷贝操作
+    void RHI_VK_CommandEncoder::copyBuffer(
+        RHIBuffer* src,
+        RHIBuffer* dst,
+        const std::vector<BufferCopyRegion>& regions) {
+    }
+
+    void RHI_VK_CommandEncoder::copyImage(
+        RHITexture* src,
+        RHITexture* dst,
+        const std::vector<ImageCopyRegion>& regions) {
+    }
+
+    void RHI_VK_CommandEncoder::copyBufferToImage(
+        RHIBuffer* src,
+        RHITexture* dst,
+        const std::vector<BufferImageCopyRegion>& regions) {
+    }
+
+    void RHI_VK_CommandEncoder::copyImageToBuffer(
+        RHITexture* src,
+        RHIBuffer* dst,
+        const std::vector<BufferImageCopyRegion>& regions) {
+    }
+
+    void RHI_VK_CommandEncoder::blitImage(
+        RHITexture* src,
+        ImageLayout srcLayout,
+        RHITexture* dst,
+        ImageLayout dstLayout,
+        const std::vector<ImageBlitRegion>& regions,
+        Filter filter) {
+    }
+
+    // 清除操作
+    void RHI_VK_CommandEncoder::clearColorImage(
+        RHITexture* image,
+        ImageLayout layout,
+        const Color& color,
+        const std::vector<ImageSubresourceRange>& ranges) {
+    }
+
+    void RHI_VK_CommandEncoder::clearDepthStencilImage(
+        RHITexture* image,
+        ImageLayout layout,
+        float depth,
+        uint32_t stencil,
+        const std::vector<ImageSubresourceRange>& ranges) {
+    }
+
+    void RHI_VK_CommandEncoder::clearAttachments(
+        const std::vector<ClearAttachment>& attachments,
+        const std::vector<ClearRect>& rects) {
+    }
+
+    // 填充缓冲区
+    void RHI_VK_CommandEncoder::fillBuffer(
+        RHIBuffer* buffer,
+        uint64_t offset,
+        uint64_t size,
+        uint32_t data) {
+    }
+
+    // 更新缓冲区
+    void RHI_VK_CommandEncoder::updateBuffer(
+        RHIBuffer* buffer,
+        uint64_t offset,
+        uint64_t size,
+        const void* data) {
+    }
+
+    // 查询操作
+    void RHI_VK_CommandEncoder::beginQuery(
+        QueryPoolHandle queryPool,
+        uint32_t query,
+        QueryControlFlags flags) {
+    }
+
+    void RHI_VK_CommandEncoder::endQuery(
+        QueryPoolHandle queryPool,
+        uint32_t query) {
+    }
+
+    void RHI_VK_CommandEncoder::writeTimestamp(
+        PipelineStage stage,
+        QueryPoolHandle queryPool,
+        uint32_t query) {
+    }
+
+    void RHI_VK_CommandEncoder::resetQueryPool(
+        QueryPoolHandle queryPool,
+        uint32_t firstQuery,
+        uint32_t queryCount) {
+    }
+
+    void RHI_VK_CommandEncoder::copyQueryPoolResults(
+        QueryPoolHandle queryPool,
+        uint32_t firstQuery,
+        uint32_t queryCount,
+        RHIBuffer* dstBuffer,
+        uint64_t dstOffset,
+        uint64_t stride,
+        QueryResultFlags flags) {
+    }
+
+    // 调试标记
+    void RHI_VK_CommandEncoder::beginDebugLabel(const char* label, const float color[4]) {}
+    void RHI_VK_CommandEncoder::endDebugLabel() {}
+    void RHI_VK_CommandEncoder::insertDebugLabel(const char* label, const float color[4]) {}
 
 } // namespace StarryEngine::RHI

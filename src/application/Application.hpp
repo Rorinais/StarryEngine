@@ -269,6 +269,15 @@ namespace StarryEngine {
             m_rhi->createGraphicsPipeline(desc);
         }
 
+        void createCommandBuffers() {
+			RHI::CommandPoolDesc poolDesc;
+			poolDesc.queueType = RHI::QueueType::Graphics;
+
+			mCommandPoolHandle = m_rhi->createCommandPool(poolDesc);
+            
+        }
+
+
     private:
         // 窗口相关
         uint32_t m_width = 800;
@@ -287,6 +296,8 @@ namespace StarryEngine {
 		StarryEngine::RHI::RHIBuffer* mVertexBuffer = nullptr;
 
 		StarryEngine::RHI::PipelineLayoutHandle mPipelineLayoutHandle = RHI::PipelineLayoutHandle::Null();
+		StarryEngine::RHI::CommandPoolHandle mCommandPoolHandle = RHI::CommandPoolHandle::Null();
+		std::vector<RHI::CommandBufferHandle> mCommandBufferHandles;
     };
 
 } // namespace StarryEngine

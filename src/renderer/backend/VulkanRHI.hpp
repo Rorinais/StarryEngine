@@ -53,6 +53,10 @@ namespace StarryEngine{
             return mResourceManager->createBuffer(desc);
 		}
 
+        StarryEngine::RHI::CommandPoolHandle createCommandPool(StarryEngine::RHI::CommandPoolDesc desc) {
+            return mResourceManager->createCommandPool(desc);
+        }
+
         void release(RHI::ShaderHandle handle) {
             mResourceManager->destroy(handle);
         }
