@@ -1,34 +1,6 @@
 #include"RHI_VK_RESOURCE.hpp"
 
 namespace StarryEngine::RHI {
-    // ANSI 颜色代码定义
-    namespace ANSIColor {
-        const std::string RESET = "\033[0m";
-        const std::string BLACK = "\033[30m";
-        const std::string RED = "\033[31m";
-        const std::string GREEN = "\033[32m";
-        const std::string YELLOW = "\033[33m";
-        const std::string BLUE = "\033[34m";
-        const std::string MAGENTA = "\033[35m";
-        const std::string CYAN = "\033[36m";
-        const std::string WHITE = "\033[37m";
-
-        // 背景色
-        const std::string BG_BLACK = "\033[40m";
-        const std::string BG_RED = "\033[41m";
-        const std::string BG_GREEN = "\033[42m";
-        const std::string BG_YELLOW = "\033[43m";
-        const std::string BG_BLUE = "\033[44m";
-        const std::string BG_MAGENTA = "\033[45m";
-        const std::string BG_CYAN = "\033[46m";
-        const std::string BG_WHITE = "\033[47m";
-
-        // 样式
-        const std::string BOLD = "\033[1m";
-        const std::string UNDERLINE = "\033[4m";
-        const std::string INVERSE = "\033[7m";
-    }
-
     RHI_VK_ShaderModule::RHI_VK_ShaderModule(Device::Ptr device, ShaderModuleDesc desc)
         : mDevice(device), mDesc(desc), mShaderModule(VK_NULL_HANDLE) {
 
@@ -565,6 +537,13 @@ namespace StarryEngine::RHI {
         }
 
         mVkRenderPass = mDevice->createRenderPass(vkAttachments, vkSubpasses, vkDependencies);
+
+        std::cout << "RenderPass attachments:" << std::endl;
+        for (size_t i = 0; i < mDesc.attachments.size(); ++i) {
+            const auto& att = mDesc.attachments[i];
+            std::cout << "  Index " << i << ": format=" << static_cast<int>(att.format)
+                << ", loadOp=" << static_cast<int>(att.loadOp) << std::endl;
+        }
     }
 
     void RHI_VK_RenderPass::release() {
@@ -858,5 +837,18 @@ namespace StarryEngine::RHI {
 		if (vkResetCommandBuffer(mCommandBuffer, flags) != VK_SUCCESS) {
 			throw std::runtime_error("Failed to reset command buffer");
 		}
+    }
+
+    //RHI_VK_Framebuffer
+    RHI_VK_Framebuffer::RHI_VK_Framebuffer(Device::Ptr device,const FramebufferDesc& desc):mDevice(device),mDesc(desc) {
+		mAttachments.reserve(desc.attachments.size());
+        for (const auto& att : desc.attachments) {
+            mAttachments.push_back(static_cast<VkImageView>(att));
+		}
+
+		mFramebuffer = mDevice->createFramebuffer(static_cast<VkRenderPass>(desc.renderPass), mAttachments,desc.extent.width,desc.extent.height,desc.layers);
+    }
+    void RHI_VK_Framebuffer::release(){
+		mDevice->destroyFramebuffer(mFramebuffer);
     }
 }

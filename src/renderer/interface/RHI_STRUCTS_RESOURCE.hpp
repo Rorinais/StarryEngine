@@ -193,13 +193,11 @@ namespace StarryEngine::RHI {
         virtual ~RHIFramebuffer() = default;
 
         virtual const FramebufferDesc& getDesc() const = 0;
-        virtual RHIRenderPass* getRenderPass() const = 0;
         virtual Extent2D getExtent() const = 0;
         virtual uint32_t getLayerCount() const = 0;
 
         // 附件访问
         virtual uint32_t getAttachmentCount() const = 0;
-        virtual RHITexture* getAttachment(uint32_t index) const = 0;
     };
 
     // ==================== 命令缓冲区接口 ====================

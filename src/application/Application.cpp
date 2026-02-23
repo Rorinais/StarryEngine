@@ -3,13 +3,13 @@
 namespace StarryEngine {
     Application::Application() {
         // 1. 创建窗口
-    Window::Config config;
-    config.width = m_width;
-    config.height = m_height;
-    config.title = m_title;
-    config.iconPath = m_icon_path;       
-    config.highDPI = true;                    
-    m_window = Window::create(config);
+        Window::Config config;
+        config.width = m_width;
+        config.height = m_height;
+        config.title = m_title;
+        config.iconPath = m_icon_path;       
+        config.highDPI = false;                    
+        m_window = Window::create(config);
 
         // 2. 设置回调
         m_window->setKeyCallback([this](int key, int action) {
@@ -80,10 +80,11 @@ namespace StarryEngine {
 
         // 交换链配置
         rhiConfig.presentMode = RHI::RHIInitConfig::PresentMode::FIFO; // 垂直同步
+		rhiConfig.swapChainImages = m_frameCount; // 双缓冲
         rhiConfig.srgb = true;
 
         // 帧上下文配置
-        rhiConfig.frameBuffering = 2; // 双缓冲
+        rhiConfig.frameBuffering = m_frameCount; // 双缓冲
         rhiConfig.usePersistentCommandBuffers = true;
 
         // 4. 初始化Vulkan RHI
@@ -104,31 +105,80 @@ namespace StarryEngine {
 		createRenderPass();
 		createPipelineLayout();
 		createPipeline();
+		createFramebuffers();
 
-        for (auto handle: shaderHandles) {
-            m_rhi->release(handle);
-        }
+        //for (auto handle: shaderHandles) {
+        //    m_rhi->release(handle);
+        //}
+
+        auto swapChain = m_rhi->getSwapChain();
+        auto frameContext = m_rhi->getFrameContext();
+        auto acquireFunc = [&](VkSemaphore imageAvailableSemaphore, VkFence inFlightFence, uint32_t& imageIndex)->VkResult {
+            VkResult result = swapChain->acquireNextImage(imageAvailableSemaphore, inFlightFence, UINT16_MAX);
+            if (result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR) {
+                imageIndex = swapChain->getCurrentImageIndex();  
+            }
+            return result;
+            };
+        auto presentFunc = [&](VkQueue presentQueue, uint32_t imageIndex, VkSemaphore renderFinishedSemaphore)->VkResult {
+            return swapChain->present(presentQueue, imageIndex, renderFinishedSemaphore);
+            };
+
+        frameContext->setRecreateCallback([&](uint32_t width, uint32_t height)-> bool {
+            return swapChain->recreate(width, height);
+            });
         
-
-
         while (!glfwWindowShouldClose(m_window->getHandle())) {
             glfwPollEvents();
 
             // 处理窗口大小变化
             if (mFramebufferResized) {
                 mFramebufferResized = false;
-
-                // 等待设备空闲
-                // TODO: 实现交换链重建
-                std::cout << "Window resized to " << m_width << "x" << m_height
-                    << ", swapchain recreation needed." << std::endl;
+                swapChain->recreate(m_width, m_height);
+                // 重新创建帧缓冲
+                mFramebuffers = m_rhi->createFramebuffers(mRenderPassHandle);
             }
 
-            // TODO: 渲染逻辑
-            // 1. 开始帧
-            // 2. 记录命令
-            // 3. 结束帧
-            // 4. 提交渲染
+            FrameContext::FrameInfo frameInfo = frameContext->beginFrame(acquireFunc);
+
+            if (frameInfo.needsRecreate) {
+                if(!frameContext->isRecreationNeeded()) {
+					m_rhi->waitIdle();
+                    swapChain->recreate(m_width, m_height);
+                    continue;
+				}
+            }
+			auto encoder = m_rhi->getCommandEncoder(frameInfo.commandBuffer);
+
+            RHI::RenderPassBeginInfo rpBegin{};
+            rpBegin.renderPass = m_rhi->getRenderPass(mRenderPassHandle)->getNativeHandle();
+            rpBegin.framebuffer = m_rhi->getFramebuffer(mFramebuffers[frameInfo.imageIndex])->getNativeHandle();  // 确保 mFramebuffers 已创建
+            rpBegin.renderArea = { {0, 0}, {m_width, m_height} };
+            rpBegin.clearValues = {
+                RHI::ClearValue{{RHI::Color::Black()}},
+                RHI::ClearValue{1.0f, 0}                 
+            };
+            encoder->beginRenderPass(rpBegin, RHI::SubpassContents::Inline);
+
+            RHI::Viewport viewport{ 0.0f, 0.0f, static_cast<float>(m_width), static_cast<float>(m_height), 0.0f, 1.0f };
+            encoder->setViewport(viewport);
+
+            // 设置动态裁剪矩形
+            RHI::Rect2D scissor{ {0, 0}, {m_width, m_height} };
+            encoder->setScissor(scissor);
+
+            encoder->bindPipeline(m_rhi->getPipeline(mPipelineHandle));
+            encoder->draw(3, 1, 0, 0);
+
+			encoder->endRenderPass();
+
+			frameContext->endFrame(frameInfo);
+
+			VkResult PresentResult = frameContext->submitFrame(frameInfo, m_rhi->getGraphicsQueue(), presentFunc);
+            if (PresentResult == VK_ERROR_OUT_OF_DATE_KHR || PresentResult == VK_SUBOPTIMAL_KHR) {
+				mFramebufferResized = true;
+            }
+
 
             // 简单帧率限制
             static auto lastTime = glfwGetTime();

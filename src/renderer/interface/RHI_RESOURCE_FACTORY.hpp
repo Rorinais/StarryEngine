@@ -118,6 +118,10 @@ namespace StarryEngine::RHI {
             if (mCommandBuffer != nullptr) mCommandBuffer->begin();
 		}
 
+        RHI_VK_CommandEncoder(Device::Ptr device, VkCommandBuffer cmdBuf, ResourceManager* ptr)
+            : mDevice(device), mCommandBuffer(nullptr), mResourceManager(ptr), mEnded(false), m_vkCmdBuf(cmdBuf) {
+        }
+
         ~RHI_VK_CommandEncoder() override { if (mCommandBuffer != nullptr && !mEnded) mCommandBuffer->end(); }
 
 		void end() override {
@@ -355,12 +359,14 @@ namespace StarryEngine::RHI {
         void insertDebugLabel(const char* label, const float color[4]) override;
 
         private:
-			VkCommandBuffer getVkCommandBuffer() const { return mCommandBuffer ? static_cast<VkCommandBuffer>(mCommandBuffer->getNativeHandle()) : VK_NULL_HANDLE; }
+            VkCommandBuffer getVkCommandBuffer() const { return m_vkCmdBuf; }
 
 		private:
 			Device::Ptr mDevice;
 			RHI_VK_CommandBuffer* mCommandBuffer;
 			ResourceManager* mResourceManager;
 			bool mEnded = false;
+
+            VkCommandBuffer m_vkCmdBuf = VK_NULL_HANDLE;
     };
 }

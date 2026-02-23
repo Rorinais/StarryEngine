@@ -875,7 +875,7 @@ namespace StarryEngine::RHI {
     * @details 描述帧缓冲的配置
     */
     struct FramebufferDesc {
-        void* renderPass = nullptr;                 ///< 渲染通道句柄
+        void* renderPass;                           ///< 渲染通道句柄
         std::vector<void*> attachments;             ///< 附件句柄列表
         Extent2D extent;                            ///< 尺寸
         uint32_t layers = 1;                        ///< 层数

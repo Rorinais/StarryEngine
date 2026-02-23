@@ -128,16 +128,16 @@ namespace StarryEngine {
                 .finalLayout = RHI::ImageLayout::PresentSrc
             };
 
-            RHI::AttachmentDesc depthAttachment{
-                .format = RHI::Format::D24_UNorm_S8_UInt,
-                .sampleCount = 1,
-                .loadOp = RHI::AttachmentLoadOp::Clear,
-                .storeOp = RHI::AttachmentStoreOp::DontCare,
-                .stencilLoadOp = RHI::AttachmentLoadOp::Clear,
-                .stencilStoreOp = RHI::AttachmentStoreOp::DontCare,
-                .initialLayout = RHI::ImageLayout::Undefined,
-                .finalLayout = RHI::ImageLayout::DepthStencilAttachment
-            };
+            //RHI::AttachmentDesc depthAttachment{
+            //    .format = RHI::Format::D24_UNorm_S8_UInt,
+            //    .sampleCount = 1,
+            //    .loadOp = RHI::AttachmentLoadOp::Clear,
+            //    .storeOp = RHI::AttachmentStoreOp::DontCare,
+            //    .stencilLoadOp = RHI::AttachmentLoadOp::Clear,
+            //    .stencilStoreOp = RHI::AttachmentStoreOp::DontCare,
+            //    .initialLayout = RHI::ImageLayout::Undefined,
+            //    .finalLayout = RHI::ImageLayout::DepthStencilAttachment
+            //};
 
             // 2. 定义附件引用
             RHI::AttachmentReference colorAttachmentRef{
@@ -145,9 +145,15 @@ namespace StarryEngine {
                 .layout = RHI::ImageLayout::ColorAttachment
             };
 
+            constexpr uint32_t ATTACHMENT_UNUSED = std::numeric_limits<uint32_t>::max();
+            //RHI::AttachmentReference depthAttachmentRef{
+            //    .attachment = 1,
+            //    .layout = RHI::ImageLayout::DepthStencilAttachment
+            //};
+
             RHI::AttachmentReference depthAttachmentRef{
-                .attachment = 1,
-                .layout = RHI::ImageLayout::DepthStencilAttachment
+                .attachment = ATTACHMENT_UNUSED,
+                .layout = RHI::ImageLayout::Undefined
             };
 
             // 3. 定义子通道
@@ -160,35 +166,53 @@ namespace StarryEngine {
             };
 
             // 4. 定义依赖（使用位运算）
+            //RHI::SubpassDependency dependency1{
+            //    .srcSubpass = SUBPASS_EXTERNAL,
+            //    .dstSubpass = 0,
+            //    .srcStageMask = static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::BottomOfPipe),
+            //    .dstStageMask = static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::ColorAttachmentOutput) |
+            //                    static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::EarlyFragmentTests),
+            //    .srcAccessMask = static_cast<RHI::AccessFlags>(RHI::AccessFlag::None),
+            //    .dstAccessMask = static_cast<RHI::AccessFlags>(RHI::AccessFlag::ColorAttachmentWrite) |
+            //                     static_cast<RHI::AccessFlags>(RHI::AccessFlag::DepthStencilAttachmentWrite),
+            //    .byRegion = true
+            //};
+
             RHI::SubpassDependency dependency1{
                 .srcSubpass = SUBPASS_EXTERNAL,
                 .dstSubpass = 0,
-                .srcStageMask = static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::BottomOfPipe),
+                .srcStageMask = static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::ColorAttachmentOutput), // 等待之前的颜色输出完成
                 .dstStageMask = static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::ColorAttachmentOutput) |
                                 static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::EarlyFragmentTests),
-                .srcAccessMask = static_cast<RHI::AccessFlags>(RHI::AccessFlag::None),
-                .dstAccessMask = static_cast<RHI::AccessFlags>(RHI::AccessFlag::ColorAttachmentWrite) |
-                                 static_cast<RHI::AccessFlags>(RHI::AccessFlag::DepthStencilAttachmentWrite),
+                .srcAccessMask = static_cast<RHI::AccessFlags>(RHI::AccessFlag::ColorAttachmentWrite), // 之前的写入需要可见
+                .dstAccessMask = static_cast<RHI::AccessFlags>(RHI::AccessFlag::ColorAttachmentWrite), // 后续将写入颜色附件
                 .byRegion = true
             };
 
-            RHI::SubpassDependency dependency2{
-                .srcSubpass = 0,
-                .dstSubpass = SUBPASS_EXTERNAL,
-                .srcStageMask = static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::ColorAttachmentOutput) |
-                                static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::LateFragmentTests),
-                .dstStageMask = static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::BottomOfPipe),
-                .srcAccessMask = static_cast<RHI::AccessFlags>(RHI::AccessFlag::ColorAttachmentWrite) |
-                                 static_cast<RHI::AccessFlags>(RHI::AccessFlag::DepthStencilAttachmentWrite),
-                .dstAccessMask = static_cast<RHI::AccessFlags>(RHI::AccessFlag::None),
-                .byRegion = true
-            };
+            //RHI::SubpassDependency dependency2{
+            //    .srcSubpass = 0,
+            //    .dstSubpass = SUBPASS_EXTERNAL,
+            //    .srcStageMask = static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::ColorAttachmentOutput) |
+            //                    static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::LateFragmentTests),
+            //    .dstStageMask = static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::BottomOfPipe),
+            //    .srcAccessMask = static_cast<RHI::AccessFlags>(RHI::AccessFlag::ColorAttachmentWrite) |
+            //                     static_cast<RHI::AccessFlags>(RHI::AccessFlag::DepthStencilAttachmentWrite),
+            //    .dstAccessMask = static_cast<RHI::AccessFlags>(RHI::AccessFlag::None),
+            //    .byRegion = true
+            //};
 
             // 5. 组装渲染通道
+            //RHI::RenderPassDesc renderPassDesc{
+            //    .attachments = { colorAttachment, depthAttachment },
+            //    .subpasses = { subpass },
+            //    .dependencies = { dependency1, dependency2 },
+            //    .debugName = "MainPass"
+            //};
+
             RHI::RenderPassDesc renderPassDesc{
-                .attachments = { colorAttachment, depthAttachment },
+                .attachments = { colorAttachment },
                 .subpasses = { subpass },
-                .dependencies = { dependency1, dependency2 },
+                .dependencies = { dependency1 },
                 .debugName = "MainPass"
             };
 
@@ -243,14 +267,14 @@ namespace StarryEngine {
 			desc.multisample = multisampleState;
 
             RHI::DepthStencilState depthStencilState;
-            depthStencilState.depthTestEnable = true;
-            depthStencilState.depthWriteEnable = true;
+            depthStencilState.depthTestEnable = false;
+            depthStencilState.depthWriteEnable = false;
             depthStencilState.depthCompareOp = RHI::CompareOp::Less;
             desc.depthStencil = depthStencilState;
 
             RHI::ColorBlendState colorBlendState;
             RHI::BlendAttachmentState attachment;
-            attachment.blendEnable = true;
+            attachment.blendEnable = false;
             colorBlendState.attachments = { attachment };
 
             colorBlendState.logicOpEnable = false;  
@@ -266,7 +290,7 @@ namespace StarryEngine {
             desc.renderPass = mRenderPassHandle;
             desc.subpass = 0;
             
-            m_rhi->createGraphicsPipeline(desc);
+            mPipelineHandle = m_rhi->createGraphicsPipeline(desc);
         }
 
         void createCommandBuffers() {
@@ -275,6 +299,25 @@ namespace StarryEngine {
 
 			mCommandPoolHandle = m_rhi->createCommandPool(poolDesc);
             
+            if (mCommandPoolHandle != RHI::CommandPoolHandle::Null()) {
+                for (uint32_t i = 0; i < m_frameCount; ++i) {
+                    RHI::CommandBufferDesc cmdBufferDesc;
+                    cmdBufferDesc.commandPool = mCommandPoolHandle;
+                    mCommandBufferHandles.push_back(m_rhi->createCommandBuffer(cmdBufferDesc));
+                }
+            }
+        }
+
+        void createFramebuffers() {
+			RHI::TextureDesc depthTextureDesc;
+			depthTextureDesc.extent = { m_width, m_height, 1 };
+			depthTextureDesc.format = RHI::Format::D32_Float;
+            depthTextureDesc.type = RHI::TextureType::Texture2D;
+			depthTextureDesc.allowDepthStencil = true;
+
+			//mDepthTextureHandle = m_rhi->createDepthTexture(depthTextureDesc);
+
+            mFramebuffers = m_rhi->createFramebuffers(mRenderPassHandle);
         }
 
 
@@ -286,6 +329,7 @@ namespace StarryEngine {
         const char* m_icon_path = "assets/icons/window_icon.png";
         Window::Ptr m_window;
         bool mFramebufferResized = false;
+		uint32_t m_frameCount = 2;
 
         std::shared_ptr<VulkanRHI> m_rhi;
 
@@ -296,8 +340,12 @@ namespace StarryEngine {
 		StarryEngine::RHI::RHIBuffer* mVertexBuffer = nullptr;
 
 		StarryEngine::RHI::PipelineLayoutHandle mPipelineLayoutHandle = RHI::PipelineLayoutHandle::Null();
+		StarryEngine::RHI::PipelineHandle mPipelineHandle = RHI::PipelineHandle::Null();
+
 		StarryEngine::RHI::CommandPoolHandle mCommandPoolHandle = RHI::CommandPoolHandle::Null();
 		std::vector<RHI::CommandBufferHandle> mCommandBufferHandles;
+
+		std::vector<RHI::FramebufferHandle> mFramebuffers;
     };
 
 } // namespace StarryEngine

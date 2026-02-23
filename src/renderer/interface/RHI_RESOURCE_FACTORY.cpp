@@ -9,8 +9,24 @@ namespace StarryEngine::RHI {
     }
 
     std::unique_ptr<RHITexture> VKResourceFactory::createTexture(const TextureDesc& desc) {
-        // TODO: 实现Vulkan纹理创建
-        throw std::runtime_error("Not implemented: createTexture");
+        VkFormat format = FUNC::RHI_TO_VK_Format(desc.format);
+        if (desc.allowDepthStencil) {
+            VkFormat defaultVkFormat = mDevice->findDepthFormat();
+			VkFormat requestedVkFormat = FUNC::RHI_TO_VK_Format(desc.format);
+
+            if (defaultVkFormat != requestedVkFormat){
+                std::cout<< ANSIColor::BG_RED
+                    << "Warning: Requested depth-stencil format " 
+                    << FUNC::RHI_TO_VK_Format(desc.format) 
+					<< " is not supported. Using default depth format " 
+                    << defaultVkFormat
+					<< ANSIColor::RESET
+                    << std::endl;
+				format = defaultVkFormat;
+            }
+        }
+
+		throw std::runtime_error("Not implemented: createTexture");
     }
 
     std::unique_ptr<RHIPipeline> VKResourceFactory::createPipeline(const GraphicsPipelineDesc& desc) {
@@ -70,8 +86,7 @@ namespace StarryEngine::RHI {
     }
 
     std::unique_ptr<RHIFramebuffer> VKResourceFactory::createFramebuffer(const FramebufferDesc& desc) {
-        // TODO: 实现帧缓冲创建
-        throw std::runtime_error("Not implemented: createFramebuffer");
+		return std::make_unique<RHI_VK_Framebuffer>(mDevice, desc);
     }
 
     std::unique_ptr<RHIDescriptorSet> VKResourceFactory::createDescriptorSet(const DescriptorSetDesc& desc) {
@@ -316,7 +331,38 @@ namespace StarryEngine::RHI {
         uint32_t firstSet,
         const std::vector<DescriptorSetHandle>& descriptorSets,
         const std::vector<uint32_t>& dynamicOffsets) {
-        std::vector<VkDescriptorSet> vkDescriptorSets;
+        //if (!layout || descriptorSets.empty()) return;
+
+        //// 获取 Vulkan 布局
+        //auto vkLayout = static_cast<VkPipelineLayout>(layout->getNativeHandle());
+
+        //// 转换描述符集句柄为 VkDescriptorSet
+        //std::vector<VkDescriptorSet> vkSets;
+        //vkSets.reserve(descriptorSets.size());
+        //for (const auto& handle : descriptorSets) {
+        //    if (mResourceManager) {
+        //        VkDescriptorSet set = mResourceManager->getDescriptorSet(handle);
+        //        vkSets.push_back(set);
+        //    }
+        //    else {
+        //        vkSets.push_back(VK_NULL_HANDLE);
+        //    }
+        //}
+
+        //VkPipelineBindPoint vkBindPoint = (bindPoint == PipelineBindPoint::Graphics)
+        //    ? VK_PIPELINE_BIND_POINT_GRAPHICS
+        //    : VK_PIPELINE_BIND_POINT_COMPUTE;
+
+        //vkCmdBindDescriptorSets(
+        //    getVkCommandBuffer(),
+        //    vkBindPoint,
+        //    vkLayout,
+        //    firstSet,
+        //    static_cast<uint32_t>(vkSets.size()),
+        //    vkSets.data(),
+        //    static_cast<uint32_t>(dynamicOffsets.size()),
+        //    dynamicOffsets.data()
+        //);
     }
 
     // 推送常量
@@ -337,6 +383,7 @@ namespace StarryEngine::RHI {
         uint32_t instanceCount,
         uint32_t firstVertex,
         uint32_t firstInstance) {
+		vkCmdDraw(getVkCommandBuffer(), vertexCount, instanceCount, firstVertex, firstInstance);
     }
 
     void RHI_VK_CommandEncoder::drawIndexed(
@@ -345,6 +392,7 @@ namespace StarryEngine::RHI {
         uint32_t firstIndex,
         int32_t vertexOff,
         uint32_t firstInstance) {
+		vkCmdDrawIndexed(getVkCommandBuffer(), indexCount, instanceCount, firstIndex, vertexOff, firstInstance);
     }
 
     void RHI_VK_CommandEncoder::drawIndirect(
@@ -352,6 +400,7 @@ namespace StarryEngine::RHI {
         uint64_t offset,
         uint32_t drawCount,
         uint32_t stride) {
+       
     }
 
     void RHI_VK_CommandEncoder::drawIndexedIndirect(
@@ -414,14 +463,51 @@ namespace StarryEngine::RHI {
         CopyAccelerationStructureMode mode) {
     }
 
-    // 渲染通道
     void RHI_VK_CommandEncoder::beginRenderPass(
         const RenderPassBeginInfo& beginInfo,
         SubpassContents contents) {
+
+        std::vector<VkClearValue> vkClearValues;
+        vkClearValues.reserve(beginInfo.clearValues.size());
+
+        for (size_t i = 0; i < beginInfo.clearValues.size(); ++i) {
+            const auto& cv = beginInfo.clearValues[i];
+            VkClearValue vkCv{};
+
+            // 当前只有一个颜色附件，所有清除值都作为颜色清除
+            vkCv.color.float32[0] = cv.color.r;
+            vkCv.color.float32[1] = cv.color.g;
+            vkCv.color.float32[2] = cv.color.b;
+            vkCv.color.float32[3] = cv.color.a;
+            // 注意：不设置 depthStencil 字段，避免覆盖 color
+
+            vkClearValues.push_back(vkCv);
+        }
+
+        VkRenderPassBeginInfo vkBeginInfo{};
+        vkBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        vkBeginInfo.renderPass = static_cast<VkRenderPass>(beginInfo.renderPass);
+        vkBeginInfo.framebuffer = static_cast<VkFramebuffer>(beginInfo.framebuffer);
+        vkBeginInfo.renderArea.offset.x = beginInfo.renderArea.offset.x;
+        vkBeginInfo.renderArea.offset.y = beginInfo.renderArea.offset.y;
+        vkBeginInfo.renderArea.extent.width = beginInfo.renderArea.extent.width;
+        vkBeginInfo.renderArea.extent.height = beginInfo.renderArea.extent.height;
+        vkBeginInfo.clearValueCount = static_cast<uint32_t>(vkClearValues.size());
+        vkBeginInfo.pClearValues = vkClearValues.data();
+
+        VkSubpassContents vkContents = (contents == SubpassContents::Inline)
+            ? VK_SUBPASS_CONTENTS_INLINE
+            : VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS;
+
+        vkCmdBeginRenderPass(getVkCommandBuffer(), &vkBeginInfo, vkContents);
     }
 
-    void RHI_VK_CommandEncoder::nextSubpass(SubpassContents contents) {}
-    void RHI_VK_CommandEncoder::endRenderPass() {}
+    void RHI_VK_CommandEncoder::nextSubpass(SubpassContents contents) {
+		vkCmdNextSubpass(getVkCommandBuffer(), (contents == SubpassContents::Inline) ? VK_SUBPASS_CONTENTS_INLINE : VK_SUBPASS_CONTENTS_SECONDARY_COMMAND_BUFFERS);
+    }
+    void RHI_VK_CommandEncoder::endRenderPass() {
+		vkCmdEndRenderPass(getVkCommandBuffer());
+    }
 
     // 执行次命令缓冲区
     void RHI_VK_CommandEncoder::executeCommands(const std::vector<RHICommandBuffer*>& commandBuffers) {}
@@ -545,5 +631,6 @@ namespace StarryEngine::RHI {
     void RHI_VK_CommandEncoder::beginDebugLabel(const char* label, const float color[4]) {}
     void RHI_VK_CommandEncoder::endDebugLabel() {}
     void RHI_VK_CommandEncoder::insertDebugLabel(const char* label, const float color[4]) {}
+
 
 } // namespace StarryEngine::RHI

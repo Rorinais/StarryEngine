@@ -162,13 +162,12 @@ namespace StarryEngine {
         mFormat = mSurfaceFormat.format;
 
         // 确定图像数量
-        uint32_t imageCount = support.capabilities.minImageCount + 1;
-        if (support.capabilities.maxImageCount > 0 && imageCount > support.capabilities.maxImageCount) {
-            imageCount = support.capabilities.maxImageCount;
+        uint32_t imageCount = mConfig.minImageCount; // 以配置值为基准
+        if (imageCount < support.capabilities.minImageCount) {
+            imageCount = support.capabilities.minImageCount; // 不低于设备最小值
         }
-
-        if (imageCount < mConfig.minImageCount) {
-            imageCount = mConfig.minImageCount;
+        if (support.capabilities.maxImageCount > 0 && imageCount > support.capabilities.maxImageCount) {
+            imageCount = support.capabilities.maxImageCount; // 不超过设备最大值
         }
 
         // 创建交换链
