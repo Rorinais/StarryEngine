@@ -147,6 +147,7 @@ namespace StarryEngine::RHI {
     using RenderPassHandle = TypedHandle<ResourceCategory::RenderPass>;
     using FramebufferHandle = TypedHandle<ResourceCategory::Framebuffer>;
     using DescriptorSetHandle = TypedHandle<ResourceCategory::DescriptorSet>;
+    using DescriptorSetLayoutHandle = TypedHandle<ResourceCategory::DescriptorSetLayout>;
     using DescriptorPoolHandle = TypedHandle<ResourceCategory::DescriptorPool>;
     using SamplerHandle = TypedHandle<ResourceCategory::Sampler>;
     using QueryPoolHandle = TypedHandle<ResourceCategory::QueryPool>;
@@ -156,7 +157,6 @@ namespace StarryEngine::RHI {
     using SemaphoreHandle = TypedHandle<ResourceCategory::Semaphore>;
     using EventHandle = TypedHandle<ResourceCategory::Event>;
     using SwapChainHandle = TypedHandle<ResourceCategory::SwapChain>;
-    using DescriptorSetLayoutHandle = TypedHandle<ResourceCategory::DescriptorSetLayout>;
     using AccelerationStructureHandle = TypedHandle<ResourceCategory::AccelerationStructure>;
     using QueueHandle = TypedHandle<ResourceCategory::Queue>;
 

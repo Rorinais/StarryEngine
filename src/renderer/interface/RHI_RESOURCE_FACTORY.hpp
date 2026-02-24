@@ -36,17 +36,17 @@ namespace StarryEngine::RHI {
         virtual std::unique_ptr<RHIDescriptorSet> createDescriptorSet(const DescriptorSetDesc& desc) = 0;
         virtual std::unique_ptr<RHIDescriptorPool> createDescriptorPool(const DescriptorPoolDesc& desc) = 0;
         virtual std::unique_ptr<RHIDescriptorSetLayout> createDescriptorSetLayout(const DescriptorSetLayoutDesc& desc) = 0;
-        virtual std::unique_ptr<RHICommandBuffer> createCommandBuffer(const CommandBufferDesc& desc) = 0;
-        virtual std::unique_ptr<RHICommandPool> createCommandPool(const CommandPoolDesc& desc) = 0;
-        virtual std::unique_ptr<RHIFence> createFence(const FenceDesc& desc) = 0;
-        virtual std::unique_ptr<RHISemaphore> createSemaphore(const SemaphoreDesc& desc) = 0;
-        virtual std::unique_ptr<RHIEvent> createEvent(const EventDesc& desc) = 0;
-        virtual std::unique_ptr<RHIQueryPool> createQueryPool(const QueryPoolDesc& desc) = 0;
-        virtual std::unique_ptr<RHIAccelerationStructure> createAccelerationStructure(const AccelerationStructureDesc& desc) = 0;
-        virtual std::unique_ptr<RHISwapChain> createSwapChain(const SwapChainDesc& desc) = 0;
-        virtual std::unique_ptr<RHIQueue> createQueue(const QueueDesc& desc) = 0;
+        //virtual std::unique_ptr<RHICommandBuffer> createCommandBuffer(const CommandBufferDesc& desc) = 0;
+        //virtual std::unique_ptr<RHICommandPool> createCommandPool(const CommandPoolDesc& desc) = 0;
+        //virtual std::unique_ptr<RHIFence> createFence(const FenceDesc& desc) = 0;
+        //virtual std::unique_ptr<RHISemaphore> createSemaphore(const SemaphoreDesc& desc) = 0;
+        //virtual std::unique_ptr<RHIEvent> createEvent(const EventDesc& desc) = 0;
+        //virtual std::unique_ptr<RHIQueryPool> createQueryPool(const QueryPoolDesc& desc) = 0;
+        //virtual std::unique_ptr<RHIAccelerationStructure> createAccelerationStructure(const AccelerationStructureDesc& desc) = 0;
+        //virtual std::unique_ptr<RHISwapChain> createSwapChain(const SwapChainDesc& desc) = 0;
+        //virtual std::unique_ptr<RHIQueue> createQueue(const QueueDesc& desc) = 0;
 
-        virtual std::vector<std::unique_ptr<RHICommandBuffer>> createCommandBuffers(uint32_t count,const CommandBufferDesc& desc) = 0;
+        //virtual std::vector<std::unique_ptr<RHICommandBuffer>> createCommandBuffers(uint32_t count,const CommandBufferDesc& desc) = 0;
         virtual std::vector<std::unique_ptr<RHIDescriptorSet>> createDescriptorSets(uint32_t count,const DescriptorSetDesc& desc) = 0;
 
         virtual void setResourceManager(ResourceManager * ptr) = 0;
@@ -82,25 +82,25 @@ namespace StarryEngine::RHI {
 
         std::unique_ptr<RHIDescriptorSetLayout> createDescriptorSetLayout(const DescriptorSetLayoutDesc& desc) override;
 
-        std::unique_ptr<RHICommandBuffer> createCommandBuffer(const CommandBufferDesc& desc) override;
+        //std::unique_ptr<RHICommandBuffer> createCommandBuffer(const CommandBufferDesc& desc) override;
 
-        std::unique_ptr<RHICommandPool> createCommandPool(const CommandPoolDesc& desc) override;
+        //std::unique_ptr<RHICommandPool> createCommandPool(const CommandPoolDesc& desc) override;
 
-        std::unique_ptr<RHIFence> createFence(const FenceDesc& desc) override;
+        //std::unique_ptr<RHIFence> createFence(const FenceDesc& desc) override;
 
-        std::unique_ptr<RHISemaphore> createSemaphore(const SemaphoreDesc& desc) override;
+        //std::unique_ptr<RHISemaphore> createSemaphore(const SemaphoreDesc& desc) override;
 
-        std::unique_ptr<RHIEvent> createEvent(const EventDesc& desc) override;
+        //std::unique_ptr<RHIEvent> createEvent(const EventDesc& desc) override;
 
-        std::unique_ptr<RHIQueryPool> createQueryPool(const QueryPoolDesc& desc) override;
+        //std::unique_ptr<RHIQueryPool> createQueryPool(const QueryPoolDesc& desc) override;
 
-        std::unique_ptr<RHIAccelerationStructure> createAccelerationStructure(const AccelerationStructureDesc& desc) override;
+        //std::unique_ptr<RHIAccelerationStructure> createAccelerationStructure(const AccelerationStructureDesc& desc) override;
 
-        std::unique_ptr<RHISwapChain> createSwapChain(const SwapChainDesc& desc) override;
+        //std::unique_ptr<RHISwapChain> createSwapChain(const SwapChainDesc& desc) override;
 
-        std::unique_ptr<RHIQueue> createQueue(const QueueDesc& desc) override;
+        //std::unique_ptr<RHIQueue> createQueue(const QueueDesc& desc) override;
 
-        std::vector<std::unique_ptr<RHICommandBuffer>> createCommandBuffers(uint32_t count, const CommandBufferDesc& desc) override;
+        //std::vector<std::unique_ptr<RHICommandBuffer>> createCommandBuffers(uint32_t count, const CommandBufferDesc& desc) override;
 
         std::vector<std::unique_ptr<RHIDescriptorSet>> createDescriptorSets(uint32_t count, const DescriptorSetDesc& desc) override;
 
@@ -325,33 +325,33 @@ namespace StarryEngine::RHI {
             const void* data)override;
 
         // 查询操作
-        void beginQuery(
-            QueryPoolHandle queryPool,
-            uint32_t query,
-            QueryControlFlags flags = {})override;
+        //void beginQuery(
+        //    QueryPoolHandle queryPool,
+        //    uint32_t query,
+        //    QueryControlFlags flags = {})override;
 
-        void endQuery(
-            QueryPoolHandle queryPool,
-            uint32_t query)override;
+        //void endQuery(
+        //    QueryPoolHandle queryPool,
+        //    uint32_t query)override;
 
-        void writeTimestamp(
-            PipelineStage stage,
-            QueryPoolHandle queryPool,
-            uint32_t query)override;
+        //void writeTimestamp(
+        //    PipelineStage stage,
+        //    QueryPoolHandle queryPool,
+        //    uint32_t query)override;
 
-        void resetQueryPool(
-            QueryPoolHandle queryPool,
-            uint32_t firstQuery,
-            uint32_t queryCount)override;
+        //void resetQueryPool(
+        //    QueryPoolHandle queryPool,
+        //    uint32_t firstQuery,
+        //    uint32_t queryCount)override;
 
-        void copyQueryPoolResults(
-            QueryPoolHandle queryPool,
-            uint32_t firstQuery,
-            uint32_t queryCount,
-            RHIBuffer* dstBuffer,
-            uint64_t dstOffset,
-            uint64_t stride,
-            QueryResultFlags flags)override;
+        //void copyQueryPoolResults(
+        //    QueryPoolHandle queryPool,
+        //    uint32_t firstQuery,
+        //    uint32_t queryCount,
+        //    RHIBuffer* dstBuffer,
+        //    uint64_t dstOffset,
+        //    uint64_t stride,
+        //    QueryResultFlags flags)override;
 
         // 调试标记
         void beginDebugLabel(const char* label, const float color[4])override;

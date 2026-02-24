@@ -74,13 +74,8 @@ namespace StarryEngine {
         }
 
         mDevice->waitIdle();
-
-        cleanupFrameData();
-
-        if (mMainCommandPool != VK_NULL_HANDLE) {
-            mDevice->destroyCommandPool(mMainCommandPool);
-            mMainCommandPool = VK_NULL_HANDLE;
-        }
+        cleanupFrameData(); 
+        mDevice->destroyCommandPool(mMainCommandPool);
     }
 
     // ==================== 帧循环接口 ====================
@@ -90,16 +85,18 @@ namespace StarryEngine {
             throw std::runtime_error("Frame already in progress");
         }
 
-        FrameInfo frameInfo;
-        frameInfo.frameIndex = mCurrentFrameIndex;
-
-        // 获取当前帧数据
-        FrameData& frameData = mFrameData[mCurrentFrameIndex];
-
         // 等待上一帧完成
         if (!waitForFrame(mCurrentFrameIndex)) {
             throw std::runtime_error("Failed to wait for previous frame");
         }
+
+        if (m_hasRenderedAnyFrame) {
+            updateStatistics(m_lastFrameIndex);
+        }
+
+        FrameInfo frameInfo;
+        frameInfo.frameIndex = mCurrentFrameIndex; // 当前要录制的帧索引
+        FrameData& frameData = mFrameData[mCurrentFrameIndex];
 
         // 重置栅栏
         resetFrame(mCurrentFrameIndex);
@@ -145,7 +142,6 @@ namespace StarryEngine {
         frameInfo.cpuBeginTime = getCurrentTimeNanoseconds();
 
         mFrameInProgress = true;
-
         return frameInfo;
     }
 
@@ -167,8 +163,19 @@ namespace StarryEngine {
             throw std::runtime_error("Failed to end recording command buffer");
         }
 
-        // 记录CPU结束时间
+        // 记录 CPU 结束时间
         frameInfo.cpuEndTime = getCurrentTimeNanoseconds();
+
+        // === 新增：将 CPU 时间存入对应的 FrameData ===
+        if (frameInfo.frameIndex < mFrameData.size()) {
+            FrameData& frameData = mFrameData[frameInfo.frameIndex];
+            // 计算 CPU 耗时（毫秒）
+            float cpuTime = nanosecondsToMilliseconds(frameInfo.cpuEndTime - frameInfo.cpuBeginTime);
+            frameData.cpuTime = cpuTime;
+            // 也可保存原始时间戳便于调试
+            frameData.cpuBeginTime = frameInfo.cpuBeginTime;
+            frameData.cpuEndTime = frameInfo.cpuEndTime;
+        }
 
         mFrameInProgress = false;
     }
@@ -211,6 +218,8 @@ namespace StarryEngine {
             return submitResult;
         }
 
+        m_hasRenderedAnyFrame = true;
+
         // 呈现图像（通过回调）
         VkResult presentResult = presentFunc(graphicsQueue, frameInfo.imageIndex, frameInfo.renderFinishedSemaphore);
         frameInfo.presentResult = presentResult;
@@ -220,17 +229,12 @@ namespace StarryEngine {
 
         // 如果启用了自动重建并且需要重建，尝试重建
         if (mConfig.autoRecreate && frameInfo.needsRecreate && mRecreateCallback) {
-            // 注意：这里需要知道宽度和高度，通常需要从其他地方获取
-            // 在实际应用中，可能需要传递这些参数或从其他地方获取
             std::cout << "[INFO] Auto-recreating swap chain..." << std::endl;
         }
 
         // 更新帧索引
+        m_lastFrameIndex = mCurrentFrameIndex;
         mCurrentFrameIndex = (mCurrentFrameIndex + 1) % mConfig.frameCount;
-
-        // 更新统计信息
-        updateStatistics(frameInfo);
-
         return presentResult;
     }
 
@@ -474,12 +478,7 @@ namespace StarryEngine {
         }
         else if (!enable && mTimestampsEnabled) {
             for (auto& frameData : mFrameData) {
-                if (frameData.timestampQueryPool != VK_NULL_HANDLE) {
-                    vkDestroyQueryPool(mDevice->getLogicalDevice(),
-                        frameData.timestampQueryPool,
-                        nullptr);
-                    frameData.timestampQueryPool = VK_NULL_HANDLE;
-                }
+                mDevice->destroyQueryPool(frameData.timestampQueryPool);
             }
             mTimestampsEnabled = false;
         }
@@ -572,15 +571,10 @@ namespace StarryEngine {
 
             try {
                 // 分配命令缓冲区
-                frameData.commandBuffer = mDevice->allocateCommandBuffer(
-                    mMainCommandPool,
-                    VK_COMMAND_BUFFER_LEVEL_PRIMARY
-                );
+                frameData.commandBuffer = mDevice->allocateCommandBuffer(mMainCommandPool,VK_COMMAND_BUFFER_LEVEL_PRIMARY);
 
                 // 设置调试名称
-                mDevice->setObjectName(reinterpret_cast<uint64_t>(frameData.commandBuffer),
-                    VK_OBJECT_TYPE_COMMAND_BUFFER,
-                    ("Frame" + std::to_string(i) + "_CommandBuffer").c_str());
+                mDevice->setObjectName(reinterpret_cast<uint64_t>(frameData.commandBuffer),VK_OBJECT_TYPE_COMMAND_BUFFER,("Frame" + std::to_string(i) + "_CommandBuffer").c_str());
 
             }
             catch (const std::runtime_error& e) {
@@ -615,22 +609,16 @@ namespace StarryEngine {
             );
 
             if (result != VK_SUCCESS) {
-                std::cerr << "[WARNING] Failed to create timestamp query pool for frame "
-                    << i << std::endl;
+                std::cerr << "[WARNING] Failed to create timestamp query pool for frame "<< i << std::endl;
                 // 清理已创建的查询池
                 for (size_t j = 0; j < i; j++) {
-                    vkDestroyQueryPool(mDevice->getLogicalDevice(),
-                        mFrameData[j].timestampQueryPool,
-                        nullptr);
-                    mFrameData[j].timestampQueryPool = VK_NULL_HANDLE;
+					mDevice->destroyQueryPool(mFrameData[j].timestampQueryPool);
                 }
                 return false;
             }
 
             // 设置调试名称
-            mDevice->setObjectName(reinterpret_cast<uint64_t>(frameData.timestampQueryPool),
-                VK_OBJECT_TYPE_QUERY_POOL,
-                ("Frame" + std::to_string(i) + "_TimestampQueryPool").c_str());
+            mDevice->setObjectName(reinterpret_cast<uint64_t>(frameData.timestampQueryPool),VK_OBJECT_TYPE_QUERY_POOL,("Frame" + std::to_string(i) + "_TimestampQueryPool").c_str());
         }
 
         return true;
@@ -642,41 +630,12 @@ namespace StarryEngine {
         }
 
         for (auto& frameData : mFrameData) {
-            // 销毁信号量
-            if (frameData.imageAvailableSemaphore != VK_NULL_HANDLE) {
-                mDevice->destroySemaphore(frameData.imageAvailableSemaphore);
-                frameData.imageAvailableSemaphore = VK_NULL_HANDLE;
-            }
-
-            if (frameData.renderFinishedSemaphore != VK_NULL_HANDLE) {
-                mDevice->destroySemaphore(frameData.renderFinishedSemaphore);
-                frameData.renderFinishedSemaphore = VK_NULL_HANDLE;
-            }
-
-            // 销毁栅栏
-            if (frameData.inFlightFence != VK_NULL_HANDLE) {
-                mDevice->destroyFence(frameData.inFlightFence);
-                frameData.inFlightFence = VK_NULL_HANDLE;
-            }
-
-            // 销毁时间戳查询池
-            if (frameData.timestampQueryPool != VK_NULL_HANDLE) {
-                vkDestroyQueryPool(mDevice->getLogicalDevice(),
-                    frameData.timestampQueryPool,
-                    nullptr);
-                frameData.timestampQueryPool = VK_NULL_HANDLE;
-            }
-
-            // 销毁线程命令池
-            if (frameData.threadCommandPool != VK_NULL_HANDLE) {
-                mDevice->destroyCommandPool(frameData.threadCommandPool);
-                frameData.threadCommandPool = VK_NULL_HANDLE;
-            }
-
-            // 命令缓冲区由命令池统一管理，不需要单独销毁
-            frameData.commandBuffer = VK_NULL_HANDLE;
+            mDevice->destroySemaphore(frameData.imageAvailableSemaphore);
+            mDevice->destroySemaphore(frameData.renderFinishedSemaphore);
+            mDevice->destroyFence(frameData.inFlightFence);
+			mDevice->destroyQueryPool(frameData.timestampQueryPool);
+            mDevice->destroyCommandPool(frameData.threadCommandPool);
         }
-
         mFrameData.clear();
     }
 
@@ -717,68 +676,49 @@ namespace StarryEngine {
             1);  // 查询索引1
     }
 
-    void FrameContext::updateStatistics(const FrameInfo& frameInfo) {
-        if (frameInfo.frameIndex >= mFrameData.size()) {
-            return;
-        }
+    void FrameContext::updateStatistics(uint32_t completedFrameIndex) {
+        if (completedFrameIndex >= mFrameData.size()) return;
 
-        FrameData& frameData = mFrameData[frameInfo.frameIndex];
+        FrameData& frameData = mFrameData[completedFrameIndex];
 
-        // 更新帧计数器
+        // 1. 递增总帧数并保存当前计数值
         mStatistics.totalFrames++;
-        frameData.frameNumber = mStatistics.totalFrames;
+        uint64_t total = mStatistics.totalFrames;  // 当前总帧数，用于计算
 
-        // 记录CPU时间
-        if (frameInfo.cpuBeginTime > 0 && frameInfo.cpuEndTime > 0) {
-            float cpuTime = nanosecondsToMilliseconds(frameInfo.cpuEndTime - frameInfo.cpuBeginTime);
-            frameData.cpuTime = cpuTime;
-            frameData.cpuBeginTime = frameInfo.cpuBeginTime;
-            frameData.cpuEndTime = frameInfo.cpuEndTime;
+        // 记录该帧的序号（可选）
+        frameData.frameNumber = total;
 
-            // 更新CPU时间统计
-            mStatistics.averageCPUTime = (mStatistics.averageCPUTime * (mStatistics.totalFrames - 1) + cpuTime)
-                / mStatistics.totalFrames;
+        // 2. CPU 时间统计
+        float cpuTime = frameData.cpuTime;
+        if (cpuTime > 0) {
+            // 更新平均 CPU 时间（使用新的总帧数 total）
+            mStatistics.averageCPUTime = (mStatistics.averageCPUTime * (total - 1) + cpuTime) / total;
             if (cpuTime > mStatistics.maxCPUTime) {
                 mStatistics.maxCPUTime = cpuTime;
             }
         }
 
-        // 更新成功/失败帧计数
-        if (frameInfo.acquireResult == VK_SUCCESS &&
-            (frameInfo.presentResult == VK_SUCCESS || frameInfo.presentResult == VK_SUBOPTIMAL_KHR)) {
-            mStatistics.successfulFrames++;
-        }
-        else {
-            mStatistics.failedFrames++;
-        }
-
-        // 更新重建计数
-        if (frameInfo.needsRecreate) {
-            mStatistics.recreateCount++;
-        }
-
-        // 更新GPU时间统计
+        // 3. GPU 时间统计（如果启用）
         if (mTimestampsEnabled) {
-            float gpuTime = getFrameGPUTime(frameInfo.frameIndex);
+            float gpuTime = getFrameGPUTime(completedFrameIndex);
             frameData.gpuTime = gpuTime;
 
             if (gpuTime > 0) {
-                mStatistics.averageGPUTime = (mStatistics.averageGPUTime * (mStatistics.totalFrames - 1) + gpuTime)
-                    / mStatistics.totalFrames;
+                mStatistics.averageGPUTime = (mStatistics.averageGPUTime * (total - 1) + gpuTime) / total;
                 if (gpuTime > mStatistics.maxGPUTime) {
                     mStatistics.maxGPUTime = gpuTime;
                 }
             }
         }
 
-        // 总帧时间（CPU + GPU）
+        // 4. 总帧时间（CPU + GPU）
         float frameTime = frameData.cpuTime + frameData.gpuTime;
-        mStatistics.averageFrameTime = (mStatistics.averageFrameTime * (mStatistics.totalFrames - 1) + frameTime)
-            / mStatistics.totalFrames;
+        mStatistics.averageFrameTime = (mStatistics.averageFrameTime * (total - 1) + frameTime) / total;
         if (frameTime > mStatistics.maxFrameTime) {
             mStatistics.maxFrameTime = frameTime;
         }
     }
+
 
     void FrameContext::validateFrameInfo(const FrameInfo& frameInfo) const {
         if (frameInfo.frameIndex >= mFrameData.size()) {

@@ -13,52 +13,58 @@ namespace StarryEngine{
 
     class ConfigConverter {
     public:
-        static StarryEngine::Instance::Config convertInstanceConfig(const StarryEngine::RHI::RHIInitConfig& rhiConfig);
-        static StarryEngine::Device::Config convertDeviceConfig(const StarryEngine::RHI::RHIInitConfig& rhiConfig);
-        static StarryEngine::SwapChainConfig convertSwapChainConfig(const StarryEngine::RHI::RHIInitConfig& rhiConfig);
-        static StarryEngine::FrameContext::Config convertFrameContextConfig(const StarryEngine::RHI::RHIInitConfig& rhiConfig);
+        static Instance::Config convertInstanceConfig(const RHI::RHIInitConfig& rhiConfig);
+        static Device::Config convertDeviceConfig(const RHI::RHIInitConfig& rhiConfig);
+        static SwapChainConfig convertSwapChainConfig(const RHI::RHIInitConfig& rhiConfig);
+        static FrameContext::Config convertFrameContextConfig(const RHI::RHIInitConfig& rhiConfig);
 
     private:
-        static uint32_t convertFeatureLevel(StarryEngine::RHI::FeatureLevel level);
-        static StarryEngine::RHI::MessageSeverity convertToRHISeverity(VkDebugUtilsMessageSeverityFlagBitsEXT vulkanSeverity);
-        static StarryEngine::RHI::MessageSource convertToRHISource(VkDebugUtilsMessageTypeFlagsEXT vulkanType);
-        static const char* messageSourceToString(StarryEngine::RHI::MessageSource source);
-        static const char* messageSeverityToString(StarryEngine::RHI::MessageSeverity severity);
+        static uint32_t convertFeatureLevel(RHI::FeatureLevel level);
+        static RHI::MessageSeverity convertToRHISeverity(VkDebugUtilsMessageSeverityFlagBitsEXT vulkanSeverity);
+        static RHI::MessageSource convertToRHISource(VkDebugUtilsMessageTypeFlagsEXT vulkanType);
+        static const char* messageSourceToString(RHI::MessageSource source);
+        static const char* messageSeverityToString(RHI::MessageSeverity severity);
     };
 
     class VulkanRHI{
     public:
         VulkanRHI() = default;
         ~VulkanRHI(){ clear(); }
+        void clear();
 
-        bool initialize(const StarryEngine::RHI::RHIInitConfig& config);
+        bool initialize(const RHI::RHIInitConfig& config);
 
-        StarryEngine::RHI::PipelineLayoutHandle createPipelineLayout(StarryEngine::RHI::PipelineLayoutDesc desc) {
-            return mResourceManager->createPipelineLayout(desc);
+        bool renderFrame(const std::function<void(RHI::RHICommandEncoder*, uint32_t imageIndex)>& drawFunc);
+
+        bool recreateSwapChain(uint32_t width, uint32_t height);
+
+        uint32_t getWidth() const { return mWidth; }
+        uint32_t getHeight() const { return mHeight; }
+
+        FrameContext::Ptr getFrameContext() const { return mFrameContext; }
+
+        std::unique_ptr<RHI::RHICommandEncoder> getCommandEncoder(VkCommandBuffer cmdBuf) {
+            return std::make_unique<RHI::RHI_VK_CommandEncoder>(mDevice, cmdBuf, mResourceManager.get());
         }
 
-        StarryEngine::RHI::PipelineHandle createGraphicsPipeline(StarryEngine::RHI::GraphicsPipelineDesc desc) {
-            return mResourceManager->createGraphicsPipeline(desc);
+        RHI::PipelineLayoutHandle createPipelineLayout(RHI::PipelineLayoutDesc desc) {
+            return mResourceManager->createPipelineLayout(desc, desc.debugName);
         }
 
-        StarryEngine::RHI::RenderPassHandle createRenderPass(StarryEngine::RHI::RenderPassDesc desc) {
-            return mResourceManager->createRenderPass(desc);
+        RHI::PipelineHandle createGraphicsPipeline(RHI::GraphicsPipelineDesc desc) {
+            return mResourceManager->createGraphicsPipeline(desc, desc.debugName);
+        }
+
+        RHI::RenderPassHandle createRenderPass(RHI::RenderPassDesc desc) {
+            return mResourceManager->createRenderPass(desc, desc.debugName);
 		}
 
-        StarryEngine::RHI::ShaderHandle createShaderHandle(StarryEngine::RHI::ShaderModuleDesc desc) {
-            return mResourceManager->createShader(desc);
+        RHI::ShaderHandle createShaderHandle(RHI::ShaderModuleDesc desc) {
+            return mResourceManager->createShader(desc, desc.debugName);
         }
         
-        StarryEngine::RHI::BufferHandle createBuffer(StarryEngine::RHI::BufferDesc desc) {
-            return mResourceManager->createBuffer(desc);
-		}
-
-        StarryEngine::RHI::CommandPoolHandle createCommandPool(StarryEngine::RHI::CommandPoolDesc desc) {
-            return mResourceManager->createCommandPool(desc);
-        }
-
-        StarryEngine::RHI::CommandBufferHandle createCommandBuffer(StarryEngine::RHI::CommandBufferDesc desc) {
-            return mResourceManager->createCommandBuffer(desc);
+        RHI::BufferHandle createBuffer(RHI::BufferDesc desc) {
+            return mResourceManager->createBuffer(desc, desc.debugName);
 		}
 
         void release(RHI::ShaderHandle handle) {
@@ -86,7 +92,7 @@ namespace StarryEngine{
 		}
 
         RHI::TextureHandle createDepthTexture(RHI::TextureDesc desc) {
-			return mResourceManager->createTexture(desc);
+			return mResourceManager->createTexture(desc, desc.debugName);
 		}
 
         std::vector<RHI::FramebufferHandle> createFramebuffers(RHI::RenderPassHandle renderpass,RHI::TextureHandle depthTexture=RHI::TextureHandle::Null()) {
@@ -104,7 +110,8 @@ namespace StarryEngine{
                 //    fboDesc.attachments.push_back(image->view); 
                 //}
                 fboDesc.layers = 1;
-				framebuffers.push_back(mResourceManager->createFramebuffer(fboDesc));
+
+				framebuffers.push_back(mResourceManager->createFramebuffer(fboDesc,"framebuffer_"+std::to_string(i)));
             }
 			return framebuffers;
         }
@@ -115,27 +122,6 @@ namespace StarryEngine{
             }
         }
 
-        void waitIdle() {
-			mDevice->waitIdle();
-		}
-
-		VkQueue getGraphicsQueue() const { return mDevice->getGraphicsQueue(); }
-
-        void clear();
-
-		SwapChain::Ptr getSwapChain() const { return mSwapChain; }
-		FrameContext::Ptr getFrameContext() const { return mFrameContext; }
-
-        RHI::RHICommandEncoder* getCommandEncoder(RHI::CommandBufferHandle handle) {
-			auto commandBuffer = static_cast<RHI::RHI_VK_CommandBuffer*>(mResourceManager->getCommandBuffer(handle));
-
-            return new RHI::RHI_VK_CommandEncoder(mDevice,commandBuffer,mResourceManager.get());
-        }
-
-        RHI::RHICommandEncoder* getCommandEncoder(VkCommandBuffer cmdBuf) {
-            return new RHI::RHI_VK_CommandEncoder(mDevice, cmdBuf, mResourceManager.get());
-        }
-
     private:
         Instance::Ptr mInstance;
         Device::Ptr mDevice;
@@ -144,5 +130,10 @@ namespace StarryEngine{
         VkSurfaceKHR mSurface = VK_NULL_HANDLE;
 
         std::shared_ptr<RHI::ResourceManager> mResourceManager;
+
+        std::function<VkResult(VkSemaphore, VkFence, uint32_t&)> mAcquireFunc;
+        std::function<VkResult(VkQueue, uint32_t, VkSemaphore)> mPresentFunc;
+        uint32_t mWidth = 0, mHeight = 0;
+        bool mFramebufferResized = false; 
     };
 }

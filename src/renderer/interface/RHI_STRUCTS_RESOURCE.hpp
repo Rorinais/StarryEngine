@@ -605,34 +605,34 @@ namespace StarryEngine::RHI {
             uint64_t size,
             const void* data) = 0;
 
-        // 查询操作
-        virtual void beginQuery(
-            QueryPoolHandle queryPool,
-            uint32_t query,
-            QueryControlFlags flags = {}) = 0;
+        //// 查询操作
+        //virtual void beginQuery(
+        //    QueryPoolHandle queryPool,
+        //    uint32_t query,
+        //    QueryControlFlags flags = {}) = 0;
 
-        virtual void endQuery(
-            QueryPoolHandle queryPool,
-            uint32_t query) = 0;
+        //virtual void endQuery(
+        //    QueryPoolHandle queryPool,
+        //    uint32_t query) = 0;
 
-        virtual void writeTimestamp(
-            PipelineStage stage,
-            QueryPoolHandle queryPool,
-            uint32_t query) = 0;
+        //virtual void writeTimestamp(
+        //    PipelineStage stage,
+        //    QueryPoolHandle queryPool,
+        //    uint32_t query) = 0;
 
-        virtual void resetQueryPool(
-            QueryPoolHandle queryPool,
-            uint32_t firstQuery,
-            uint32_t queryCount) = 0;
+        //virtual void resetQueryPool(
+        //    QueryPoolHandle queryPool,
+        //    uint32_t firstQuery,
+        //    uint32_t queryCount) = 0;
 
-        virtual void copyQueryPoolResults(
-            QueryPoolHandle queryPool,
-            uint32_t firstQuery,
-            uint32_t queryCount,
-            RHIBuffer* dstBuffer,
-            uint64_t dstOffset,
-            uint64_t stride,
-            QueryResultFlags flags) = 0;
+        //virtual void copyQueryPoolResults(
+        //    QueryPoolHandle queryPool,
+        //    uint32_t firstQuery,
+        //    uint32_t queryCount,
+        //    RHIBuffer* dstBuffer,
+        //    uint64_t dstOffset,
+        //    uint64_t stride,
+        //    QueryResultFlags flags) = 0;
 
         // 调试标记
         virtual void beginDebugLabel(const char* label, const float color[4]) = 0;

@@ -223,6 +223,7 @@ namespace StarryEngine {
             RHI::PipelineLayoutDesc layoutDesc;
             layoutDesc.descriptorSetLayouts = {};
             layoutDesc.pushConstants = {};
+			layoutDesc.debugName = "MainPipelineLayout";
             mPipelineLayoutHandle = m_rhi->createPipelineLayout(layoutDesc);
 		}
 
@@ -289,23 +290,9 @@ namespace StarryEngine {
 
             desc.renderPass = mRenderPassHandle;
             desc.subpass = 0;
+			desc.debugName = "MainPipeline";
             
             mPipelineHandle = m_rhi->createGraphicsPipeline(desc);
-        }
-
-        void createCommandBuffers() {
-			RHI::CommandPoolDesc poolDesc;
-			poolDesc.queueType = RHI::QueueType::Graphics;
-
-			mCommandPoolHandle = m_rhi->createCommandPool(poolDesc);
-            
-            if (mCommandPoolHandle != RHI::CommandPoolHandle::Null()) {
-                for (uint32_t i = 0; i < m_frameCount; ++i) {
-                    RHI::CommandBufferDesc cmdBufferDesc;
-                    cmdBufferDesc.commandPool = mCommandPoolHandle;
-                    mCommandBufferHandles.push_back(m_rhi->createCommandBuffer(cmdBufferDesc));
-                }
-            }
         }
 
         void createFramebuffers() {
@@ -323,13 +310,14 @@ namespace StarryEngine {
 
     private:
         // 窗口相关
-        uint32_t m_width = 800;
-        uint32_t m_height = 600;
+        uint32_t m_width = 800*1.25;
+        uint32_t m_height = 600*1.25;
         const char* m_title = "StarryEngine";
         const char* m_icon_path = "assets/icons/window_icon.png";
         Window::Ptr m_window;
         bool mFramebufferResized = false;
-		uint32_t m_frameCount = 2;
+		uint32_t m_FlightFrame = 2;
+        double m_lastFpsTime;
 
         std::shared_ptr<VulkanRHI> m_rhi;
 
@@ -341,9 +329,6 @@ namespace StarryEngine {
 
 		StarryEngine::RHI::PipelineLayoutHandle mPipelineLayoutHandle = RHI::PipelineLayoutHandle::Null();
 		StarryEngine::RHI::PipelineHandle mPipelineHandle = RHI::PipelineHandle::Null();
-
-		StarryEngine::RHI::CommandPoolHandle mCommandPoolHandle = RHI::CommandPoolHandle::Null();
-		std::vector<RHI::CommandBufferHandle> mCommandBufferHandles;
 
 		std::vector<RHI::FramebufferHandle> mFramebuffers;
     };

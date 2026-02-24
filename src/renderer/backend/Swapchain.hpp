@@ -41,8 +41,9 @@ namespace StarryEngine {
 
         // === 核心功能 ===
         VkResult acquireNextImage(VkSemaphore imageAvailableSemaphore,
-            VkFence fence = VK_NULL_HANDLE,
-            uint64_t timeout = UINT64_MAX);
+            VkFence fence,
+            uint64_t timeout,
+            uint32_t& outImageIndex);
 
         VkResult present(VkQueue presentQueue,
             uint32_t imageIndex,
@@ -69,7 +70,6 @@ namespace StarryEngine {
         }
 
         uint32_t getImageCount() const { return static_cast<uint32_t>(mImages.size()); }
-        uint32_t getCurrentImageIndex() const { return mCurrentImageIndex; }
 
         // === 状态查询 ===
         bool isValid() const { return mSwapChain != VK_NULL_HANDLE; }
@@ -108,7 +108,6 @@ namespace StarryEngine {
         // 状态
         bool mOutOfDate = false;
         bool mSuboptimal = false;
-        uint32_t mCurrentImageIndex = 0;
     };
 
 } // namespace StarryEngine

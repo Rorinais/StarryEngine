@@ -1,9 +1,8 @@
 #include"VulkanRHI.hpp"
 
 namespace StarryEngine {
-    StarryEngine::Instance::Config ConfigConverter::convertInstanceConfig(const StarryEngine::RHI::RHIInitConfig& rhiConfig) {
-        StarryEngine::Instance::Config config;
-
+    Instance::Config ConfigConverter::convertInstanceConfig(const RHI::RHIInitConfig& rhiConfig) {
+        Instance::Config config;
         config.appName = rhiConfig.appName;
         config.engineName = rhiConfig.engineName;
         config.appVersion = rhiConfig.appVersion.packed();
@@ -28,32 +27,30 @@ namespace StarryEngine {
 
         // 转换调试回调
         if (rhiConfig.debugCallback) {
-            config.debugCallback = [rhiConfig](VkDebugUtilsMessageSeverityFlagBitsEXT severity,
-                VkDebugUtilsMessageTypeFlagsEXT type,
-                const VkDebugUtilsMessengerCallbackDataEXT* data) {
-                    // 转换严重程度
-                    StarryEngine::RHI::MessageSeverity rhiSeverity = convertToRHISeverity(severity);
+            config.debugCallback = [rhiConfig](
+                VkDebugUtilsMessageSeverityFlagBitsEXT severity,
+                VkDebugUtilsMessageTypeFlagsEXT type, 
+                const VkDebugUtilsMessengerCallbackDataEXT* data
+                ){
+                // 转换严重程度
+                RHI::MessageSeverity rhiSeverity = convertToRHISeverity(severity);
 
-                    // 转换消息来源
-                    StarryEngine::RHI::MessageSource rhiSource = convertToRHISource(type);
+                // 转换消息来源
+                RHI::MessageSource rhiSource = convertToRHISource(type);
 
-                    // 构建消息字符串
-                    std::string message = data->pMessage;
-                    if (data->pMessageIdName) {
-                        message = std::string("[") + data->pMessageIdName + "] " + message;
-                    }
+                // 构建消息字符串
+                std::string message = data->pMessage;
+                if (data->pMessageIdName) message = std::string("[") + data->pMessageIdName + "] " + message;
 
-                    // 调用RHI回调
-                    rhiConfig.debugCallback(rhiSeverity, rhiSource, message);
-                };
+                // 调用RHI回调
+                rhiConfig.debugCallback(rhiSeverity, rhiSource, message);
+            };
         }
-
         return config;
     }
 
-    StarryEngine::Device::Config ConfigConverter::convertDeviceConfig(const StarryEngine::RHI::RHIInitConfig& rhiConfig) {
-        StarryEngine::Device::Config config;
-
+    Device::Config ConfigConverter::convertDeviceConfig(const RHI::RHIInitConfig& rhiConfig) {
+        Device::Config config;
         for (const auto& ext : rhiConfig.deviceExtensions) {
             config.extensions.push_back(ext.c_str());
         }
@@ -67,25 +64,23 @@ namespace StarryEngine {
         config.queuePriority = rhiConfig.queuePriority;
         config.enableValidation = rhiConfig.enableDebug;
         config.enableVMA = rhiConfig.enableVMA;
-
         return config;
     }
 
-    StarryEngine::SwapChainConfig ConfigConverter::convertSwapChainConfig(const StarryEngine::RHI::RHIInitConfig& rhiConfig) {
-        StarryEngine::SwapChainConfig config;
-
+    SwapChainConfig ConfigConverter::convertSwapChainConfig(const RHI::RHIInitConfig& rhiConfig) {
+        SwapChainConfig config;
         config.width = rhiConfig.windowWidth;
         config.height = rhiConfig.windowHeight;
 
         // 转换PresentMode
         switch (rhiConfig.presentMode) {
-        case StarryEngine::RHI::RHIInitConfig::PresentMode::FIFO:
+        case RHI::RHIInitConfig::PresentMode::FIFO:
             config.presentMode = VK_PRESENT_MODE_FIFO_KHR;
             break;
-        case StarryEngine::RHI::RHIInitConfig::PresentMode::MAILBOX:
+        case RHI::RHIInitConfig::PresentMode::MAILBOX:
             config.presentMode = VK_PRESENT_MODE_MAILBOX_KHR;
             break;
-        case StarryEngine::RHI::RHIInitConfig::PresentMode::IMMEDIATE:
+        case RHI::RHIInitConfig::PresentMode::IMMEDIATE:
             config.presentMode = VK_PRESENT_MODE_IMMEDIATE_KHR;
             break;
         default:
@@ -104,107 +99,86 @@ namespace StarryEngine {
         config.enableMailboxMode = rhiConfig.enableMailboxMode;
         config.enableImmediateMode = rhiConfig.enableImmediateMode;
         config.minImageCount = rhiConfig.swapChainImages;
-
         return config;
     }
 
-    StarryEngine::FrameContext::Config ConfigConverter::convertFrameContextConfig(const StarryEngine::RHI::RHIInitConfig& rhiConfig) {
-        StarryEngine::FrameContext::Config config;
-
+    FrameContext::Config ConfigConverter::convertFrameContextConfig(const RHI::RHIInitConfig& rhiConfig) {
+        FrameContext::Config config;
         config.frameCount = rhiConfig.frameBuffering;
         config.usePersistentCommandBuffers = rhiConfig.usePersistentCommandBuffers;
         config.enableTimestamps = rhiConfig.enableTimestamps;
 
-        if (rhiConfig.allowCommandBufferReset) {
-            config.commandBufferResetFlags |= VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT;
-        }
-
-        if (rhiConfig.allowCommandPoolReset) {
-            config.commandPoolFlags |= VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-        }
+        if (rhiConfig.allowCommandBufferReset) config.commandBufferResetFlags |= VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT;
+        if (rhiConfig.allowCommandPoolReset) config.commandPoolFlags |= VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
 
         config.maxRecreateAttempts = rhiConfig.maxRecreateAttempts;
         config.autoRecreate = rhiConfig.autoRecreateSwapChain;
-
         return config;
     }
 
-uint32_t ConfigConverter::convertFeatureLevel(StarryEngine::RHI::FeatureLevel level) {
-    switch (level) {
-    case StarryEngine::RHI::FeatureLevel::VK_1_0: 
-        return VK_MAKE_API_VERSION(0, 1, 0, 0);
-    case StarryEngine::RHI::FeatureLevel::VK_1_1: 
-        return VK_MAKE_API_VERSION(0, 1, 1, 0);
-    case StarryEngine::RHI::FeatureLevel::VK_1_2: 
-        return VK_MAKE_API_VERSION(0, 1, 2, 0);
-    case StarryEngine::RHI::FeatureLevel::VK_1_3: 
-        return VK_MAKE_API_VERSION(0, 1, 3, 0);
-    default: 
-        return VK_MAKE_API_VERSION(0, 1, 3, 0); 
+    uint32_t ConfigConverter::convertFeatureLevel(RHI::FeatureLevel level) {
+        switch (level) {
+        case RHI::FeatureLevel::VK_1_0: 
+            return VK_MAKE_API_VERSION(0, 1, 0, 0);
+        case RHI::FeatureLevel::VK_1_1: 
+            return VK_MAKE_API_VERSION(0, 1, 1, 0);
+        case RHI::FeatureLevel::VK_1_2: 
+            return VK_MAKE_API_VERSION(0, 1, 2, 0);
+        case RHI::FeatureLevel::VK_1_3: 
+            return VK_MAKE_API_VERSION(0, 1, 3, 0);
+        default: 
+            return VK_MAKE_API_VERSION(0, 1, 3, 0); 
+        }
     }
-}
 
-    StarryEngine::RHI::MessageSeverity ConfigConverter::convertToRHISeverity(VkDebugUtilsMessageSeverityFlagBitsEXT vulkanSeverity) {
+    RHI::MessageSeverity ConfigConverter::convertToRHISeverity(VkDebugUtilsMessageSeverityFlagBitsEXT vulkanSeverity) {
         switch (vulkanSeverity) {
         case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:
-            return StarryEngine::RHI::MessageSeverity::Verbose;
+            return RHI::MessageSeverity::Verbose;
         case VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT:
-            return StarryEngine::RHI::MessageSeverity::Info;
+            return RHI::MessageSeverity::Info;
         case VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT:
-            return StarryEngine::RHI::MessageSeverity::Warning;
+            return RHI::MessageSeverity::Warning;
         case VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT:
-            return StarryEngine::RHI::MessageSeverity::Error;
+            return RHI::MessageSeverity::Error;
         default:
-            return StarryEngine::RHI::MessageSeverity::Critical;
+            return RHI::MessageSeverity::Critical;
         }
     }
 
-    StarryEngine::RHI::MessageSource ConfigConverter::convertToRHISource(VkDebugUtilsMessageTypeFlagsEXT vulkanType) {
-        if (vulkanType & VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT) {
-            return StarryEngine::RHI::MessageSource::Validation;
-        }
-        if (vulkanType & VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT) {
-            return StarryEngine::RHI::MessageSource::Performance;
-        }
-        if (vulkanType & VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT) {
-            return StarryEngine::RHI::MessageSource::General;
-        }
-
-        return StarryEngine::RHI::MessageSource::API;
+    RHI::MessageSource ConfigConverter::convertToRHISource(VkDebugUtilsMessageTypeFlagsEXT vulkanType) {
+        if (vulkanType & VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT) return RHI::MessageSource::Validation;
+        if (vulkanType & VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT) return RHI::MessageSource::Performance;
+        if (vulkanType & VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT) return RHI::MessageSource::General;
+        return RHI::MessageSource::API;
     }
 
-    const char* ConfigConverter::messageSourceToString(StarryEngine::RHI::MessageSource source) {
+    const char* ConfigConverter::messageSourceToString(RHI::MessageSource source) {
         switch (source) {
-        case StarryEngine::RHI::MessageSource::General: return "General";
-        case StarryEngine::RHI::MessageSource::Validation: return "Validation";
-        case StarryEngine::RHI::MessageSource::Performance: return "Performance";
-        case StarryEngine::RHI::MessageSource::Shader: return "Shader";
-        case StarryEngine::RHI::MessageSource::API: return "API";
+        case RHI::MessageSource::General: return "General";
+        case RHI::MessageSource::Validation: return "Validation";
+        case RHI::MessageSource::Performance: return "Performance";
+        case RHI::MessageSource::Shader: return "Shader";
+        case RHI::MessageSource::API: return "API";
         default: return "Unknown";
         }
     }
 
     const char* ConfigConverter::messageSeverityToString(StarryEngine::RHI::MessageSeverity severity) {
         switch (severity) {
-        case StarryEngine::RHI::MessageSeverity::Verbose: return "Verbose";
-        case StarryEngine::RHI::MessageSeverity::Info: return "Info";
-        case StarryEngine::RHI::MessageSeverity::Warning: return "Warning";
-        case StarryEngine::RHI::MessageSeverity::Error: return "Error";
-        case StarryEngine::RHI::MessageSeverity::Critical: return "Critical";
+        case RHI::MessageSeverity::Verbose: return "Verbose";
+        case RHI::MessageSeverity::Info: return "Info";
+        case RHI::MessageSeverity::Warning: return "Warning";
+        case RHI::MessageSeverity::Error: return "Error";
+        case RHI::MessageSeverity::Critical: return "Critical";
         default: return "Unknown";
         }
     }
 
-    bool VulkanRHI::initialize(const StarryEngine::RHI::RHIInitConfig& config) {
+    bool VulkanRHI::initialize(const RHI::RHIInitConfig& config) {
         // 1. 检查窗口句柄
         if (!config.windowHandle) {
-            if (config.debugCallback) {
-                config.debugCallback(
-                    StarryEngine::RHI::MessageSeverity::Error,
-                    StarryEngine::RHI::MessageSource::API,
-                    "VulkanStarryEngine::RHI::initialize: windowHandle is null!"
-                );
-            }
+            if (config.debugCallback) config.debugCallback(RHI::MessageSeverity::Error,RHI::MessageSource::API,"VulkanStarryEngine::RHI::initialize: windowHandle is null!");
             return false;
         }
 
@@ -220,19 +194,11 @@ uint32_t ConfigConverter::convertFeatureLevel(StarryEngine::RHI::FeatureLevel le
             std::cout << "[INFO] Vulkan instance created successfully" << std::endl;
         }
         catch (const std::exception& e) {
-            if (config.debugCallback) {
-                config.debugCallback(
-                    StarryEngine::RHI::MessageSeverity::Error,
-                    StarryEngine::RHI::MessageSource::API,
-                    std::string("Failed to create Vulkan instance: ") + e.what()
-                );
-            }
+            if (config.debugCallback) config.debugCallback(RHI::MessageSeverity::Error,RHI::MessageSource::API,std::string("Failed to create Vulkan instance: ") + e.what());
             return false;
         }
 
-        if (!mInstance || !mInstance->getHandle()) {
-            return false;
-        }
+        if (!mInstance || !mInstance->getHandle()) return false;
 
         // 4. 创建Surface（使用GLFW）
         GLFWwindow* window = static_cast<GLFWwindow*>(config.windowHandle);
@@ -242,13 +208,7 @@ uint32_t ConfigConverter::convertFeatureLevel(StarryEngine::RHI::FeatureLevel le
             std::cerr << "[WARNING] Window is not visible when creating surface" << std::endl;
         }
 
-        std::cout << "[INFO] Creating window surface..." << std::endl;
-        VkResult result = glfwCreateWindowSurface(
-            mInstance->getHandle(),
-            window,
-            nullptr,
-            &mSurface
-        );
+        VkResult result = glfwCreateWindowSurface(mInstance->getHandle(), window, nullptr, &mSurface);
 
         if (result != VK_SUCCESS) {
             std::string errorMsg = "Failed to create window surface! Error: ";
@@ -259,17 +219,9 @@ uint32_t ConfigConverter::convertFeatureLevel(StarryEngine::RHI::FeatureLevel le
             default: errorMsg += std::to_string(result); break;
             }
 
-            if (config.debugCallback) {
-                config.debugCallback(
-                    StarryEngine::RHI::MessageSeverity::Error,
-                    StarryEngine::RHI::MessageSource::API,
-                    errorMsg
-                );
-            }
+            if (config.debugCallback) config.debugCallback(RHI::MessageSeverity::Error, RHI::MessageSource::API, errorMsg);
             return false;
         }
-
-        std::cout << "[INFO] Window surface created successfully" << std::endl;
 
         // 5. 创建设备
         try {
@@ -281,32 +233,14 @@ uint32_t ConfigConverter::convertFeatureLevel(StarryEngine::RHI::FeatureLevel le
             std::string errorMsg = std::string("Failed to create device: ") + e.what();
             std::cerr << "[ERROR] " << errorMsg << std::endl;
 
-            if (config.debugCallback) {
-                config.debugCallback(
-                    StarryEngine::RHI::MessageSeverity::Error,
-                    StarryEngine::RHI::MessageSource::API,
-                    errorMsg
-                );
-            }
-
-            // 清理表面
-            if (mSurface != VK_NULL_HANDLE) {
-                vkDestroySurfaceKHR(mInstance->getHandle(), mSurface, nullptr);
-                mSurface = VK_NULL_HANDLE;
-            }
-
+            if (config.debugCallback) config.debugCallback(RHI::MessageSeverity::Error,RHI::MessageSource::API,errorMsg);
+            mDevice->destroySurface(mSurface);
             return false;
         }
 
         if (!mDevice || !mDevice->getLogicalDevice()) {
             std::cerr << "[ERROR] Device creation failed - null device" << std::endl;
-
-            // 清理表面
-            if (mSurface != VK_NULL_HANDLE) {
-                vkDestroySurfaceKHR(mInstance->getHandle(), mSurface, nullptr);
-                mSurface = VK_NULL_HANDLE;
-            }
-
+            mDevice->destroySurface(mSurface);
             return false;
         }
 
@@ -321,7 +255,6 @@ uint32_t ConfigConverter::convertFeatureLevel(StarryEngine::RHI::FeatureLevel le
         }
         catch (const std::exception& e) {
             std::cerr << "[WARNING] VMA initialization error: " << e.what() << std::endl;
-            // 继续执行，VMA 不是必需的
         }
 
         // 7. 创建交换链
@@ -333,20 +266,13 @@ uint32_t ConfigConverter::convertFeatureLevel(StarryEngine::RHI::FeatureLevel le
                 throw std::runtime_error("Swap chain creation returned invalid object");
             }
 
-            std::cout << "[INFO] Swap chain created with " << mSwapChain->getImageCount()
-                << " images" << std::endl;
+            std::cout << "[INFO] Swap chain created with " << mSwapChain->getImageCount()<< " images" << std::endl;
         }
         catch (const std::exception& e) {
             std::string errorMsg = std::string("Failed to create swap chain: ") + e.what();
             std::cerr << "[ERROR] " << errorMsg << std::endl;
 
-            if (config.debugCallback) {
-                config.debugCallback(
-                    StarryEngine::RHI::MessageSeverity::Error,
-                    StarryEngine::RHI::MessageSource::API,
-                    errorMsg
-                );
-            }
+            if (config.debugCallback) config.debugCallback(RHI::MessageSeverity::Error, RHI::MessageSource::API, errorMsg);
 
             clear();
             return false;
@@ -367,24 +293,37 @@ uint32_t ConfigConverter::convertFeatureLevel(StarryEngine::RHI::FeatureLevel le
             if (!mFrameContext->initialize(queueFamilyIndices.graphicsFamily.value())) {
                 throw std::runtime_error("Failed to initialize frame context!");
             }
-
             std::cout << "[INFO] Frame context created successfully" << std::endl;
         }
         catch (const std::exception& e) {
             std::string errorMsg = std::string("Failed to create frame context: ") + e.what();
             std::cerr << "[ERROR] " << errorMsg << std::endl;
 
-            if (config.debugCallback) {
-                config.debugCallback(
-                    StarryEngine::RHI::MessageSeverity::Error,
-                    StarryEngine::RHI::MessageSource::API,
-                    errorMsg
-                );
-            }
+            if (config.debugCallback) config.debugCallback(RHI::MessageSeverity::Error,RHI::MessageSource::API,errorMsg);
 
             clear();
             return false;
         }
+
+        mWidth = config.windowWidth;
+        mHeight = config.windowHeight;
+
+        // 设置内部 acquire 和 present 回调
+        mAcquireFunc = [this](VkSemaphore semaphore, VkFence fence, uint32_t& index) {
+            return mSwapChain->acquireNextImage(semaphore, fence, UINT16_MAX, index);
+        };
+        mPresentFunc = [this](VkQueue queue, uint32_t index, VkSemaphore semaphore) {
+            return mSwapChain->present(queue, index, semaphore);
+        };
+
+        // 设置帧上下文的重建回调
+        mFrameContext->setRecreateCallback([this](uint32_t width, uint32_t height) {
+            return mSwapChain->recreate(width, height);
+        });
+
+        auto factory = std::make_shared<StarryEngine::RHI::VKResourceFactory>(mDevice);
+        mResourceManager = std::make_shared<StarryEngine::RHI::ResourceManager>(factory);
+        mResourceManager->setDebugMode(config.enableDebug);
 
         // 9. 输出成功信息
         if (config.debugCallback) {
@@ -393,24 +332,14 @@ uint32_t ConfigConverter::convertFeatureLevel(StarryEngine::RHI::FeatureLevel le
             info += "  SwapChain: " + std::to_string(mSwapChain->getImageCount()) + " images\n";
             info += "  FrameBuffering: " + std::to_string(config.frameBuffering);
 
-            config.debugCallback(
-                StarryEngine::RHI::MessageSeverity::Info,
-                StarryEngine::RHI::MessageSource::API,
-                info
-            );
+            config.debugCallback(RHI::MessageSeverity::Info, RHI::MessageSource::API, info);
         }
-
-        auto factory = std::make_shared<StarryEngine::RHI::VKResourceFactory>(mDevice);
-        mResourceManager = std::make_shared<StarryEngine::RHI::ResourceManager>(factory);
-        mResourceManager->setDebugMode(config.enableDebug);
-
         return true;
     }
 
     void VulkanRHI::clear() {
         std::cout << "[INFO] Cleaning up Vulkan RHI..." << std::endl;
 
-        // 等待设备空闲
         if (mDevice) {
             try {
                 mDevice->waitIdle();
@@ -420,7 +349,6 @@ uint32_t ConfigConverter::convertFeatureLevel(StarryEngine::RHI::FeatureLevel le
             }
         }
 
-        // 清理帧上下文
         if (mFrameContext) {
             try {
                 mFrameContext->cleanup();
@@ -431,30 +359,42 @@ uint32_t ConfigConverter::convertFeatureLevel(StarryEngine::RHI::FeatureLevel le
             mFrameContext.reset();
         }
 
-        // 清理交换链
-        if (mSwapChain) {
-            // SwapChain析构函数会自动清理
-            mSwapChain.reset();
-        }
-
-        // 清理设备
-        if (mDevice) {
-            mDevice.reset();
-        }
-
-        // 清理Surface - 必须在实例销毁之前
-        if (mSurface != VK_NULL_HANDLE && mInstance) {
-            std::cout << "[INFO] Destroying window surface..." << std::endl;
-            vkDestroySurfaceKHR(mInstance->getHandle(), mSurface, nullptr);
-            mSurface = VK_NULL_HANDLE;
-        }
-
-        // 清理实例
-        if (mInstance) {
-            mInstance.reset();
-        }
+        if (mSwapChain) mSwapChain.reset();
+        if (mInstance) mDevice->destroySurface(mSurface);
+        if (mDevice) mDevice.reset();
+        if (mInstance) mInstance.reset();
 
         std::cout << "[INFO] Vulkan RHI cleanup completed" << std::endl;
     }
 
+
+    bool VulkanRHI::renderFrame(const std::function<void(RHI::RHICommandEncoder*, uint32_t)>& drawFunc) {
+        FrameContext::FrameInfo frameInfo = mFrameContext->beginFrame(mAcquireFunc);
+
+        if (frameInfo.needsRecreate) {
+            if (!mFrameContext->isRecreationNeeded()) {
+				mDevice->waitIdle();
+                if (!recreateSwapChain(mWidth, mHeight)) return false; 
+            }
+            return true; 
+        }
+
+        auto encoder = getCommandEncoder(frameInfo.commandBuffer);
+        drawFunc(encoder.get(), frameInfo.imageIndex);
+
+        mFrameContext->endFrame(frameInfo);
+
+        VkResult presentResult = mFrameContext->submitFrame(frameInfo, mDevice->getGraphicsQueue(), mPresentFunc);
+        if (presentResult == VK_ERROR_OUT_OF_DATE_KHR || presentResult == VK_SUBOPTIMAL_KHR) mFramebufferResized = true; 
+        return true;
+    }
+
+    bool VulkanRHI::recreateSwapChain(uint32_t width, uint32_t height) {
+        mDevice->waitIdle();
+        if (!mSwapChain->recreate(width, height)) return false;
+
+        mWidth = width;
+        mHeight = height;
+        return true;
+    }
 }

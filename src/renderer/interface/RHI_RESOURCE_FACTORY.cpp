@@ -104,62 +104,62 @@ namespace StarryEngine::RHI {
         throw std::runtime_error("Not implemented: createDescriptorSetLayout");
     }
 
-    std::unique_ptr<RHICommandBuffer> VKResourceFactory::createCommandBuffer(const CommandBufferDesc& desc) {
-        auto rhicmdPool = static_cast<RHI_VK_CommandPool*>(mResourceManager->getCommandPool(desc.commandPool));
-		return std::make_unique<RHI_VK_CommandBuffer>(mDevice, desc, rhicmdPool);
-    }
+  //  std::unique_ptr<RHICommandBuffer> VKResourceFactory::createCommandBuffer(const CommandBufferDesc& desc) {
+  //      auto rhicmdPool = static_cast<RHI_VK_CommandPool*>(mResourceManager->getCommandPool(desc.commandPool));
+  //      return std::make_unique<RHI_VK_CommandBuffer>(mDevice, desc, rhicmdPool);
+  //  }
 
-    std::unique_ptr<RHICommandPool> VKResourceFactory::createCommandPool(const CommandPoolDesc& desc) {
-		return std::make_unique<RHI_VK_CommandPool>(mDevice, desc);
-    }
+  //  std::unique_ptr<RHICommandPool> VKResourceFactory::createCommandPool(const CommandPoolDesc& desc) {
+  //      return std::make_unique<RHI_VK_CommandPool>(mDevice, desc);
+  //  }
 
-    std::unique_ptr<RHIFence> VKResourceFactory::createFence(const FenceDesc& desc) {
-        // TODO: 实现栅栏创建
-        throw std::runtime_error("Not implemented: createFence");
-    }
+  //  std::unique_ptr<RHIFence> VKResourceFactory::createFence(const FenceDesc& desc) {
+  //      // TODO: 实现栅栏创建
+  //      throw std::runtime_error("Not implemented: createFence");
+  //  }
 
-    std::unique_ptr<RHISemaphore> VKResourceFactory::createSemaphore(const SemaphoreDesc& desc) {
-        // TODO: 实现信号量创建
-        throw std::runtime_error("Not implemented: createSemaphore");
-    }
+  //  std::unique_ptr<RHISemaphore> VKResourceFactory::createSemaphore(const SemaphoreDesc& desc) {
+  //      // TODO: 实现信号量创建
+  //      throw std::runtime_error("Not implemented: createSemaphore");
+  //  }
 
-    std::unique_ptr<RHIEvent> VKResourceFactory::createEvent(const EventDesc& desc) {
-        // TODO: 实现事件创建
-        throw std::runtime_error("Not implemented: createEvent");
-    }
+  //  std::unique_ptr<RHIEvent> VKResourceFactory::createEvent(const EventDesc& desc) {
+  //      // TODO: 实现事件创建
+  //      throw std::runtime_error("Not implemented: createEvent");
+  //  }
 
-    std::unique_ptr<RHIQueryPool> VKResourceFactory::createQueryPool(const QueryPoolDesc& desc) {
-        // TODO: 实现查询池创建
-        throw std::runtime_error("Not implemented: createQueryPool");
-    }
+  //  std::unique_ptr<RHIQueryPool> VKResourceFactory::createQueryPool(const QueryPoolDesc& desc) {
+  //      // TODO: 实现查询池创建
+  //      throw std::runtime_error("Not implemented: createQueryPool");
+  //  }
 
-    std::unique_ptr<RHIAccelerationStructure> VKResourceFactory::createAccelerationStructure(const AccelerationStructureDesc& desc) {
-        // TODO: 实现加速结构创建
-        throw std::runtime_error("Not implemented: createAccelerationStructure");
-    }
+  //  std::unique_ptr<RHIAccelerationStructure> VKResourceFactory::createAccelerationStructure(const AccelerationStructureDesc& desc) {
+  //      // TODO: 实现加速结构创建
+  //      throw std::runtime_error("Not implemented: createAccelerationStructure");
+  //  }
 
-    std::unique_ptr<RHISwapChain> VKResourceFactory::createSwapChain(const SwapChainDesc& desc) {
-        // TODO: 实现交换链创建
-        throw std::runtime_error("Not implemented: createSwapChain");
-    }
+  //  std::unique_ptr<RHISwapChain> VKResourceFactory::createSwapChain(const SwapChainDesc& desc) {
+  //      // TODO: 实现交换链创建
+  //      throw std::runtime_error("Not implemented: createSwapChain");
+  //  }
 
-    std::unique_ptr<RHIQueue> VKResourceFactory::createQueue(const QueueDesc& desc) {
-        // TODO: 实现队列创建
-        throw std::runtime_error("Not implemented: createQueue");
-    }
+  //  std::unique_ptr<RHIQueue> VKResourceFactory::createQueue(const QueueDesc& desc) {
+  //      // TODO: 实现队列创建
+  //      throw std::runtime_error("Not implemented: createQueue");
+  //  }
 
-    std::vector<std::unique_ptr<RHICommandBuffer>> VKResourceFactory::createCommandBuffers(
-        uint32_t count,
-        const CommandBufferDesc& desc) {
-        auto rhicmdPool = static_cast<RHI_VK_CommandPool*>(mResourceManager->getCommandPool(desc.commandPool));
-        std::vector<VkCommandBuffer> cmdBuffers = rhicmdPool->allocateCommandBuffers(count, desc.level);
+  //  std::vector<std::unique_ptr<RHICommandBuffer>> VKResourceFactory::createCommandBuffers(
+  //      uint32_t count,
+  //      const CommandBufferDesc& desc) {
+  //      auto rhicmdPool = static_cast<RHI_VK_CommandPool*>(mResourceManager->getCommandPool(desc.commandPool));
+  //      std::vector<VkCommandBuffer> cmdBuffers = rhicmdPool->allocateCommandBuffers(count, desc.level);
 
-		std::vector<std::unique_ptr<RHICommandBuffer>> buffers;
-        for (auto cmdBuffer: cmdBuffers) {
-			buffers.push_back(std::make_unique<RHI_VK_CommandBuffer>(mDevice, desc, rhicmdPool));
-        }
-        return buffers;
-    }
+		//std::vector<std::unique_ptr<RHICommandBuffer>> buffers;
+  //      for (auto cmdBuffer: cmdBuffers) {
+		//	buffers.push_back(std::make_unique<RHI_VK_CommandBuffer>(mDevice, desc, rhicmdPool));
+  //      }
+  //      return buffers;
+  //  }
 
     std::vector<std::unique_ptr<RHIDescriptorSet>> VKResourceFactory::createDescriptorSets(
         uint32_t count,
@@ -594,38 +594,38 @@ namespace StarryEngine::RHI {
     }
 
     // 查询操作
-    void RHI_VK_CommandEncoder::beginQuery(
-        QueryPoolHandle queryPool,
-        uint32_t query,
-        QueryControlFlags flags) {
-    }
+    //void RHI_VK_CommandEncoder::beginQuery(
+    //    QueryPoolHandle queryPool,
+    //    uint32_t query,
+    //    QueryControlFlags flags) {
+    //}
 
-    void RHI_VK_CommandEncoder::endQuery(
-        QueryPoolHandle queryPool,
-        uint32_t query) {
-    }
+    //void RHI_VK_CommandEncoder::endQuery(
+    //    QueryPoolHandle queryPool,
+    //    uint32_t query) {
+    //}
 
-    void RHI_VK_CommandEncoder::writeTimestamp(
-        PipelineStage stage,
-        QueryPoolHandle queryPool,
-        uint32_t query) {
-    }
+    //void RHI_VK_CommandEncoder::writeTimestamp(
+    //    PipelineStage stage,
+    //    QueryPoolHandle queryPool,
+    //    uint32_t query) {
+    //}
 
-    void RHI_VK_CommandEncoder::resetQueryPool(
-        QueryPoolHandle queryPool,
-        uint32_t firstQuery,
-        uint32_t queryCount) {
-    }
+    //void RHI_VK_CommandEncoder::resetQueryPool(
+    //    QueryPoolHandle queryPool,
+    //    uint32_t firstQuery,
+    //    uint32_t queryCount) {
+    //}
 
-    void RHI_VK_CommandEncoder::copyQueryPoolResults(
-        QueryPoolHandle queryPool,
-        uint32_t firstQuery,
-        uint32_t queryCount,
-        RHIBuffer* dstBuffer,
-        uint64_t dstOffset,
-        uint64_t stride,
-        QueryResultFlags flags) {
-    }
+    //void RHI_VK_CommandEncoder::copyQueryPoolResults(
+    //    QueryPoolHandle queryPool,
+    //    uint32_t firstQuery,
+    //    uint32_t queryCount,
+    //    RHIBuffer* dstBuffer,
+    //    uint64_t dstOffset,
+    //    uint64_t stride,
+    //    QueryResultFlags flags) {
+    //}
 
     // 调试标记
     void RHI_VK_CommandEncoder::beginDebugLabel(const char* label, const float color[4]) {}

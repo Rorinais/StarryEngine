@@ -213,156 +213,156 @@ namespace StarryEngine::RHI {
         return descriptorSetLayouts_.create(std::move(resource), name, debugTag);
     }
 
-    CommandBufferHandle ResourceManager::createCommandBuffer(const CommandBufferDesc& desc,
-        const std::string& name,
-        const std::string& debugTag) {
-        auto resource = factory_->createCommandBuffer(desc);
-        if (!resource) {
-            if (debugMode_) {
-                std::cerr << "[ResourceManager] Failed to create command buffer: " << name << std::endl;
-            }
-            return CommandBufferHandle::Null();
-        }
-        logResourceCreation(ResourceCategory::CommandBuffer, name);
-        return commandBuffers_.create(std::move(resource), name, debugTag);
-    }
+    //CommandBufferHandle ResourceManager::createCommandBuffer(const CommandBufferDesc& desc,
+    //    const std::string& name,
+    //    const std::string& debugTag) {
+    //    auto resource = factory_->createCommandBuffer(desc);
+    //    if (!resource) {
+    //        if (debugMode_) {
+    //            std::cerr << "[ResourceManager] Failed to create command buffer: " << name << std::endl;
+    //        }
+    //        return CommandBufferHandle::Null();
+    //    }
+    //    logResourceCreation(ResourceCategory::CommandBuffer, name);
+    //    return commandBuffers_.create(std::move(resource), name, debugTag);
+    //}
 
-    CommandPoolHandle ResourceManager::createCommandPool(const CommandPoolDesc& desc,
-        const std::string& name,
-        const std::string& debugTag) {
-        auto resource = factory_->createCommandPool(desc);
-        if (!resource) {
-            if (debugMode_) {
-                std::cerr << "[ResourceManager] Failed to create command pool: " << name << std::endl;
-            }
-            return CommandPoolHandle::Null();
-        }
-        logResourceCreation(ResourceCategory::CommandPool, name);
-        return commandPools_.create(std::move(resource), name, debugTag);
-    }
+    //CommandPoolHandle ResourceManager::createCommandPool(const CommandPoolDesc& desc,
+    //    const std::string& name,
+    //    const std::string& debugTag) {
+    //    auto resource = factory_->createCommandPool(desc);
+    //    if (!resource) {
+    //        if (debugMode_) {
+    //            std::cerr << "[ResourceManager] Failed to create command pool: " << name << std::endl;
+    //        }
+    //        return CommandPoolHandle::Null();
+    //    }
+    //    logResourceCreation(ResourceCategory::CommandPool, name);
+    //    return commandPools_.create(std::move(resource), name, debugTag);
+    //}
 
-    FenceHandle ResourceManager::createFence(const FenceDesc& desc,
-        const std::string& name,
-        const std::string& debugTag) {
-        auto resource = factory_->createFence(desc);
-        if (!resource) {
-            if (debugMode_) {
-                std::cerr << "[ResourceManager] Failed to create fence: " << name << std::endl;
-            }
-            return FenceHandle::Null();
-        }
-        logResourceCreation(ResourceCategory::Fence, name);
-        return fences_.create(std::move(resource), name, debugTag);
-    }
+    //FenceHandle ResourceManager::createFence(const FenceDesc& desc,
+    //    const std::string& name,
+    //    const std::string& debugTag) {
+    //    auto resource = factory_->createFence(desc);
+    //    if (!resource) {
+    //        if (debugMode_) {
+    //            std::cerr << "[ResourceManager] Failed to create fence: " << name << std::endl;
+    //        }
+    //        return FenceHandle::Null();
+    //    }
+    //    logResourceCreation(ResourceCategory::Fence, name);
+    //    return fences_.create(std::move(resource), name, debugTag);
+    //}
 
-    SemaphoreHandle ResourceManager::createSemaphore(const SemaphoreDesc& desc,
-        const std::string& name,
-        const std::string& debugTag) {
-        auto resource = factory_->createSemaphore(desc);
-        if (!resource) {
-            if (debugMode_) {
-                std::cerr << "[ResourceManager] Failed to create semaphore: " << name << std::endl;
-            }
-            return SemaphoreHandle::Null();
-        }
-        logResourceCreation(ResourceCategory::Semaphore, name);
-        return semaphores_.create(std::move(resource), name, debugTag);
-    }
+    //SemaphoreHandle ResourceManager::createSemaphore(const SemaphoreDesc& desc,
+    //    const std::string& name,
+    //    const std::string& debugTag) {
+    //    auto resource = factory_->createSemaphore(desc);
+    //    if (!resource) {
+    //        if (debugMode_) {
+    //            std::cerr << "[ResourceManager] Failed to create semaphore: " << name << std::endl;
+    //        }
+    //        return SemaphoreHandle::Null();
+    //    }
+    //    logResourceCreation(ResourceCategory::Semaphore, name);
+    //    return semaphores_.create(std::move(resource), name, debugTag);
+    //}
 
-    EventHandle ResourceManager::createEvent(const EventDesc& desc,
-        const std::string& name,
-        const std::string& debugTag) {
-        auto resource = factory_->createEvent(desc);
-        if (!resource) {
-            if (debugMode_) {
-                std::cerr << "[ResourceManager] Failed to create event: " << name << std::endl;
-            }
-            return EventHandle::Null();
-        }
-        logResourceCreation(ResourceCategory::Event, name);
-        return events_.create(std::move(resource), name, debugTag);
-    }
+    //EventHandle ResourceManager::createEvent(const EventDesc& desc,
+    //    const std::string& name,
+    //    const std::string& debugTag) {
+    //    auto resource = factory_->createEvent(desc);
+    //    if (!resource) {
+    //        if (debugMode_) {
+    //            std::cerr << "[ResourceManager] Failed to create event: " << name << std::endl;
+    //        }
+    //        return EventHandle::Null();
+    //    }
+    //    logResourceCreation(ResourceCategory::Event, name);
+    //    return events_.create(std::move(resource), name, debugTag);
+    //}
 
-    QueryPoolHandle ResourceManager::createQueryPool(const QueryPoolDesc& desc,
-        const std::string& name,
-        const std::string& debugTag) {
-        auto resource = factory_->createQueryPool(desc);
-        if (!resource) {
-            if (debugMode_) {
-                std::cerr << "[ResourceManager] Failed to create query pool: " << name << std::endl;
-            }
-            return QueryPoolHandle::Null();
-        }
-        logResourceCreation(ResourceCategory::QueryPool, name);
-        return queryPools_.create(std::move(resource), name, debugTag);
-    }
+    //QueryPoolHandle ResourceManager::createQueryPool(const QueryPoolDesc& desc,
+    //    const std::string& name,
+    //    const std::string& debugTag) {
+    //    auto resource = factory_->createQueryPool(desc);
+    //    if (!resource) {
+    //        if (debugMode_) {
+    //            std::cerr << "[ResourceManager] Failed to create query pool: " << name << std::endl;
+    //        }
+    //        return QueryPoolHandle::Null();
+    //    }
+    //    logResourceCreation(ResourceCategory::QueryPool, name);
+    //    return queryPools_.create(std::move(resource), name, debugTag);
+    //}
 
-    AccelerationStructureHandle ResourceManager::createAccelerationStructure(const AccelerationStructureDesc& desc,
-        const std::string& name,
-        const std::string& debugTag) {
-        auto resource = factory_->createAccelerationStructure(desc);
-        if (!resource) {
-            if (debugMode_) {
-                std::cerr << "[ResourceManager] Failed to create acceleration structure: " << name << std::endl;
-            }
-            return AccelerationStructureHandle::Null();
-        }
-        logResourceCreation(ResourceCategory::AccelerationStructure, name);
-        return accelerationStructures_.create(std::move(resource), name, debugTag);
-    }
+    //AccelerationStructureHandle ResourceManager::createAccelerationStructure(const AccelerationStructureDesc& desc,
+    //    const std::string& name,
+    //    const std::string& debugTag) {
+    //    auto resource = factory_->createAccelerationStructure(desc);
+    //    if (!resource) {
+    //        if (debugMode_) {
+    //            std::cerr << "[ResourceManager] Failed to create acceleration structure: " << name << std::endl;
+    //        }
+    //        return AccelerationStructureHandle::Null();
+    //    }
+    //    logResourceCreation(ResourceCategory::AccelerationStructure, name);
+    //    return accelerationStructures_.create(std::move(resource), name, debugTag);
+    //}
 
-    SwapChainHandle ResourceManager::createSwapChain(const SwapChainDesc& desc,
-        const std::string& name,
-        const std::string& debugTag) {
-        auto resource = factory_->createSwapChain(desc);
-        if (!resource) {
-            if (debugMode_) {
-                std::cerr << "[ResourceManager] Failed to create swap chain: " << name << std::endl;
-            }
-            return SwapChainHandle::Null();
-        }
-        logResourceCreation(ResourceCategory::SwapChain, name);
-        return swapChains_.create(std::move(resource), name, debugTag);
-    }
+    //SwapChainHandle ResourceManager::createSwapChain(const SwapChainDesc& desc,
+    //    const std::string& name,
+    //    const std::string& debugTag) {
+    //    auto resource = factory_->createSwapChain(desc);
+    //    if (!resource) {
+    //        if (debugMode_) {
+    //            std::cerr << "[ResourceManager] Failed to create swap chain: " << name << std::endl;
+    //        }
+    //        return SwapChainHandle::Null();
+    //    }
+    //    logResourceCreation(ResourceCategory::SwapChain, name);
+    //    return swapChains_.create(std::move(resource), name, debugTag);
+    //}
 
-    QueueHandle ResourceManager::createQueue(const QueueDesc& desc,
-        const std::string& name,
-        const std::string& debugTag) {
-        auto resource = factory_->createQueue(desc);
-        if (!resource) {
-            if (debugMode_) {
-                std::cerr << "[ResourceManager] Failed to create queue: " << name << std::endl;
-            }
-            return QueueHandle::Null();
-        }
-        logResourceCreation(ResourceCategory::Queue, name);
-        return queues_.create(std::move(resource), name, debugTag);
-    }
+    //QueueHandle ResourceManager::createQueue(const QueueDesc& desc,
+    //    const std::string& name,
+    //    const std::string& debugTag) {
+    //    auto resource = factory_->createQueue(desc);
+    //    if (!resource) {
+    //        if (debugMode_) {
+    //            std::cerr << "[ResourceManager] Failed to create queue: " << name << std::endl;
+    //        }
+    //        return QueueHandle::Null();
+    //    }
+    //    logResourceCreation(ResourceCategory::Queue, name);
+    //    return queues_.create(std::move(resource), name, debugTag);
+    //}
 
     // ==================== 批量创建方法 ====================
-    std::vector<CommandBufferHandle> ResourceManager::createCommandBuffers(uint32_t count,
-        const CommandBufferDesc& desc,
-        const std::string& baseName) {
-        std::vector<CommandBufferHandle> handles;
-        handles.reserve(count);
+    //std::vector<CommandBufferHandle> ResourceManager::createCommandBuffers(uint32_t count,
+    //    const CommandBufferDesc& desc,
+    //    const std::string& baseName) {
+    //    std::vector<CommandBufferHandle> handles;
+    //    handles.reserve(count);
 
-        for (uint32_t i = 0; i < count; ++i) {
-            std::string name = baseName.empty() ? "" : baseName + "_" + std::to_string(i);
-            auto handle = createCommandBuffer(desc, name);
-            if (handle.isValid()) {
-                handles.push_back(handle);
-            }
-            else {
-                // 如果创建失败，释放已创建的资源
-                for (auto& h : handles) {
-                    destroy(h);
-                }
-                return {};
-            }
-        }
+    //    for (uint32_t i = 0; i < count; ++i) {
+    //        std::string name = baseName.empty() ? "" : baseName + "_" + std::to_string(i);
+    //        auto handle = createCommandBuffer(desc, name);
+    //        if (handle.isValid()) {
+    //            handles.push_back(handle);
+    //        }
+    //        else {
+    //            // 如果创建失败，释放已创建的资源
+    //            for (auto& h : handles) {
+    //                destroy(h);
+    //            }
+    //            return {};
+    //        }
+    //    }
 
-        return handles;
-    }
+    //    return handles;
+    //}
 
     std::vector<DescriptorSetHandle> ResourceManager::createDescriptorSets(uint32_t count,
         const DescriptorSetDesc& desc,
@@ -477,77 +477,77 @@ namespace StarryEngine::RHI {
         return descriptorSetLayouts_.getData(handle);
     }
 
-    RHICommandBuffer* ResourceManager::getCommandBuffer(CommandBufferHandle handle) {
-        return commandBuffers_.getData(handle);
-    }
+    //RHICommandBuffer* ResourceManager::getCommandBuffer(CommandBufferHandle handle) {
+    //    return commandBuffers_.getData(handle);
+    //}
 
-    const RHICommandBuffer* ResourceManager::getCommandBuffer(CommandBufferHandle handle) const {
-        return commandBuffers_.getData(handle);
-    }
+    //const RHICommandBuffer* ResourceManager::getCommandBuffer(CommandBufferHandle handle) const {
+    //    return commandBuffers_.getData(handle);
+    //}
 
-    RHICommandPool* ResourceManager::getCommandPool(CommandPoolHandle handle) {
-        return commandPools_.getData(handle);
-    }
+    //RHICommandPool* ResourceManager::getCommandPool(CommandPoolHandle handle) {
+    //    return commandPools_.getData(handle);
+    //}
 
-    const RHICommandPool* ResourceManager::getCommandPool(CommandPoolHandle handle) const {
-        return commandPools_.getData(handle);
-    }
+    //const RHICommandPool* ResourceManager::getCommandPool(CommandPoolHandle handle) const {
+    //    return commandPools_.getData(handle);
+    //}
 
-    RHIFence* ResourceManager::getFence(FenceHandle handle) {
-        return fences_.getData(handle);
-    }
+    //RHIFence* ResourceManager::getFence(FenceHandle handle) {
+    //    return fences_.getData(handle);
+    //}
 
-    const RHIFence* ResourceManager::getFence(FenceHandle handle) const {
-        return fences_.getData(handle);
-    }
+    //const RHIFence* ResourceManager::getFence(FenceHandle handle) const {
+    //    return fences_.getData(handle);
+    //}
 
-    RHISemaphore* ResourceManager::getSemaphore(SemaphoreHandle handle) {
-        return semaphores_.getData(handle);
-    }
+    //RHISemaphore* ResourceManager::getSemaphore(SemaphoreHandle handle) {
+    //    return semaphores_.getData(handle);
+    //}
 
-    const RHISemaphore* ResourceManager::getSemaphore(SemaphoreHandle handle) const {
-        return semaphores_.getData(handle);
-    }
+    //const RHISemaphore* ResourceManager::getSemaphore(SemaphoreHandle handle) const {
+    //    return semaphores_.getData(handle);
+    //}
 
-    RHIEvent* ResourceManager::getEvent(EventHandle handle) {
-        return events_.getData(handle);
-    }
+    //RHIEvent* ResourceManager::getEvent(EventHandle handle) {
+    //    return events_.getData(handle);
+    //}
 
-    const RHIEvent* ResourceManager::getEvent(EventHandle handle) const {
-        return events_.getData(handle);
-    }
+    //const RHIEvent* ResourceManager::getEvent(EventHandle handle) const {
+    //    return events_.getData(handle);
+    //}
 
-    RHIQueryPool* ResourceManager::getQueryPool(QueryPoolHandle handle) {
-        return queryPools_.getData(handle);
-    }
+    //RHIQueryPool* ResourceManager::getQueryPool(QueryPoolHandle handle) {
+    //    return queryPools_.getData(handle);
+    //}
 
-    const RHIQueryPool* ResourceManager::getQueryPool(QueryPoolHandle handle) const {
-        return queryPools_.getData(handle);
-    }
+    //const RHIQueryPool* ResourceManager::getQueryPool(QueryPoolHandle handle) const {
+    //    return queryPools_.getData(handle);
+    //}
 
-    RHIAccelerationStructure* ResourceManager::getAccelerationStructure(AccelerationStructureHandle handle) {
-        return accelerationStructures_.getData(handle);
-    }
+    //RHIAccelerationStructure* ResourceManager::getAccelerationStructure(AccelerationStructureHandle handle) {
+    //    return accelerationStructures_.getData(handle);
+    //}
 
-    const RHIAccelerationStructure* ResourceManager::getAccelerationStructure(AccelerationStructureHandle handle) const {
-        return accelerationStructures_.getData(handle);
-    }
+    //const RHIAccelerationStructure* ResourceManager::getAccelerationStructure(AccelerationStructureHandle handle) const {
+    //    return accelerationStructures_.getData(handle);
+    //}
 
-    RHISwapChain* ResourceManager::getSwapChain(SwapChainHandle handle) {
-        return swapChains_.getData(handle);
-    }
+    //RHISwapChain* ResourceManager::getSwapChain(SwapChainHandle handle) {
+    //    return swapChains_.getData(handle);
+    //}
 
-    const RHISwapChain* ResourceManager::getSwapChain(SwapChainHandle handle) const {
-        return swapChains_.getData(handle);
-    }
+    //const RHISwapChain* ResourceManager::getSwapChain(SwapChainHandle handle) const {
+    //    return swapChains_.getData(handle);
+    //}
 
-    RHIQueue* ResourceManager::getQueue(QueueHandle handle) {
-        return queues_.getData(handle);
-    }
+    //RHIQueue* ResourceManager::getQueue(QueueHandle handle) {
+    //    return queues_.getData(handle);
+    //}
 
-    const RHIQueue* ResourceManager::getQueue(QueueHandle handle) const {
-        return queues_.getData(handle);
-    }
+    //const RHIQueue* ResourceManager::getQueue(QueueHandle handle) const {
+    //    return queues_.getData(handle);
+    //}
 
     // ==================== 按名称查找方法 ====================
     BufferHandle ResourceManager::findBufferByName(const std::string& name) {
@@ -590,41 +590,41 @@ namespace StarryEngine::RHI {
         return descriptorSetLayouts_.findByName(name);
     }
 
-    CommandBufferHandle ResourceManager::findCommandBufferByName(const std::string& name) {
-        return commandBuffers_.findByName(name);
-    }
+    //CommandBufferHandle ResourceManager::findCommandBufferByName(const std::string& name) {
+    //    return commandBuffers_.findByName(name);
+    //}
 
-    CommandPoolHandle ResourceManager::findCommandPoolByName(const std::string& name) {
-        return commandPools_.findByName(name);
-    }
+    //CommandPoolHandle ResourceManager::findCommandPoolByName(const std::string& name) {
+    //    return commandPools_.findByName(name);
+    //}
 
-    FenceHandle ResourceManager::findFenceByName(const std::string& name) {
-        return fences_.findByName(name);
-    }
+    //FenceHandle ResourceManager::findFenceByName(const std::string& name) {
+    //    return fences_.findByName(name);
+    //}
 
-    SemaphoreHandle ResourceManager::findSemaphoreByName(const std::string& name) {
-        return semaphores_.findByName(name);
-    }
+    //SemaphoreHandle ResourceManager::findSemaphoreByName(const std::string& name) {
+    //    return semaphores_.findByName(name);
+    //}
 
-    EventHandle ResourceManager::findEventByName(const std::string& name) {
-        return events_.findByName(name);
-    }
+    //EventHandle ResourceManager::findEventByName(const std::string& name) {
+    //    return events_.findByName(name);
+    //}
 
-    QueryPoolHandle ResourceManager::findQueryPoolByName(const std::string& name) {
-        return queryPools_.findByName(name);
-    }
+    //QueryPoolHandle ResourceManager::findQueryPoolByName(const std::string& name) {
+    //    return queryPools_.findByName(name);
+    //}
 
-    AccelerationStructureHandle ResourceManager::findAccelerationStructureByName(const std::string& name) {
-        return accelerationStructures_.findByName(name);
-    }
+    //AccelerationStructureHandle ResourceManager::findAccelerationStructureByName(const std::string& name) {
+    //    return accelerationStructures_.findByName(name);
+    //}
 
-    SwapChainHandle ResourceManager::findSwapChainByName(const std::string& name) {
-        return swapChains_.findByName(name);
-    }
+    //SwapChainHandle ResourceManager::findSwapChainByName(const std::string& name) {
+    //    return swapChains_.findByName(name);
+    //}
 
-    QueueHandle ResourceManager::findQueueByName(const std::string& name) {
-        return queues_.findByName(name);
-    }
+    //QueueHandle ResourceManager::findQueueByName(const std::string& name) {
+    //    return queues_.findByName(name);
+    //}
 
     // ==================== 按调试标签查找方法 ====================
     BufferHandle ResourceManager::findBufferByDebugTag(const std::string& debugTag) {
@@ -667,41 +667,41 @@ namespace StarryEngine::RHI {
         return descriptorSetLayouts_.findByDebugTag(debugTag);
     }
 
-    CommandBufferHandle ResourceManager::findCommandBufferByDebugTag(const std::string& debugTag) {
-        return commandBuffers_.findByDebugTag(debugTag);
-    }
+    //CommandBufferHandle ResourceManager::findCommandBufferByDebugTag(const std::string& debugTag) {
+    //    return commandBuffers_.findByDebugTag(debugTag);
+    //}
 
-    CommandPoolHandle ResourceManager::findCommandPoolByDebugTag(const std::string& debugTag) {
-        return commandPools_.findByDebugTag(debugTag);
-    }
+    //CommandPoolHandle ResourceManager::findCommandPoolByDebugTag(const std::string& debugTag) {
+    //    return commandPools_.findByDebugTag(debugTag);
+    //}
 
-    FenceHandle ResourceManager::findFenceByDebugTag(const std::string& debugTag) {
-        return fences_.findByDebugTag(debugTag);
-    }
+    //FenceHandle ResourceManager::findFenceByDebugTag(const std::string& debugTag) {
+    //    return fences_.findByDebugTag(debugTag);
+    //}
 
-    SemaphoreHandle ResourceManager::findSemaphoreByDebugTag(const std::string& debugTag) {
-        return semaphores_.findByDebugTag(debugTag);
-    }
+    //SemaphoreHandle ResourceManager::findSemaphoreByDebugTag(const std::string& debugTag) {
+    //    return semaphores_.findByDebugTag(debugTag);
+    //}
 
-    EventHandle ResourceManager::findEventByDebugTag(const std::string& debugTag) {
-        return events_.findByDebugTag(debugTag);
-    }
+    //EventHandle ResourceManager::findEventByDebugTag(const std::string& debugTag) {
+    //    return events_.findByDebugTag(debugTag);
+    //}
 
-    QueryPoolHandle ResourceManager::findQueryPoolByDebugTag(const std::string& debugTag) {
-        return queryPools_.findByDebugTag(debugTag);
-    }
+    //QueryPoolHandle ResourceManager::findQueryPoolByDebugTag(const std::string& debugTag) {
+    //    return queryPools_.findByDebugTag(debugTag);
+    //}
 
-    AccelerationStructureHandle ResourceManager::findAccelerationStructureByDebugTag(const std::string& debugTag) {
-        return accelerationStructures_.findByDebugTag(debugTag);
-    }
+    //AccelerationStructureHandle ResourceManager::findAccelerationStructureByDebugTag(const std::string& debugTag) {
+    //    return accelerationStructures_.findByDebugTag(debugTag);
+    //}
 
-    SwapChainHandle ResourceManager::findSwapChainByDebugTag(const std::string& debugTag) {
-        return swapChains_.findByDebugTag(debugTag);
-    }
+    //SwapChainHandle ResourceManager::findSwapChainByDebugTag(const std::string& debugTag) {
+    //    return swapChains_.findByDebugTag(debugTag);
+    //}
 
-    QueueHandle ResourceManager::findQueueByDebugTag(const std::string& debugTag) {
-        return queues_.findByDebugTag(debugTag);
-    }
+    //QueueHandle ResourceManager::findQueueByDebugTag(const std::string& debugTag) {
+    //    return queues_.findByDebugTag(debugTag);
+    //}
 
     // ==================== 资源引用计数管理 ====================
     bool ResourceManager::addRef(BufferHandle handle) {
@@ -836,113 +836,113 @@ namespace StarryEngine::RHI {
         return descriptorSetLayouts_.destroy(handle);
     }
 
-    bool ResourceManager::addRef(CommandBufferHandle handle) {
-        return commandBuffers_.addRef(handle);
-    }
+    //bool ResourceManager::addRef(CommandBufferHandle handle) {
+    //    return commandBuffers_.addRef(handle);
+    //}
 
-    bool ResourceManager::release(CommandBufferHandle handle) {
-        return commandBuffers_.release(handle);
-    }
+    //bool ResourceManager::release(CommandBufferHandle handle) {
+    //    return commandBuffers_.release(handle);
+    //}
 
-    bool ResourceManager::destroy(CommandBufferHandle handle) {
-        return commandBuffers_.destroy(handle);
-    }
+    //bool ResourceManager::destroy(CommandBufferHandle handle) {
+    //    return commandBuffers_.destroy(handle);
+    //}
 
-    bool ResourceManager::addRef(CommandPoolHandle handle) {
-        return commandPools_.addRef(handle);
-    }
+    //bool ResourceManager::addRef(CommandPoolHandle handle) {
+    //    return commandPools_.addRef(handle);
+    //}
 
-    bool ResourceManager::release(CommandPoolHandle handle) {
-        return commandPools_.release(handle);
-    }
+    //bool ResourceManager::release(CommandPoolHandle handle) {
+    //    return commandPools_.release(handle);
+    //}
 
-    bool ResourceManager::destroy(CommandPoolHandle handle) {
-        return commandPools_.destroy(handle);
-    }
+    //bool ResourceManager::destroy(CommandPoolHandle handle) {
+    //    return commandPools_.destroy(handle);
+    //}
 
-    bool ResourceManager::addRef(FenceHandle handle) {
-        return fences_.addRef(handle);
-    }
+    //bool ResourceManager::addRef(FenceHandle handle) {
+    //    return fences_.addRef(handle);
+    //}
 
-    bool ResourceManager::release(FenceHandle handle) {
-        return fences_.release(handle);
-    }
+    //bool ResourceManager::release(FenceHandle handle) {
+    //    return fences_.release(handle);
+    //}
 
-    bool ResourceManager::destroy(FenceHandle handle) {
-        return fences_.destroy(handle);
-    }
+    //bool ResourceManager::destroy(FenceHandle handle) {
+    //    return fences_.destroy(handle);
+    //}
 
-    bool ResourceManager::addRef(SemaphoreHandle handle) {
-        return semaphores_.addRef(handle);
-    }
+    //bool ResourceManager::addRef(SemaphoreHandle handle) {
+    //    return semaphores_.addRef(handle);
+    //}
 
-    bool ResourceManager::release(SemaphoreHandle handle) {
-        return semaphores_.release(handle);
-    }
+    //bool ResourceManager::release(SemaphoreHandle handle) {
+    //    return semaphores_.release(handle);
+    //}
 
-    bool ResourceManager::destroy(SemaphoreHandle handle) {
-        return semaphores_.destroy(handle);
-    }
+    //bool ResourceManager::destroy(SemaphoreHandle handle) {
+    //    return semaphores_.destroy(handle);
+    //}
 
-    bool ResourceManager::addRef(EventHandle handle) {
-        return events_.addRef(handle);
-    }
+    //bool ResourceManager::addRef(EventHandle handle) {
+    //    return events_.addRef(handle);
+    //}
 
-    bool ResourceManager::release(EventHandle handle) {
-        return events_.release(handle);
-    }
+    //bool ResourceManager::release(EventHandle handle) {
+    //    return events_.release(handle);
+    //}
 
-    bool ResourceManager::destroy(EventHandle handle) {
-        return events_.destroy(handle);
-    }
+    //bool ResourceManager::destroy(EventHandle handle) {
+    //    return events_.destroy(handle);
+    //}
 
-    bool ResourceManager::addRef(QueryPoolHandle handle) {
-        return queryPools_.addRef(handle);
-    }
+    //bool ResourceManager::addRef(QueryPoolHandle handle) {
+    //    return queryPools_.addRef(handle);
+    //}
 
-    bool ResourceManager::release(QueryPoolHandle handle) {
-        return queryPools_.release(handle);
-    }
+    //bool ResourceManager::release(QueryPoolHandle handle) {
+    //    return queryPools_.release(handle);
+    //}
 
-    bool ResourceManager::destroy(QueryPoolHandle handle) {
-        return queryPools_.destroy(handle);
-    }
+    //bool ResourceManager::destroy(QueryPoolHandle handle) {
+    //    return queryPools_.destroy(handle);
+    //}
 
-    bool ResourceManager::addRef(AccelerationStructureHandle handle) {
-        return accelerationStructures_.addRef(handle);
-    }
+    //bool ResourceManager::addRef(AccelerationStructureHandle handle) {
+    //    return accelerationStructures_.addRef(handle);
+    //}
 
-    bool ResourceManager::release(AccelerationStructureHandle handle) {
-        return accelerationStructures_.release(handle);
-    }
+    //bool ResourceManager::release(AccelerationStructureHandle handle) {
+    //    return accelerationStructures_.release(handle);
+    //}
 
-    bool ResourceManager::destroy(AccelerationStructureHandle handle) {
-        return accelerationStructures_.destroy(handle);
-    }
+    //bool ResourceManager::destroy(AccelerationStructureHandle handle) {
+    //    return accelerationStructures_.destroy(handle);
+    //}
 
-    bool ResourceManager::addRef(SwapChainHandle handle) {
-        return swapChains_.addRef(handle);
-    }
+    //bool ResourceManager::addRef(SwapChainHandle handle) {
+    //    return swapChains_.addRef(handle);
+    //}
 
-    bool ResourceManager::release(SwapChainHandle handle) {
-        return swapChains_.release(handle);
-    }
+    //bool ResourceManager::release(SwapChainHandle handle) {
+    //    return swapChains_.release(handle);
+    //}
 
-    bool ResourceManager::destroy(SwapChainHandle handle) {
-        return swapChains_.destroy(handle);
-    }
+    //bool ResourceManager::destroy(SwapChainHandle handle) {
+    //    return swapChains_.destroy(handle);
+    //}
 
-    bool ResourceManager::addRef(QueueHandle handle) {
-        return queues_.addRef(handle);
-    }
+    //bool ResourceManager::addRef(QueueHandle handle) {
+    //    return queues_.addRef(handle);
+    //}
 
-    bool ResourceManager::release(QueueHandle handle) {
-        return queues_.release(handle);
-    }
+    //bool ResourceManager::release(QueueHandle handle) {
+    //    return queues_.release(handle);
+    //}
 
-    bool ResourceManager::destroy(QueueHandle handle) {
-        return queues_.destroy(handle);
-    }
+    //bool ResourceManager::destroy(QueueHandle handle) {
+    //    return queues_.destroy(handle);
+    //}
 
     // ==================== 资源存储访问 ====================
     TypedResourceStorage<BufferHandle, RHIBuffer>& ResourceManager::getBufferStorage() {
@@ -989,41 +989,41 @@ namespace StarryEngine::RHI {
         return descriptorSetLayouts_;
     }
 
-    TypedResourceStorage<CommandBufferHandle, RHICommandBuffer>& ResourceManager::getCommandBufferStorage() {
-        return commandBuffers_;
-    }
+    //TypedResourceStorage<CommandBufferHandle, RHICommandBuffer>& ResourceManager::getCommandBufferStorage() {
+    //    return commandBuffers_;
+    //}
 
-    TypedResourceStorage<CommandPoolHandle, RHICommandPool>& ResourceManager::getCommandPoolStorage() {
-        return commandPools_;
-    }
+    //TypedResourceStorage<CommandPoolHandle, RHICommandPool>& ResourceManager::getCommandPoolStorage() {
+    //    return commandPools_;
+    //}
 
-    TypedResourceStorage<FenceHandle, RHIFence>& ResourceManager::getFenceStorage() {
-        return fences_;
-    }
+    //TypedResourceStorage<FenceHandle, RHIFence>& ResourceManager::getFenceStorage() {
+    //    return fences_;
+    //}
 
-    TypedResourceStorage<SemaphoreHandle, RHISemaphore>& ResourceManager::getSemaphoreStorage() {
-        return semaphores_;
-    }
+    //TypedResourceStorage<SemaphoreHandle, RHISemaphore>& ResourceManager::getSemaphoreStorage() {
+    //    return semaphores_;
+    //}
 
-    TypedResourceStorage<EventHandle, RHIEvent>& ResourceManager::getEventStorage() {
-        return events_;
-    }
+    //TypedResourceStorage<EventHandle, RHIEvent>& ResourceManager::getEventStorage() {
+    //    return events_;
+    //}
 
-    TypedResourceStorage<QueryPoolHandle, RHIQueryPool>& ResourceManager::getQueryPoolStorage() {
-        return queryPools_;
-    }
+    //TypedResourceStorage<QueryPoolHandle, RHIQueryPool>& ResourceManager::getQueryPoolStorage() {
+    //    return queryPools_;
+    //}
 
-    TypedResourceStorage<AccelerationStructureHandle, RHIAccelerationStructure>& ResourceManager::getAccelerationStructureStorage() {
-        return accelerationStructures_;
-    }
+    //TypedResourceStorage<AccelerationStructureHandle, RHIAccelerationStructure>& ResourceManager::getAccelerationStructureStorage() {
+    //    return accelerationStructures_;
+    //}
 
-    TypedResourceStorage<SwapChainHandle, RHISwapChain>& ResourceManager::getSwapChainStorage() {
-        return swapChains_;
-    }
+    //TypedResourceStorage<SwapChainHandle, RHISwapChain>& ResourceManager::getSwapChainStorage() {
+    //    return swapChains_;
+    //}
 
-    TypedResourceStorage<QueueHandle, RHIQueue>& ResourceManager::getQueueStorage() {
-        return queues_;
-    }
+    //TypedResourceStorage<QueueHandle, RHIQueue>& ResourceManager::getQueueStorage() {
+    //    return queues_;
+    //}
 
     // ==================== 管理功能 ====================
     void ResourceManager::clearAll() {
@@ -1039,15 +1039,15 @@ namespace StarryEngine::RHI {
         descriptorSets_.clear();
         descriptorPools_.clear();
         descriptorSetLayouts_.clear();
-        commandBuffers_.clear();
-        commandPools_.clear();
-        fences_.clear();
-        semaphores_.clear();
-        events_.clear();
-        queryPools_.clear();
-        accelerationStructures_.clear();
-        swapChains_.clear();
-        queues_.clear();
+        //commandBuffers_.clear();
+        //commandPools_.clear();
+        //fences_.clear();
+        //semaphores_.clear();
+        //events_.clear();
+        //queryPools_.clear();
+        //accelerationStructures_.clear();
+        //swapChains_.clear();
+        //queues_.clear();
     }
 
     // ==================== ResourceManager::getStatistics() 方法修复 ====================
@@ -1066,15 +1066,15 @@ namespace StarryEngine::RHI {
         stats.descriptorSetCount = descriptorSets_.size();
         stats.descriptorPoolCount = descriptorPools_.size();
         stats.descriptorSetLayoutCount = descriptorSetLayouts_.size();
-        stats.commandBufferCount = commandBuffers_.size();
-        stats.commandPoolCount = commandPools_.size();
-        stats.fenceCount = fences_.size();
-        stats.semaphoreCount = semaphores_.size();
-        stats.eventCount = events_.size();
-        stats.queryPoolCount = queryPools_.size();
-        stats.accelerationStructureCount = accelerationStructures_.size();
-        stats.swapChainCount = swapChains_.size();
-        stats.queueCount = queues_.size();
+        //stats.commandBufferCount = commandBuffers_.size();
+        //stats.commandPoolCount = commandPools_.size();
+        //stats.fenceCount = fences_.size();
+        //stats.semaphoreCount = semaphores_.size();
+        //stats.eventCount = events_.size();
+        //stats.queryPoolCount = queryPools_.size();
+        //stats.accelerationStructureCount = accelerationStructures_.size();
+        //stats.swapChainCount = swapChains_.size();
+        //stats.queueCount = queues_.size();
 
         stats.totalResources = stats.bufferCount + stats.textureCount + stats.pipelineCount +
             stats.pipelineLayoutCount + stats.shaderCount + stats.samplerCount +
@@ -1086,7 +1086,7 @@ namespace StarryEngine::RHI {
 
         stats.bufferMemoryUsage = buffers_.getTotalMemoryUsage();
         stats.textureMemoryUsage = textures_.getTotalMemoryUsage();
-        stats.accelerationStructureMemoryUsage = accelerationStructures_.getTotalMemoryUsage();
+        //stats.accelerationStructureMemoryUsage = accelerationStructures_.getTotalMemoryUsage();
         stats.totalMemoryUsage = stats.bufferMemoryUsage + stats.textureMemoryUsage +
             stats.accelerationStructureMemoryUsage;
 
@@ -1169,13 +1169,15 @@ namespace StarryEngine::RHI {
     void ResourceManager::setMemoryWarningThreshold(size_t threshold) {
         buffers_.setMemoryWarningThreshold(threshold);
         textures_.setMemoryWarningThreshold(threshold);
-        accelerationStructures_.setMemoryWarningThreshold(threshold);
+        //accelerationStructures_.setMemoryWarningThreshold(threshold);
     }
 
     bool ResourceManager::checkMemoryUsage() const {
+        //return buffers_.isMemoryUsageExceeded() ||
+        //    textures_.isMemoryUsageExceeded() ||
+        //    accelerationStructures_.isMemoryUsageExceeded();
         return buffers_.isMemoryUsageExceeded() ||
-            textures_.isMemoryUsageExceeded() ||
-            accelerationStructures_.isMemoryUsageExceeded();
+            textures_.isMemoryUsageExceeded();
     }
 
     size_t ResourceManager::tryReleaseUnusedResources() {
@@ -1232,15 +1234,15 @@ namespace StarryEngine::RHI {
         validateStorage(shaders_, "Shader");
         validateStorage(descriptorSets_, "DescriptorSet");
         validateStorage(descriptorPools_, "DescriptorPool");
-        validateStorage(commandBuffers_, "CommandBuffer");
-        validateStorage(commandPools_, "CommandPool");
-        validateStorage(fences_, "Fence");
-        validateStorage(semaphores_, "Semaphore");
-        validateStorage(events_, "Event");
-        validateStorage(queryPools_, "QueryPool");
-        validateStorage(accelerationStructures_, "AccelerationStructure");
-        validateStorage(swapChains_, "SwapChain");
-        validateStorage(queues_, "Queue");
+        //validateStorage(commandBuffers_, "CommandBuffer");
+        //validateStorage(commandPools_, "CommandPool");
+        //validateStorage(fences_, "Fence");
+        //validateStorage(semaphores_, "Semaphore");
+        //validateStorage(events_, "Event");
+        //validateStorage(queryPools_, "QueryPool");
+        //validateStorage(accelerationStructures_, "AccelerationStructure");
+        //validateStorage(swapChains_, "SwapChain");
+        //validateStorage(queues_, "Queue");
 
         return allValid;
     }

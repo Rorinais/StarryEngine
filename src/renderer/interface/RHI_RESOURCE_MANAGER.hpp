@@ -279,56 +279,56 @@ namespace StarryEngine::RHI {
             const std::string& name = "",
             const std::string& debugTag = "");
 
-        // 命令缓冲区
-        CommandBufferHandle createCommandBuffer(const CommandBufferDesc& desc,
-            const std::string& name = "",
-            const std::string& debugTag = "");
+        //// 命令缓冲区
+        //CommandBufferHandle createCommandBuffer(const CommandBufferDesc& desc,
+        //    const std::string& name = "",
+        //    const std::string& debugTag = "");
 
-        // 命令池
-        CommandPoolHandle createCommandPool(const CommandPoolDesc& desc,
-            const std::string& name = "",
-            const std::string& debugTag = "");
+        //// 命令池
+        //CommandPoolHandle createCommandPool(const CommandPoolDesc& desc,
+        //    const std::string& name = "",
+        //    const std::string& debugTag = "");
 
-        // 栅栏
-        FenceHandle createFence(const FenceDesc& desc,
-            const std::string& name = "",
-            const std::string& debugTag = "");
+        //// 栅栏
+        //FenceHandle createFence(const FenceDesc& desc,
+        //    const std::string& name = "",
+        //    const std::string& debugTag = "");
 
-        // 信号量
-        SemaphoreHandle createSemaphore(const SemaphoreDesc& desc,
-            const std::string& name = "",
-            const std::string& debugTag = "");
+        //// 信号量
+        //SemaphoreHandle createSemaphore(const SemaphoreDesc& desc,
+        //    const std::string& name = "",
+        //    const std::string& debugTag = "");
 
-        // 事件
-        EventHandle createEvent(const EventDesc& desc,
-            const std::string& name = "",
-            const std::string& debugTag = "");
+        //// 事件
+        //EventHandle createEvent(const EventDesc& desc,
+        //    const std::string& name = "",
+        //    const std::string& debugTag = "");
 
-        // 查询池
-        QueryPoolHandle createQueryPool(const QueryPoolDesc& desc,
-            const std::string& name = "",
-            const std::string& debugTag = "");
+        //// 查询池
+        //QueryPoolHandle createQueryPool(const QueryPoolDesc& desc,
+        //    const std::string& name = "",
+        //    const std::string& debugTag = "");
 
-        // 加速结构
-        AccelerationStructureHandle createAccelerationStructure(const AccelerationStructureDesc& desc,
-            const std::string& name = "",
-            const std::string& debugTag = "");
+        //// 加速结构
+        //AccelerationStructureHandle createAccelerationStructure(const AccelerationStructureDesc& desc,
+        //    const std::string& name = "",
+        //    const std::string& debugTag = "");
 
-        // 交换链
-        SwapChainHandle createSwapChain(const SwapChainDesc& desc,
-            const std::string& name = "",
-            const std::string& debugTag = "");
+        //// 交换链
+        //SwapChainHandle createSwapChain(const SwapChainDesc& desc,
+        //    const std::string& name = "",
+        //    const std::string& debugTag = "");
 
-        // 队列
-        QueueHandle createQueue(const QueueDesc& desc,
-            const std::string& name = "",
-            const std::string& debugTag = "");
+        //// 队列
+        //QueueHandle createQueue(const QueueDesc& desc,
+        //    const std::string& name = "",
+        //    const std::string& debugTag = "");
 
         // ========== 批量创建接口 ==========
 
-        std::vector<CommandBufferHandle> createCommandBuffers(uint32_t count,
-            const CommandBufferDesc& desc,
-            const std::string& baseName = "");
+        //std::vector<CommandBufferHandle> createCommandBuffers(uint32_t count,
+        //    const CommandBufferDesc& desc,
+        //    const std::string& baseName = "");
 
         std::vector<DescriptorSetHandle> createDescriptorSets(uint32_t count,
             const DescriptorSetDesc& desc,
@@ -369,32 +369,32 @@ namespace StarryEngine::RHI {
         RHIDescriptorSetLayout* getDescriptorSetLayout(DescriptorSetLayoutHandle handle);
         const RHIDescriptorSetLayout* getDescriptorSetLayout(DescriptorSetLayoutHandle handle) const;
 
-        RHICommandBuffer* getCommandBuffer(CommandBufferHandle handle);
-        const RHICommandBuffer* getCommandBuffer(CommandBufferHandle handle) const;
+        //RHICommandBuffer* getCommandBuffer(CommandBufferHandle handle);
+        //const RHICommandBuffer* getCommandBuffer(CommandBufferHandle handle) const;
 
-        RHICommandPool* getCommandPool(CommandPoolHandle handle);
-        const RHICommandPool* getCommandPool(CommandPoolHandle handle) const;
+        //RHICommandPool* getCommandPool(CommandPoolHandle handle);
+        //const RHICommandPool* getCommandPool(CommandPoolHandle handle) const;
 
-        RHIFence* getFence(FenceHandle handle);
-        const RHIFence* getFence(FenceHandle handle) const;
+        //RHIFence* getFence(FenceHandle handle);
+        //const RHIFence* getFence(FenceHandle handle) const;
 
-        RHISemaphore* getSemaphore(SemaphoreHandle handle);
-        const RHISemaphore* getSemaphore(SemaphoreHandle handle) const;
+        //RHISemaphore* getSemaphore(SemaphoreHandle handle);
+        //const RHISemaphore* getSemaphore(SemaphoreHandle handle) const;
 
-        RHIEvent* getEvent(EventHandle handle);
-        const RHIEvent* getEvent(EventHandle handle) const;
+        //RHIEvent* getEvent(EventHandle handle);
+        //const RHIEvent* getEvent(EventHandle handle) const;
 
-        RHIQueryPool* getQueryPool(QueryPoolHandle handle);
-        const RHIQueryPool* getQueryPool(QueryPoolHandle handle) const;
+        //RHIQueryPool* getQueryPool(QueryPoolHandle handle);
+        //const RHIQueryPool* getQueryPool(QueryPoolHandle handle) const;
 
-        RHIAccelerationStructure* getAccelerationStructure(AccelerationStructureHandle handle);
-        const RHIAccelerationStructure* getAccelerationStructure(AccelerationStructureHandle handle) const;
+        //RHIAccelerationStructure* getAccelerationStructure(AccelerationStructureHandle handle);
+        //const RHIAccelerationStructure* getAccelerationStructure(AccelerationStructureHandle handle) const;
 
-        RHISwapChain* getSwapChain(SwapChainHandle handle);
-        const RHISwapChain* getSwapChain(SwapChainHandle handle) const;
+        //RHISwapChain* getSwapChain(SwapChainHandle handle);
+        //const RHISwapChain* getSwapChain(SwapChainHandle handle) const;
 
-        RHIQueue* getQueue(QueueHandle handle);
-        const RHIQueue* getQueue(QueueHandle handle) const;
+        //RHIQueue* getQueue(QueueHandle handle);
+        //const RHIQueue* getQueue(QueueHandle handle) const;
 
         // ========== 按名称查找 ==========
 
@@ -408,15 +408,15 @@ namespace StarryEngine::RHI {
         DescriptorSetHandle findDescriptorSetByName(const std::string& name);
         DescriptorPoolHandle findDescriptorPoolByName(const std::string& name);
         DescriptorSetLayoutHandle findDescriptorSetLayoutByName(const std::string& name);
-        CommandBufferHandle findCommandBufferByName(const std::string& name);
-        CommandPoolHandle findCommandPoolByName(const std::string& name);
-        FenceHandle findFenceByName(const std::string& name);
-        SemaphoreHandle findSemaphoreByName(const std::string& name);
-        EventHandle findEventByName(const std::string& name);
-        QueryPoolHandle findQueryPoolByName(const std::string& name);
-        AccelerationStructureHandle findAccelerationStructureByName(const std::string& name);
-        SwapChainHandle findSwapChainByName(const std::string& name);
-        QueueHandle findQueueByName(const std::string& name);
+        //CommandBufferHandle findCommandBufferByName(const std::string& name);
+        //CommandPoolHandle findCommandPoolByName(const std::string& name);
+        //FenceHandle findFenceByName(const std::string& name);
+        //SemaphoreHandle findSemaphoreByName(const std::string& name);
+        //EventHandle findEventByName(const std::string& name);
+        //QueryPoolHandle findQueryPoolByName(const std::string& name);
+        //AccelerationStructureHandle findAccelerationStructureByName(const std::string& name);
+        //SwapChainHandle findSwapChainByName(const std::string& name);
+        //QueueHandle findQueueByName(const std::string& name);
 
         // ========== 按调试标签查找 ==========
 
@@ -430,15 +430,15 @@ namespace StarryEngine::RHI {
         DescriptorSetHandle findDescriptorSetByDebugTag(const std::string& debugTag);
         DescriptorPoolHandle findDescriptorPoolByDebugTag(const std::string& debugTag);
         DescriptorSetLayoutHandle findDescriptorSetLayoutByDebugTag(const std::string& debugTag);
-        CommandBufferHandle findCommandBufferByDebugTag(const std::string& debugTag);
-        CommandPoolHandle findCommandPoolByDebugTag(const std::string& debugTag);
-        FenceHandle findFenceByDebugTag(const std::string& debugTag);
-        SemaphoreHandle findSemaphoreByDebugTag(const std::string& debugTag);
-        EventHandle findEventByDebugTag(const std::string& debugTag);
-        QueryPoolHandle findQueryPoolByDebugTag(const std::string& debugTag);
-        AccelerationStructureHandle findAccelerationStructureByDebugTag(const std::string& debugTag);
-        SwapChainHandle findSwapChainByDebugTag(const std::string& debugTag);
-        QueueHandle findQueueByDebugTag(const std::string& debugTag);
+        //CommandBufferHandle findCommandBufferByDebugTag(const std::string& debugTag);
+        //CommandPoolHandle findCommandPoolByDebugTag(const std::string& debugTag);
+        //FenceHandle findFenceByDebugTag(const std::string& debugTag);
+        //SemaphoreHandle findSemaphoreByDebugTag(const std::string& debugTag);
+        //EventHandle findEventByDebugTag(const std::string& debugTag);
+        //QueryPoolHandle findQueryPoolByDebugTag(const std::string& debugTag);
+        //AccelerationStructureHandle findAccelerationStructureByDebugTag(const std::string& debugTag);
+        //SwapChainHandle findSwapChainByDebugTag(const std::string& debugTag);
+        //QueueHandle findQueueByDebugTag(const std::string& debugTag);
 
         // ========== 资源引用计数管理 ==========
 
@@ -486,41 +486,41 @@ namespace StarryEngine::RHI {
         bool release(DescriptorSetLayoutHandle handle);
         bool destroy(DescriptorSetLayoutHandle handle);
 
-        bool addRef(CommandBufferHandle handle);
-        bool release(CommandBufferHandle handle);
-        bool destroy(CommandBufferHandle handle);
+        //bool addRef(CommandBufferHandle handle);
+        //bool release(CommandBufferHandle handle);
+        //bool destroy(CommandBufferHandle handle);
 
-        bool addRef(CommandPoolHandle handle);
-        bool release(CommandPoolHandle handle);
-        bool destroy(CommandPoolHandle handle);
+        //bool addRef(CommandPoolHandle handle);
+        //bool release(CommandPoolHandle handle);
+        //bool destroy(CommandPoolHandle handle);
 
-        bool addRef(FenceHandle handle);
-        bool release(FenceHandle handle);
-        bool destroy(FenceHandle handle);
+        //bool addRef(FenceHandle handle);
+        //bool release(FenceHandle handle);
+        //bool destroy(FenceHandle handle);
 
-        bool addRef(SemaphoreHandle handle);
-        bool release(SemaphoreHandle handle);
-        bool destroy(SemaphoreHandle handle);
+        //bool addRef(SemaphoreHandle handle);
+        //bool release(SemaphoreHandle handle);
+        //bool destroy(SemaphoreHandle handle);
 
-        bool addRef(EventHandle handle);
-        bool release(EventHandle handle);
-        bool destroy(EventHandle handle);
+        //bool addRef(EventHandle handle);
+        //bool release(EventHandle handle);
+        //bool destroy(EventHandle handle);
 
-        bool addRef(QueryPoolHandle handle);
-        bool release(QueryPoolHandle handle);
-        bool destroy(QueryPoolHandle handle);
+        //bool addRef(QueryPoolHandle handle);
+        //bool release(QueryPoolHandle handle);
+        //bool destroy(QueryPoolHandle handle);
 
-        bool addRef(AccelerationStructureHandle handle);
-        bool release(AccelerationStructureHandle handle);
-        bool destroy(AccelerationStructureHandle handle);
+        //bool addRef(AccelerationStructureHandle handle);
+        //bool release(AccelerationStructureHandle handle);
+        //bool destroy(AccelerationStructureHandle handle);
 
-        bool addRef(SwapChainHandle handle);
-        bool release(SwapChainHandle handle);
-        bool destroy(SwapChainHandle handle);
+        //bool addRef(SwapChainHandle handle);
+        //bool release(SwapChainHandle handle);
+        //bool destroy(SwapChainHandle handle);
 
-        bool addRef(QueueHandle handle);
-        bool release(QueueHandle handle);
-        bool destroy(QueueHandle handle);
+        //bool addRef(QueueHandle handle);
+        //bool release(QueueHandle handle);
+        //bool destroy(QueueHandle handle);
 
         // ========== 资源存储访问 ==========
 
@@ -535,15 +535,15 @@ namespace StarryEngine::RHI {
         TypedResourceStorage<DescriptorSetHandle, RHIDescriptorSet>& getDescriptorSetStorage();
         TypedResourceStorage<DescriptorPoolHandle, RHIDescriptorPool>& getDescriptorPoolStorage();
         TypedResourceStorage<DescriptorSetLayoutHandle, RHIDescriptorSetLayout>& getDescriptorSetLayoutStorage();
-        TypedResourceStorage<CommandBufferHandle, RHICommandBuffer>& getCommandBufferStorage();
-        TypedResourceStorage<CommandPoolHandle, RHICommandPool>& getCommandPoolStorage();
-        TypedResourceStorage<FenceHandle, RHIFence>& getFenceStorage();
-        TypedResourceStorage<SemaphoreHandle, RHISemaphore>& getSemaphoreStorage();
-        TypedResourceStorage<EventHandle, RHIEvent>& getEventStorage();
-        TypedResourceStorage<QueryPoolHandle, RHIQueryPool>& getQueryPoolStorage();
-        TypedResourceStorage<AccelerationStructureHandle, RHIAccelerationStructure>& getAccelerationStructureStorage();
-        TypedResourceStorage<SwapChainHandle, RHISwapChain>& getSwapChainStorage();
-        TypedResourceStorage<QueueHandle, RHIQueue>& getQueueStorage();
+        //TypedResourceStorage<CommandBufferHandle, RHICommandBuffer>& getCommandBufferStorage();
+        //TypedResourceStorage<CommandPoolHandle, RHICommandPool>& getCommandPoolStorage();
+        //TypedResourceStorage<FenceHandle, RHIFence>& getFenceStorage();
+        //TypedResourceStorage<SemaphoreHandle, RHISemaphore>& getSemaphoreStorage();
+        //TypedResourceStorage<EventHandle, RHIEvent>& getEventStorage();
+        //TypedResourceStorage<QueryPoolHandle, RHIQueryPool>& getQueryPoolStorage();
+        //TypedResourceStorage<AccelerationStructureHandle, RHIAccelerationStructure>& getAccelerationStructureStorage();
+        //TypedResourceStorage<SwapChainHandle, RHISwapChain>& getSwapChainStorage();
+        //TypedResourceStorage<QueueHandle, RHIQueue>& getQueueStorage();
 
         // ========== 管理功能 ==========
 
@@ -612,15 +612,15 @@ namespace StarryEngine::RHI {
         TypedResourceStorage<DescriptorSetHandle, RHIDescriptorSet> descriptorSets_;
         TypedResourceStorage<DescriptorPoolHandle, RHIDescriptorPool> descriptorPools_;
         TypedResourceStorage<DescriptorSetLayoutHandle, RHIDescriptorSetLayout> descriptorSetLayouts_;
-        TypedResourceStorage<CommandBufferHandle, RHICommandBuffer> commandBuffers_;
-        TypedResourceStorage<CommandPoolHandle, RHICommandPool> commandPools_;
-        TypedResourceStorage<FenceHandle, RHIFence> fences_;
-        TypedResourceStorage<SemaphoreHandle, RHISemaphore> semaphores_;
-        TypedResourceStorage<EventHandle, RHIEvent> events_;
-        TypedResourceStorage<QueryPoolHandle, RHIQueryPool> queryPools_;
-        TypedResourceStorage<AccelerationStructureHandle, RHIAccelerationStructure> accelerationStructures_;
-        TypedResourceStorage<SwapChainHandle, RHISwapChain> swapChains_;
-        TypedResourceStorage<QueueHandle, RHIQueue> queues_;
+        //TypedResourceStorage<CommandBufferHandle, RHICommandBuffer> commandBuffers_;
+        //TypedResourceStorage<CommandPoolHandle, RHICommandPool> commandPools_;
+        //TypedResourceStorage<FenceHandle, RHIFence> fences_;
+        //TypedResourceStorage<SemaphoreHandle, RHISemaphore> semaphores_;
+        //TypedResourceStorage<EventHandle, RHIEvent> events_;
+        //TypedResourceStorage<QueryPoolHandle, RHIQueryPool> queryPools_;
+        //TypedResourceStorage<AccelerationStructureHandle, RHIAccelerationStructure> accelerationStructures_;
+        //TypedResourceStorage<SwapChainHandle, RHISwapChain> swapChains_;
+        //TypedResourceStorage<QueueHandle, RHIQueue> queues_;
 
         // 统计信息
        // mutable std::mutex statsMutex_;

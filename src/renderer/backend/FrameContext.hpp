@@ -92,7 +92,6 @@ namespace StarryEngine {
             VkQueue graphicsQueue,
             const PresentImageFunc& presentFunc);
 
-        // 简化接口：一次性执行完整帧
         FrameInfo processFrame(const AcquireImageFunc& acquireFunc,
             VkQueue graphicsQueue,
             const PresentImageFunc& presentFunc);
@@ -185,6 +184,9 @@ namespace StarryEngine {
         bool mTimestampsEnabled = false;
         float mTimestampPeriod = 1.0f;
 
+        bool m_hasRenderedAnyFrame = false;
+        uint32_t m_lastFrameIndex = 0;
+
     private:
         // 内部创建函数
         bool createSyncObjects();
@@ -197,7 +199,7 @@ namespace StarryEngine {
         void endTimestampQuery(FrameInfo& frameInfo);
 
         // 统计更新
-        void updateStatistics(const FrameInfo& frameInfo);
+        void updateStatistics(uint32_t completedFrameIndex);
 
         // 验证
         void validateFrameInfo(const FrameInfo& frameInfo) const;

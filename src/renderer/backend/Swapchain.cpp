@@ -25,19 +25,20 @@ namespace StarryEngine {
 
     VkResult SwapChain::acquireNextImage(VkSemaphore imageAvailableSemaphore,
         VkFence fence,
-        uint64_t timeout) {
-
+        uint64_t timeout,
+        uint32_t& outImageIndex) {
         if (mSwapChain == VK_NULL_HANDLE) {
             return VK_ERROR_INITIALIZATION_FAILED;
         }
 
+        uint32_t imageIndex;
         VkResult result = vkAcquireNextImageKHR(
             mDevice->getLogicalDevice(),
             mSwapChain,
             timeout,
             imageAvailableSemaphore,
             fence,
-            &mCurrentImageIndex
+            &imageIndex
         );
 
         // 处理特殊结果
@@ -45,14 +46,17 @@ namespace StarryEngine {
         case VK_SUCCESS:
             mOutOfDate = false;
             mSuboptimal = false;
+            outImageIndex = imageIndex;  // 将索引返回给调用者
             break;
 
         case VK_SUBOPTIMAL_KHR:
             mSuboptimal = true;
+            outImageIndex = imageIndex;  // 子优情况下索引仍然有效
             break;
 
         case VK_ERROR_OUT_OF_DATE_KHR:
             mOutOfDate = true;
+            // 不设置 outImageIndex
             break;
 
         case VK_ERROR_SURFACE_LOST_KHR:
@@ -249,17 +253,11 @@ namespace StarryEngine {
 
     void SwapChain::cleanupSwapChain() {
         for (auto& imageView : mImageViews) {
-            if (imageView != VK_NULL_HANDLE) {
-                mDevice->destroyImageView(imageView);
-            }
+            mDevice->destroyImageView(imageView);
+
         }
         mImageViews.clear();
-
-        if (mSwapChain != VK_NULL_HANDLE) {
-            vkDestroySwapchainKHR(mDevice->getLogicalDevice(), mSwapChain, nullptr);
-            mSwapChain = VK_NULL_HANDLE;
-        }
-
+		mDevice->destroySwapChain(mSwapChain);
         mImages.clear();
     }
 

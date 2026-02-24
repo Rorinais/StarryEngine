@@ -221,6 +221,10 @@ namespace StarryEngine {
 
         void destroyImageView(VkImageView& imageView);
 
+        void destroySwapChain(VkSwapchainKHR& swapchain);
+
+        void destroySurface(VkSurfaceKHR& surface);
+
         // ==================== 组合函数 ====================
 
         // 创建完整的图像资源（VMA方式：图像+分配+视图）
@@ -260,6 +264,7 @@ namespace StarryEngine {
         VkCommandPool createCommandPool(uint32_t queueFamilyIndex,
             VkCommandPoolCreateFlags flags = 0);
         void destroyCommandPool(VkCommandPool& commandPool);
+        void destroyQueryPool(VkQueryPool& queryPool);
 
         VkCommandBuffer allocateCommandBuffer(VkCommandPool& pool,
             VkCommandBufferLevel level = VK_COMMAND_BUFFER_LEVEL_PRIMARY);

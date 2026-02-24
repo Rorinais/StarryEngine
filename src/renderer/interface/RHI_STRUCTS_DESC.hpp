@@ -582,7 +582,7 @@ namespace StarryEngine::RHI {
      * @details 描述缓冲区访问同步屏障
      */
     struct BufferBarrier {
-        void* buffer = nullptr;                     ///< 缓冲区句柄
+        BufferHandle buffer;                     ///< 缓冲区句柄
         AccessFlag srcAccessMask = AccessFlag::None; ///< 源访问掩码
         AccessFlag dstAccessMask = AccessFlag::None; ///< 目标访问掩码
         uint64_t offset = 0;                        ///< 偏移量
@@ -609,7 +609,7 @@ namespace StarryEngine::RHI {
      * @details 描述图像访问同步屏障
      */
     struct ImageBarrier {
-        void* image = nullptr;                      ///< 图像句柄
+        TextureHandle image;                      ///< 图像句柄
         ImageLayout oldLayout = ImageLayout::Undefined; ///< 旧布局
         ImageLayout newLayout = ImageLayout::Undefined; ///< 新布局
         AccessFlag srcAccessMask = AccessFlag::None; ///< 源访问掩码
@@ -661,7 +661,7 @@ namespace StarryEngine::RHI {
      * @details 描述命令缓冲区的属性和行为
      */
     struct CommandBufferDesc {
-		CommandPoolHandle commandPool;                   ///< 命令池句柄
+		void*  commandPool;                   ///< 命令池句柄
         CommandBufferLevel level = CommandBufferLevel::Primary; ///< 命令缓冲区级别
         CommandBufferType type = CommandBufferType::Graphics;   ///< 命令缓冲区类型
         bool oneTimeSubmit = true;               ///< 是否为一次性提交

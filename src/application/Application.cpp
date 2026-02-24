@@ -8,23 +8,20 @@ namespace StarryEngine {
         config.height = m_height;
         config.title = m_title;
         config.iconPath = m_icon_path;       
-        config.highDPI = false;                    
+        config.highDPI = false;    
+		config.resizable = true;
         m_window = Window::create(config);
 
         // 2. 设置回调
         m_window->setKeyCallback([this](int key, int action) {
-            if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
-                glfwSetWindowShouldClose(m_window->getHandle(), GLFW_TRUE);
-            }
-            });
+            if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) glfwSetWindowShouldClose(m_window->getHandle(), GLFW_TRUE);
+        });
 
         m_window->setResizeCallback([this](int width, int height) {
             mFramebufferResized = true;
             m_width = width;
             m_height = height;
-
-            // TODO: 处理交换链重建
-            });
+        });
 
         // 3. 配置RHI
         RHI::RHIInitConfig rhiConfig;
@@ -79,15 +76,15 @@ namespace StarryEngine {
         rhiConfig.deviceFeatures.dynamicRendering = true;
 
         // 交换链配置
-        rhiConfig.presentMode = RHI::RHIInitConfig::PresentMode::FIFO; // 垂直同步
-		rhiConfig.swapChainImages = m_frameCount; // 双缓冲
+        rhiConfig.presentMode = RHI::RHIInitConfig::PresentMode::FIFO; 
+		rhiConfig.swapChainImages = m_FlightFrame; 
         rhiConfig.srgb = true;
 
         // 帧上下文配置
-        rhiConfig.frameBuffering = m_frameCount; // 双缓冲
+        rhiConfig.frameBuffering = m_FlightFrame; 
         rhiConfig.usePersistentCommandBuffers = true;
+        rhiConfig.enableTimestamps = true;
 
-        // 4. 初始化Vulkan RHI
         m_rhi = std::make_unique<VulkanRHI>();
         if (!m_rhi->initialize(rhiConfig)) {
             std::cerr << "Failed to initialize Vulkan RHI!" << std::endl;
@@ -107,86 +104,69 @@ namespace StarryEngine {
 		createPipeline();
 		createFramebuffers();
 
-        //for (auto handle: shaderHandles) {
-        //    m_rhi->release(handle);
-        //}
-
-        auto swapChain = m_rhi->getSwapChain();
         auto frameContext = m_rhi->getFrameContext();
-        auto acquireFunc = [&](VkSemaphore imageAvailableSemaphore, VkFence inFlightFence, uint32_t& imageIndex)->VkResult {
-            VkResult result = swapChain->acquireNextImage(imageAvailableSemaphore, inFlightFence, UINT16_MAX);
-            if (result == VK_SUCCESS || result == VK_SUBOPTIMAL_KHR) {
-                imageIndex = swapChain->getCurrentImageIndex();  
-            }
-            return result;
-            };
-        auto presentFunc = [&](VkQueue presentQueue, uint32_t imageIndex, VkSemaphore renderFinishedSemaphore)->VkResult {
-            return swapChain->present(presentQueue, imageIndex, renderFinishedSemaphore);
-            };
 
-        frameContext->setRecreateCallback([&](uint32_t width, uint32_t height)-> bool {
-            return swapChain->recreate(width, height);
-            });
+        double lastFrameTime = glfwGetTime();  // 上一帧结束的时间点
+        uint64_t frameCounter = 0;
         
         while (!glfwWindowShouldClose(m_window->getHandle())) {
             glfwPollEvents();
+            double frameStart = glfwGetTime();
 
             // 处理窗口大小变化
             if (mFramebufferResized) {
                 mFramebufferResized = false;
-                swapChain->recreate(m_width, m_height);
+
+                if (!m_rhi->recreateSwapChain(m_width, m_height)) {
+                    std::cerr << "Failed to recreate swap chain!" << std::endl;
+                }
                 // 重新创建帧缓冲
                 mFramebuffers = m_rhi->createFramebuffers(mRenderPassHandle);
             }
 
-            FrameContext::FrameInfo frameInfo = frameContext->beginFrame(acquireFunc);
+            bool success = m_rhi->renderFrame([this](RHI::RHICommandEncoder* encoder, uint32_t imageIndex) {
+                RHI::RenderPassBeginInfo rpBegin{};
+                rpBegin.renderPass = m_rhi->getRenderPass(mRenderPassHandle)->getNativeHandle();
+                rpBegin.framebuffer = m_rhi->getFramebuffer(mFramebuffers[imageIndex])->getNativeHandle();
+                rpBegin.renderArea = { {0, 0}, {m_width, m_height} };
+                rpBegin.clearValues = {
+                    RHI::ClearValue{{RHI::Color::Black()}},
+                    RHI::ClearValue{1.0f, 0}
+                };
+                encoder->beginRenderPass(rpBegin, RHI::SubpassContents::Inline);
 
-            if (frameInfo.needsRecreate) {
-                if(!frameContext->isRecreationNeeded()) {
-					m_rhi->waitIdle();
-                    swapChain->recreate(m_width, m_height);
-                    continue;
-				}
+                RHI::Viewport viewport{ 0.0f, 0.0f, static_cast<float>(m_width), static_cast<float>(m_height), 0.0f, 1.0f };
+                encoder->setViewport(viewport);
+                RHI::Rect2D scissor{ {0, 0}, {m_width, m_height} };
+                encoder->setScissor(scissor);
+
+                encoder->bindPipeline(m_rhi->getPipeline(mPipelineHandle));
+                encoder->draw(3, 1, 0, 0);
+
+                encoder->endRenderPass();
+             });
+
+            double frameEnd = glfwGetTime();   
+            double frameDuration = frameEnd - frameStart;  
+            double realFPS = 1.0 / frameDuration;
+
+            // 更新标题
+            double now = glfwGetTime();
+            if (now - m_lastFpsTime >= 1.0) {
+                const auto& stats = frameContext->getStatistics();
+                uint32_t lastFrameIdx = (frameContext->getCurrentFrameIndex() + m_FlightFrame - 1) % m_FlightFrame;
+                float lastGpuTime = frameContext->getFrameGPUTime(lastFrameIdx);
+
+                std::stringstream title;
+                title << m_title
+                    << " | Real FPS: " << std::fixed << std::setprecision(1) << realFPS
+                    << " | GPU Time: " << std::setprecision(3) << lastGpuTime << " ms"
+                    << " | CPU(avg): " << stats.averageCPUTime << " ms"
+                    << " | Total Frames: " << stats.totalFrames;
+                glfwSetWindowTitle(m_window->getHandle(), title.str().c_str());
+
+                m_lastFpsTime = now;
             }
-			auto encoder = m_rhi->getCommandEncoder(frameInfo.commandBuffer);
-
-            RHI::RenderPassBeginInfo rpBegin{};
-            rpBegin.renderPass = m_rhi->getRenderPass(mRenderPassHandle)->getNativeHandle();
-            rpBegin.framebuffer = m_rhi->getFramebuffer(mFramebuffers[frameInfo.imageIndex])->getNativeHandle();  // 确保 mFramebuffers 已创建
-            rpBegin.renderArea = { {0, 0}, {m_width, m_height} };
-            rpBegin.clearValues = {
-                RHI::ClearValue{{RHI::Color::Black()}},
-                RHI::ClearValue{1.0f, 0}                 
-            };
-            encoder->beginRenderPass(rpBegin, RHI::SubpassContents::Inline);
-
-            RHI::Viewport viewport{ 0.0f, 0.0f, static_cast<float>(m_width), static_cast<float>(m_height), 0.0f, 1.0f };
-            encoder->setViewport(viewport);
-
-            // 设置动态裁剪矩形
-            RHI::Rect2D scissor{ {0, 0}, {m_width, m_height} };
-            encoder->setScissor(scissor);
-
-            encoder->bindPipeline(m_rhi->getPipeline(mPipelineHandle));
-            encoder->draw(3, 1, 0, 0);
-
-			encoder->endRenderPass();
-
-			frameContext->endFrame(frameInfo);
-
-			VkResult PresentResult = frameContext->submitFrame(frameInfo, m_rhi->getGraphicsQueue(), presentFunc);
-            if (PresentResult == VK_ERROR_OUT_OF_DATE_KHR || PresentResult == VK_SUBOPTIMAL_KHR) {
-				mFramebufferResized = true;
-            }
-
-
-            // 简单帧率限制
-            static auto lastTime = glfwGetTime();
-            auto currentTime = glfwGetTime();
-            if (currentTime - lastTime < 1.0 / 60.0) {
-                continue;
-            }
-            lastTime = currentTime;
         }
 
         std::cout << "Application main loop ended." << std::endl;

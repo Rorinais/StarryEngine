@@ -92,7 +92,7 @@ namespace StarryEngine {
 
     bool Device::initializeVMA() {
         if (mVmaAllocator != VK_NULL_HANDLE) {
-            return true; 
+            return true;
         }
 
         VmaAllocatorCreateInfo allocatorInfo = {};
@@ -128,10 +128,10 @@ namespace StarryEngine {
 
     // VMA 方式创建缓冲区
     VMABuffer Device::createBufferWithVMA(VkDeviceSize size, VkBufferUsageFlags usage,
-    VmaMemoryUsage memoryUsage, VmaAllocationCreateFlags flags,
-    const void* initialData, size_t initialDataSize,
-    VmaAllocationInfo* allocationInfo) {  
-        
+        VmaMemoryUsage memoryUsage, VmaAllocationCreateFlags flags,
+        const void* initialData, size_t initialDataSize,
+        VmaAllocationInfo* allocationInfo) {
+
         if (mVmaAllocator == VK_NULL_HANDLE) {
             throw std::runtime_error("VMA not initialized!");
         }
@@ -164,7 +164,7 @@ namespace StarryEngine {
 
     void Device::uploadDataToVmaBuffer(VkBuffer buffer, VmaAllocation allocation,
         const void* data, size_t dataSize, VkDeviceSize offset) {
-        
+
         if (!data || dataSize == 0) {
             return;
         }
@@ -187,7 +187,8 @@ namespace StarryEngine {
             }
 
             vmaUnmapMemory(mVmaAllocator, allocation);
-        } else {
+        }
+        else {
             std::cerr << "Failed to map VMA memory: " << result << std::endl;
         }
     }
@@ -202,16 +203,16 @@ namespace StarryEngine {
         }
     }
 
-    void Device::uploadDataToTraditionalMemory(VkDeviceMemory memory, const void* data, 
-                            size_t dataSize, VkDeviceSize offset,
-                            bool hostCoherent) {
+    void Device::uploadDataToTraditionalMemory(VkDeviceMemory memory, const void* data,
+        size_t dataSize, VkDeviceSize offset,
+        bool hostCoherent) {
         if (!data || dataSize == 0) return;
-        
+
         void* mapped = nullptr;
         VkResult result = vkMapMemory(mLogicalDevice, memory, offset, dataSize, 0, &mapped);
         if (result == VK_SUCCESS && mapped) {
             memcpy(mapped, data, dataSize);
-            
+
             if (!hostCoherent) {
                 VkMappedMemoryRange mappedRange = {};
                 mappedRange.sType = VK_STRUCTURE_TYPE_MAPPED_MEMORY_RANGE;
@@ -220,20 +221,21 @@ namespace StarryEngine {
                 mappedRange.size = dataSize;
                 vkFlushMappedMemoryRanges(mLogicalDevice, 1, &mappedRange);
             }
-            
+
             vkUnmapMemory(mLogicalDevice, memory);
-        } else {
+        }
+        else {
             std::cerr << "[Device] Failed to map memory: " << result << std::endl;
         }
     }
 
     void Device::uploadDataViaStagingBuffer(VkCommandPool commandPool,
-                                    const VMATraditionalBuffer& dstBuffer,
-                                    const void* data, size_t dataSize) {
+        const VMATraditionalBuffer& dstBuffer,
+        const void* data, size_t dataSize) {
         if (!data || dataSize == 0) {
             return;
         }
-        
+
         try {
             // 1. 创建暂存缓冲区
             VMATraditionalBuffer stagingBuffer = createBufferTraditional(
@@ -243,14 +245,15 @@ namespace StarryEngine {
                 data,      // 直接上传数据
                 dataSize   // 数据大小
             );
-            
+
             // 2. 复制缓冲区（从暂存缓冲区复制到目标缓冲区）
             copyBuffer(commandPool, stagingBuffer.buffer, dstBuffer.buffer, dataSize);
-            
+
             // 3. 销毁暂存缓冲区
             destroyBufferTraditional(stagingBuffer);
-            
-        } catch (const std::exception& e) {
+
+        }
+        catch (const std::exception& e) {
             std::cerr << "[Device] Failed to upload data via staging buffer: " << e.what() << std::endl;
             throw;
         }
@@ -260,7 +263,7 @@ namespace StarryEngine {
     VMATraditionalBuffer Device::createBufferTraditional(VkDeviceSize size, VkBufferUsageFlags usage,
         VkMemoryPropertyFlags properties, const void* initialData,
         size_t initialDataSize, VkCommandPool commandPool) {
-        
+
         VkBufferCreateInfo bufferInfo = {};
         bufferInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
         bufferInfo.size = size;
@@ -295,10 +298,10 @@ namespace StarryEngine {
             if (properties & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
                 bool hostCoherent = (properties & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != 0;
                 uploadDataToTraditionalMemory(bufferMemory, initialData, initialDataSize, 0, hostCoherent);
-            } 
+            }
             // 如果是设备本地内存，需要暂存缓冲区
             else if (commandPool != VK_NULL_HANDLE) {
-                uploadDataViaStagingBuffer(commandPool, {buffer, bufferMemory}, initialData, initialDataSize);
+                uploadDataViaStagingBuffer(commandPool, { buffer, bufferMemory }, initialData, initialDataSize);
             }
             // 如果是设备本地内存但没有提供命令池，抛出异常
             else {
@@ -315,7 +318,7 @@ namespace StarryEngine {
     VMATraditionalBuffer Device::createBufferTraditionalWithData(VkCommandPool commandPool,
         VkDeviceSize size, VkBufferUsageFlags usage,
         VkMemoryPropertyFlags properties, const void* initialData) {
-        
+
         // 创建缓冲区
         auto buffer = createBufferTraditional(size, usage, properties);
 
@@ -324,7 +327,8 @@ namespace StarryEngine {
             if (properties & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
                 bool hostCoherent = (properties & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != 0;
                 uploadDataToTraditionalMemory(buffer.memory, initialData, size, 0, hostCoherent);
-            } else {
+            }
+            else {
                 uploadDataViaStagingBuffer(commandPool, buffer, initialData, size);
             }
         }
@@ -346,31 +350,31 @@ namespace StarryEngine {
     }
 
     std::vector<VMABuffer> Device::createVmaBuffers(uint32_t count,
-                                        VkDeviceSize size,
-                                        VkBufferUsageFlags usage,
-                                        VmaMemoryUsage memoryUsage,
-                                        VmaAllocationCreateFlags flags) {
+        VkDeviceSize size,
+        VkBufferUsageFlags usage,
+        VmaMemoryUsage memoryUsage,
+        VmaAllocationCreateFlags flags) {
         std::vector<VMABuffer> buffers;
         buffers.reserve(count);
-        
+
         for (uint32_t i = 0; i < count; ++i) {
             buffers.push_back(createBufferWithVMA(size, usage, memoryUsage, flags));
         }
-        
+
         return buffers;
     }
 
     std::vector<VMATraditionalBuffer> Device::createTraditionalBuffers(uint32_t count,
-                                                            VkDeviceSize size,
-                                                            VkBufferUsageFlags usage,
-                                                            VkMemoryPropertyFlags properties) {
+        VkDeviceSize size,
+        VkBufferUsageFlags usage,
+        VkMemoryPropertyFlags properties) {
         std::vector<VMATraditionalBuffer> buffers;
         buffers.reserve(count);
-        
+
         for (uint32_t i = 0; i < count; ++i) {
             buffers.push_back(createBufferTraditional(size, usage, properties));
         }
-        
+
         return buffers;
     }
 
@@ -559,6 +563,20 @@ namespace StarryEngine {
             imageView = VK_NULL_HANDLE;
         }
     }
+
+	void Device::destroySwapChain(VkSwapchainKHR& swapchain) {
+        if (swapchain != VK_NULL_HANDLE) {
+            vkDestroySwapchainKHR(mLogicalDevice, swapchain, nullptr);
+            swapchain = VK_NULL_HANDLE;
+        }
+    }
+
+    void Device::destroySurface(VkSurfaceKHR& surface) {
+        if (surface != VK_NULL_HANDLE) {
+            vkDestroySurfaceKHR(mInstance->getHandle(), surface, nullptr);
+            surface = VK_NULL_HANDLE;
+        }
+    }
     // ==================== 组合函数 ====================
 
     VMAImageFull Device::createImageWithVMAFull(uint32_t width, uint32_t height, VkFormat format,
@@ -697,6 +715,14 @@ namespace StarryEngine {
             commandPool = VK_NULL_HANDLE;
         }
     }
+
+    void  Device::destroyQueryPool(VkQueryPool& queryPool) {
+        if (queryPool != VK_NULL_HANDLE) {
+            vkDestroyQueryPool(mLogicalDevice, queryPool, nullptr);
+            queryPool = VK_NULL_HANDLE;
+        }
+    }
+
 
     VkCommandBuffer Device::allocateCommandBuffer(VkCommandPool& pool, VkCommandBufferLevel level) {
         VkCommandBufferAllocateInfo allocInfo = {};
