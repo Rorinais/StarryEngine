@@ -146,33 +146,6 @@ namespace StarryEngine::RHI {
             throw;
         }
     }
-    void RHI_VK_Buffer::destroyBuffer() {
-        // 销毁所有视图
-        for (auto& [key, viewInfo] : mViews) {
-            vkDestroyBufferView(mDevice->getLogicalDevice(), viewInfo.view, nullptr);
-        }
-        mViews.clear();
-        
-        // 取消映射
-        if (mIsMapped) {
-            unmap();
-        }
-        
-        // 销毁缓冲区
-        if (mBuffer != VK_NULL_HANDLE) {
-            if (mUsingVMA && mVmaAllocation != VK_NULL_HANDLE) {
-                mDevice->destroyBufferWithVMA(mBuffer, mVmaAllocation);
-            } else if (mTraditionalMemory != VK_NULL_HANDLE) {
-                mDevice->destroyBufferTraditional(mBuffer, mTraditionalMemory);
-            } else {
-                vkDestroyBuffer(mDevice->getLogicalDevice(), mBuffer, nullptr);
-            }
-            
-            mBuffer = VK_NULL_HANDLE;
-            mVmaAllocation = VK_NULL_HANDLE;
-            mTraditionalMemory = VK_NULL_HANDLE;
-        }
-    }
 
     // ==================== 数据更新优化 ====================
     void RHI_VK_Buffer::update(const void* data, uint64_t size, uint64_t offset) {
@@ -365,7 +338,31 @@ namespace StarryEngine::RHI {
 
     // ==================== 其他函数 ====================
     void RHI_VK_Buffer::release() {
-        destroyBuffer();
+        for (auto& [key, viewInfo] : mViews) {
+            vkDestroyBufferView(mDevice->getLogicalDevice(), viewInfo.view, nullptr);
+        }
+        mViews.clear();
+
+        // 取消映射
+        if (mIsMapped) {
+            unmap();
+        }
+
+        // 销毁缓冲区
+        if (mBuffer != VK_NULL_HANDLE) {
+            if (mUsingVMA && mVmaAllocation != VK_NULL_HANDLE) {
+                mDevice->destroyBufferWithVMA(mBuffer, mVmaAllocation);
+            }
+            else if (mTraditionalMemory != VK_NULL_HANDLE) {
+                mDevice->destroyBufferTraditional(mBuffer, mTraditionalMemory);
+            }
+            else {
+                vkDestroyBuffer(mDevice->getLogicalDevice(), mBuffer, nullptr);
+            }
+            mBuffer = VK_NULL_HANDLE;
+            mVmaAllocation = VK_NULL_HANDLE;
+            mTraditionalMemory = VK_NULL_HANDLE;
+        }
     }
 
     bool RHI_VK_Buffer::isValid() const {
@@ -459,6 +456,10 @@ namespace StarryEngine::RHI {
         std::vector<std::vector<VkAttachmentReference>> vkResolveRefs;
         std::vector<VkAttachmentReference> vkDepthStencilRefs;
         vkSubpasses.reserve(mDesc.subpasses.size());
+
+        for (size_t i = 0; i < vkAttachments.size(); ++i) {
+            std::cout << "vkAttachments[" << i << "].format = " << vkAttachments[i].format << std::endl;
+        }
 
         for (const auto& subpass : mDesc.subpasses) {
             // 输入附件
@@ -771,13 +772,10 @@ namespace StarryEngine::RHI {
 		mDevice->destroyCommandPool(mCommandPool);
     }
 
-    const std::vector<VkCommandBuffer> &RHI_VK_CommandPool::allocateCommandBuffers(uint32_t count, CommandBufferLevel level) {
+    std::vector<VkCommandBuffer> RHI_VK_CommandPool::allocateCommandBuffers(uint32_t count, CommandBufferLevel level) {
         if (!isValid() || count == 0) return {};
-
-        VkCommandBufferLevel vkLevel = (level == CommandBufferLevel::Primary)
-            ? VK_COMMAND_BUFFER_LEVEL_PRIMARY : VK_COMMAND_BUFFER_LEVEL_SECONDARY;
-
-        return mDevice->allocateCommandBuffers(mCommandPool, count, vkLevel); 
+        VkCommandBufferLevel vkLevel = (level == CommandBufferLevel::Primary) ? VK_COMMAND_BUFFER_LEVEL_PRIMARY : VK_COMMAND_BUFFER_LEVEL_SECONDARY;
+        return mDevice->allocateCommandBuffers(mCommandPool, count, vkLevel);
     }
 
     void RHI_VK_CommandPool::freeCommandBuffers(const std::vector<VkCommandBuffer>& commandBuffers) {
@@ -785,7 +783,7 @@ namespace StarryEngine::RHI {
         mDevice->freeCommandBuffers(mCommandPool, commandBuffers);
     }
 
-    const VkCommandBuffer& RHI_VK_CommandPool::allocateCommandBuffer(CommandBufferLevel level) {
+    VkCommandBuffer RHI_VK_CommandPool::allocateCommandBuffer(CommandBufferLevel level) {
 		return allocateCommandBuffers(0,level)[0];
     }
     void RHI_VK_CommandPool::freeCommandBuffer(const VkCommandBuffer& commandBuffer) {
@@ -803,10 +801,9 @@ namespace StarryEngine::RHI {
 		mCommandBuffer = mCommandPool->allocateCommandBuffer(desc.level);
 	}
 
-	void RHI_VK_CommandBuffer::release() {
-		// Command buffers are freed by the command pool, so we don't destroy them here
-		mCommandPool->allocateCommandBuffers(0, mDesc.level); 
-	}
+    void RHI_VK_CommandBuffer::release() {
+        mCommandPool->freeCommandBuffer(mCommandBuffer); 
+    }
 
     // 生命周期
     void RHI_VK_CommandBuffer::begin() {
@@ -851,4 +848,388 @@ namespace StarryEngine::RHI {
     void RHI_VK_Framebuffer::release(){
 		mDevice->destroyFramebuffer(mFramebuffer);
     }
+
+    // ==================== 纹理特有的辅助函数（保留） ====================
+    namespace {
+        VkImageUsageFlags convertUsage(const TextureDesc& desc) {
+            VkImageUsageFlags usage = 0;
+            if (desc.allowRenderTarget) usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+            if (desc.allowDepthStencil) usage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+            if (desc.allowUnorderedAccess) usage |= VK_IMAGE_USAGE_STORAGE_BIT;
+            usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
+            usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+            return usage;
+        }
+
+        VmaMemoryUsage convertMemoryUsage(const TextureDesc& desc) {
+            if (desc.memoryless) return VMA_MEMORY_USAGE_GPU_LAZILY_ALLOCATED;
+            return VMA_MEMORY_USAGE_GPU_ONLY;
+        }
+
+        VkMemoryPropertyFlags convertMemoryProperties(const TextureDesc& desc) {
+            if (desc.memoryless) return VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT;
+            return VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        }
+    }
+
+    // ==================== RHI_VK_Texture 实现 ====================
+    RHI_VK_Texture::RHI_VK_Texture(Device::Ptr device, const TextureDesc& desc)
+        : mDevice(device), mDesc(desc), mUsingVMA(device->isVMAEnabled()) {
+        createTexture();
+    }
+
+    RHI_VK_Texture::~RHI_VK_Texture() {
+        release();
+    }
+
+    void RHI_VK_Texture::release() {
+        for (auto& [key, viewInfo] : mViews) {
+            mDevice->destroyImageView(viewInfo.view);
+        }
+        mViews.clear();
+        mDefaultView = nullptr;
+
+        if (mUsingVMA) {
+            if (vmaImage.image != VK_NULL_HANDLE) {
+                mDevice->destroyImageWithVMAFull(vmaImage);
+                vmaImage = {}; // 重置为默认值
+            }
+        }
+        else {
+            if (traditionalImage.image != VK_NULL_HANDLE) {
+                mDevice->destroyImageTraditionalFull(traditionalImage);
+                traditionalImage = {}; // 重置
+            }
+        }
+    }
+
+    bool RHI_VK_Texture::isValid() const {
+        if (mUsingVMA) {
+            return vmaImage.image != VK_NULL_HANDLE && vmaImage.view != VK_NULL_HANDLE;
+        }
+        else {
+            return traditionalImage.image != VK_NULL_HANDLE && traditionalImage.view != VK_NULL_HANDLE;
+        }
+    }
+
+    void* RHI_VK_Texture::getNativeHandle() const {
+        return getDefaultView();
+    }
+
+    size_t RHI_VK_Texture::getMemoryUsage() const {
+        if (!isValid()) return 0;
+        if (mUsingVMA) {
+            VmaAllocationInfo allocInfo;
+            vmaGetAllocationInfo(mDevice->getVmaAllocator(), vmaImage.allocation, &allocInfo);
+            return allocInfo.size;
+        }
+        else {
+            VkMemoryRequirements memReq;
+            vkGetImageMemoryRequirements(mDevice->getLogicalDevice(), traditionalImage.image, &memReq);
+            return memReq.size;
+        }
+    }
+
+    void* RHI_VK_Texture::createView(const ImageSubresourceRange& range, ImageViewType viewType) {
+        VkImageViewType vkViewType = FUNC::RHI_TO_VK_ImageViewType(viewType, mDesc.type);
+        VkImageView vkView = createVkImageView(range, vkViewType);
+        if (vkView == VK_NULL_HANDLE) return nullptr;
+
+        uint64_t key = mNextViewKey++;
+        mViews[key] = { vkView, range };
+        return reinterpret_cast<void*>(key);
+    }
+
+    void RHI_VK_Texture::destroyView(void* view) {
+        uint64_t key = reinterpret_cast<uint64_t>(view);
+        auto it = mViews.find(key);
+        if (it != mViews.end()) {
+            mDevice->destroyImageView(it->second.view);
+            mViews.erase(it);
+        }
+    }
+
+    void* RHI_VK_Texture::getDefaultView() const {
+        return mDefaultView;
+    }
+
+    void RHI_VK_Texture::transitionLayout(ImageLayout newLayout,
+        PipelineStage srcStage,
+        PipelineStage dstStage,
+        AccessFlags srcAccess,
+        AccessFlags dstAccess,
+        const ImageSubresourceRange& range) {
+        VkCommandPool cmdPool = mDevice->getTransferCommandPool();
+        VkCommandBuffer cmdBuf = mDevice->beginSingleTimeCommands(cmdPool);
+
+        VkImageMemoryBarrier barrier = {};
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrier.oldLayout = FUNC::RHI_TO_VK_ImageLayout(mCurrentLayout);
+        barrier.newLayout = FUNC::RHI_TO_VK_ImageLayout(newLayout);
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = mUsingVMA ? vmaImage.image : traditionalImage.image;
+        barrier.subresourceRange.aspectMask = FUNC::RHI_TO_VK_ImageAspect(range.aspectMask);
+        barrier.subresourceRange.baseMipLevel = range.baseMipLevel;
+        barrier.subresourceRange.levelCount = range.levelCount;
+        barrier.subresourceRange.baseArrayLayer = range.baseArrayLayer;
+        barrier.subresourceRange.layerCount = range.layerCount;
+        barrier.srcAccessMask = FUNC::RHI_TO_VK_AccessFlags(srcAccess);
+        barrier.dstAccessMask = FUNC::RHI_TO_VK_AccessFlags(dstAccess);
+
+        vkCmdPipelineBarrier(cmdBuf,
+            FUNC::RHI_TO_VK_PipelineStageFlags(static_cast<PipelineStageFlags>(srcStage)),
+            FUNC::RHI_TO_VK_PipelineStageFlags(static_cast<PipelineStageFlags>(dstStage)),
+            0,
+            0, nullptr,
+            0, nullptr,
+            1, &barrier);
+
+        mDevice->endSingleTimeCommands(cmdPool, cmdBuf);
+        mCurrentLayout = newLayout;
+    }
+
+    void RHI_VK_Texture::copyFromBuffer(RHIBuffer* srcBuffer, const std::vector<BufferImageCopyRegion>& regions) {
+        RHI_VK_Buffer* vkSrcBuffer = dynamic_cast<RHI_VK_Buffer*>(srcBuffer);
+        if (!vkSrcBuffer) return;
+
+        VkCommandPool cmdPool = mDevice->getTransferCommandPool();
+        VkCommandBuffer cmdBuf = mDevice->beginSingleTimeCommands(cmdPool);
+
+        std::vector<VkBufferImageCopy> vkRegions;
+        vkRegions.reserve(regions.size());
+        for (const auto& region : regions) {
+            VkBufferImageCopy vkRegion = {};
+            vkRegion.bufferOffset = region.bufferOffset;
+            vkRegion.bufferRowLength = region.bufferRowLength;
+            vkRegion.bufferImageHeight = region.bufferImageHeight;
+            vkRegion.imageSubresource.aspectMask = FUNC::RHI_TO_VK_ImageAspect(region.imageSubresource.aspectMask);
+            vkRegion.imageSubresource.mipLevel = region.imageSubresource.baseMipLevel;
+            vkRegion.imageSubresource.baseArrayLayer = region.imageSubresource.baseArrayLayer;
+            vkRegion.imageSubresource.layerCount = region.imageSubresource.layerCount;
+            vkRegion.imageOffset = { region.imageOffset.x, region.imageOffset.y, region.imageOffset.z };
+            vkRegion.imageExtent = { region.imageExtent.width, region.imageExtent.height, region.imageExtent.depth };
+            vkRegions.push_back(vkRegion);
+        }
+
+        vkCmdCopyBufferToImage(cmdBuf,
+            static_cast<VkBuffer>(vkSrcBuffer->getNativeHandle()),
+            mUsingVMA ? vmaImage.image : traditionalImage.image,
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            static_cast<uint32_t>(vkRegions.size()),
+            vkRegions.data());
+
+        mDevice->endSingleTimeCommands(cmdPool, cmdBuf);
+    }
+
+    void RHI_VK_Texture::copyToBuffer(RHIBuffer* dstBuffer, const std::vector<BufferImageCopyRegion>& regions) {
+        RHI_VK_Buffer* vkDstBuffer = dynamic_cast<RHI_VK_Buffer*>(dstBuffer);
+        if (!vkDstBuffer) return;
+
+        VkCommandPool cmdPool = mDevice->getTransferCommandPool();
+        VkCommandBuffer cmdBuf = mDevice->beginSingleTimeCommands(cmdPool);
+
+        std::vector<VkBufferImageCopy> vkRegions;
+        vkRegions.reserve(regions.size());
+        for (const auto& region : regions) {
+            VkBufferImageCopy vkRegion = {};
+            vkRegion.bufferOffset = region.bufferOffset;
+            vkRegion.bufferRowLength = region.bufferRowLength;
+            vkRegion.bufferImageHeight = region.bufferImageHeight;
+            vkRegion.imageSubresource.aspectMask = FUNC::RHI_TO_VK_ImageAspect(region.imageSubresource.aspectMask);
+            vkRegion.imageSubresource.mipLevel = region.imageSubresource.baseMipLevel;
+            vkRegion.imageSubresource.baseArrayLayer = region.imageSubresource.baseArrayLayer;
+            vkRegion.imageSubresource.layerCount = region.imageSubresource.layerCount;
+            vkRegion.imageOffset = { region.imageOffset.x, region.imageOffset.y, region.imageOffset.z };
+            vkRegion.imageExtent = { region.imageExtent.width, region.imageExtent.height, region.imageExtent.depth };
+            vkRegions.push_back(vkRegion);
+        }
+
+        vkCmdCopyImageToBuffer(cmdBuf,
+            mUsingVMA ? vmaImage.image : traditionalImage.image,
+            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            static_cast<VkBuffer>(vkDstBuffer->getNativeHandle()),
+            static_cast<uint32_t>(vkRegions.size()),
+            vkRegions.data());
+
+        mDevice->endSingleTimeCommands(cmdPool, cmdBuf);
+    }
+
+    void RHI_VK_Texture::copyFromTexture(RHITexture* srcTexture, const std::vector<ImageCopyRegion>& regions) {
+        RHI_VK_Texture* vkSrcTexture = dynamic_cast<RHI_VK_Texture*>(srcTexture);
+        if (!vkSrcTexture) return;
+
+        VkCommandPool cmdPool = mDevice->getTransferCommandPool();
+        VkCommandBuffer cmdBuf = mDevice->beginSingleTimeCommands(cmdPool);
+
+        std::vector<VkImageCopy> vkRegions;
+        vkRegions.reserve(regions.size());
+        for (const auto& region : regions) {
+            VkImageCopy vkRegion = {};
+            vkRegion.srcSubresource.aspectMask = FUNC::RHI_TO_VK_ImageAspect(region.srcSubresource.aspectMask);
+            vkRegion.srcSubresource.mipLevel = region.srcSubresource.baseMipLevel;
+            vkRegion.srcSubresource.baseArrayLayer = region.srcSubresource.baseArrayLayer;
+            vkRegion.srcSubresource.layerCount = region.srcSubresource.layerCount;
+            vkRegion.srcOffset = { region.srcOffset.x, region.srcOffset.y, region.srcOffset.z };
+            vkRegion.dstSubresource.aspectMask = FUNC::RHI_TO_VK_ImageAspect(region.dstSubresource.aspectMask);
+            vkRegion.dstSubresource.mipLevel = region.dstSubresource.baseMipLevel;
+            vkRegion.dstSubresource.baseArrayLayer = region.dstSubresource.baseArrayLayer;
+            vkRegion.dstSubresource.layerCount = region.dstSubresource.layerCount;
+            vkRegion.dstOffset = { region.dstOffset.x, region.dstOffset.y, region.dstOffset.z };
+            vkRegion.extent = { region.extent.width, region.extent.height, region.extent.depth };
+            vkRegions.push_back(vkRegion);
+        }
+
+        vkCmdCopyImage(cmdBuf,
+            vkSrcTexture->mUsingVMA ? vkSrcTexture->vmaImage.image : vkSrcTexture->traditionalImage.image,
+            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+            mUsingVMA ? vmaImage.image : traditionalImage.image,
+            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+            static_cast<uint32_t>(vkRegions.size()),
+            vkRegions.data());
+
+        mDevice->endSingleTimeCommands(cmdPool, cmdBuf);
+    }
+
+    void RHI_VK_Texture::update(const void* data, size_t size, const ImageSubresourceRange& range) {
+        // 创建暂存缓冲区
+        VMABuffer staging = mDevice->createBufferWithVMA(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,VMA_MEMORY_USAGE_CPU_TO_GPU, 0, data, size);
+
+        // 构造拷贝区域
+        BufferImageCopyRegion region;
+        region.imageSubresource = range;
+        region.imageExtent = mDesc.extent;
+        // 其他字段保持默认（bufferOffset=0等）
+
+        // 调用已有的 copyFromBuffer
+        copyFromBuffer(reinterpret_cast<RHIBuffer*>(&staging), { region });
+
+        // 清理暂存缓冲区
+        mDevice->destroyBufferWithVMA(staging.buffer, staging.allocation);
+    }
+
+    void RHI_VK_Texture::generateMipmaps() {
+        VkCommandPool cmdPool = mDevice->getTransferCommandPool();
+        mDevice->generateMipmaps(cmdPool,
+            mUsingVMA ? vmaImage.image : traditionalImage.image,
+            FUNC::RHI_TO_VK_Format(mDesc.format),
+            mDesc.extent.width, mDesc.extent.height,
+            mDesc.mipLevels);
+    }
+
+    void RHI_VK_Texture::createTexture() {
+        VkFormat vkFormat;
+        if (mDesc.allowDepthStencil) {
+            // 获取设备支持的深度格式
+            vkFormat = mDevice->findDepthFormat();
+            // 将 VkFormat 转换为 RHI::Format（需要实现反向转换函数）
+            mActualFormat = FUNC::VK_TO_RHI_Format(vkFormat);
+        }
+        else {
+            vkFormat = FUNC::RHI_TO_VK_Format(mDesc.format);
+            mActualFormat = mDesc.format;
+        }
+
+        VkImageUsageFlags usage = convertUsage(mDesc);
+        VkImageAspectFlags aspect;
+        if (mDesc.allowDepthStencil) {
+            aspect = VK_IMAGE_ASPECT_DEPTH_BIT; // 假设只使用深度，如需模板可进一步判断
+        }
+        else {
+            aspect = VK_IMAGE_ASPECT_COLOR_BIT;
+        }
+        VkImageViewType viewType = FUNC::RHI_TO_VK_ImageViewType(ImageViewType::Auto, mDesc.type);
+        VkImageTiling tiling = VK_IMAGE_TILING_OPTIMAL;
+
+        if (mUsingVMA) {
+            vmaImage = mDevice->createImageWithVMAFull(
+                mDesc.extent.width, mDesc.extent.height, vkFormat,
+                tiling, usage, convertMemoryUsage(mDesc), aspect,
+                0, mDesc.mipLevels, mDesc.arrayLayers, viewType
+            );
+            mDefaultView = reinterpret_cast<void*>(vmaImage.view);
+        }
+        else {
+            traditionalImage = mDevice->createImageTraditionalFull(
+                mDesc.extent.width, mDesc.extent.height, vkFormat,
+                tiling, usage, convertMemoryProperties(mDesc), aspect,
+                mDesc.mipLevels, mDesc.arrayLayers, viewType
+            );
+            mDefaultView = reinterpret_cast<void*>(traditionalImage.view);
+        }
+
+        if (!mDesc.debugName.empty()) {
+            VkImage image = mUsingVMA ? vmaImage.image : traditionalImage.image;
+            mDevice->setImageName(image, mDesc.debugName.c_str());
+        }
+        mCurrentLayout = ImageLayout::Undefined;
+    }
+
+    VkImageView RHI_VK_Texture::createVkImageView(const ImageSubresourceRange& range, VkImageViewType viewType) {
+        VkImage image = mUsingVMA ? vmaImage.image : traditionalImage.image;
+        VkFormat format = FUNC::RHI_TO_VK_Format(mDesc.format);
+        VkImageAspectFlags aspect = FUNC::RHI_TO_VK_ImageAspect(range.aspectMask);
+        return mDevice->createImageView(
+            image, format, aspect, viewType,
+            range.levelCount, range.baseArrayLayer, range.layerCount,
+            "");
+    }
+
+    // ==================== RHI_VK_Sampler 实现 ====================
+    RHI_VK_Sampler::RHI_VK_Sampler(Device::Ptr device, const SamplerDesc& desc)
+        : mDevice(device), mDesc(desc) {
+        createSampler();
+    }
+
+    RHI_VK_Sampler::~RHI_VK_Sampler() {
+        release();
+    }
+
+    void RHI_VK_Sampler::release() {
+        destroySampler();
+    }
+
+    bool RHI_VK_Sampler::isValid() const {
+        return mSampler != VK_NULL_HANDLE;
+    }
+
+    void* RHI_VK_Sampler::getNativeHandle() const {
+        return reinterpret_cast<void*>(mSampler);
+    }
+
+    size_t RHI_VK_Sampler::getMemoryUsage() const {
+        return sizeof(*this);
+    }
+
+    void RHI_VK_Sampler::createSampler() {
+        mSampler = mDevice->createSampler(
+            FUNC::RHI_TO_VK_Filter(mDesc.magFilter),
+            FUNC::RHI_TO_VK_Filter(mDesc.minFilter),
+            FUNC::RHI_TO_VK_AddressMode(mDesc.addressU),
+            FUNC::RHI_TO_VK_AddressMode(mDesc.addressV),
+            FUNC::RHI_TO_VK_AddressMode(mDesc.addressW),
+            mDesc.maxAnisotropy > 1.0f,
+            mDesc.maxAnisotropy,
+            mDesc.compareEnable ? VK_TRUE : VK_FALSE,
+            FUNC::RHI_TO_VK_CompareOp(mDesc.compareOp),
+            mDesc.mipLodBias,
+            mDesc.minLod,
+            mDesc.maxLod,
+            FUNC::RHI_TO_VK_BorderColor(mDesc.borderColor)
+        );
+
+        if (!mDesc.debugName.empty()) {
+            mDevice->setObjectName(reinterpret_cast<uint64_t>(mSampler),
+                VK_OBJECT_TYPE_SAMPLER,
+                mDesc.debugName.c_str());
+        }
+    }
+
+    void RHI_VK_Sampler::destroySampler() {
+        if (mSampler != VK_NULL_HANDLE) {
+            mDevice->destroySampler(mSampler);
+            mSampler = VK_NULL_HANDLE;
+        }
+    }
+
 }

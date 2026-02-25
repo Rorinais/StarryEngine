@@ -1,7 +1,7 @@
 #include "Application.hpp"
 
 namespace StarryEngine {
-    Application::Application() {
+    Application::Application() : m_lastFpsTime(0.0), m_depthFormat(RHI::Format::Undefined) {
         // 1. 创建窗口
         Window::Config config;
         config.width = m_width;
@@ -25,11 +25,7 @@ namespace StarryEngine {
 
         // 3. 配置RHI
         RHI::RHIInitConfig rhiConfig;
-
-        // 设置窗口句柄
         rhiConfig.windowHandle = m_window->getHandle();
-
-        // 设置窗口尺寸
         rhiConfig.windowWidth = m_width;
         rhiConfig.windowHeight = m_height;
 
@@ -40,27 +36,27 @@ namespace StarryEngine {
         rhiConfig.engineVersion = { 1, 0, 0 };
         rhiConfig.enableDebug = true;
 
-        rhiConfig.debugCallback = [](StarryEngine::RHI::MessageSeverity severity,
-            StarryEngine::RHI::MessageSource source,
+        rhiConfig.debugCallback = [](RHI::MessageSeverity severity,
+            RHI::MessageSource source,
             const std::string& message) {
                 // 根据严重程度选择输出方式
                 switch (severity) {
-                case StarryEngine::RHI::MessageSeverity::Verbose:
+                case RHI::MessageSeverity::Verbose:
                     // 详细信息，通常只在调试时开启
 #ifdef _DEBUG
                     std::cout << "[VERBOSE] " << message << std::endl;
 #endif
                     break;
-                case StarryEngine::RHI::MessageSeverity::Info:
+                case RHI::MessageSeverity::Info:
                     std::cout << "[INFO] " << message << std::endl;
                     break;
-                case StarryEngine::RHI::MessageSeverity::Warning:
+                case RHI::MessageSeverity::Warning:
                     std::cout << "\033[33m[WARNING]\033[0m " << message << std::endl;
                     break;
-                case StarryEngine::RHI::MessageSeverity::Error:
+                case RHI::MessageSeverity::Error:
                     std::cerr << "\033[31m[ERROR]\033[0m " << message << std::endl;
                     break;
-                case StarryEngine::RHI::MessageSeverity::Critical:
+                case RHI::MessageSeverity::Critical:
                     std::cerr << "\033[31;1m[CRITICAL]\033[0m " << message << std::endl;
                     break;
                 default:
@@ -89,6 +85,10 @@ namespace StarryEngine {
         if (!m_rhi->initialize(rhiConfig)) {
             std::cerr << "Failed to initialize Vulkan RHI!" << std::endl;
             return;
+        }
+
+        if (m_rhi) {
+            m_depthFormat = m_rhi->getDefaultDepthFormat();
         }
 
         std::cout << "Application initialized successfully!" << std::endl;
@@ -121,7 +121,7 @@ namespace StarryEngine {
                     std::cerr << "Failed to recreate swap chain!" << std::endl;
                 }
                 // 重新创建帧缓冲
-                mFramebuffers = m_rhi->createFramebuffers(mRenderPassHandle);
+                mFramebuffers = m_rhi->createFramebuffers(mRenderPassHandle,mDepthTextureHandle);
             }
 
             bool success = m_rhi->renderFrame([this](RHI::RHICommandEncoder* encoder, uint32_t imageIndex) {
@@ -176,9 +176,6 @@ namespace StarryEngine {
         if (mVertexBuffer){
             delete mVertexBuffer;
             mVertexBuffer = nullptr;
-        }
-        if (m_rhi) {
-            m_rhi->clear();
         }
 
         // 清理窗口

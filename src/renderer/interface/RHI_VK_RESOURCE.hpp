@@ -117,7 +117,6 @@ namespace StarryEngine::RHI {
 
     private:
         void createBuffer();
-        void destroyBuffer();
         
         // 辅助函数
         VkBufferUsageFlags getBufferUsageFlags() const;
@@ -315,10 +314,10 @@ namespace StarryEngine::RHI {
 		size_t getMemoryUsage() const override { return sizeof(*this) + mDesc.debugName.size(); }
 		const char* getTypeName() const override { return "VK_CommandPool"; }
 
-        const std::vector<VkCommandBuffer> &allocateCommandBuffers(uint32_t count,CommandBufferLevel level);
+        std::vector<VkCommandBuffer> allocateCommandBuffers(uint32_t count,CommandBufferLevel level);
         void freeCommandBuffers(const std::vector<VkCommandBuffer>& commandBuffers);
 
-        const VkCommandBuffer& allocateCommandBuffer(CommandBufferLevel level);
+        VkCommandBuffer allocateCommandBuffer(CommandBufferLevel level);
         void freeCommandBuffer(const VkCommandBuffer& commandBuffer);
 
         void reset(bool releaseResources = false) override;
@@ -384,12 +383,97 @@ namespace StarryEngine::RHI {
         std::vector<VkImageView> mAttachments;
     };
 
-
+    // ==================== 纹理类 ====================
     class RHI_VK_Texture : public RHITexture {
     public:
+        RHI_VK_Texture(Device::Ptr device, const TextureDesc& desc);
+        ~RHI_VK_Texture() override;
+
+        // 实现 IResource
+        void release() override;
+        bool isValid() const override;
+        void* getNativeHandle() const override;      // 返回默认图像视图
+        size_t getMemoryUsage() const override;
+        const char* getTypeName() const override { return "VK_Texture"; }
+
+        // 实现 RHITexture
+        TextureType getType() const override { return mDesc.type; }
+        Format getFormat() const override { return mDesc.format; }
+        Extent3D getExtent() const override { return mDesc.extent; }
+        uint32_t getMipLevels() const override { return mDesc.mipLevels; }
+        uint32_t getArrayLayers() const override { return mDesc.arrayLayers; }
+        uint32_t getSampleCount() const override { return mDesc.sampleCount; }
+        ImageLayout getCurrentLayout() const override { return mCurrentLayout; }
+
+        VkImageView createVkImageView(const ImageSubresourceRange& range, VkImageViewType viewType);
+        void* createView(const ImageSubresourceRange& range, ImageViewType viewType = ImageViewType::Auto) override;
+        void destroyView(void* view) override;
+        void* getDefaultView() const override;
+
+        void transitionLayout(ImageLayout newLayout,
+            PipelineStage srcStage,
+            PipelineStage dstStage,
+            AccessFlags srcAccess,
+            AccessFlags dstAccess,
+            const ImageSubresourceRange& range) override;
+
+        void copyFromBuffer(RHIBuffer* srcBuffer, const std::vector<BufferImageCopyRegion>& regions) override;
+        void copyToBuffer(RHIBuffer* dstBuffer, const std::vector<BufferImageCopyRegion>& regions) override;
+        void copyFromTexture(RHITexture* srcTexture, const std::vector<ImageCopyRegion>& regions) override;
+		void update(const void* data, size_t size, const ImageSubresourceRange& range) override;
+
+        void generateMipmaps() override;
 
     private:
+        Device::Ptr mDevice;
+        TextureDesc mDesc;
 
+        // 图像和分配
+        bool mUsingVMA;
+        union {
+            VMAImageFull vmaImage;
+            TraditionalImageFull traditionalImage;
+        };
+        ImageLayout mCurrentLayout = ImageLayout::Undefined;
+
+        // 视图管理
+        struct ViewInfo {
+            VkImageView view;
+            ImageSubresourceRange range;
+        };
+        std::unordered_map<uint64_t, ViewInfo> mViews;
+        uint64_t mNextViewKey = 1;
+        void* mDefaultView = nullptr;
+        RHI::Format mActualFormat;
+
+        // 辅助函数
+        void createTexture();
+    };
+
+    // ==================== 采样器类 ====================
+    class RHI_VK_Sampler : public RHISampler {
+    public:
+        RHI_VK_Sampler(Device::Ptr device, const SamplerDesc& desc);
+        ~RHI_VK_Sampler() override;
+
+        // 实现 IResource
+        void release() override;
+        bool isValid() const override;
+        void* getNativeHandle() const override;
+        size_t getMemoryUsage() const override;
+        const char* getTypeName() const override { return "VK_Sampler"; }
+
+        // 实现 RHISampler
+        const SamplerDesc& getDesc() const override { return mDesc; }
+
+    private:
+        Device::Ptr mDevice;
+        SamplerDesc mDesc;
+        VkSampler mSampler = VK_NULL_HANDLE;
+
+        void createSampler();
+        void destroySampler();
+        VkBool32 toVkBool(bool b) { return b ? VK_TRUE : VK_FALSE; }
     };
 
 } // namespace StarryEngine::RHI

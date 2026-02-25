@@ -521,6 +521,13 @@ namespace StarryEngine {
         // ==================== 等待和同步 ====================
         void waitIdle() const;
 
+        template<typename Func>
+        void executeSingleTimeCommands(VkCommandPool commandPool, Func&& func) {
+            VkCommandBuffer commandBuffer = beginSingleTimeCommands(commandPool);
+            func(commandBuffer);
+            endSingleTimeCommands(commandPool, commandBuffer);
+        }
+
     private:
         // 物理设备选择
         VkPhysicalDevice selectPhysicalDevice(VkSurfaceKHR surface);
@@ -534,13 +541,6 @@ namespace StarryEngine {
         // 性能计数器初始化
         void initializePerformanceCounters();
         void cleanupPerformanceCounters();
-
-        template<typename Func>
-        void executeSingleTimeCommands(VkCommandPool commandPool, Func&& func) {
-            VkCommandBuffer commandBuffer = beginSingleTimeCommands(commandPool);
-            func(commandBuffer);
-            endSingleTimeCommands(commandPool, commandBuffer);
-        }
     private:
         // 外部引用
         std::shared_ptr<Instance> mInstance;

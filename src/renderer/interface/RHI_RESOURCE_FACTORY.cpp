@@ -9,24 +9,7 @@ namespace StarryEngine::RHI {
     }
 
     std::unique_ptr<RHITexture> VKResourceFactory::createTexture(const TextureDesc& desc) {
-        VkFormat format = FUNC::RHI_TO_VK_Format(desc.format);
-        if (desc.allowDepthStencil) {
-            VkFormat defaultVkFormat = mDevice->findDepthFormat();
-			VkFormat requestedVkFormat = FUNC::RHI_TO_VK_Format(desc.format);
-
-            if (defaultVkFormat != requestedVkFormat){
-                std::cout<< ANSIColor::BG_RED
-                    << "Warning: Requested depth-stencil format " 
-                    << FUNC::RHI_TO_VK_Format(desc.format) 
-					<< " is not supported. Using default depth format " 
-                    << defaultVkFormat
-					<< ANSIColor::RESET
-                    << std::endl;
-				format = defaultVkFormat;
-            }
-        }
-
-		throw std::runtime_error("Not implemented: createTexture");
+        return std::make_unique<RHI_VK_Texture>(mDevice, desc);
     }
 
     std::unique_ptr<RHIPipeline> VKResourceFactory::createPipeline(const GraphicsPipelineDesc& desc) {
@@ -474,12 +457,18 @@ namespace StarryEngine::RHI {
             const auto& cv = beginInfo.clearValues[i];
             VkClearValue vkCv{};
 
-            // 当前只有一个颜色附件，所有清除值都作为颜色清除
-            vkCv.color.float32[0] = cv.color.r;
-            vkCv.color.float32[1] = cv.color.g;
-            vkCv.color.float32[2] = cv.color.b;
-            vkCv.color.float32[3] = cv.color.a;
-            // 注意：不设置 depthStencil 字段，避免覆盖 color
+            if (i == 0) {
+                // 颜色清除
+                vkCv.color.float32[0] = cv.color.r;
+                vkCv.color.float32[1] = cv.color.g;
+                vkCv.color.float32[2] = cv.color.b;
+                vkCv.color.float32[3] = cv.color.a;
+            }
+            else {
+                // 深度/模板清除
+                vkCv.depthStencil.depth = cv.depth;
+                vkCv.depthStencil.stencil = cv.stencil;
+            }
 
             vkClearValues.push_back(vkCv);
         }

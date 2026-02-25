@@ -5,32 +5,35 @@
 #include "RHI_STRUCTS_DESC.hpp"
 
 namespace StarryEngine::RHI::FUNC {
-	static VkShaderStageFlagBits RHI_TO_VK_ShaderStageFlag(ShaderStage stage) {
-		switch (stage) {
-		case ShaderStage::Vertex:   return VK_SHADER_STAGE_VERTEX_BIT;
-		case ShaderStage::Fragment: return VK_SHADER_STAGE_FRAGMENT_BIT;
-		case ShaderStage::Compute:  return VK_SHADER_STAGE_COMPUTE_BIT;
-		case ShaderStage::Geometry: return VK_SHADER_STAGE_GEOMETRY_BIT;
-		case ShaderStage::TessellationControl: return VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
-		case ShaderStage::TessellationEvaluation: return VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
-		default:
-			throw std::runtime_error("Unsupported shader stage: " + std::to_string(static_cast<int>(stage)));
-		}
-	}
+
+    // ==================== 着色器阶段转换 ====================
+    static VkShaderStageFlagBits RHI_TO_VK_ShaderStageFlag(ShaderStage stage) {
+        switch (stage) {
+        case ShaderStage::Vertex:   return VK_SHADER_STAGE_VERTEX_BIT;
+        case ShaderStage::Fragment: return VK_SHADER_STAGE_FRAGMENT_BIT;
+        case ShaderStage::Compute:  return VK_SHADER_STAGE_COMPUTE_BIT;
+        case ShaderStage::Geometry: return VK_SHADER_STAGE_GEOMETRY_BIT;
+        case ShaderStage::TessellationControl: return VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT;
+        case ShaderStage::TessellationEvaluation: return VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT;
+        default:
+            throw std::runtime_error("Unsupported shader stage: " + std::to_string(static_cast<int>(stage)));
+        }
+    }
 
     static shaderc_shader_kind RHI_TO_Shaderc_ShaderKind(ShaderStage stage) {
-		switch (stage) {
-		case ShaderStage::Vertex:   return shaderc_vertex_shader;
-		case ShaderStage::Fragment: return shaderc_fragment_shader;
-		case ShaderStage::Compute:  return shaderc_compute_shader;
-		case ShaderStage::Geometry: return shaderc_geometry_shader;
-		case ShaderStage::TessellationControl: return shaderc_tess_control_shader;
-		case ShaderStage::TessellationEvaluation: return shaderc_tess_evaluation_shader;
-		default:
-			throw std::runtime_error("Unsupported shader stage for shaderc: " + std::to_string(static_cast<int>(stage)));
-		}
-	}
+        switch (stage) {
+        case ShaderStage::Vertex:   return shaderc_vertex_shader;
+        case ShaderStage::Fragment: return shaderc_fragment_shader;
+        case ShaderStage::Compute:  return shaderc_compute_shader;
+        case ShaderStage::Geometry: return shaderc_geometry_shader;
+        case ShaderStage::TessellationControl: return shaderc_tess_control_shader;
+        case ShaderStage::TessellationEvaluation: return shaderc_tess_evaluation_shader;
+        default:
+            throw std::runtime_error("Unsupported shader stage for shaderc: " + std::to_string(static_cast<int>(stage)));
+        }
+    }
 
+    // ==================== 格式转换 ====================
     static VkFormat RHI_TO_VK_Format(Format format) {
         switch (format) {
         case Format::R8_UNorm: return VK_FORMAT_R8_UNORM;
@@ -72,18 +75,23 @@ namespace StarryEngine::RHI::FUNC {
         }
     }
 
+    static RHI::Format VK_TO_RHI_Format(VkFormat vkFormat) {
+        switch (vkFormat) {
+        case VK_FORMAT_D16_UNORM:          return RHI::Format::D16_UNorm;
+        case VK_FORMAT_D32_SFLOAT:         return RHI::Format::D32_Float;
+        case VK_FORMAT_D24_UNORM_S8_UINT:  return RHI::Format::D24_UNorm_S8_UInt;
+        default: return RHI::Format::Undefined;
+        }
+    }
+
+    // ==================== 内存类型转换 ====================
     static VmaMemoryUsage RHI_TO_VK_VmaMemoryUsage(MemoryType memoryType) {
         switch (memoryType) {
-        case MemoryType::GPU_Only:
-            return VMA_MEMORY_USAGE_GPU_ONLY;
-        case MemoryType::CPU_To_GPU:
-            return VMA_MEMORY_USAGE_CPU_TO_GPU;
-        case MemoryType::CPU_Only:
-            return VMA_MEMORY_USAGE_CPU_ONLY;
-        case MemoryType::GPU_To_CPU:
-            return VMA_MEMORY_USAGE_GPU_TO_CPU;
-        default:
-            return VMA_MEMORY_USAGE_AUTO;
+        case MemoryType::GPU_Only:      return VMA_MEMORY_USAGE_GPU_ONLY;
+        case MemoryType::CPU_To_GPU:    return VMA_MEMORY_USAGE_CPU_TO_GPU;
+        case MemoryType::CPU_Only:      return VMA_MEMORY_USAGE_CPU_ONLY;
+        case MemoryType::GPU_To_CPU:    return VMA_MEMORY_USAGE_GPU_TO_CPU;
+        default:                        return VMA_MEMORY_USAGE_AUTO;
         }
     }
 
@@ -92,49 +100,41 @@ namespace StarryEngine::RHI::FUNC {
         case MemoryType::GPU_Only:
             return VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
         case MemoryType::CPU_To_GPU:
-            return VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+            return VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
         case MemoryType::CPU_Only:
-            return VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
-                VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+            return VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
         case MemoryType::GPU_To_CPU:
-            return VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT |
-                VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+            return VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
         default:
             return VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
         }
     }
 
-    /**
-     * @brief 将 RHI 图像布局枚举转换为 Vulkan VkImageLayout
-     */
+    // ==================== 图像布局转换 ====================
     static VkImageLayout RHI_TO_VK_ImageLayout(ImageLayout layout) {
         switch (layout) {
         case ImageLayout::Undefined:                        return VK_IMAGE_LAYOUT_UNDEFINED;
-        case ImageLayout::General:                         return VK_IMAGE_LAYOUT_GENERAL;
-        case ImageLayout::ColorAttachment:                 return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-        case ImageLayout::DepthStencilAttachment:          return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-        case ImageLayout::DepthStencilReadOnly:            return VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-        case ImageLayout::ShaderReadOnly:                  return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        case ImageLayout::TransferSrc:                     return VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-        case ImageLayout::TransferDst:                     return VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-        case ImageLayout::Preinitialized:                  return VK_IMAGE_LAYOUT_PREINITIALIZED;
-        case ImageLayout::PresentSrc:                      return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-        case ImageLayout::DepthReadOnlyStencilAttachment:  return VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL_KHR;
-        case ImageLayout::DepthAttachmentStencilReadOnly:  return VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL_KHR;
-        case ImageLayout::DepthReadOnly:                   return VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL_KHR;
-        case ImageLayout::StencilReadOnly:                 return VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL_KHR;
-        case ImageLayout::ReadOnly:                        return VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL_KHR;
-        case ImageLayout::Attachment:                      return VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL_KHR;
-        case ImageLayout::ReadOnlyAttachment:              return VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL_KHR;  // 注意：Vulkan 无独立只读附件布局，使用只读通用布局
-        default:                                           return VK_IMAGE_LAYOUT_UNDEFINED;
+        case ImageLayout::General:                          return VK_IMAGE_LAYOUT_GENERAL;
+        case ImageLayout::ColorAttachment:                  return VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        case ImageLayout::DepthStencilAttachment:           return VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+        case ImageLayout::DepthStencilReadOnly:             return VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+        case ImageLayout::ShaderReadOnly:                   return VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        case ImageLayout::TransferSrc:                      return VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        case ImageLayout::TransferDst:                      return VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        case ImageLayout::Preinitialized:                   return VK_IMAGE_LAYOUT_PREINITIALIZED;
+        case ImageLayout::PresentSrc:                       return VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        case ImageLayout::DepthReadOnlyStencilAttachment:   return VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL_KHR;
+        case ImageLayout::DepthAttachmentStencilReadOnly:   return VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL_KHR;
+        case ImageLayout::DepthReadOnly:                    return VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL_KHR;
+        case ImageLayout::StencilReadOnly:                  return VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL_KHR;
+        case ImageLayout::ReadOnly:                         return VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL_KHR;
+        case ImageLayout::Attachment:                       return VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL_KHR;
+        case ImageLayout::ReadOnlyAttachment:               return VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL_KHR; // Vulkan 无独立只读附件布局，使用只读通用布局
+        default:                                            return VK_IMAGE_LAYOUT_UNDEFINED;
         }
     }
 
-    /**
-     * @brief 将 RHI 附件加载操作枚举转换为 Vulkan VkAttachmentLoadOp
-     */
+    // ==================== 附件操作转换 ====================
     static VkAttachmentLoadOp RHI_TO_VK_AttachmentLoadOp(AttachmentLoadOp op) {
         switch (op) {
         case AttachmentLoadOp::Load:     return VK_ATTACHMENT_LOAD_OP_LOAD;
@@ -144,9 +144,6 @@ namespace StarryEngine::RHI::FUNC {
         }
     }
 
-    /**
-     * @brief 将 RHI 附件存储操作枚举转换为 Vulkan VkAttachmentStoreOp
-     */
     static VkAttachmentStoreOp RHI_TO_VK_AttachmentStoreOp(AttachmentStoreOp op) {
         switch (op) {
         case AttachmentStoreOp::Store:    return VK_ATTACHMENT_STORE_OP_STORE;
@@ -156,10 +153,7 @@ namespace StarryEngine::RHI::FUNC {
         }
     }
 
-    /**
-     * @brief 将 RHI 管线阶段位掩码转换为 Vulkan VkPipelineStageFlags
-     * @param flags PipelineStageFlags（uint32_t 位掩码）
-     */
+    // ==================== 管线阶段转换 ====================
     static VkPipelineStageFlags RHI_TO_VK_PipelineStageFlags(PipelineStageFlags flags) {
         VkPipelineStageFlags vkFlags = 0;
         if (flags & static_cast<PipelineStageFlags>(PipelineStage::TopOfPipe))
@@ -207,10 +201,7 @@ namespace StarryEngine::RHI::FUNC {
         return vkFlags;
     }
 
-    /**
-     * @brief 将 RHI 访问位掩码转换为 Vulkan VkAccessFlags
-     * @param flags AccessFlags（uint32_t 位掩码）
-     */
+    // ==================== 访问掩码转换 ====================
     static VkAccessFlags RHI_TO_VK_AccessFlags(AccessFlags flags) {
         if (flags == static_cast<AccessFlags>(AccessFlag::None))
             return 0;
@@ -255,12 +246,100 @@ namespace StarryEngine::RHI::FUNC {
         if (flags & static_cast<AccessFlags>(AccessFlag::AccelerationStructureWrite))
             vkFlags |= VK_ACCESS_ACCELERATION_STRUCTURE_WRITE_BIT_KHR;
         if (flags & static_cast<AccessFlags>(AccessFlag::ShaderSampledRead))
-            vkFlags |= VK_ACCESS_SHADER_READ_BIT;  
+            vkFlags |= VK_ACCESS_SHADER_READ_BIT;
         if (flags & static_cast<AccessFlags>(AccessFlag::ShaderStorageRead))
             vkFlags |= VK_ACCESS_SHADER_READ_BIT;
         if (flags & static_cast<AccessFlags>(AccessFlag::ShaderStorageWrite))
             vkFlags |= VK_ACCESS_SHADER_WRITE_BIT;
         return vkFlags;
     }
-}
 
+    // ==================== 新增：图像方面转换 ====================
+    static VkImageAspectFlags RHI_TO_VK_ImageAspect(ImageAspect aspect) {
+        switch (aspect) {
+        case ImageAspect::Color:        return VK_IMAGE_ASPECT_COLOR_BIT;
+        case ImageAspect::Depth:        return VK_IMAGE_ASPECT_DEPTH_BIT;
+        case ImageAspect::Stencil:      return VK_IMAGE_ASPECT_STENCIL_BIT;
+        case ImageAspect::DepthStencil: return VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT;
+        default:                        return VK_IMAGE_ASPECT_COLOR_BIT;
+        }
+    }
+
+    // ==================== 新增：图像视图类型转换 ====================
+    static VkImageViewType RHI_TO_VK_ImageViewType(ImageViewType viewType, TextureType texType) {
+        if (viewType != ImageViewType::Auto) {
+            switch (viewType) {
+            case ImageViewType::Texture1D:          return VK_IMAGE_VIEW_TYPE_1D;
+            case ImageViewType::Texture1DArray:     return VK_IMAGE_VIEW_TYPE_1D_ARRAY;
+            case ImageViewType::Texture2D:          return VK_IMAGE_VIEW_TYPE_2D;
+            case ImageViewType::Texture2DArray:     return VK_IMAGE_VIEW_TYPE_2D_ARRAY;
+            case ImageViewType::Texture3D:          return VK_IMAGE_VIEW_TYPE_3D;
+            case ImageViewType::TextureCube:        return VK_IMAGE_VIEW_TYPE_CUBE;
+            case ImageViewType::TextureCubeArray:   return VK_IMAGE_VIEW_TYPE_CUBE_ARRAY;
+            default: break;
+            }
+        }
+        // 根据纹理类型自动推导
+        switch (texType) {
+        case TextureType::Texture1D:        return VK_IMAGE_VIEW_TYPE_1D;
+        case TextureType::Texture1DArray:   return VK_IMAGE_VIEW_TYPE_1D_ARRAY;
+        case TextureType::Texture2D:        return VK_IMAGE_VIEW_TYPE_2D;
+        case TextureType::Texture2DArray:   return VK_IMAGE_VIEW_TYPE_2D_ARRAY;
+        case TextureType::Texture3D:        return VK_IMAGE_VIEW_TYPE_3D;
+        case TextureType::TextureCube:      return VK_IMAGE_VIEW_TYPE_CUBE;
+        case TextureType::TextureCubeArray: return VK_IMAGE_VIEW_TYPE_CUBE_ARRAY;
+        default:                            return VK_IMAGE_VIEW_TYPE_2D;
+        }
+    }
+    static VkFilter RHI_TO_VK_Filter(SamplerFilter filter) {
+        switch (filter) {
+        case SamplerFilter::Nearest: return VK_FILTER_NEAREST;
+        case SamplerFilter::Linear:  return VK_FILTER_LINEAR;
+        default: return VK_FILTER_LINEAR;
+        }
+    }
+
+    static VkSamplerMipmapMode RHI_TO_VK_MipmapMode(SamplerFilter filter) {
+        switch (filter) {
+        case SamplerFilter::Nearest: return VK_SAMPLER_MIPMAP_MODE_NEAREST;
+        case SamplerFilter::Linear:  return VK_SAMPLER_MIPMAP_MODE_LINEAR;
+        default: return VK_SAMPLER_MIPMAP_MODE_LINEAR;
+        }
+    }
+
+    static VkSamplerAddressMode RHI_TO_VK_AddressMode(SamplerAddressMode mode) {
+        switch (mode) {
+        case SamplerAddressMode::Repeat:            return VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        case SamplerAddressMode::MirrorRepeat:      return VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+        case SamplerAddressMode::ClampToEdge:       return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        case SamplerAddressMode::ClampToBorder:     return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+        case SamplerAddressMode::MirrorClampToEdge: return VK_SAMPLER_ADDRESS_MODE_MIRROR_CLAMP_TO_EDGE;
+        default: return VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        }
+    }
+
+    static VkCompareOp RHI_TO_VK_CompareOp(CompareOp op) {
+        switch (op) {
+        case CompareOp::Never:          return VK_COMPARE_OP_NEVER;
+        case CompareOp::Less:           return VK_COMPARE_OP_LESS;
+        case CompareOp::Equal:          return VK_COMPARE_OP_EQUAL;
+        case CompareOp::LessOrEqual:    return VK_COMPARE_OP_LESS_OR_EQUAL;
+        case CompareOp::Greater:        return VK_COMPARE_OP_GREATER;
+        case CompareOp::NotEqual:       return VK_COMPARE_OP_NOT_EQUAL;
+        case CompareOp::GreaterOrEqual: return VK_COMPARE_OP_GREATER_OR_EQUAL;
+        case CompareOp::Always:         return VK_COMPARE_OP_ALWAYS;
+        default: return VK_COMPARE_OP_ALWAYS;
+        }
+    }
+
+    static VkBorderColor RHI_TO_VK_BorderColor(SamplerBorderColor color) {
+        switch (color) {
+        case SamplerBorderColor::TransparentBlack: return VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
+        case SamplerBorderColor::OpaqueBlack:      return VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
+        case SamplerBorderColor::OpaqueWhite:      return VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
+        case SamplerBorderColor::Custom:
+        default: return VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK; // 降级
+        }
+    }
+
+} // namespace StarryEngine::RHI::FUNC

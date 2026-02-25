@@ -341,28 +341,25 @@ namespace StarryEngine {
         std::cout << "[INFO] Cleaning up Vulkan RHI..." << std::endl;
 
         if (mDevice) {
-            try {
-                mDevice->waitIdle();
-            }
-            catch (const std::exception& e) {
-                std::cerr << "[WARNING] Failed to wait for device idle: " << e.what() << std::endl;
-            }
+            mDevice->waitIdle();
         }
 
-        if (mFrameContext) {
-            try {
-                mFrameContext->cleanup();
-            }
-            catch (const std::exception& e) {
-                std::cerr << "[WARNING] Failed to cleanup frame context: " << e.what() << std::endl;
-            }
-            mFrameContext.reset();
-        }
+        // 先销毁资源管理器，释放所有 GPU 资源（纹理、缓冲区等）
+        mResourceManager.reset();
 
-        if (mSwapChain) mSwapChain.reset();
-        if (mInstance) mDevice->destroySurface(mSurface);
-        if (mDevice) mDevice.reset();
-        if (mInstance) mInstance.reset();
+        // 再销毁帧上下文和交换链
+        mFrameContext.reset();
+        mSwapChain.reset();
+
+        // 然后销毁设备
+        mDevice.reset();
+
+        // 最后销毁 Surface 和 Instance
+        if (mSurface != VK_NULL_HANDLE && mInstance) {
+            vkDestroySurfaceKHR(mInstance->getHandle(), mSurface, nullptr);
+            mSurface = VK_NULL_HANDLE;
+        }
+        mInstance.reset();
 
         std::cout << "[INFO] Vulkan RHI cleanup completed" << std::endl;
     }

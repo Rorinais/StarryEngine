@@ -95,30 +95,54 @@ namespace StarryEngine{
 			return mResourceManager->createTexture(desc, desc.debugName);
 		}
 
-        std::vector<RHI::FramebufferHandle> createFramebuffers(RHI::RenderPassHandle renderpass,RHI::TextureHandle depthTexture=RHI::TextureHandle::Null()) {
-			std::vector<RHI::FramebufferHandle> framebuffers;
-			framebuffers.reserve(mSwapChain->getImageCount());
+        std::vector<RHI::FramebufferHandle> createFramebuffers(
+            RHI::RenderPassHandle renderpass,
+            RHI::TextureHandle depthTexture /* = RHI::TextureHandle::Null() */)
+        {
+            std::vector<RHI::FramebufferHandle> framebuffers;
+            framebuffers.reserve(mSwapChain->getImageCount());
 
-            for (size_t i = 0; i < mSwapChain->getImageCount(); i++){
-				RHI::FramebufferDesc fboDesc;
-				fboDesc.renderPass = mResourceManager->getRenderPass(renderpass)->getNativeHandle();
-				fboDesc.extent = { mSwapChain->getExtent().width, mSwapChain->getExtent().height };
+            for (size_t i = 0; i < mSwapChain->getImageCount(); i++) {
+                RHI::FramebufferDesc fboDesc;
+                fboDesc.renderPass = mResourceManager->getRenderPass(renderpass)->getNativeHandle();
+                fboDesc.extent = { mSwapChain->getExtent().width, mSwapChain->getExtent().height };
+
+                // 添加颜色附件（交换链图像视图）
                 fboDesc.attachments.push_back((void*)mSwapChain->getImageView(i));
-				//TODO: 深度纹理附件未实现，后续添加
-                //if (depthTexture != RHI::TextureHandle::Null()) { 
-                //    auto image = static_cast<TraditionalImageFull*>(mResourceManager->getTexture(depthTexture)->getNativeHandle());
-                //    fboDesc.attachments.push_back(image->view); 
-                //}
-                fboDesc.layers = 1;
 
-				framebuffers.push_back(mResourceManager->createFramebuffer(fboDesc,"framebuffer_"+std::to_string(i)));
+                // 添加深度附件（如果提供了深度纹理）
+                if (depthTexture != RHI::TextureHandle::Null()) {
+                    RHI::RHITexture* texture = mResourceManager->getTexture(depthTexture);
+                    if (texture) {
+                        // getDefaultView() 返回的是 VkImageView 存储在 void* 中
+                        fboDesc.attachments.push_back(texture->getDefaultView());
+                    }
+                    else {
+                        std::cerr << "[Warning] Depth texture handle is invalid!" << std::endl;
+                    }
+                }
+
+                fboDesc.layers = 1;
+                framebuffers.push_back(mResourceManager->createFramebuffer(
+                    fboDesc, "framebuffer_" + std::to_string(i)));
             }
-			return framebuffers;
+            return framebuffers;
         }
 
         void destroyFramebuffers(const std::vector<RHI::FramebufferHandle> & fboHandles) {
             for (const auto& fboHandle : fboHandles) {
                 mResourceManager->destroy(fboHandle);
+            }
+        }
+
+        RHI::Format getDefaultDepthFormat() const {
+            if (!mDevice) return RHI::Format::Undefined;
+
+            switch (mDevice->findDepthFormat()) {
+            case VK_FORMAT_D16_UNORM:          return RHI::Format::D16_UNorm;
+            case VK_FORMAT_D32_SFLOAT:         return RHI::Format::D32_Float;
+            case VK_FORMAT_D24_UNORM_S8_UINT:  return RHI::Format::D24_UNorm_S8_UInt;
+            default: return RHI::Format::Undefined;
             }
         }
 

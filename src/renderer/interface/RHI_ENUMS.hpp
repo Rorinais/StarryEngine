@@ -87,6 +87,17 @@ namespace StarryEngine::RHI {
         MAX_CATEGORIES
     };
 
+    enum class ImageViewType {
+        Auto,           
+        Texture1D,
+        Texture1DArray,
+        Texture2D,
+        Texture2DArray,
+        Texture3D,
+        TextureCube,
+        TextureCubeArray
+    };
+
     enum class DynamicState : uint32_t {
         Viewport = 0,
         Scissor,

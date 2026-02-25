@@ -774,16 +774,14 @@ namespace StarryEngine::RHI {
 
     template<typename HandleType, typename ResourceType>
     void TypedResourceStorage<HandleType, ResourceType>::clear() {
-        //std::lock_guard<std::mutex> lock(mutex_);
-
         for (auto& chunk : chunks_) {
             for (auto& entry : chunk.entries) {
                 if (entry.alive && entry.data) {
-                    entry.data->release();
+                    entry.data->release();  // 释放 GPU 资源
+                    entry.data.reset();     // 销毁对象，避免析构时再次调用 release
                 }
             }
         }
-
         chunks_.clear();
         nameToIndex_.clear();
         debugTagToIndex_.clear();

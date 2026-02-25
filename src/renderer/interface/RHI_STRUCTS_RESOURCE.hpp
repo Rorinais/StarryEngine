@@ -56,6 +56,7 @@ namespace StarryEngine::RHI {
     };
 
     // ==================== 纹理接口 ====================
+// ==================== 纹理接口 ====================
     class RHITexture : public IResource {
     public:
         virtual ~RHITexture() = default;
@@ -69,32 +70,28 @@ namespace StarryEngine::RHI {
         virtual uint32_t getSampleCount() const = 0;
         virtual ImageLayout getCurrentLayout() const = 0;
 
-        // 视图创建
+        // ========== 视图管理 ==========
+        // 创建视图，可指定子资源范围和视图类型（默认从纹理类型推导）
         virtual void* createView(
-            ImageAspect aspect = ImageAspect::Color,
-            uint32_t baseMipLevel = 0,
-            uint32_t levelCount = 1,
-            uint32_t baseArrayLayer = 0,
-            uint32_t layerCount = 1) = 0;
+            const ImageSubresourceRange& range,
+            ImageViewType viewType = ImageViewType::Auto) = 0;
 
+        // 获取默认视图（完整资源的视图，常用于渲染目标或采样）
+        virtual void* getDefaultView() const = 0;
+
+        // 销毁由 createView 返回的视图句柄
         virtual void destroyView(void* view) = 0;
 
-        // Mipmap生成
-        virtual void generateMipmaps() = 0;
-
-        // 布局转换
+        // ========== 布局转换 ==========
         virtual void transitionLayout(
             ImageLayout newLayout,
             PipelineStage srcStage,
             PipelineStage dstStage,
-            AccessFlag srcAccess,
-            AccessFlag dstAccess,
-            uint32_t baseMipLevel = 0,
-            uint32_t levelCount = 1,
-            uint32_t baseArrayLayer = 0,
-            uint32_t layerCount = 1) = 0;
+            AccessFlags srcAccess,
+            AccessFlags dstAccess,
+            const ImageSubresourceRange& range) = 0;
 
-        // 拷贝操作
+        // ========== 拷贝操作 ==========
         virtual void copyFromBuffer(
             RHIBuffer* buffer,
             const std::vector<BufferImageCopyRegion>& regions) = 0;
@@ -106,6 +103,11 @@ namespace StarryEngine::RHI {
         virtual void copyFromTexture(
             RHITexture* texture,
             const std::vector<ImageCopyRegion>& regions) = 0;
+
+        // ========== Mipmap生成 ==========
+        virtual void generateMipmaps() = 0;
+
+        virtual void update(const void* data, size_t size, const ImageSubresourceRange& range) = 0;
     };
 
     // ==================== 采样器接口 ====================
