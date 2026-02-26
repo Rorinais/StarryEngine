@@ -323,7 +323,7 @@ namespace StarryEngine {
             VkBool32 compareEnable = VK_FALSE, VkCompareOp compareOp = VK_COMPARE_OP_ALWAYS,
             float mipLodBias = 0.0f, float minLod = 0.0f, float maxLod = 0.0f,
             VkBorderColor borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK);
-        void destroySampler(VkSampler sampler);
+        void destroySampler(VkSampler& sampler);
 
         // ==================== 实用功能 ====================
         

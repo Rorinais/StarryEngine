@@ -556,7 +556,8 @@ namespace StarryEngine::RHI {
         Device::Ptr device,
         const PipelineLayoutDesc& desc,
         std::vector<VkDescriptorSetLayout> vkDescriptorSetLayouts 
-    ) :mDevice(device), mDesc(desc), mDescriptorSetLayouts(vkDescriptorSetLayouts) {
+    ) :mDevice(device), mDesc(desc), mDescriptorSetLayouts(vkDescriptorSetLayouts),
+        mLayoutHandles(desc.descriptorSetLayouts) {
         std::vector<VkPushConstantRange> vkPushConstants;
         vkPushConstants.reserve(mDesc.pushConstants.size());
 
@@ -990,9 +991,10 @@ namespace StarryEngine::RHI {
     }
 
     void RHI_VK_Texture::copyFromBuffer(RHIBuffer* srcBuffer, const std::vector<BufferImageCopyRegion>& regions) {
-        RHI_VK_Buffer* vkSrcBuffer = dynamic_cast<RHI_VK_Buffer*>(srcBuffer);
-        if (!vkSrcBuffer) return;
-
+        VkBuffer vkBuffer = static_cast<VkBuffer>(srcBuffer->getNativeHandle());
+        copyFromBuffer(vkBuffer, regions);
+    }
+    void RHI_VK_Texture::copyFromBuffer(VkBuffer srcBuffer, const std::vector<BufferImageCopyRegion>& regions) {
         VkCommandPool cmdPool = mDevice->getTransferCommandPool();
         VkCommandBuffer cmdBuf = mDevice->beginSingleTimeCommands(cmdPool);
 
@@ -1013,7 +1015,7 @@ namespace StarryEngine::RHI {
         }
 
         vkCmdCopyBufferToImage(cmdBuf,
-            static_cast<VkBuffer>(vkSrcBuffer->getNativeHandle()),
+            srcBuffer,
             mUsingVMA ? vmaImage.image : traditionalImage.image,
             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
             static_cast<uint32_t>(vkRegions.size()),
@@ -1092,19 +1094,32 @@ namespace StarryEngine::RHI {
     }
 
     void RHI_VK_Texture::update(const void* data, size_t size, const ImageSubresourceRange& range) {
-        // 创建暂存缓冲区
-        VMABuffer staging = mDevice->createBufferWithVMA(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,VMA_MEMORY_USAGE_CPU_TO_GPU, 0, data, size);
+        // 1. 如果当前布局不是 TransferDst，则进行布局转换
+        if (mCurrentLayout != ImageLayout::TransferDst) {
+            // 注意：转换整个子资源范围（通常为整个纹理）
+            ImageSubresourceRange fullRange = range; // 或使用整个纹理的范围
+            transitionLayout(
+                ImageLayout::TransferDst,            // 目标布局
+                PipelineStage::TopOfPipe,            // 源阶段（之前无操作）
+                PipelineStage::Transfer,              // 目标阶段（传输操作）
+                static_cast<AccessFlags>(AccessFlag::None),// 源访问掩码（UNDEFINED 无依赖）
+                static_cast<AccessFlags>(AccessFlag::TransferWrite),// 目标访问掩码（写入传输）
+                fullRange
+            );
+            mCurrentLayout = ImageLayout::TransferDst; // 更新内部状态
+        }
 
-        // 构造拷贝区域
+        // 2. 创建暂存缓冲区并拷贝（已有代码）
+        VMABuffer staging = mDevice->createBufferWithVMA(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+            VMA_MEMORY_USAGE_CPU_TO_GPU, 0, data, size);
+
         BufferImageCopyRegion region;
         region.imageSubresource = range;
         region.imageExtent = mDesc.extent;
-        // 其他字段保持默认（bufferOffset=0等）
 
-        // 调用已有的 copyFromBuffer
-        copyFromBuffer(reinterpret_cast<RHIBuffer*>(&staging), { region });
+        // 调用原生句柄重载（假设你已添加）
+        copyFromBuffer(staging.buffer, { region });
 
-        // 清理暂存缓冲区
         mDevice->destroyBufferWithVMA(staging.buffer, staging.allocation);
     }
 
@@ -1186,7 +1201,7 @@ namespace StarryEngine::RHI {
     }
 
     void RHI_VK_Sampler::release() {
-        destroySampler();
+        mDevice->destroySampler(mSampler);
     }
 
     bool RHI_VK_Sampler::isValid() const {
@@ -1225,11 +1240,284 @@ namespace StarryEngine::RHI {
         }
     }
 
-    void RHI_VK_Sampler::destroySampler() {
-        if (mSampler != VK_NULL_HANDLE) {
-            mDevice->destroySampler(mSampler);
-            mSampler = VK_NULL_HANDLE;
+    RHI_VK_DescriptorSetLayout::RHI_VK_DescriptorSetLayout(Device::Ptr device, const DescriptorSetLayoutDesc& desc)
+        : mDevice(device), mDesc(desc) {
+
+        std::vector<VkDescriptorSetLayoutBinding> vkBindings;
+        vkBindings.reserve(mDesc.bindings.size());
+
+        // 临时存储每个绑定对应的采样器指针数组（确保 pImmutableSamplers 指向有效内存）
+        std::vector<std::vector<VkSampler>> perBindingSamplers;
+
+        for (const auto& binding : mDesc.bindings) {
+            VkDescriptorSetLayoutBinding vkBinding{};
+            vkBinding.binding = binding.binding;
+            vkBinding.descriptorType = FUNC::RHI_TO_VK_DescriptorType(binding.type);
+            vkBinding.descriptorCount = binding.count;
+            vkBinding.stageFlags = static_cast<VkShaderStageFlags>(binding.stageFlags);
+            vkBinding.pImmutableSamplers = nullptr;
+
+            if (binding.immutableSamplers) {
+                if (binding.type != DescriptorType::Sampler &&
+                    binding.type != DescriptorType::CombinedImageSampler) {
+                    throw std::runtime_error("Immutable samplers only allowed for Sampler or CombinedImageSampler");
+                }
+
+                std::vector<VkSampler> samplers;
+                samplers.reserve(binding.count);
+                for (uint32_t i = 0; i < binding.count; ++i) {
+                    SamplerDesc samplerDesc = (i < binding.samplerDescs.size()) ? binding.samplerDescs[i] : SamplerDesc{};
+                    VkSampler sampler = mDevice->createSampler(
+                        FUNC::RHI_TO_VK_Filter(samplerDesc.magFilter),
+                        FUNC::RHI_TO_VK_Filter(samplerDesc.minFilter),
+                        FUNC::RHI_TO_VK_AddressMode(samplerDesc.addressU),
+                        FUNC::RHI_TO_VK_AddressMode(samplerDesc.addressV),
+                        FUNC::RHI_TO_VK_AddressMode(samplerDesc.addressW),
+                        samplerDesc.maxAnisotropy > 1.0f ? VK_TRUE : VK_FALSE,
+                        samplerDesc.maxAnisotropy,
+                        samplerDesc.compareEnable ? VK_TRUE : VK_FALSE,
+                        FUNC::RHI_TO_VK_CompareOp(samplerDesc.compareOp),
+                        samplerDesc.mipLodBias,
+                        samplerDesc.minLod,
+                        samplerDesc.maxLod,
+                        FUNC::RHI_TO_VK_BorderColor(samplerDesc.borderColor)
+                    );
+                    samplers.push_back(sampler);
+                    mImmutableSamplers.push_back(sampler);
+                }
+                perBindingSamplers.push_back(std::move(samplers));
+                vkBinding.pImmutableSamplers = perBindingSamplers.back().data();
+            }
+            else {
+                perBindingSamplers.emplace_back(); // 占位，保持索引对齐
+            }
+
+            vkBindings.push_back(vkBinding);
+        }
+
+        try {
+            mLayout = mDevice->createDescriptorSetLayout(vkBindings);
+        }
+        catch (...) {
+            for (auto sampler : mImmutableSamplers) {
+                mDevice->destroySampler(sampler);
+            }
+            throw;
         }
     }
 
+    RHI_VK_DescriptorSetLayout::~RHI_VK_DescriptorSetLayout() {
+        release();
+    }
+
+    void RHI_VK_DescriptorSetLayout::release() {
+        mDevice->destroyDescriptorSetLayout(mLayout);
+
+        for (auto sampler : mImmutableSamplers) {
+            mDevice->destroySampler(sampler);
+        }
+        mImmutableSamplers.clear();
+    }
+
+    bool RHI_VK_DescriptorSetLayout::isCompatibleWith(const RHIDescriptorSetLayout* other) const {
+        auto* vkOther = dynamic_cast<const RHI_VK_DescriptorSetLayout*>(other);
+        if (!vkOther) return false;
+        return mDesc.bindings == vkOther->mDesc.bindings;
+    }
+
+    RHI_VK_DescriptorPool::RHI_VK_DescriptorPool(Device::Ptr device, const DescriptorPoolDesc& desc)
+        : mDevice(device), mDesc(desc) {
+
+        std::vector<VkDescriptorPoolSize> vkPoolSizes;
+        for (const auto& size : desc.poolSizes) {
+            VkDescriptorPoolSize vkSize{};
+            vkSize.type = FUNC::RHI_TO_VK_DescriptorType(size.first);
+            vkSize.descriptorCount = size.second;
+            vkPoolSizes.push_back(vkSize);
+        }
+
+        // 直接调用 Device 的封装函数
+        mPool = mDevice->createDescriptorPool(vkPoolSizes, desc.maxSets);
+
+        if (!desc.debugName.empty())
+            mDevice->setObjectName(reinterpret_cast<uint64_t>(mPool),
+                VK_OBJECT_TYPE_DESCRIPTOR_POOL, desc.debugName.c_str());
+    }
+
+    void RHI_VK_DescriptorPool::release() {
+        mDevice->destroyDescriptorPool(mPool);
+    }
+
+    std::vector<std::unique_ptr<RHIDescriptorSet>> RHI_VK_DescriptorPool::allocateDescriptorSets(
+        const std::vector<RHIDescriptorSetLayout*>& layouts) {
+
+        std::vector<VkDescriptorSetLayout> vkLayouts;
+        for (auto* layout : layouts) {
+            auto* vkLayout = dynamic_cast<RHI_VK_DescriptorSetLayout*>(layout);
+            if (!vkLayout) throw std::runtime_error("Invalid layout type");
+            vkLayouts.push_back(static_cast<VkDescriptorSetLayout>(vkLayout->getNativeHandle()));
+        }
+
+        VkDescriptorSetAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        allocInfo.descriptorPool = mPool;
+        allocInfo.descriptorSetCount = static_cast<uint32_t>(vkLayouts.size());
+        allocInfo.pSetLayouts = vkLayouts.data();
+
+        std::vector<VkDescriptorSet> vkSets(vkLayouts.size());
+        if (vkAllocateDescriptorSets(mDevice->getLogicalDevice(), &allocInfo, vkSets.data()) != VK_SUCCESS) {
+            throw std::runtime_error("Failed to allocate descriptor sets");
+        }
+
+        mAllocatedSets += static_cast<uint32_t>(vkSets.size());
+
+        std::vector<std::unique_ptr<RHIDescriptorSet>> result;
+        for (size_t i = 0; i < vkSets.size(); ++i) {
+            result.push_back(std::make_unique<RHI_VK_DescriptorSet>(mDevice, vkSets[i], this, layouts[i]));
+        }
+        return result;
+    }
+
+    void RHI_VK_DescriptorPool::freeDescriptorSets(const std::vector<DescriptorSetHandle>& /*descriptorSets*/) {
+        // 若需要单独释放，可通过 ResourceManager 获取对象后调用 vkFreeDescriptorSets
+        // 此处暂不实现，由 reset() 统一管理
+    }
+
+    void RHI_VK_DescriptorPool::reset() {
+        vkResetDescriptorPool(mDevice->getLogicalDevice(), mPool, 0);
+        mAllocatedSets = 0;
+    }
+
+    uint32_t RHI_VK_DescriptorPool::getRemainingSets() const {
+        return mDesc.maxSets - mAllocatedSets.load();
+    }
+
+    RHI_VK_DescriptorSet::RHI_VK_DescriptorSet(Device::Ptr device, VkDescriptorSet set,
+        RHI_VK_DescriptorPool* pool, RHIDescriptorSetLayout* layout)
+        : mDevice(device), mSet(set), mPool(pool), mLayout(layout) {
+    }
+
+    RHI_VK_DescriptorSet::~RHI_VK_DescriptorSet() { release(); }
+
+    void RHI_VK_DescriptorSet::release() {
+        mSet = VK_NULL_HANDLE;
+    }
+
+    void RHI_VK_DescriptorSet::writeBuffer(uint32_t binding, uint32_t arrayElement,
+        RHIBuffer* buffer, uint64_t offset, uint64_t range) {
+        if (!buffer) return;
+
+        VkDescriptorBufferInfo bufferInfo{};
+        bufferInfo.buffer = static_cast<VkBuffer>(buffer->getNativeHandle());
+        bufferInfo.offset = offset;
+        bufferInfo.range = (range == 0) ? VK_WHOLE_SIZE : range;
+        mBufferInfos.push_back(bufferInfo);
+
+        VkWriteDescriptorSet write{};
+        write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        write.dstSet = mSet;
+        write.dstBinding = binding;
+        write.dstArrayElement = arrayElement;
+        write.descriptorCount = 1;
+        // 注意：描述符类型应从 mLayout 中查询，这里假设 binding 0 是 UniformBuffer
+        write.descriptorType = getBindingDescriptorType(binding);
+        write.pBufferInfo = &mBufferInfos.back();
+
+        mPendingWrites.push_back(write);
+    }
+
+    void RHI_VK_DescriptorSet::writeTexture(uint32_t binding, uint32_t arrayElement,
+        RHITexture* texture, RHISampler* sampler,
+        ImageLayout layout) {
+        if (!texture) return;
+
+        // 确定描述符类型：若有采样器则为 CombinedImageSampler，否则为 SampledImage
+        DescriptorType type = sampler ? DescriptorType::CombinedImageSampler : DescriptorType::SampledImage;
+        // 若布局中该绑定为 StorageImage，则应为 StorageImage，此处简化
+
+        VkDescriptorImageInfo imageInfo{};
+        imageInfo.imageView = static_cast<VkImageView>(texture->getDefaultView());
+        if (sampler) {
+            imageInfo.sampler = static_cast<VkSampler>(sampler->getNativeHandle());
+        }
+        imageInfo.imageLayout = FUNC::RHI_TO_VK_ImageLayout(layout);
+        mImageInfos.push_back(imageInfo);
+
+        VkWriteDescriptorSet write{};
+        write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        write.dstSet = mSet;
+        write.dstBinding = binding;
+        write.dstArrayElement = arrayElement;
+        write.descriptorCount = 1;
+        write.descriptorType = FUNC::RHI_TO_VK_DescriptorType(type);
+        write.pImageInfo = &mImageInfos.back();
+
+        mPendingWrites.push_back(write);
+    }
+
+    void RHI_VK_DescriptorSet::writeSampler(uint32_t binding, uint32_t arrayElement,
+        RHISampler* sampler) {
+        if (!sampler) return;
+
+        VkDescriptorImageInfo imageInfo{};
+        imageInfo.sampler = static_cast<VkSampler>(sampler->getNativeHandle());
+        mImageInfos.push_back(imageInfo);
+
+        VkWriteDescriptorSet write{};
+        write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        write.dstSet = mSet;
+        write.dstBinding = binding;
+        write.dstArrayElement = arrayElement;
+        write.descriptorCount = 1;
+        write.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+        write.pImageInfo = &mImageInfos.back();
+
+        mPendingWrites.push_back(write);
+    }
+
+    void RHI_VK_DescriptorSet::writeAccelerationStructure(uint32_t /*binding*/, uint32_t /*arrayElement*/,
+        RHIAccelerationStructure* /*accelerationStructure*/) {
+        // 暂未实现
+    }
+
+    void RHI_VK_DescriptorSet::writeInlineUniformBlock(uint32_t /*binding*/, uint32_t /*offset*/,
+        uint32_t /*size*/, const void* /*data*/) {
+        // 暂未实现
+    }
+
+    void RHI_VK_DescriptorSet::update() {
+        if (mPendingWrites.empty()) return;
+        mDevice->updateDescriptorSet(mSet, mPendingWrites);
+        mPendingWrites.clear();
+        mBufferInfos.clear();
+        mImageInfos.clear();
+        mAccelStructs.clear();
+    }
+
+    void RHI_VK_DescriptorSet::copyFrom(const RHIDescriptorSet* src, const std::vector<DescriptorCopy>& copies) {
+        std::vector<VkCopyDescriptorSet> vkCopies;
+        for (const auto& copy : copies) {
+            // 需要从 src 句柄获取 VkDescriptorSet（通过 dynamic_cast）
+            auto* vkSrc = dynamic_cast<const RHI_VK_DescriptorSet*>(src);
+            if (!vkSrc) continue;
+
+            VkCopyDescriptorSet vkCopy{};
+            vkCopy.sType = VK_STRUCTURE_TYPE_COPY_DESCRIPTOR_SET;
+            vkCopy.srcSet = vkSrc->mSet;
+            vkCopy.srcBinding = copy.srcBinding;
+            vkCopy.srcArrayElement = copy.srcArrayElement;
+            vkCopy.dstSet = mSet;
+            vkCopy.dstBinding = copy.dstBinding;
+            vkCopy.dstArrayElement = copy.dstArrayElement;
+            vkCopy.descriptorCount = copy.descriptorCount;
+            vkCopies.push_back(vkCopy);
+        }
+
+        if (!vkCopies.empty()) {
+            vkUpdateDescriptorSets(mDevice->getLogicalDevice(),
+                0, nullptr,
+                static_cast<uint32_t>(vkCopies.size()),
+                vkCopies.data());
+        }
+    }
 }

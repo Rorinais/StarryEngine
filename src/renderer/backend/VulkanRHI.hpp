@@ -71,6 +71,10 @@ namespace StarryEngine{
             mResourceManager->destroy(handle);
         }
 
+        RHI::RHIPipelineLayout* getPipelineLayout(RHI::PipelineLayoutHandle handle) {
+            return mResourceManager->getPipelineLayout(handle);
+        }
+
         void release(RHI::PipelineLayoutHandle handle) {
             mResourceManager->destroy(handle);
 		}
@@ -144,6 +148,64 @@ namespace StarryEngine{
             case VK_FORMAT_D24_UNORM_S8_UINT:  return RHI::Format::D24_UNorm_S8_UInt;
             default: return RHI::Format::Undefined;
             }
+        }
+
+        RHI::DescriptorSetLayoutHandle createDescriptorSetLayout(RHI::DescriptorSetLayoutDesc desc) {
+            return mResourceManager->createDescriptorSetLayout(desc, desc.debugName);
+        }
+
+        RHI::DescriptorPoolHandle createDescriptorPool(RHI::DescriptorPoolDesc desc) {
+            return mResourceManager->createDescriptorPool(desc, desc.debugName);
+        }
+
+        RHI::DescriptorSetHandle allocateDescriptorSet(RHI::DescriptorSetDesc desc) {
+            return mResourceManager->createDescriptorSet(desc);
+        }
+
+        void updateDescriptorSet(RHI::DescriptorSetHandle setHandle, uint32_t binding, uint32_t arrayElement,
+            const RHI::DescriptorBufferInfo& bufferInfo) {
+            auto* set = mResourceManager->getDescriptorSet(setHandle);
+            if (!set) {
+                std::cerr << "[VulkanRHI] Invalid descriptor set handle" << std::endl;
+                return;
+            }
+
+            auto* buffer = mResourceManager->getBuffer(bufferInfo.buffer);
+            if (!buffer) {
+                std::cerr << "[VulkanRHI] Invalid buffer handle" << std::endl;
+                return;
+            }
+
+            set->writeBuffer(binding, arrayElement, buffer, bufferInfo.offset, bufferInfo.range);
+            set->update();
+        }
+
+        void updateDescriptorSet(RHI::DescriptorSetHandle set, uint32_t binding, uint32_t arrayElement, const RHI::DescriptorImageInfo& imageInfo) {
+            auto* rhiSet = mResourceManager->getDescriptorSet(set);
+            if (rhiSet) {
+                auto* texture = mResourceManager->getTexture(imageInfo.texture);
+                auto* sampler = mResourceManager->getSampler(imageInfo.sampler);
+                if (texture && sampler) {
+                    rhiSet->writeTexture(binding, arrayElement, texture, sampler, imageInfo.imageLayout);
+                    rhiSet->update();
+                }
+            }
+        }
+
+        RHI::TextureHandle createTexture(const RHI::TextureDesc& desc) {
+            return mResourceManager->createTexture(desc, desc.debugName);
+        }
+
+        RHI::RHITexture* getTexture(RHI::TextureHandle handle) {
+            return mResourceManager->getTexture(handle);
+        }
+
+        RHI::SamplerHandle createSampler(const RHI::SamplerDesc& desc) {
+            return mResourceManager->createSampler(desc, desc.debugName);
+        }
+
+        RHI::RHISampler* getSampler(RHI::SamplerHandle handle) {
+            return mResourceManager->getSampler(handle);
         }
 
     private:

@@ -241,11 +241,18 @@ namespace StarryEngine::RHI {
         const char* getTypeName() const override { return "VK_PipelineLayout"; }
 
         VkPipelineLayout getVkPipelineLayout() const { return mPipelineLayout; }
+
+        DescriptorSetLayoutHandle getLayoutHandle(uint32_t setIndex) const {
+            if (setIndex < mLayoutHandles.size()) return mLayoutHandles[setIndex];
+            return DescriptorSetLayoutHandle::Null();
+        }
+
     private:
         Device::Ptr mDevice;
         VkPipelineLayout mPipelineLayout = VK_NULL_HANDLE;
         PipelineLayoutDesc mDesc;
         std::vector<VkDescriptorSetLayout> mDescriptorSetLayouts;
+        std::vector<DescriptorSetLayoutHandle> mLayoutHandles;
     };
 
     class RHI_VK_Pipeline : public RHIPipeline {
@@ -346,7 +353,6 @@ namespace StarryEngine::RHI {
 
         void release() override;
 
-
         // 生命周期
         void begin()override;
         void end()override;
@@ -421,10 +427,11 @@ namespace StarryEngine::RHI {
         void copyToBuffer(RHIBuffer* dstBuffer, const std::vector<BufferImageCopyRegion>& regions) override;
         void copyFromTexture(RHITexture* srcTexture, const std::vector<ImageCopyRegion>& regions) override;
 		void update(const void* data, size_t size, const ImageSubresourceRange& range) override;
-
         void generateMipmaps() override;
 
     private:
+        void copyFromBuffer(VkBuffer srcBuffer, const std::vector<BufferImageCopyRegion>& regions);
+
         Device::Ptr mDevice;
         TextureDesc mDesc;
 
@@ -472,8 +479,109 @@ namespace StarryEngine::RHI {
         VkSampler mSampler = VK_NULL_HANDLE;
 
         void createSampler();
-        void destroySampler();
         VkBool32 toVkBool(bool b) { return b ? VK_TRUE : VK_FALSE; }
+    };
+
+
+    // RHI_VK_DescriptorSetLayout.hpp
+    class RHI_VK_DescriptorSetLayout : public RHIDescriptorSetLayout {
+    public:
+        RHI_VK_DescriptorSetLayout(Device::Ptr device, const DescriptorSetLayoutDesc& desc);
+        ~RHI_VK_DescriptorSetLayout() override;
+
+        void release() override;
+        bool isValid() const override { return mLayout != VK_NULL_HANDLE; }
+        void* getNativeHandle() const override { return reinterpret_cast<void*>(mLayout); }
+        size_t getMemoryUsage() const override { return 0; } // 布局本身内存很小，不计入
+        const char* getTypeName() const override { return "Vulkan_DescriptorSetLayout"; }
+
+        const std::vector<DescriptorSetLayoutBinding>& getBindings() const override { return mDesc.bindings; }
+        uint32_t getBindingCount() const override { return static_cast<uint32_t>(mDesc.bindings.size()); }
+        bool isCompatibleWith(const RHIDescriptorSetLayout* other) const override;
+        const DescriptorSetLayoutDesc& getDesc() const { return mDesc; }
+
+    private:
+        Device::Ptr mDevice;
+        VkDescriptorSetLayout mLayout = VK_NULL_HANDLE;
+        DescriptorSetLayoutDesc mDesc;
+        std::vector<VkSampler> mImmutableSamplers;
+    };
+
+    class RHI_VK_DescriptorPool : public RHIDescriptorPool {
+    public:
+        RHI_VK_DescriptorPool(Device::Ptr device, const DescriptorPoolDesc& desc);
+        ~RHI_VK_DescriptorPool() override { release(); }
+
+        void release() override;
+        bool isValid() const override { return mPool != VK_NULL_HANDLE; }
+        void* getNativeHandle() const override { return reinterpret_cast<void*>(mPool); }
+        size_t getMemoryUsage() const override { return sizeof(*this); }
+        const char* getTypeName() const override { return "Vulkan_DescriptorPool"; }
+
+        std::vector<std::unique_ptr<RHIDescriptorSet>> allocateDescriptorSets(
+            const std::vector<RHIDescriptorSetLayout*>& layouts) override;
+        void freeDescriptorSets(const std::vector<DescriptorSetHandle>& descriptorSets) override;
+        void reset() override;
+        uint32_t getMaxSets() const override { return mDesc.maxSets; }
+        uint32_t getRemainingSets() const override;
+
+    private:
+        Device::Ptr mDevice;
+        VkDescriptorPool mPool = VK_NULL_HANDLE;
+        DescriptorPoolDesc mDesc;
+        std::atomic<uint32_t> mAllocatedSets{ 0 };
+    };
+
+    class RHI_VK_DescriptorSet : public RHIDescriptorSet {
+    public:
+        RHI_VK_DescriptorSet(Device::Ptr device, VkDescriptorSet set,
+            RHI_VK_DescriptorPool* pool,
+            RHIDescriptorSetLayout* layout);
+        ~RHI_VK_DescriptorSet() override;
+
+        void release() override;
+        bool isValid() const override { return mSet != VK_NULL_HANDLE; }
+        void* getNativeHandle() const override { return reinterpret_cast<void*>(mSet); }
+        size_t getMemoryUsage() const override { return 0; }
+        const char* getTypeName() const override { return "Vulkan_DescriptorSet"; }
+
+        // 写入方法
+        void writeBuffer(uint32_t binding, uint32_t arrayElement,
+            RHIBuffer* buffer, uint64_t offset = 0, uint64_t range = 0) override;
+        void writeTexture(uint32_t binding, uint32_t arrayElement,
+            RHITexture* texture, RHISampler* sampler = nullptr,
+            ImageLayout layout = ImageLayout::ShaderReadOnly) override;
+        void writeSampler(uint32_t binding, uint32_t arrayElement,
+            RHISampler* sampler) override;
+        void writeAccelerationStructure(uint32_t binding, uint32_t arrayElement,
+            RHIAccelerationStructure* accelerationStructure) override;
+        void writeInlineUniformBlock(uint32_t binding, uint32_t offset,
+            uint32_t size, const void* data) override;
+        void update() override;
+        void copyFrom(const RHIDescriptorSet* src, const std::vector<DescriptorCopy>& copies) override;
+
+    private:
+        VkDescriptorType getBindingDescriptorType(uint32_t binding) const {
+            if (!mLayout) return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER; // fallback
+            const auto& bindings = mLayout->getBindings();
+            for (const auto& b : bindings) {
+                if (b.binding == binding) {
+                    return FUNC::RHI_TO_VK_DescriptorType(b.type);
+                }
+            }
+            return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER; // fallback
+        }
+
+
+        Device::Ptr mDevice;
+        VkDescriptorSet mSet = VK_NULL_HANDLE;
+        RHI_VK_DescriptorPool* mPool;        // 所属池（用于释放判断）
+        RHIDescriptorSetLayout* mLayout;      // 布局，用于查询绑定信息
+
+        std::vector<VkWriteDescriptorSet> mPendingWrites;
+        std::vector<VkDescriptorBufferInfo> mBufferInfos;   // 确保指针有效
+        std::vector<VkDescriptorImageInfo> mImageInfos;
+        std::vector<VkWriteDescriptorSetAccelerationStructureKHR> mAccelStructs; // 可选
     };
 
 } // namespace StarryEngine::RHI

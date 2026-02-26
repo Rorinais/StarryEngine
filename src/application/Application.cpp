@@ -1,4 +1,5 @@
 #include "Application.hpp"
+#include <stb_image.h>
 
 namespace StarryEngine {
     Application::Application() : m_lastFpsTime(0.0), m_depthFormat(RHI::Format::Undefined) {
@@ -94,15 +95,58 @@ namespace StarryEngine {
         std::cout << "Application initialized successfully!" << std::endl;
     }
 
+    void Application::loadTexture(const char* filename) {
+        int texWidth, texHeight, texChannels;
+        stbi_uc* pixels = stbi_load(filename, &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+        if (!pixels) {
+            std::cerr << "Failed to load texture image: " << filename << std::endl;
+            return;
+        }
+
+        // 创建纹理描述
+        RHI::TextureDesc texDesc;
+        texDesc.extent = { (uint32_t)texWidth, (uint32_t)texHeight, 1 };
+        texDesc.format = RHI::Format::RGBA8_UNorm;  // 注意：如果使用 sRGB，需选择对应格式
+        texDesc.type = RHI::TextureType::Texture2D;
+        texDesc.mipLevels = 1;
+        texDesc.arrayLayers = 1;
+        texDesc.sampleCount = 1;
+        texDesc.allowRenderTarget = false;
+        texDesc.allowDepthStencil = false;
+        texDesc.allowUnorderedAccess = false;
+        texDesc.debugName = "MyTexture";
+
+        mTextureHandle = m_rhi->createTexture(texDesc);
+        mTexture = m_rhi->getTexture(mTextureHandle);
+
+        // 上传像素数据
+        mTexture->update(pixels, texWidth * texHeight * 4, { RHI::ImageAspect::Color, 0, 1, 0, 1 });
+        mTexture->transitionLayout(
+            RHI::ImageLayout::ShaderReadOnly,          // 目标布局
+            RHI::PipelineStage::Transfer,              // 源阶段（传输完成）
+            RHI::PipelineStage::FragmentShader,        // 目标阶段（片元着色器采样）
+            static_cast<RHI::AccessFlags>(RHI::AccessFlag::TransferWrite), // 源访问
+            static_cast<RHI::AccessFlags>(RHI::AccessFlag::ShaderRead),    // 目标访问
+            { RHI::ImageAspect::Color, 0, 1, 0, 1 }
+        );
+        stbi_image_free(pixels);
+    }
+
     void Application::run() {
         std::cout << "Starting application main loop..." << std::endl;
 
         createShaderProgram();
-		createBuffer();
-		createRenderPass();
-		createPipelineLayout();
-		createPipeline();
-		createFramebuffers();
+        createBuffer();
+        createRenderPass();
+
+        createUniformResources();      // 创建 UBO、布局、池
+        loadTexture("C:\\Users\\41384\\Desktop\\Snipaste.png");
+        createSampler();
+        createPipelineLayout();        // 此时布局句柄已包含两个 binding
+        allocateAndUpdateDescriptorSet();
+
+        createPipeline();
+        createFramebuffers();
 
         auto frameContext = m_rhi->getFrameContext();
 
@@ -125,6 +169,24 @@ namespace StarryEngine {
             }
 
             bool success = m_rhi->renderFrame([this](RHI::RHICommandEncoder* encoder, uint32_t imageIndex) {
+                // ========== 1. 更新 Uniform 缓冲区数据（每帧计算并上传 MVP 矩阵）==========
+                static auto startTime = std::chrono::high_resolution_clock::now();
+                auto currentTime = std::chrono::high_resolution_clock::now();
+                float time = std::chrono::duration<float>(currentTime - startTime).count();
+
+                // 计算 MVP 矩阵（使用 glm，记得包含头文件）
+                glm::mat4 model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+                glm::mat4 view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+                glm::mat4 proj = glm::perspective(glm::radians(45.0f), static_cast<float>(m_width) / m_height, 0.1f, 10.0f);
+                // Vulkan 的 NDC Y 轴向下，需要翻转投影矩阵的 Y 轴
+                proj[1][1] *= -1;
+
+                // 将数据打包成 Uniforms 结构体
+                Uniforms ubo = { model, view, proj };
+                // 更新 Uniform 缓冲区（假设 mUniformBuffer 是 RHIBuffer*，并且已持久映射）
+                mUniformBuffer->update(&ubo, sizeof(ubo), 0);
+
+                // ========== 2. 开始渲染通道 ==========
                 RHI::RenderPassBeginInfo rpBegin{};
                 rpBegin.renderPass = m_rhi->getRenderPass(mRenderPassHandle)->getNativeHandle();
                 rpBegin.framebuffer = m_rhi->getFramebuffer(mFramebuffers[imageIndex])->getNativeHandle();
@@ -135,16 +197,56 @@ namespace StarryEngine {
                 };
                 encoder->beginRenderPass(rpBegin, RHI::SubpassContents::Inline);
 
-                RHI::Viewport viewport{ 0.0f, 0.0f, static_cast<float>(m_width), static_cast<float>(m_height), 0.0f, 1.0f };
+                // 设置视口（注意你的翻转设置）
+                //RHI::Viewport viewport{
+                //    0.0f,
+                //    static_cast<float>(m_height),   // y 设为窗口高度
+                //    static_cast<float>(m_width),    // width
+                //    -static_cast<float>(m_height),  // height 为负值实现 Y 轴翻转
+                //    0.0f, 1.0f
+                //};
+
+                RHI::Viewport viewport{
+                    0.0f,
+                    0.0f,   // y 设为窗口高度
+                    static_cast<float>(m_width),    // width
+                    static_cast<float>(m_height),  // height 为负值实现 Y 轴翻转
+                    0.0f, 1.0f
+                };
+
                 encoder->setViewport(viewport);
                 RHI::Rect2D scissor{ {0, 0}, {m_width, m_height} };
                 encoder->setScissor(scissor);
 
+                // 绑定图形管线
                 encoder->bindPipeline(m_rhi->getPipeline(mPipelineHandle));
-                encoder->draw(3, 1, 0, 0);
+
+                // ========== 3. 绑定描述符集（Uniform 缓冲区）==========
+                // 假设你有方法从 pipelineLayoutHandle 获取 RHIPipelineLayout*，并且 encoder 实现了 bindDescriptorSets
+                // 注意：bindDescriptorSets 的第一个参数是 PipelineBindPoint::Graphics，第三个是动态偏移量（此处为空）
+                encoder->bindDescriptorSets(
+                    RHI::PipelineBindPoint::Graphics,
+                    m_rhi->getPipelineLayout(mPipelineLayoutHandle),  // 需要确保 mPipelineLayoutHandle 有效
+                    0,                                                 // firstSet
+                    { mDescriptorSetHandle },                          // 描述符集句柄列表
+                    {}                                                  // 动态偏移量（无）
+                );
+
+                // ========== 4. 绑定顶点和索引缓冲区 ==========
+                if (mVertexBuffer) {
+                    std::vector<RHI::RHIBuffer*> buffers = { mVertexBuffer };
+                    std::vector<uint64_t> offsets = { 0 };
+                    encoder->bindVertexBuffers(0, buffers, offsets);
+                }
+                if (mIndexBuffer) {
+                    encoder->bindIndexBuffer(mIndexBuffer, 0, RHI::IndexType::UInt32);
+                }
+
+                // ========== 5. 绘制立方体（36个索引） ==========
+                encoder->drawIndexed(36, 1, 0, 0, 0);
 
                 encoder->endRenderPass();
-             });
+                });
 
             double frameEnd = glfwGetTime();   
             double frameDuration = frameEnd - frameStart;  
@@ -173,14 +275,8 @@ namespace StarryEngine {
     }
 
     Application::~Application() {
-        if (mVertexBuffer){
-            delete mVertexBuffer;
-            mVertexBuffer = nullptr;
-        }
-
-        // 清理窗口
+		m_rhi.reset();
         m_window.reset();
-
         std::cout << "Application shutdown." << std::endl;
     }
 

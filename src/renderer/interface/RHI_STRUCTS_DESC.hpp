@@ -1289,6 +1289,19 @@ namespace StarryEngine::RHI {
         }
     };
 
+    // 在 DescriptorWrite 之前添加
+    struct DescriptorBufferInfo {
+        BufferHandle buffer;      ///< 缓冲区句柄
+        uint64_t offset = 0;      ///< 偏移量
+        uint64_t range = 0;       ///< 范围（0表示整个缓冲区）
+    };
+
+    struct DescriptorImageInfo {
+        TextureHandle texture;    ///< 纹理句柄
+        SamplerHandle sampler;    ///< 采样器句柄
+        ImageLayout imageLayout = ImageLayout::ShaderReadOnly; ///< 图像布局
+    };
+
     /**
      * @brief 推送常量范围结构体
      * @details 描述推送常量的内存布局

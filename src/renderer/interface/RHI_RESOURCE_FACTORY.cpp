@@ -45,13 +45,11 @@ namespace StarryEngine::RHI {
 
     std::unique_ptr<RHIPipelineLayout> VKResourceFactory::createPipelineLayout(const PipelineLayoutDesc& desc) {
         std::vector<VkDescriptorSetLayout> vkDescSetlayouts{};
-		/* //TODO: 描述符未实现
-        for (auto desSet : desc.descriptorSetlayouts) {
-			 auto rhiDesSetlayout = mResourceManager->getDescriptorSet(desSet);
+        for (auto desSet : desc.descriptorSetLayouts) {
+			 auto rhiDesSetlayout = mResourceManager->getDescriptorSetLayout(desSet);
              auto desSetlayout = static_cast<VkDescriptorSetLayout>(rhiDesSetlayout->getNativeHandle());
 			 vkDescSetlayouts.push_back(desSetlayout);
         }
-        */
         return std::make_unique<RHI_VK_PipelineLayout>(mDevice, desc, vkDescSetlayouts);
     }
 
@@ -61,7 +59,7 @@ namespace StarryEngine::RHI {
 
     std::unique_ptr<RHISampler> VKResourceFactory::createSampler(const SamplerDesc& desc) {
         // TODO: 实现采样器创建
-        throw std::runtime_error("Not implemented: createSampler");
+        return std::make_unique<RHI_VK_Sampler>(mDevice, desc);
     }
 
     std::unique_ptr<RHIRenderPass> VKResourceFactory::createRenderPass(const RenderPassDesc& desc) {
@@ -73,18 +71,51 @@ namespace StarryEngine::RHI {
     }
 
     std::unique_ptr<RHIDescriptorSet> VKResourceFactory::createDescriptorSet(const DescriptorSetDesc& desc) {
-        // TODO: 实现描述符集创建
-        throw std::runtime_error("Not implemented: createDescriptorSet");
+        if (!mResourceManager) {
+            throw std::runtime_error("ResourceManager not set in VKResourceFactory");
+        }
+
+        // 1. 获取描述符池对象（Vulkan 实现）
+        auto* pool = dynamic_cast<RHI_VK_DescriptorPool*>(mResourceManager->getDescriptorPool(desc.descriptorPool));
+        if (!pool) {
+            throw std::runtime_error("Invalid descriptor pool handle");
+        }
+
+        // 2. 获取管线布局对象
+        auto* pipelineLayout = dynamic_cast<RHI_VK_PipelineLayout*>(mResourceManager->getPipelineLayout(desc.pipelineLayout));
+        if (!pipelineLayout) {
+            throw std::runtime_error("Invalid pipeline layout handle");
+        }
+
+        // 3. 通过管线布局获取指定 set 索引的布局句柄
+        auto layoutHandle = pipelineLayout->getLayoutHandle(desc.setIndex);
+        if (!layoutHandle.isValid()) {
+            throw std::runtime_error("No descriptor set layout at set index " + std::to_string(desc.setIndex));
+        }
+
+        // 4. 获取布局对象
+        auto* layout = dynamic_cast<RHI_VK_DescriptorSetLayout*>(mResourceManager->getDescriptorSetLayout(layoutHandle));
+        if (!layout) {
+            throw std::runtime_error("Invalid descriptor set layout handle");
+        }
+
+        // 5. 通过描述符池分配描述符集（返回 vector）
+        auto sets = pool->allocateDescriptorSets({ layout });
+        if (sets.empty()) {
+            throw std::runtime_error("Failed to allocate descriptor set");
+        }
+
+        // 6. 返回分配的第一个（也是唯一一个）描述符集
+        return std::move(sets[0]);
     }
 
     std::unique_ptr<RHIDescriptorPool> VKResourceFactory::createDescriptorPool(const DescriptorPoolDesc& desc) {
         // TODO: 实现描述符池创建
-        throw std::runtime_error("Not implemented: createDescriptorPool");
+        return std::make_unique<RHI_VK_DescriptorPool>(mDevice, desc);
     }
 
     std::unique_ptr<RHIDescriptorSetLayout> VKResourceFactory::createDescriptorSetLayout(const DescriptorSetLayoutDesc& desc) {
-        // TODO: 实现描述符集布局创建
-        throw std::runtime_error("Not implemented: createDescriptorSetLayout");
+        return std::make_unique<RHI_VK_DescriptorSetLayout>(mDevice, desc);
     }
 
   //  std::unique_ptr<RHICommandBuffer> VKResourceFactory::createCommandBuffer(const CommandBufferDesc& desc) {
@@ -298,6 +329,7 @@ namespace StarryEngine::RHI {
         }
         vkCmdBindVertexBuffers(getVkCommandBuffer(), firstBinding, static_cast<uint32_t>(vkBuffers.size()), vkBuffers.data(), offsets.data());
     }
+
     void RHI_VK_CommandEncoder::bindIndexBuffer(
         RHIBuffer* buffer,
         uint64_t offset,
@@ -307,45 +339,40 @@ namespace StarryEngine::RHI {
         vkCmdBindIndexBuffer(getVkCommandBuffer(), vkBuffer, offset, vkIndexType);
     }
 
-    // 描述符集绑定
     void RHI_VK_CommandEncoder::bindDescriptorSets(
         PipelineBindPoint bindPoint,
         RHIPipelineLayout* layout,
         uint32_t firstSet,
         const std::vector<DescriptorSetHandle>& descriptorSets,
         const std::vector<uint32_t>& dynamicOffsets) {
-        //if (!layout || descriptorSets.empty()) return;
 
-        //// 获取 Vulkan 布局
-        //auto vkLayout = static_cast<VkPipelineLayout>(layout->getNativeHandle());
+        if (!layout || descriptorSets.empty()) return;
 
-        //// 转换描述符集句柄为 VkDescriptorSet
-        //std::vector<VkDescriptorSet> vkSets;
-        //vkSets.reserve(descriptorSets.size());
-        //for (const auto& handle : descriptorSets) {
-        //    if (mResourceManager) {
-        //        VkDescriptorSet set = mResourceManager->getDescriptorSet(handle);
-        //        vkSets.push_back(set);
-        //    }
-        //    else {
-        //        vkSets.push_back(VK_NULL_HANDLE);
-        //    }
-        //}
+        auto vkLayout = static_cast<VkPipelineLayout>(layout->getNativeHandle());
+        std::vector<VkDescriptorSet> vkSets;
+        for (auto handle : descriptorSets) {
+            // 需要通过 ResourceManager 获取 RHIDescriptorSet 对象
+            auto set = mResourceManager->getDescriptorSet(handle);
+            if (set) {
+                vkSets.push_back(static_cast<VkDescriptorSet>(set->getNativeHandle()));
+            }
+        }
+        if (vkSets.empty()) return;
 
-        //VkPipelineBindPoint vkBindPoint = (bindPoint == PipelineBindPoint::Graphics)
-        //    ? VK_PIPELINE_BIND_POINT_GRAPHICS
-        //    : VK_PIPELINE_BIND_POINT_COMPUTE;
+        VkPipelineBindPoint vkBindPoint = (bindPoint == PipelineBindPoint::Graphics)
+            ? VK_PIPELINE_BIND_POINT_GRAPHICS
+            : VK_PIPELINE_BIND_POINT_COMPUTE;
 
-        //vkCmdBindDescriptorSets(
-        //    getVkCommandBuffer(),
-        //    vkBindPoint,
-        //    vkLayout,
-        //    firstSet,
-        //    static_cast<uint32_t>(vkSets.size()),
-        //    vkSets.data(),
-        //    static_cast<uint32_t>(dynamicOffsets.size()),
-        //    dynamicOffsets.data()
-        //);
+        vkCmdBindDescriptorSets(
+            getVkCommandBuffer(),
+            vkBindPoint,
+            vkLayout,
+            firstSet,
+            static_cast<uint32_t>(vkSets.size()),
+            vkSets.data(),
+            static_cast<uint32_t>(dynamicOffsets.size()),
+            dynamicOffsets.data()
+        );
     }
 
     // 推送常量

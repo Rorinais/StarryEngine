@@ -303,17 +303,18 @@ namespace StarryEngine::RHI {
         virtual bool isCompatibleWith(const RHIDescriptorSetLayout* other) const = 0;
     };
 
+    class RHIDescriptorSet;
+
     // ==================== 描述符池接口 ====================
     class RHIDescriptorPool : public IResource {
     public:
         virtual ~RHIDescriptorPool() = default;
 
-        virtual std::vector<DescriptorSetHandle> allocateDescriptorSets(
+        virtual std::vector<std::unique_ptr<RHIDescriptorSet>> allocateDescriptorSets(
             const std::vector<RHIDescriptorSetLayout*>& layouts) = 0;
 
         virtual void freeDescriptorSets(const std::vector<DescriptorSetHandle>& descriptorSets) = 0;
         virtual void reset() = 0;
-
         virtual uint32_t getMaxSets() const = 0;
         virtual uint32_t getRemainingSets() const = 0;
     };

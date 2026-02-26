@@ -71,6 +71,8 @@ namespace StarryEngine::RHI::FUNC {
         case Format::D16_UNorm: return VK_FORMAT_D16_UNORM;
         case Format::D32_Float: return VK_FORMAT_D32_SFLOAT;
         case Format::D24_UNorm_S8_UInt: return VK_FORMAT_D24_UNORM_S8_UINT;
+        case Format::RGB32_Float: return VK_FORMAT_R32G32B32_SFLOAT;
+        case Format::RG32_Float: return VK_FORMAT_R32G32_SFLOAT;
         default: return VK_FORMAT_UNDEFINED;
         }
     }
@@ -340,6 +342,37 @@ namespace StarryEngine::RHI::FUNC {
         case SamplerBorderColor::Custom:
         default: return VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK; // 降级
         }
+    }
+
+    static VkDescriptorType RHI_TO_VK_DescriptorType(DescriptorType type) {
+        switch (type) {
+        case DescriptorType::Sampler:               return VK_DESCRIPTOR_TYPE_SAMPLER;
+        case DescriptorType::CombinedImageSampler:  return VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        case DescriptorType::SampledImage:          return VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+        case DescriptorType::StorageImage:          return VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        case DescriptorType::UniformTexelBuffer:    return VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER;
+        case DescriptorType::StorageTexelBuffer:    return VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER;
+        case DescriptorType::UniformBuffer:         return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        case DescriptorType::StorageBuffer:         return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        case DescriptorType::UniformBufferDynamic:  return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+        case DescriptorType::StorageBufferDynamic:  return VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC;
+        case DescriptorType::InputAttachment:       return VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+        case DescriptorType::AccelerationStructure: return VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR; // 需检查扩展
+        case DescriptorType::InlineUniformBlock:    return VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT;  // 需检查扩展
+        default:
+            throw std::runtime_error("Unsupported DescriptorType");
+        }
+    }
+
+    static VkDescriptorSetLayoutCreateFlags RHI_TO_VK_DescriptorSetLayoutFlags(bool pushDescriptors,bool updateAfterBind) {
+        VkDescriptorSetLayoutCreateFlags flags = 0;
+        if (pushDescriptors) {
+            flags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_PUSH_DESCRIPTOR_BIT_KHR;
+        }
+        if (updateAfterBind) {
+            flags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
+        }
+        return flags;
     }
 
 } // namespace StarryEngine::RHI::FUNC

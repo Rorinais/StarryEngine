@@ -994,6 +994,7 @@ namespace StarryEngine {
 
         VkSamplerCreateInfo samplerInfo = {};
         samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+        samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
         samplerInfo.magFilter = magFilter;
         samplerInfo.minFilter = minFilter;
         samplerInfo.addressModeU = addressModeU;
@@ -1018,7 +1019,7 @@ namespace StarryEngine {
         return sampler;
     }
 
-    void Device::destroySampler(VkSampler sampler) {
+    void Device::destroySampler(VkSampler&sampler) {
         if (sampler != VK_NULL_HANDLE) {
             vkDestroySampler(mLogicalDevice, sampler, nullptr);
             sampler = VK_NULL_HANDLE;
