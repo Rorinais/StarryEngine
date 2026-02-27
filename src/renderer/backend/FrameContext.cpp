@@ -302,6 +302,26 @@ namespace StarryEngine {
         }
     }
 
+    void FrameContext::resetAllFrames() {
+        if (!mDevice) return;
+
+        // 确保所有 GPU 工作完成
+        mDevice->waitIdle();
+
+        // 等待所有栅栏完成，但不要重置它们（保持已信号状态）
+        for (auto& frameData : mFrameData) {
+            if (frameData.inFlightFence != VK_NULL_HANDLE) {
+                vkWaitForFences(mDevice->getLogicalDevice(), 1, &frameData.inFlightFence, VK_TRUE, UINT64_MAX);
+                // 注意：不调用 vkResetFences
+            }
+        }
+
+        mCurrentFrameIndex = 0;
+        mFrameInProgress = false;
+        mNeedsRecreate = false;
+        mRecreateAttempts = 0;
+    }
+
     // ==================== 重建处理辅助函数 ====================
 
     bool FrameContext::handleAcquireResult(VkResult result, FrameInfo& frameInfo) {
@@ -412,7 +432,12 @@ namespace StarryEngine {
         }
 
         VkResult result = vkWaitForFences(mDevice->getLogicalDevice(), 1, &fence, VK_TRUE, timeout);
-        return result == VK_SUCCESS;
+        if (result != VK_SUCCESS) {
+            std::cerr << "[ERROR] waitForFrame failed for frame " << frameIndex
+                << " with result: " << result << std::endl;
+            return false;
+        }
+        return true;
     }
 
     void FrameContext::resetFrame(uint32_t frameIndex) {

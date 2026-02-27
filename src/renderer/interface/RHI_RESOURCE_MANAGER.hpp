@@ -170,8 +170,18 @@ namespace StarryEngine::RHI {
 		std::atomic<size_t> currentMemoryUsage_{ 0 };
     };
 
+    class IResourceManager {
+    public:
+        virtual ~IResourceManager() = default;
+        virtual TextureHandle createTexture(const TextureDesc& desc,const std::string& name = "",const std::string& debugTag = "") = 0;
+        virtual BufferHandle createBuffer(const BufferDesc& desc,const std::string& name = "",const std::string& debugTag = "") = 0;
+        virtual bool destroy(TextureHandle handle) = 0;
+        virtual bool destroy(BufferHandle handle) = 0;
+    };
+
+
     // ==================== 全局资源管理器 ====================
-    class ResourceManager {
+    class ResourceManager:IResourceManager {
     public:
         struct Statistics {
             size_t totalResources = 0;
@@ -222,12 +232,12 @@ namespace StarryEngine::RHI {
         // 缓冲区
         BufferHandle createBuffer(const BufferDesc& desc,
             const std::string& name = "",
-            const std::string& debugTag = "");
+            const std::string& debugTag = "") override;
 
         // 纹理
         TextureHandle createTexture(const TextureDesc& desc,
             const std::string& name = "",
-            const std::string& debugTag = "");
+            const std::string& debugTag = "") override;
 
         // 图形管线
         PipelineHandle createGraphicsPipeline(const GraphicsPipelineDesc& desc,
@@ -444,11 +454,11 @@ namespace StarryEngine::RHI {
 
         bool addRef(BufferHandle handle);
         bool release(BufferHandle handle);
-        bool destroy(BufferHandle handle);
+        bool destroy(BufferHandle handle) override;
 
         bool addRef(TextureHandle handle);
         bool release(TextureHandle handle);
-        bool destroy(TextureHandle handle);
+        bool destroy(TextureHandle handle) override;
 
         bool addRef(PipelineHandle handle);
         bool release(PipelineHandle handle);

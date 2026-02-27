@@ -80,8 +80,7 @@ namespace StarryEngine {
         void printInfo() const;
 
     private:
-        // 内部创建函数
-        bool createSwapChain(uint32_t width, uint32_t height);
+        bool createSwapChain(uint32_t width, uint32_t height, VkSwapchainKHR oldSwapchain = VK_NULL_HANDLE);
         bool createImageViews();
         void cleanupSwapChain();
 

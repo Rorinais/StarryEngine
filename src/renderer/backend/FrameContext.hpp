@@ -112,6 +112,7 @@ namespace StarryEngine {
         bool recreateSwapChain(uint32_t width, uint32_t height);
         void handleRecreateResult(bool success);
         void setAutoRecreate(bool autoRecreate) { mConfig.autoRecreate = autoRecreate; }
+        void resetAllFrames();
 
         // ==================== 多线程支持 ====================
 

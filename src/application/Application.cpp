@@ -2,7 +2,7 @@
 #include <stb_image.h>
 
 namespace StarryEngine {
-    Application::Application() : m_lastFpsTime(0.0), m_depthFormat(RHI::Format::Undefined) {
+    Application::Application() : m_lastFpsTime(0.0) {
         // 1. 创建窗口
         Window::Config config;
         config.width = m_width;
@@ -88,10 +88,6 @@ namespace StarryEngine {
             return;
         }
 
-        if (m_rhi) {
-            m_depthFormat = m_rhi->getDefaultDepthFormat();
-        }
-
         std::cout << "Application initialized successfully!" << std::endl;
     }
 
@@ -116,8 +112,8 @@ namespace StarryEngine {
         texDesc.allowUnorderedAccess = false;
         texDesc.debugName = "MyTexture";
 
-        mTextureHandle = m_rhi->createTexture(texDesc);
-        mTexture = m_rhi->getTexture(mTextureHandle);
+        mTextureHandle = m_rhi->createResource<RHI::TextureHandle,RHI::TextureDesc>(texDesc);
+        mTexture = m_rhi->getResource<RHI::TextureHandle>(mTextureHandle);
 
         // 上传像素数据
         mTexture->update(pixels, texWidth * texHeight * 4, { RHI::ImageAspect::Color, 0, 1, 0, 1 });
@@ -146,7 +142,6 @@ namespace StarryEngine {
         allocateAndUpdateDescriptorSet();
 
         createPipeline();
-        createFramebuffers();
 
         auto frameContext = m_rhi->getFrameContext();
 
@@ -157,15 +152,20 @@ namespace StarryEngine {
             glfwPollEvents();
             double frameStart = glfwGetTime();
 
-            // 处理窗口大小变化
             if (mFramebufferResized) {
                 mFramebufferResized = false;
+
+                if (m_width == 0 || m_height == 0) {
+                    continue;
+                }
 
                 if (!m_rhi->recreateSwapChain(m_width, m_height)) {
                     std::cerr << "Failed to recreate swap chain!" << std::endl;
                 }
-                // 重新创建帧缓冲
-                mFramebuffers = m_rhi->createFramebuffers(mRenderPassHandle,mDepthTextureHandle);
+            }
+
+            if (m_width == 0 || m_height == 0) {
+                continue;
             }
 
             bool success = m_rhi->renderFrame([this](RHI::RHICommandEncoder* encoder, uint32_t imageIndex) {
@@ -174,22 +174,23 @@ namespace StarryEngine {
                 auto currentTime = std::chrono::high_resolution_clock::now();
                 float time = std::chrono::duration<float>(currentTime - startTime).count();
 
-                // 计算 MVP 矩阵（使用 glm，记得包含头文件）
                 glm::mat4 model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
                 glm::mat4 view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
                 glm::mat4 proj = glm::perspective(glm::radians(45.0f), static_cast<float>(m_width) / m_height, 0.1f, 10.0f);
-                // Vulkan 的 NDC Y 轴向下，需要翻转投影矩阵的 Y 轴
-                proj[1][1] *= -1;
+                //proj[1][1] *= -1;
 
-                // 将数据打包成 Uniforms 结构体
                 Uniforms ubo = { model, view, proj };
-                // 更新 Uniform 缓冲区（假设 mUniformBuffer 是 RHIBuffer*，并且已持久映射）
                 mUniformBuffer->update(&ubo, sizeof(ubo), 0);
 
                 // ========== 2. 开始渲染通道 ==========
+                const auto& framebuffers = m_rhi->getFramebuffers();
+                if (imageIndex >= framebuffers.size()) return;
+                auto* fb = m_rhi->getResource<RHI::FramebufferHandle>(framebuffers[imageIndex]);
+                if (!fb) return;
+
                 RHI::RenderPassBeginInfo rpBegin{};
-                rpBegin.renderPass = m_rhi->getRenderPass(mRenderPassHandle)->getNativeHandle();
-                rpBegin.framebuffer = m_rhi->getFramebuffer(mFramebuffers[imageIndex])->getNativeHandle();
+                rpBegin.renderPass = m_rhi->getResource<RHI::RenderPassHandle>(mRenderPassHandle)->getNativeHandle();
+                rpBegin.framebuffer = fb->getNativeHandle();
                 rpBegin.renderArea = { {0, 0}, {m_width, m_height} };
                 rpBegin.clearValues = {
                     RHI::ClearValue{{RHI::Color::Black()}},
@@ -197,36 +198,24 @@ namespace StarryEngine {
                 };
                 encoder->beginRenderPass(rpBegin, RHI::SubpassContents::Inline);
 
-                // 设置视口（注意你的翻转设置）
-                //RHI::Viewport viewport{
-                //    0.0f,
-                //    static_cast<float>(m_height),   // y 设为窗口高度
-                //    static_cast<float>(m_width),    // width
-                //    -static_cast<float>(m_height),  // height 为负值实现 Y 轴翻转
-                //    0.0f, 1.0f
-                //};
-
                 RHI::Viewport viewport{
                     0.0f,
-                    0.0f,   // y 设为窗口高度
+                    static_cast<float>(m_height),   // y 设为窗口高度
                     static_cast<float>(m_width),    // width
-                    static_cast<float>(m_height),  // height 为负值实现 Y 轴翻转
+                    -static_cast<float>(m_height),  // height 为负值实现 Y 轴翻转
                     0.0f, 1.0f
                 };
-
                 encoder->setViewport(viewport);
                 RHI::Rect2D scissor{ {0, 0}, {m_width, m_height} };
                 encoder->setScissor(scissor);
 
                 // 绑定图形管线
-                encoder->bindPipeline(m_rhi->getPipeline(mPipelineHandle));
+                encoder->bindPipeline(m_rhi->getResource<RHI::PipelineHandle>(mPipelineHandle));
 
                 // ========== 3. 绑定描述符集（Uniform 缓冲区）==========
-                // 假设你有方法从 pipelineLayoutHandle 获取 RHIPipelineLayout*，并且 encoder 实现了 bindDescriptorSets
-                // 注意：bindDescriptorSets 的第一个参数是 PipelineBindPoint::Graphics，第三个是动态偏移量（此处为空）
                 encoder->bindDescriptorSets(
                     RHI::PipelineBindPoint::Graphics,
-                    m_rhi->getPipelineLayout(mPipelineLayoutHandle),  // 需要确保 mPipelineLayoutHandle 有效
+                    m_rhi->getResource<RHI::PipelineLayoutHandle>(mPipelineLayoutHandle),  // 需要确保 mPipelineLayoutHandle 有效
                     0,                                                 // firstSet
                     { mDescriptorSetHandle },                          // 描述符集句柄列表
                     {}                                                  // 动态偏移量（无）
@@ -246,7 +235,7 @@ namespace StarryEngine {
                 encoder->drawIndexed(36, 1, 0, 0, 0);
 
                 encoder->endRenderPass();
-                });
+            });
 
             double frameEnd = glfwGetTime();   
             double frameDuration = frameEnd - frameStart;  

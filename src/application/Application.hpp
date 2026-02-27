@@ -13,6 +13,7 @@
 #include "../renderer/interface/RHI_TYPES.hpp"
 #include "../renderer/interface/RHI_STRUCTS_CONFIG.hpp"
 #include "../renderer/interface/RHI_STRUCTS_DESC.hpp"
+#include "../renderer/graph/RenderGraph.hpp"
 
 
 namespace StarryEngine {
@@ -114,7 +115,7 @@ namespace StarryEngine {
 
             vertexshaderDesc.includePaths = {};
             vertexshaderDesc.debugName = "vertexShader";
-            shaderHandles.push_back(m_rhi->createShaderHandle(vertexshaderDesc));
+            shaderHandles.push_back(m_rhi->createResource<RHI::ShaderHandle,RHI::ShaderModuleDesc>(vertexshaderDesc));
 
             RHI::ShaderModuleDesc fragmentshaderDesc;
             fragmentshaderDesc.stage = RHI::ShaderStage::Fragment;
@@ -134,7 +135,7 @@ namespace StarryEngine {
             )";
             fragmentshaderDesc.includePaths = {};
             fragmentshaderDesc.debugName = "fragmentShader";
-            shaderHandles.push_back(m_rhi->createShaderHandle(fragmentshaderDesc));
+            shaderHandles.push_back(m_rhi->createResource<RHI::ShaderHandle, RHI::ShaderModuleDesc>(fragmentshaderDesc));
 
         }
 
@@ -148,13 +149,13 @@ namespace StarryEngine {
             bufferDesc.allowUpdate = true;
             bufferDesc.debugName = "MyVertexBuffer";
 
-            mVertexBufferHandle = m_rhi->createBuffer(bufferDesc);
+            mVertexBufferHandle = m_rhi->createResource<RHI::BufferHandle,RHI::BufferDesc>(bufferDesc);
             if (!mVertexBufferHandle.isValid()) {
                 std::cerr << "Failed to create vertex buffer!" << std::endl;
                 return;
             }
             //更新顶点缓冲区数据
-            mVertexBuffer = m_rhi->getBuffer(mVertexBufferHandle);
+            mVertexBuffer = m_rhi->getResource<RHI::BufferHandle>(mVertexBufferHandle);
             mVertexBuffer->update(vertices.data(), vertices.size() * sizeof(float));
 
 
@@ -167,13 +168,13 @@ namespace StarryEngine {
             indexBufferDesc.allowUpdate = true;
             indexBufferDesc.debugName = "MyIndexBuffer";
 
-            mIndexBufferHandle = m_rhi->createBuffer(indexBufferDesc);
+            mIndexBufferHandle = m_rhi->createResource<RHI::BufferHandle, RHI::BufferDesc>(indexBufferDesc);
             if (!mIndexBufferHandle.isValid()) {
                 std::cerr << "Failed to create index buffer!" << std::endl;
                 return;
             }
             //更新索引缓冲区数据
-            mIndexBuffer = m_rhi->getBuffer(mIndexBufferHandle);
+            mIndexBuffer = m_rhi->getResource<RHI::BufferHandle>(mIndexBufferHandle);
             mIndexBuffer->update(indices.data(), indices.size() * sizeof(uint32_t));
         }
 
@@ -191,7 +192,7 @@ namespace StarryEngine {
             };
 
             RHI::AttachmentDesc depthAttachment{
-                .format = m_depthFormat,
+                .format = m_rhi->getDepthFormat(),
                 .sampleCount = 1,
                 .loadOp = RHI::AttachmentLoadOp::Clear,
                 .storeOp = RHI::AttachmentStoreOp::DontCare,
@@ -280,7 +281,11 @@ namespace StarryEngine {
             std::cout << "colorAttachment.format = " << static_cast<int>(colorAttachment.format) << std::endl;
             std::cout << "depthAttachment.format = " << static_cast<int>(depthAttachment.format) << std::endl;
 
-            mRenderPassHandle = m_rhi->createRenderPass(renderPassDesc);
+            mRenderPassHandle = m_rhi->createResource<RHI::RenderPassHandle,RHI::RenderPassDesc>(renderPassDesc);
+
+            if (mRenderPassHandle.isValid()) {
+                m_rhi->setupFramebuffers(mRenderPassHandle);
+            }
         }
 
         void createPipelineLayout() {
@@ -288,7 +293,7 @@ namespace StarryEngine {
             layoutDesc.descriptorSetLayouts = {mDescriptorSetLayoutHandle};
             layoutDesc.pushConstants = {};
 			layoutDesc.debugName = "MainPipelineLayout";
-            mPipelineLayoutHandle = m_rhi->createPipelineLayout(layoutDesc);
+            mPipelineLayoutHandle = m_rhi->createResource<RHI::PipelineLayoutHandle,RHI::PipelineLayoutDesc>(layoutDesc);
 		}
 
         void createPipeline() {
@@ -371,19 +376,7 @@ namespace StarryEngine {
             desc.subpass = 0;
 			desc.debugName = "MainPipeline";
             
-            mPipelineHandle = m_rhi->createGraphicsPipeline(desc);
-        }
-
-        void createFramebuffers() {
-			RHI::TextureDesc depthTextureDesc;
-			depthTextureDesc.extent = { m_width, m_height, 1 };
-			depthTextureDesc.format = m_depthFormat;
-            depthTextureDesc.type = RHI::TextureType::Texture2D;
-			depthTextureDesc.allowDepthStencil = true;
-			depthTextureDesc.debugName = "MainDepthTexture";
-
-			mDepthTextureHandle = m_rhi->createDepthTexture(depthTextureDesc);
-            mFramebuffers = m_rhi->createFramebuffers(mRenderPassHandle,mDepthTextureHandle);
+            mPipelineHandle = m_rhi->createResource<RHI::PipelineHandle,RHI::GraphicsPipelineDesc>(desc);
         }
 
         // 第一阶段：创建 uniform buffer、描述符集布局和描述符池
@@ -396,8 +389,8 @@ namespace StarryEngine {
             ubDesc.allowUpdate = true;
             ubDesc.persistentMapped = true;
             ubDesc.debugName = "UniformBuffer";
-            mUniformBufferHandle = m_rhi->createBuffer(ubDesc);
-            mUniformBuffer = m_rhi->getBuffer(mUniformBufferHandle);
+            mUniformBufferHandle = m_rhi->createResource<RHI::BufferHandle, RHI::BufferDesc>(ubDesc);
+            mUniformBuffer = m_rhi->getResource<RHI::BufferHandle>(mUniformBufferHandle);
             if (!mUniformBuffer) {
                 std::cerr << "Failed to create uniform buffer!" << std::endl;
                 return;
@@ -422,8 +415,9 @@ namespace StarryEngine {
             bindingTexture.stageFlags = RHI::ShaderStage::Fragment;
             bindingTexture.immutableSamplers = false;
             layoutDesc.bindings.push_back(bindingTexture);
+            layoutDesc.debugName = "DescriptorSetLayout";
 
-            mDescriptorSetLayoutHandle = m_rhi->createDescriptorSetLayout(layoutDesc);
+            mDescriptorSetLayoutHandle = m_rhi->createResource<RHI::DescriptorSetLayoutHandle,RHI::DescriptorSetLayoutDesc>(layoutDesc);
             if (!mDescriptorSetLayoutHandle.isValid()) {
                 std::cerr << "Failed to create descriptor set layout!" << std::endl;
                 return;
@@ -435,7 +429,7 @@ namespace StarryEngine {
             poolDesc.poolSizes.push_back({ RHI::DescriptorType::UniformBuffer, 1 });
             poolDesc.poolSizes.push_back({ RHI::DescriptorType::CombinedImageSampler, 1 });
             poolDesc.debugName = "MainDescriptorPool";
-            mDescriptorPoolHandle = m_rhi->createDescriptorPool(poolDesc);
+            mDescriptorPoolHandle = m_rhi->createResource<RHI::DescriptorPoolHandle,RHI::DescriptorPoolDesc>(poolDesc);
             if (!mDescriptorPoolHandle.isValid()) {
                 std::cerr << "Failed to create descriptor pool!" << std::endl;
                 return;
@@ -450,7 +444,7 @@ namespace StarryEngine {
             setDesc.pipelineLayout = mPipelineLayoutHandle;
             setDesc.setIndex = 0;
             setDesc.debugName = "MainDescriptorSet";
-            mDescriptorSetHandle = m_rhi->allocateDescriptorSet(setDesc);
+            mDescriptorSetHandle = m_rhi->createResource<RHI::DescriptorSetHandle,RHI::DescriptorSetDesc>(setDesc);
 
             // 5. 更新描述符集
             // 更新描述符集：绑定 Uniform Buffer 到 binding 0
@@ -480,8 +474,8 @@ namespace StarryEngine {
             samplerDesc.maxAnisotropy = 1.0f;
             samplerDesc.debugName = "MySampler";
 
-            mSamplerHandle = m_rhi->createSampler(samplerDesc);
-            mSampler = m_rhi->getSampler(mSamplerHandle);
+            mSamplerHandle = m_rhi->createResource<RHI::SamplerHandle,RHI::SamplerDesc>(samplerDesc);
+            mSampler = m_rhi->getResource<RHI::SamplerHandle>(mSamplerHandle);
         }
 
     private:
@@ -509,10 +503,6 @@ namespace StarryEngine {
 
 		RHI::PipelineLayoutHandle mPipelineLayoutHandle = RHI::PipelineLayoutHandle::Null();
 		RHI::PipelineHandle mPipelineHandle = RHI::PipelineHandle::Null();
-
-		RHI::TextureHandle mDepthTextureHandle = RHI::TextureHandle::Null();
-        RHI::Format m_depthFormat;
-		std::vector<RHI::FramebufferHandle> mFramebuffers;
 
         RHI::BufferHandle mUniformBufferHandle;
         RHI::DescriptorSetLayoutHandle mDescriptorSetLayoutHandle;

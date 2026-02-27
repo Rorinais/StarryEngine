@@ -10,6 +10,186 @@
 
 
 namespace StarryEngine{
+    template<typename Handle>
+    struct HandleTraits;
+
+    // BufferHandle
+    template<>
+    struct HandleTraits<RHI::BufferHandle> {
+        using ResourceType = RHI::RHIBuffer;
+        static ResourceType* get(RHI::ResourceManager* mgr, RHI::BufferHandle handle) {
+            return mgr->getBuffer(handle);
+        }
+        static RHI::BufferHandle create(RHI::ResourceManager* mgr, const RHI::BufferDesc& desc,
+            const std::string& name = "", const std::string& debugTag = "") {
+            return mgr->createBuffer(desc, name.empty() ? desc.debugName : name, debugTag);
+        }
+        static bool destroy(RHI::ResourceManager* mgr, RHI::BufferHandle handle) {
+            return mgr->destroy(handle);
+        }
+    };
+
+    // TextureHandle
+    template<>
+    struct HandleTraits<RHI::TextureHandle> {
+        using ResourceType = RHI::RHITexture;
+        static ResourceType* get(RHI::ResourceManager* mgr, RHI::TextureHandle handle) {
+            return mgr->getTexture(handle);
+        }
+        static RHI::TextureHandle create(RHI::ResourceManager* mgr, const RHI::TextureDesc& desc,
+            const std::string& name = "", const std::string& debugTag = "") {
+            return mgr->createTexture(desc, name.empty() ? desc.debugName : name, debugTag);
+        }
+        static bool destroy(RHI::ResourceManager* mgr, RHI::TextureHandle handle) {
+            return mgr->destroy(handle);
+        }
+    };
+
+    // PipelineHandle
+    template<>
+    struct HandleTraits<RHI::PipelineHandle> {
+        using ResourceType = RHI::RHIPipeline;
+        static ResourceType* get(RHI::ResourceManager* mgr, RHI::PipelineHandle handle) {
+            return mgr->getPipeline(handle);
+        }
+        static RHI::PipelineHandle create(RHI::ResourceManager* mgr, const RHI::GraphicsPipelineDesc& desc,
+            const std::string& name = "", const std::string& debugTag = "") {
+            return mgr->createGraphicsPipeline(desc, name.empty() ? desc.debugName : name, debugTag);
+        }
+        // 注意：计算管线也返回 PipelineHandle，但描述符类型不同，可以再增加一个 createCompute 特化，或使用 if constexpr
+        // 这里为了简化，只提供图形管线的创建，计算管线单独处理（或通过另一个特化）
+        static bool destroy(RHI::ResourceManager* mgr, RHI::PipelineHandle handle) {
+            return mgr->destroy(handle);
+        }
+    };
+
+    // PipelineLayoutHandle
+    template<>
+    struct HandleTraits<RHI::PipelineLayoutHandle> {
+        using ResourceType = RHI::RHIPipelineLayout;
+        static ResourceType* get(RHI::ResourceManager* mgr, RHI::PipelineLayoutHandle handle) {
+            return mgr->getPipelineLayout(handle);
+        }
+        static RHI::PipelineLayoutHandle create(RHI::ResourceManager* mgr, const RHI::PipelineLayoutDesc& desc,
+            const std::string& name = "", const std::string& debugTag = "") {
+            return mgr->createPipelineLayout(desc, name.empty() ? desc.debugName : name, debugTag);
+        }
+        static bool destroy(RHI::ResourceManager* mgr, RHI::PipelineLayoutHandle handle) {
+            return mgr->destroy(handle);
+        }
+    };
+
+    // ShaderHandle
+    template<>
+    struct HandleTraits<RHI::ShaderHandle> {
+        using ResourceType = RHI::RHIShaderModule;
+        static ResourceType* get(RHI::ResourceManager* mgr, RHI::ShaderHandle handle) {
+            return mgr->getShader(handle);
+        }
+        static RHI::ShaderHandle create(RHI::ResourceManager* mgr, const RHI::ShaderModuleDesc& desc,
+            const std::string& name = "", const std::string& debugTag = "") {
+            return mgr->createShader(desc, name.empty() ? desc.debugName : name, debugTag);
+        }
+        static bool destroy(RHI::ResourceManager* mgr, RHI::ShaderHandle handle) {
+            return mgr->destroy(handle);
+        }
+    };
+
+    // SamplerHandle
+    template<>
+    struct HandleTraits<RHI::SamplerHandle> {
+        using ResourceType = RHI::RHISampler;
+        static ResourceType* get(RHI::ResourceManager* mgr, RHI::SamplerHandle handle) {
+            return mgr->getSampler(handle);
+        }
+        static RHI::SamplerHandle create(RHI::ResourceManager* mgr, const RHI::SamplerDesc& desc,
+            const std::string& name = "", const std::string& debugTag = "") {
+            return mgr->createSampler(desc, name.empty() ? desc.debugName : name, debugTag);
+        }
+        static bool destroy(RHI::ResourceManager* mgr, RHI::SamplerHandle handle) {
+            return mgr->destroy(handle);
+        }
+    };
+
+    // RenderPassHandle
+    template<>
+    struct HandleTraits<RHI::RenderPassHandle> {
+        using ResourceType = RHI::RHIRenderPass;
+        static ResourceType* get(RHI::ResourceManager* mgr, RHI::RenderPassHandle handle) {
+            return mgr->getRenderPass(handle);
+        }
+        static RHI::RenderPassHandle create(RHI::ResourceManager* mgr, const RHI::RenderPassDesc& desc,
+            const std::string& name = "", const std::string& debugTag = "") {
+            return mgr->createRenderPass(desc, name.empty() ? desc.debugName : name, debugTag);
+        }
+        static bool destroy(RHI::ResourceManager* mgr, RHI::RenderPassHandle handle) {
+            return mgr->destroy(handle);
+        }
+    };
+
+    // FramebufferHandle
+    template<>
+    struct HandleTraits<RHI::FramebufferHandle> {
+        using ResourceType = RHI::RHIFramebuffer;
+        static ResourceType* get(RHI::ResourceManager* mgr, RHI::FramebufferHandle handle) {
+            return mgr->getFramebuffer(handle);
+        }
+        static RHI::FramebufferHandle create(RHI::ResourceManager* mgr, const RHI::FramebufferDesc& desc,
+            const std::string& name = "", const std::string& debugTag = "") {
+            return mgr->createFramebuffer(desc, name.empty() ? desc.debugName : name, debugTag);
+        }
+        static bool destroy(RHI::ResourceManager* mgr, RHI::FramebufferHandle handle) {
+            return mgr->destroy(handle);
+        }
+    };
+
+    // DescriptorSetHandle
+    template<>
+    struct HandleTraits<RHI::DescriptorSetHandle> {
+        using ResourceType = RHI::RHIDescriptorSet;
+        static ResourceType* get(RHI::ResourceManager* mgr, RHI::DescriptorSetHandle handle) {
+            return mgr->getDescriptorSet(handle);
+        }
+        static RHI::DescriptorSetHandle create(RHI::ResourceManager* mgr, const RHI::DescriptorSetDesc& desc,
+            const std::string& name = "", const std::string& debugTag = "") {
+            return mgr->createDescriptorSet(desc, name.empty() ? desc.debugName : name, debugTag);
+        }
+        static bool destroy(RHI::ResourceManager* mgr, RHI::DescriptorSetHandle handle) {
+            return mgr->destroy(handle);
+        }
+    };
+
+    // DescriptorPoolHandle
+    template<>
+    struct HandleTraits<RHI::DescriptorPoolHandle> {
+        using ResourceType = RHI::RHIDescriptorPool;
+        static ResourceType* get(RHI::ResourceManager* mgr, RHI::DescriptorPoolHandle handle) {
+            return mgr->getDescriptorPool(handle);
+        }
+        static RHI::DescriptorPoolHandle create(RHI::ResourceManager* mgr, const RHI::DescriptorPoolDesc& desc,
+            const std::string& name = "", const std::string& debugTag = "") {
+            return mgr->createDescriptorPool(desc, name.empty() ? desc.debugName : name, debugTag);
+        }
+        static bool destroy(RHI::ResourceManager* mgr, RHI::DescriptorPoolHandle handle) {
+            return mgr->destroy(handle);
+        }
+    };
+
+    // DescriptorSetLayoutHandle
+    template<>
+    struct HandleTraits<RHI::DescriptorSetLayoutHandle> {
+        using ResourceType = RHI::RHIDescriptorSetLayout;
+        static ResourceType* get(RHI::ResourceManager* mgr, RHI::DescriptorSetLayoutHandle handle) {
+            return mgr->getDescriptorSetLayout(handle);
+        }
+        static RHI::DescriptorSetLayoutHandle create(RHI::ResourceManager* mgr, const RHI::DescriptorSetLayoutDesc& desc,
+            const std::string& name = "", const std::string& debugTag = "") {
+            return mgr->createDescriptorSetLayout(desc, name.empty() ? desc.debugName : name, debugTag);
+        }
+        static bool destroy(RHI::ResourceManager* mgr, RHI::DescriptorSetLayoutHandle handle) {
+            return mgr->destroy(handle);
+        }
+    };
 
     class ConfigConverter {
     public:
@@ -38,175 +218,44 @@ namespace StarryEngine{
 
         bool recreateSwapChain(uint32_t width, uint32_t height);
 
+        void setupFramebuffers(RHI::RenderPassHandle renderPass);
+
+        void updateDescriptorSet(RHI::DescriptorSetHandle setHandle, uint32_t binding, uint32_t arrayElement, const RHI::DescriptorBufferInfo& bufferInfo);
+
+        void updateDescriptorSet(RHI::DescriptorSetHandle set, uint32_t binding, uint32_t arrayElement, const RHI::DescriptorImageInfo& imageInfo);
+
+        RHI::Format getDepthFormat() const;
+
         uint32_t getWidth() const { return mWidth; }
         uint32_t getHeight() const { return mHeight; }
 
         FrameContext::Ptr getFrameContext() const { return mFrameContext; }
+  
+        RHI::TextureHandle getDepthTexture() const { return mDepthTextureHandle; }
 
-        std::unique_ptr<RHI::RHICommandEncoder> getCommandEncoder(VkCommandBuffer cmdBuf) {
-            return std::make_unique<RHI::RHI_VK_CommandEncoder>(mDevice, cmdBuf, mResourceManager.get());
+        const std::vector<RHI::FramebufferHandle>& getFramebuffers() const { return mFramebuffers; }
+
+        std::unique_ptr<RHI::RHICommandEncoder> getCommandEncoder(VkCommandBuffer cmdBuf);
+
+        template<typename Handle>
+        auto getResource(Handle handle) -> typename HandleTraits<Handle>::ResourceType* {
+            return HandleTraits<Handle>::get(mResourceManager.get(), handle);
         }
 
-        RHI::PipelineLayoutHandle createPipelineLayout(RHI::PipelineLayoutDesc desc) {
-            return mResourceManager->createPipelineLayout(desc, desc.debugName);
+        template<typename Handle>
+        bool destroyResource(Handle handle) {
+            return HandleTraits<Handle>::destroy(mResourceManager.get(), handle);
         }
 
-        RHI::PipelineHandle createGraphicsPipeline(RHI::GraphicsPipelineDesc desc) {
-            return mResourceManager->createGraphicsPipeline(desc, desc.debugName);
+        template<typename Handle, typename Desc>
+        Handle createResource(const Desc& desc, const std::string& name = "", const std::string& debugTag = "") {
+            return HandleTraits<Handle>::create(mResourceManager.get(), desc, name, debugTag);
         }
 
-        RHI::RenderPassHandle createRenderPass(RHI::RenderPassDesc desc) {
-            return mResourceManager->createRenderPass(desc, desc.debugName);
-		}
-
-        RHI::ShaderHandle createShaderHandle(RHI::ShaderModuleDesc desc) {
-            return mResourceManager->createShader(desc, desc.debugName);
-        }
-        
-        RHI::BufferHandle createBuffer(RHI::BufferDesc desc) {
-            return mResourceManager->createBuffer(desc, desc.debugName);
-		}
-
-        void release(RHI::ShaderHandle handle) {
-            mResourceManager->destroy(handle);
-        }
-
-        RHI::RHIPipelineLayout* getPipelineLayout(RHI::PipelineLayoutHandle handle) {
-            return mResourceManager->getPipelineLayout(handle);
-        }
-
-        void release(RHI::PipelineLayoutHandle handle) {
-            mResourceManager->destroy(handle);
-		}
-
-        RHI::RHIBuffer * getBuffer(RHI::BufferHandle handle) {
-            return mResourceManager->getBuffer(handle);
-		}
-
-        RHI::RHIRenderPass* getRenderPass(RHI::RenderPassHandle handle) {
-            return mResourceManager->getRenderPass(handle);
-        }
-
-        RHI::RHIFramebuffer* getFramebuffer(RHI::FramebufferHandle handle) {
-            return mResourceManager->getFramebuffer(handle);
-		}   
-
-        RHI::RHIPipeline * getPipeline(RHI::PipelineHandle handle) {
-            return mResourceManager->getPipeline(handle);
-		}
-
-        RHI::TextureHandle createDepthTexture(RHI::TextureDesc desc) {
-			return mResourceManager->createTexture(desc, desc.debugName);
-		}
-
-        std::vector<RHI::FramebufferHandle> createFramebuffers(
-            RHI::RenderPassHandle renderpass,
-            RHI::TextureHandle depthTexture /* = RHI::TextureHandle::Null() */)
-        {
-            std::vector<RHI::FramebufferHandle> framebuffers;
-            framebuffers.reserve(mSwapChain->getImageCount());
-
-            for (size_t i = 0; i < mSwapChain->getImageCount(); i++) {
-                RHI::FramebufferDesc fboDesc;
-                fboDesc.renderPass = mResourceManager->getRenderPass(renderpass)->getNativeHandle();
-                fboDesc.extent = { mSwapChain->getExtent().width, mSwapChain->getExtent().height };
-
-                // 添加颜色附件（交换链图像视图）
-                fboDesc.attachments.push_back((void*)mSwapChain->getImageView(i));
-
-                // 添加深度附件（如果提供了深度纹理）
-                if (depthTexture != RHI::TextureHandle::Null()) {
-                    RHI::RHITexture* texture = mResourceManager->getTexture(depthTexture);
-                    if (texture) {
-                        // getDefaultView() 返回的是 VkImageView 存储在 void* 中
-                        fboDesc.attachments.push_back(texture->getDefaultView());
-                    }
-                    else {
-                        std::cerr << "[Warning] Depth texture handle is invalid!" << std::endl;
-                    }
-                }
-
-                fboDesc.layers = 1;
-                framebuffers.push_back(mResourceManager->createFramebuffer(
-                    fboDesc, "framebuffer_" + std::to_string(i)));
-            }
-            return framebuffers;
-        }
-
-        void destroyFramebuffers(const std::vector<RHI::FramebufferHandle> & fboHandles) {
-            for (const auto& fboHandle : fboHandles) {
-                mResourceManager->destroy(fboHandle);
-            }
-        }
-
-        RHI::Format getDefaultDepthFormat() const {
-            if (!mDevice) return RHI::Format::Undefined;
-
-            switch (mDevice->findDepthFormat()) {
-            case VK_FORMAT_D16_UNORM:          return RHI::Format::D16_UNorm;
-            case VK_FORMAT_D32_SFLOAT:         return RHI::Format::D32_Float;
-            case VK_FORMAT_D24_UNORM_S8_UINT:  return RHI::Format::D24_UNorm_S8_UInt;
-            default: return RHI::Format::Undefined;
-            }
-        }
-
-        RHI::DescriptorSetLayoutHandle createDescriptorSetLayout(RHI::DescriptorSetLayoutDesc desc) {
-            return mResourceManager->createDescriptorSetLayout(desc, desc.debugName);
-        }
-
-        RHI::DescriptorPoolHandle createDescriptorPool(RHI::DescriptorPoolDesc desc) {
-            return mResourceManager->createDescriptorPool(desc, desc.debugName);
-        }
-
-        RHI::DescriptorSetHandle allocateDescriptorSet(RHI::DescriptorSetDesc desc) {
-            return mResourceManager->createDescriptorSet(desc);
-        }
-
-        void updateDescriptorSet(RHI::DescriptorSetHandle setHandle, uint32_t binding, uint32_t arrayElement,
-            const RHI::DescriptorBufferInfo& bufferInfo) {
-            auto* set = mResourceManager->getDescriptorSet(setHandle);
-            if (!set) {
-                std::cerr << "[VulkanRHI] Invalid descriptor set handle" << std::endl;
-                return;
-            }
-
-            auto* buffer = mResourceManager->getBuffer(bufferInfo.buffer);
-            if (!buffer) {
-                std::cerr << "[VulkanRHI] Invalid buffer handle" << std::endl;
-                return;
-            }
-
-            set->writeBuffer(binding, arrayElement, buffer, bufferInfo.offset, bufferInfo.range);
-            set->update();
-        }
-
-        void updateDescriptorSet(RHI::DescriptorSetHandle set, uint32_t binding, uint32_t arrayElement, const RHI::DescriptorImageInfo& imageInfo) {
-            auto* rhiSet = mResourceManager->getDescriptorSet(set);
-            if (rhiSet) {
-                auto* texture = mResourceManager->getTexture(imageInfo.texture);
-                auto* sampler = mResourceManager->getSampler(imageInfo.sampler);
-                if (texture && sampler) {
-                    rhiSet->writeTexture(binding, arrayElement, texture, sampler, imageInfo.imageLayout);
-                    rhiSet->update();
-                }
-            }
-        }
-
-        RHI::TextureHandle createTexture(const RHI::TextureDesc& desc) {
-            return mResourceManager->createTexture(desc, desc.debugName);
-        }
-
-        RHI::RHITexture* getTexture(RHI::TextureHandle handle) {
-            return mResourceManager->getTexture(handle);
-        }
-
-        RHI::SamplerHandle createSampler(const RHI::SamplerDesc& desc) {
-            return mResourceManager->createSampler(desc, desc.debugName);
-        }
-
-        RHI::RHISampler* getSampler(RHI::SamplerHandle handle) {
-            return mResourceManager->getSampler(handle);
-        }
+    private:
+        bool createDepthTexture();
+        bool createFramebuffers();  
+        void destroyFramebufferResources();
 
     private:
         Instance::Ptr mInstance;
@@ -215,11 +264,16 @@ namespace StarryEngine{
         FrameContext::Ptr mFrameContext;
         VkSurfaceKHR mSurface = VK_NULL_HANDLE;
 
-        std::shared_ptr<RHI::ResourceManager> mResourceManager;
-
         std::function<VkResult(VkSemaphore, VkFence, uint32_t&)> mAcquireFunc;
         std::function<VkResult(VkQueue, uint32_t, VkSemaphore)> mPresentFunc;
         uint32_t mWidth = 0, mHeight = 0;
         bool mFramebufferResized = false; 
+
+        std::shared_ptr<RHI::ResourceManager> mResourceManager;
+    private:
+        RHI::RenderPassHandle mRenderPassHandle = RHI::RenderPassHandle::Null();
+        RHI::TextureHandle mDepthTextureHandle = RHI::TextureHandle::Null();
+        std::vector<RHI::FramebufferHandle> mFramebuffers;
+        RHI::Format mDepthFormat = RHI::Format::Undefined;
     };
 }

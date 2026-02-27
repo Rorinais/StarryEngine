@@ -121,61 +121,58 @@ namespace StarryEngine {
 
     bool SwapChain::recreate(uint32_t newWidth, uint32_t newHeight) {
         if (newWidth == 0 || newHeight == 0) {
-            // 窗口最小化，延迟重建
             mOutOfDate = true;
             return false;
         }
 
-        // 等待设备空闲
         mDevice->waitIdle();
 
-        // 清理旧资源
-        cleanupSwapChain();
+        VkSwapchainKHR oldSwapchain = mSwapChain;
+        std::vector<VkImageView> oldImageViews = std::move(mImageViews);
+        mImageViews.clear();
 
-        // 更新尺寸
-        if (newWidth > 0) mConfig.width = newWidth;
-        if (newHeight > 0) mConfig.height = newHeight;
+        mConfig.width = newWidth;
+        mConfig.height = newHeight;
 
-        // 创建新的交换链
-        if (!createSwapChain(mConfig.width, mConfig.height)) {
+        if (!createSwapChain(mConfig.width, mConfig.height, oldSwapchain)) {
+            std::cerr << "[ERROR] Failed to create new swap chain" << std::endl;
             return false;
         }
 
-        // 创建新的图像视图
+        // 销毁旧的图像视图
+        for (auto imageView : oldImageViews) {
+            mDevice->destroyImageView(imageView);
+        }
+
+        // 销毁旧的交换链（新交换链已创建成功）
+        if (oldSwapchain != VK_NULL_HANDLE) {
+            mDevice->destroySwapChain(oldSwapchain);
+        }
+
         if (!createImageViews()) {
+            std::cerr << "[ERROR] Failed to create image views for new swap chain" << std::endl;
             return false;
         }
 
         mOutOfDate = false;
         mSuboptimal = false;
-
         return true;
     }
 
-    bool SwapChain::createSwapChain(uint32_t width, uint32_t height) {
-        // 查询支持信息
+    bool SwapChain::createSwapChain(uint32_t width, uint32_t height, VkSwapchainKHR oldSwapchain) {
         auto support = mDevice->querySwapChainSupport();
-        if (support.formats.empty() || support.presentModes.empty()) {
-            return false;
-        }
+        if (support.formats.empty() || support.presentModes.empty()) return false;
 
-        // 选择表面格式、呈现模式和范围
         mSurfaceFormat = chooseSurfaceFormat(support.formats);
         mPresentMode = choosePresentMode(support.presentModes);
         mExtent = chooseExtent(support.capabilities, width, height);
         mFormat = mSurfaceFormat.format;
 
-        // 确定图像数量
-        uint32_t imageCount = mConfig.minImageCount; // 以配置值为基准
-        if (imageCount < support.capabilities.minImageCount) {
-            imageCount = support.capabilities.minImageCount; // 不低于设备最小值
-        }
-        if (support.capabilities.maxImageCount > 0 && imageCount > support.capabilities.maxImageCount) {
-            imageCount = support.capabilities.maxImageCount; // 不超过设备最大值
-        }
+        uint32_t imageCount = std::clamp(mConfig.minImageCount,
+            support.capabilities.minImageCount,
+            support.capabilities.maxImageCount > 0 ? support.capabilities.maxImageCount : UINT32_MAX);
 
-        // 创建交换链
-        VkSwapchainCreateInfoKHR createInfo = {};
+        VkSwapchainCreateInfoKHR createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
         createInfo.surface = mSurface;
         createInfo.minImageCount = imageCount;
@@ -185,13 +182,8 @@ namespace StarryEngine {
         createInfo.imageArrayLayers = 1;
         createInfo.imageUsage = mConfig.imageUsage;
 
-        // 设置队列
         auto queueIndices = mDevice->getQueueFamilyIndices();
-        uint32_t queueFamilyIndices[] = {
-            queueIndices.graphicsFamily.value(),
-            queueIndices.presentFamily.value()
-        };
-
+        uint32_t queueFamilyIndices[] = { queueIndices.graphicsFamily.value(), queueIndices.presentFamily.value() };
         if (queueIndices.graphicsFamily != queueIndices.presentFamily) {
             createInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
             createInfo.queueFamilyIndexCount = 2;
@@ -199,22 +191,17 @@ namespace StarryEngine {
         }
         else {
             createInfo.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-            createInfo.queueFamilyIndexCount = 0;
-            createInfo.pQueueFamilyIndices = nullptr;
         }
 
         createInfo.preTransform = support.capabilities.currentTransform;
         createInfo.compositeAlpha = mConfig.compositeAlpha;
         createInfo.presentMode = mPresentMode;
         createInfo.clipped = mConfig.clipped;
-        createInfo.oldSwapchain = mSwapChain;  // 用于重建
+        createInfo.oldSwapchain = oldSwapchain;  // 关键：传入旧的交换链句柄
 
         VkResult result = vkCreateSwapchainKHR(mDevice->getLogicalDevice(), &createInfo, nullptr, &mSwapChain);
-        if (result != VK_SUCCESS) {
-            return false;
-        }
+        if (result != VK_SUCCESS) return false;
 
-        // 获取交换链图像
         vkGetSwapchainImagesKHR(mDevice->getLogicalDevice(), mSwapChain, &imageCount, nullptr);
         mImages.resize(imageCount);
         vkGetSwapchainImagesKHR(mDevice->getLogicalDevice(), mSwapChain, &imageCount, mImages.data());

@@ -338,32 +338,20 @@ namespace StarryEngine {
     }
 
     void VulkanRHI::clear() {
-        std::cout << "[INFO] Cleaning up Vulkan RHI..." << std::endl;
+        if (mDevice) mDevice->waitIdle();
+        destroyFramebufferResources();  
 
-        if (mDevice) {
-            mDevice->waitIdle();
-        }
-
-        // 先销毁资源管理器，释放所有 GPU 资源（纹理、缓冲区等）
         mResourceManager.reset();
-
-        // 再销毁帧上下文和交换链
         mFrameContext.reset();
         mSwapChain.reset();
-
-        // 然后销毁设备
         mDevice.reset();
 
-        // 最后销毁 Surface 和 Instance
         if (mSurface != VK_NULL_HANDLE && mInstance) {
             vkDestroySurfaceKHR(mInstance->getHandle(), mSurface, nullptr);
             mSurface = VK_NULL_HANDLE;
         }
         mInstance.reset();
-
-        std::cout << "[INFO] Vulkan RHI cleanup completed" << std::endl;
     }
-
 
     bool VulkanRHI::renderFrame(const std::function<void(RHI::RHICommandEncoder*, uint32_t)>& drawFunc) {
         FrameContext::FrameInfo frameInfo = mFrameContext->beginFrame(mAcquireFunc);
@@ -387,11 +375,149 @@ namespace StarryEngine {
     }
 
     bool VulkanRHI::recreateSwapChain(uint32_t width, uint32_t height) {
+        if (width == 0 || height == 0) {
+            std::cerr << "[VulkanRHI] Attempted to recreate swap chain with zero dimension" << std::endl;
+            return false;
+        }
+
         mDevice->waitIdle();
         if (!mSwapChain->recreate(width, height)) return false;
 
         mWidth = width;
         mHeight = height;
+        mFrameContext->resetAllFrames();
+
+        if (mRenderPassHandle.isValid()) {
+            destroyFramebufferResources();
+            if (!createDepthTexture() || !createFramebuffers()) {
+                std::cerr << "Failed to recreate framebuffer resources\n";
+                return false;
+            }
+        }
         return true;
+    }
+
+    void VulkanRHI::setupFramebuffers(RHI::RenderPassHandle renderPass) {
+        mRenderPassHandle = renderPass;
+        mDepthFormat = getDepthFormat();
+        if (mDepthFormat == RHI::Format::Undefined) {
+            throw std::runtime_error("No suitable depth format found");
+        }
+        if (!createDepthTexture()) {
+            throw std::runtime_error("Failed to create depth texture");
+        }
+        if (!createFramebuffers()) {
+            throw std::runtime_error("Failed to create framebuffers");
+        }
+    }
+
+    bool VulkanRHI::createDepthTexture() {
+        if (mDepthFormat == RHI::Format::Undefined) {
+            mDepthFormat = getDepthFormat();
+            if (mDepthFormat == RHI::Format::Undefined) return false;
+        }
+
+        RHI::TextureDesc depthDesc;
+        depthDesc.extent = { mWidth, mHeight, 1 };
+        depthDesc.format = mDepthFormat;
+        depthDesc.type = RHI::TextureType::Texture2D;
+        depthDesc.allowDepthStencil = true;
+        depthDesc.debugName = "MainDepthTexture";
+
+        mDepthTextureHandle = mResourceManager->createTexture(depthDesc, "MainDepthTexture");
+        return mDepthTextureHandle.isValid();
+    }
+
+    bool VulkanRHI::createFramebuffers() {
+        for (const auto& fboHandle : mFramebuffers) {
+            mResourceManager->destroy(fboHandle);
+        }
+        mFramebuffers.clear();
+
+        for (size_t i = 0; i < mSwapChain->getImageCount(); ++i) {
+            RHI::FramebufferDesc fboDesc;
+            fboDesc.renderPass = mResourceManager->getRenderPass(mRenderPassHandle)->getNativeHandle();
+            fboDesc.extent = { mSwapChain->getExtent().width, mSwapChain->getExtent().height };
+            fboDesc.attachments.push_back((void*)mSwapChain->getImageView(i));
+
+            if (mDepthTextureHandle != RHI::TextureHandle::Null()) {
+                RHI::RHITexture* texture = mResourceManager->getTexture(mDepthTextureHandle);
+                if (texture) {
+                    fboDesc.attachments.push_back(texture->getDefaultView());
+                }
+                else {
+                    std::cerr << "[Error] Depth texture handle is invalid during framebuffer creation!" << std::endl;
+                }
+            }
+
+            fboDesc.layers = 1;
+            auto fbHandle = mResourceManager->createFramebuffer(fboDesc, "framebuffer_" + std::to_string(i));
+            if (!fbHandle.isValid()) {
+                std::cerr << "[Error] Failed to create framebuffer for image " << i << std::endl;
+                for (auto& h : mFramebuffers) {
+                    mResourceManager->destroy(h);
+                }
+                return {};
+            }
+            mFramebuffers.push_back(fbHandle);
+        }
+        return !mFramebuffers.empty();
+    }
+
+    void VulkanRHI::destroyFramebufferResources() {
+        for (const auto& fboHandle : mFramebuffers) {
+            mResourceManager->destroy(fboHandle);
+        }
+
+        mFramebuffers.clear();
+        if (mDepthTextureHandle.isValid()) {
+            mResourceManager->destroy(mDepthTextureHandle);
+            mDepthTextureHandle = RHI::TextureHandle::Null();
+        }
+    }
+
+    RHI::Format VulkanRHI::getDepthFormat() const {
+        if (!mDevice) return RHI::Format::Undefined;
+
+        switch (mDevice->findDepthFormat()) {
+        case VK_FORMAT_D16_UNORM:          return RHI::Format::D16_UNorm;
+        case VK_FORMAT_D32_SFLOAT:         return RHI::Format::D32_Float;
+        case VK_FORMAT_D24_UNORM_S8_UINT:  return RHI::Format::D24_UNorm_S8_UInt;
+        default: return RHI::Format::Undefined;
+        }
+    }
+
+    std::unique_ptr<RHI::RHICommandEncoder> VulkanRHI::getCommandEncoder(VkCommandBuffer cmdBuf) {
+        return std::make_unique<RHI::RHI_VK_CommandEncoder>(mDevice, cmdBuf, mResourceManager.get());
+    }
+
+    void VulkanRHI::updateDescriptorSet(RHI::DescriptorSetHandle setHandle, uint32_t binding, uint32_t arrayElement,
+        const RHI::DescriptorBufferInfo& bufferInfo) {
+        auto* set = mResourceManager->getDescriptorSet(setHandle);
+        if (!set) {
+            std::cerr << "[VulkanRHI] Invalid descriptor set handle" << std::endl;
+            return;
+        }
+
+        auto* buffer = mResourceManager->getBuffer(bufferInfo.buffer);
+        if (!buffer) {
+            std::cerr << "[VulkanRHI] Invalid buffer handle" << std::endl;
+            return;
+        }
+
+        set->writeBuffer(binding, arrayElement, buffer, bufferInfo.offset, bufferInfo.range);
+        set->update();
+    }
+
+    void VulkanRHI::updateDescriptorSet(RHI::DescriptorSetHandle setHandle, uint32_t binding, uint32_t arrayElement, const RHI::DescriptorImageInfo& imageInfo) {
+        auto* set = mResourceManager->getDescriptorSet(setHandle);
+        if (set) {
+            auto* texture = mResourceManager->getTexture(imageInfo.texture);
+            auto* sampler = mResourceManager->getSampler(imageInfo.sampler);
+            if (texture && sampler) {
+                set->writeTexture(binding, arrayElement, texture, sampler, imageInfo.imageLayout);
+                set->update();
+            }
+        }
     }
 }
