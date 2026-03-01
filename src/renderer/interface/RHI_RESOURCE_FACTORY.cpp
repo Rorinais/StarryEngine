@@ -13,29 +13,44 @@ namespace StarryEngine::RHI {
     }
 
     std::unique_ptr<RHIPipeline> VKResourceFactory::createPipeline(const GraphicsPipelineDesc& desc) {
-        // 创建管线布局
-        auto layout = static_cast<VkPipelineLayout>(mResourceManager->getPipelineLayout(desc.pipelineLayoutHandle)->getNativeHandle());
+        // 检查 PipelineLayout
+        auto* layoutObj = mResourceManager->getPipelineLayout(desc.pipelineLayoutHandle);
+        if (!layoutObj) {
+            std::cerr << "[VKResourceFactory] PipelineLayout is null for handle: " << desc.pipelineLayoutHandle.toString() << std::endl;
+            return nullptr;
+        }
+        auto layout = static_cast<VkPipelineLayout>(layoutObj->getNativeHandle());
 
-        auto rhiVertexShader = mResourceManager->getShader(desc.vertexShader);
+        // 检查 VertexShader
+        auto* rhiVertexShader = mResourceManager->getShader(desc.vertexShader);
+        if (!rhiVertexShader) {
+            std::cerr << "[VKResourceFactory] VertexShader is null for handle: " << desc.vertexShader.toString() << std::endl;
+            return nullptr;
+        }
         auto vertexShader = static_cast<VkShaderModule>(rhiVertexShader->getNativeHandle());
 
-        auto rhiFragmentShader = mResourceManager->getShader(desc.fragmentShader);
+        // 检查 FragmentShader
+        auto* rhiFragmentShader = mResourceManager->getShader(desc.fragmentShader);
+        if (!rhiFragmentShader) {
+            std::cerr << "[VKResourceFactory] FragmentShader is null for handle: " << desc.fragmentShader.toString() << std::endl;
+            return nullptr;
+        }
         auto fragmentShader = static_cast<VkShaderModule>(rhiFragmentShader->getNativeHandle());
-        
+
+        // 检查 RenderPass
+        auto* renderPassObj = mResourceManager->getRenderPass(desc.renderPass);
+        if (!renderPassObj) {
+            std::cerr << "[VKResourceFactory] RenderPass is null for handle: " << desc.renderPass.toString() << std::endl;
+            return nullptr;
+        }
+        auto renderPass = static_cast<VkRenderPass>(renderPassObj->getNativeHandle());
+
         std::vector<VkPipelineShaderStageCreateInfo> shaderStage{
-            mDevice->createShaderStageInfo(vertexShader,FUNC::RHI_TO_VK_ShaderStageFlag(rhiVertexShader->getStage()),rhiVertexShader->getEntryPoint().c_str()),
-            mDevice->createShaderStageInfo(fragmentShader,FUNC::RHI_TO_VK_ShaderStageFlag(rhiFragmentShader->getStage()),rhiFragmentShader->getEntryPoint().c_str())
+            mDevice->createShaderStageInfo(vertexShader, FUNC::RHI_TO_VK_ShaderStageFlag(rhiVertexShader->getStage()), rhiVertexShader->getEntryPoint().c_str()),
+            mDevice->createShaderStageInfo(fragmentShader, FUNC::RHI_TO_VK_ShaderStageFlag(rhiFragmentShader->getStage()), rhiFragmentShader->getEntryPoint().c_str())
         };
 
-		auto renderPass = static_cast<VkRenderPass>(mResourceManager->getRenderPass(desc.renderPass)->getNativeHandle());
-
-        return std::make_unique<RHI_VK_Pipeline>(
-            mDevice,
-            desc,
-            shaderStage,
-            layout,
-            renderPass
-        );
+        return std::make_unique<RHI_VK_Pipeline>(mDevice, desc, shaderStage, layout, renderPass);
     }
 
     std::unique_ptr<RHIPipeline> VKResourceFactory::createComputePipeline(const ComputePipelineDesc& desc) {

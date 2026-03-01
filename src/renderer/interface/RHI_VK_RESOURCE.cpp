@@ -906,12 +906,22 @@ namespace StarryEngine::RHI {
     }
 
     bool RHI_VK_Texture::isValid() const {
+        bool valid = false;
         if (mUsingVMA) {
-            return vmaImage.image != VK_NULL_HANDLE && vmaImage.view != VK_NULL_HANDLE;
+            valid = vmaImage.image != VK_NULL_HANDLE && vmaImage.view != VK_NULL_HANDLE;
+            if (!valid) {
+                std::cerr << "[RHI_VK_Texture] isValid false: vmaImage.image=" << vmaImage.image
+                    << ", vmaImage.view=" << vmaImage.view << " for " << mDesc.debugName << std::endl;
+            }
         }
         else {
-            return traditionalImage.image != VK_NULL_HANDLE && traditionalImage.view != VK_NULL_HANDLE;
+            valid = traditionalImage.image != VK_NULL_HANDLE && traditionalImage.view != VK_NULL_HANDLE;
+            if (!valid) {
+                std::cerr << "[RHI_VK_Texture] isValid false: traditionalImage.image=" << traditionalImage.image
+                    << ", traditionalImage.view=" << traditionalImage.view << " for " << mDesc.debugName << std::endl;
+            }
         }
+        return valid;
     }
 
     void* RHI_VK_Texture::getNativeHandle() const {
@@ -1163,6 +1173,10 @@ namespace StarryEngine::RHI {
                 tiling, usage, convertMemoryUsage(mDesc), aspect,
                 0, mDesc.mipLevels, mDesc.arrayLayers, viewType
             );
+            if (vmaImage.image == VK_NULL_HANDLE) {
+                std::cerr << "[RHI_VK_Texture] Failed to create VMA image for: " << mDesc.debugName << std::endl;
+                return;
+            }
             mDefaultView = reinterpret_cast<void*>(vmaImage.view);
         }
         else {
@@ -1171,6 +1185,10 @@ namespace StarryEngine::RHI {
                 tiling, usage, convertMemoryProperties(mDesc), aspect,
                 mDesc.mipLevels, mDesc.arrayLayers, viewType
             );
+            if (traditionalImage.image == VK_NULL_HANDLE) {
+                std::cerr << "[RHI_VK_Texture] Failed to create traditional image for: " << mDesc.debugName << std::endl;
+                return;
+            }
             mDefaultView = reinterpret_cast<void*>(traditionalImage.view);
         }
 

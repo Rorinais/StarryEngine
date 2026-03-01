@@ -257,6 +257,8 @@ namespace StarryEngine{
         uint32_t getSwapChainImageCount() const { return mSwapChain->getImageCount(); }
         void* getSwapChainImageView(uint32_t index) const { return mSwapChain->getImageView(index); }
 
+        void waitIdle() {mDevice->waitIdle(); }
+
     private:
         bool createDepthTexture();
         bool createFramebuffers();  

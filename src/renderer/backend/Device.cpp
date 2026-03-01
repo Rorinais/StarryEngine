@@ -398,8 +398,11 @@ namespace StarryEngine {
         VmaMemoryUsage memoryUsage, VmaAllocationCreateFlags flags,
         uint32_t mipLevels, uint32_t arrayLayers) {
 
+        VMAImage result = { VK_NULL_HANDLE, VK_NULL_HANDLE };
+
         if (mVmaAllocator == VK_NULL_HANDLE) {
-            throw std::runtime_error("VMA not initialized!");
+            std::cerr << "[Device] VMA not initialized, cannot create image!" << std::endl;
+            return result;
         }
 
         VkImageCreateInfo imageInfo = {};
@@ -425,12 +428,16 @@ namespace StarryEngine {
         VkImage image;
         VmaAllocation allocation;
 
-        if (vmaCreateImage(mVmaAllocator, &imageInfo, &allocInfo,
-            &image, &allocation, nullptr) != VK_SUCCESS) {
-            throw std::runtime_error("Failed to create image with VMA!");
+        VkResult res = vmaCreateImage(mVmaAllocator, &imageInfo, &allocInfo,
+            &image, &allocation, nullptr);
+        if (res != VK_SUCCESS) {
+            std::cerr << "[Device] vmaCreateImage failed with code: " << res << std::endl;
+            return result;
         }
 
-        return { image, allocation };
+        result.image = image;
+        result.allocation = allocation;
+        return result;
     }
 
     // 销毁 VMA 图像
@@ -450,6 +457,8 @@ namespace StarryEngine {
         VkMemoryPropertyFlags properties,
         uint32_t mipLevels, uint32_t arrayLayers) {
 
+        VMATraditionalImage result = { VK_NULL_HANDLE, VK_NULL_HANDLE };
+
         VkImageCreateInfo imageInfo = {};
         imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
         imageInfo.imageType = VK_IMAGE_TYPE_2D;
@@ -468,10 +477,10 @@ namespace StarryEngine {
 
         VkImage image;
         if (vkCreateImage(mLogicalDevice, &imageInfo, nullptr, &image) != VK_SUCCESS) {
-            throw std::runtime_error("Failed to create image!");
+            std::cerr << "[Device] vkCreateImage failed!" << std::endl;
+            return result;
         }
 
-        // 分配内存
         VkMemoryRequirements memRequirements;
         vkGetImageMemoryRequirements(mLogicalDevice, image, &memRequirements);
 
@@ -483,12 +492,20 @@ namespace StarryEngine {
         VkDeviceMemory imageMemory;
         if (vkAllocateMemory(mLogicalDevice, &allocInfo, nullptr, &imageMemory) != VK_SUCCESS) {
             vkDestroyImage(mLogicalDevice, image, nullptr);
-            throw std::runtime_error("Failed to allocate image memory!");
+            std::cerr << "[Device] Failed to allocate image memory!" << std::endl;
+            return result;
         }
 
-        vkBindImageMemory(mLogicalDevice, image, imageMemory, 0);
+        if (vkBindImageMemory(mLogicalDevice, image, imageMemory, 0) != VK_SUCCESS) {
+            vkDestroyImage(mLogicalDevice, image, nullptr);
+            vkFreeMemory(mLogicalDevice, imageMemory, nullptr);
+            std::cerr << "[Device] Failed to bind image memory!" << std::endl;
+            return result;
+        }
 
-        return { image, imageMemory };
+        result.image = image;
+        result.memory = imageMemory;
+        return result;
     }
 
     // 销毁传统图像

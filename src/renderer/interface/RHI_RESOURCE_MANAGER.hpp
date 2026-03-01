@@ -693,12 +693,13 @@ namespace StarryEngine::RHI {
                             break;
                         }
                     }
+                    std::cout << "[TypedResourceStorage] Created in existing chunk: globalIdx=" << globalIdx << std::endl;
 
                     return Handle::Create(globalIdx, entry.generation);
                 }
             }
         }
-
+        std::cout << "[TypedResourceStorage] Adding new chunk, current chunks=" << chunks_.size() << std::endl;
         // 3. 无空闲槽位 → 添加新块，直接分配第 0 个槽位
         chunks_.emplace_back();          // 修改点
         Chunk& newChunk = chunks_.back();
@@ -731,7 +732,7 @@ namespace StarryEngine::RHI {
                 break;
             }
         }
-
+        std::cout << "[TypedResourceStorage] Created in new chunk: globalIdx=" << globalIdx << std::endl;
         return Handle::Create(globalIdx, entry.generation);
     }
 
@@ -1100,6 +1101,7 @@ namespace StarryEngine::RHI {
 
     template<typename HandleType, typename ResourceType>
     void TypedResourceStorage<HandleType, ResourceType>::destroyEntry(Entry* entry) {
+        std::cout << "[TypedResourceStorage] destroyEntry: name=" << entry->name << std::endl;
         if (entry->data) {
             // 先获取内存使用量，然后再释放
             size_t memoryToFree = entry->memoryUsage;
@@ -1127,6 +1129,8 @@ namespace StarryEngine::RHI {
         entry->refCount = 0;
 
         totalDestroyed_++;
+
+        std::cout << "[TypedResourceStorage] totalDestroyed now = " << totalDestroyed_ << std::endl;
 
         if (chunks_.size() > 1 && totalDestroyed_ > totalCreated_ / 2) {
             while (!chunks_.empty()) {

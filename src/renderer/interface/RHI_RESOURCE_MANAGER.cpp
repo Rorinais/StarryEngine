@@ -30,6 +30,20 @@ namespace StarryEngine::RHI {
         return buffers_.create(std::move(resource), name, debugTag);
     }
 
+    //TextureHandle ResourceManager::createTexture(const TextureDesc& desc,
+    //    const std::string& name,
+    //    const std::string& debugTag) {
+    //    auto resource = factory_->createTexture(desc);
+    //    if (!resource) {
+    //        if (debugMode_) {
+    //            std::cerr << "[ResourceManager] Failed to create texture: " << name << std::endl;
+    //        }
+    //        return TextureHandle::Null();
+    //    }
+    //    logResourceCreation(ResourceCategory::Texture, name);
+    //    return textures_.create(std::move(resource), name, debugTag);
+    //}
+
     TextureHandle ResourceManager::createTexture(const TextureDesc& desc,
         const std::string& name,
         const std::string& debugTag) {
@@ -40,8 +54,27 @@ namespace StarryEngine::RHI {
             }
             return TextureHandle::Null();
         }
-        logResourceCreation(ResourceCategory::Texture, name);
-        return textures_.create(std::move(resource), name, debugTag);
+
+        // 打印当前纹理存储状态
+        auto stats = textures_.getStatistics();
+        std::cout << "[ResourceManager] Before create: totalCreated=" << stats.totalCreated
+            << ", totalDestroyed=" << stats.totalDestroyed
+            << ", currentCount=" << stats.currentCount
+            << ", chunkCount=" << stats.chunkCount << std::endl;
+
+        auto handle = textures_.create(std::move(resource), name, debugTag);
+
+        if (!handle.isValid()) {
+            std::cerr << "[ResourceManager] textures_.create returned null handle for texture: " << name << std::endl;
+            auto stats2 = textures_.getStatistics();
+            std::cout << "[ResourceManager] After failed create: totalCreated=" << stats2.totalCreated
+                << ", totalDestroyed=" << stats2.totalDestroyed
+                << ", currentCount=" << stats2.currentCount << std::endl;
+        }
+        else {
+            logResourceCreation(ResourceCategory::Texture, name);
+        }
+        return handle;
     }
 
     PipelineHandle ResourceManager::createGraphicsPipeline(const GraphicsPipelineDesc& desc,
@@ -725,6 +758,7 @@ namespace StarryEngine::RHI {
     }
 
     bool ResourceManager::destroy(TextureHandle handle) {
+        std::cout << "[ResourceManager] destroy texture: " << handle.toString() << std::endl;
         return textures_.destroy(handle);
     }
 

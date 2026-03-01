@@ -15,7 +15,18 @@ namespace StarryEngine::RenderGraph {
     class PassNode {
     public:
         explicit PassNode(const std::string& name);
-        ~PassNode() = default;
+        ~PassNode() {
+            if (m_resMgr) {
+                if (m_renderPassHandle.isValid()) {
+                    m_resMgr->destroy(m_renderPassHandle);
+                }
+                for (auto& pipe : m_pipelines) {
+                    if (pipe.isValid()) {
+                        m_resMgr->destroy(pipe);
+                    }
+                }
+            }
+        }
 
         // 获取 RenderPassBuilder 进行附件和 Subpass 配置
         RenderPassBuilder& getBuilder() { return m_builder; }

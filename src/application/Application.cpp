@@ -181,9 +181,15 @@ namespace StarryEngine {
     }
 
     Application::~Application() {
+        if (m_rhi) {
+            m_rhi->waitIdle();
+        }
+
         m_gbufferRenderer.reset();
+        m_postRenderer.reset();
         m_material.reset();
         m_geometry.reset();
+        m_renderGraph.reset(); 
         m_rhi.reset();
         m_window.reset();
         std::cout << "Application shutdown." << std::endl;
@@ -474,8 +480,8 @@ namespace StarryEngine {
 
         postBuilder.addInputAttachment("Color",
             RHI::Format::RGBA8_UNorm,
-            RHI::ImageLayout::ShaderReadOnly,  // finalLayout
-            RHI::ImageLayout::ShaderReadOnly,  // initialLayout 应与几何 Pass 结束时的布局一致
+            RHI::ImageLayout::ShaderReadOnly, 
+            RHI::ImageLayout::ShaderReadOnly,  
             RHI::AttachmentLoadOp::Load,
             RHI::AttachmentStoreOp::Store);
 
@@ -574,10 +580,26 @@ namespace StarryEngine {
             if (mFramebufferResized) {
                 mFramebufferResized = false;
                 if (m_width == 0 || m_height == 0) continue;
+                m_rhi->waitIdle();
+
+                for (auto fb : m_geomFramebuffers) m_resMgr->destroy(fb);
+                m_geomFramebuffers.clear();
+                for (auto fb : m_postFramebuffers) m_resMgr->destroy(fb);
+                m_postFramebuffers.clear();
+
+                m_renderGraph.reset();
+
                 if (!m_rhi->recreateSwapChain(m_width, m_height)) {
                     std::cerr << "Failed to recreate swap chain!" << std::endl;
+                    continue;
                 }
-                // 简化：重新创建 framebuffer（实际可能需要重新编译图）
+
+                buildRenderGraph();
+
+                if (!m_renderGraph->compile()) {
+                    throw std::runtime_error("Failed to recompile RenderGraph");
+                }
+
                 createFramebuffers();
             }
 

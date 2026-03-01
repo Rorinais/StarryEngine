@@ -76,11 +76,16 @@ namespace StarryEngine::RenderGraph {
         m_attachmentNameToIndex = buildResult.attachmentNameToIndex;
 
         auto renderPassDesc = buildResult.renderPass->getRenderPassDesc();
-        m_renderPassHandle = resMgr->createRenderPass(renderPassDesc, m_name);
-        if (!m_renderPassHandle.isValid()) {
-            std::cerr << "[PassNode] Failed to create RenderPass: " << m_name << std::endl;
-            return false;
+        std::cerr << "Attempting to create RenderPass with " << renderPassDesc.attachments.size() << " attachments:" << std::endl;
+        for (size_t i = 0; i < renderPassDesc.attachments.size(); ++i) {
+            const auto& att = renderPassDesc.attachments[i];
+            std::cerr << "  att[" << i << "]: format=" << static_cast<int>(att.format)
+                << ", loadOp=" << static_cast<int>(att.loadOp)
+                << ", storeOp=" << static_cast<int>(att.storeOp)
+                << ", initialLayout=" << static_cast<int>(att.initialLayout)
+                << ", finalLayout=" << static_cast<int>(att.finalLayout) << std::endl;
         }
+        m_renderPassHandle = resMgr->createRenderPass(renderPassDesc, m_name);
 
         m_pipelines.clear();
         m_subpassRenderers.clear();

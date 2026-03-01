@@ -9,7 +9,28 @@ namespace StarryEngine::RenderGraph {
         : m_rhi(rhi), m_resMgr(rhi->getResourceManager()) {
     }
 
-    RenderGraph::~RenderGraph() = default;
+    RenderGraph::~RenderGraph() {
+        if (m_rhi) {
+            m_rhi->waitIdle();
+        }
+
+        std::cout << "[RenderGraph] Destructor started" << std::endl;
+        for (auto& vt : m_virtualTextures) {
+            if (!vt.imported && vt.physicalHandle.isValid()) {
+                std::cout << "[RenderGraph] Destroying texture: " << vt.name << " handle=" << vt.physicalHandle.toString() << std::endl;
+                m_resMgr->destroy(vt.physicalHandle);
+            }
+        }
+        for (auto& vb : m_virtualBuffers) {
+            if (!vb.imported && vb.physicalHandle.isValid()) {
+                std::cout << "[RenderGraph] Destroying buffer: " << vb.name << std::endl;
+                m_resMgr->destroy(vb.physicalHandle);
+            }
+        }
+        m_textureMap.clear();
+        m_bufferMap.clear();
+        std::cout << "[RenderGraph] Destructor finished" << std::endl;
+    }
 
     TextureId RenderGraph::createVirtualTexture(const RHI::TextureDesc& desc, const std::string& name) {
         TextureId id = TextureId::Create(m_nextTextureId++, 1);
@@ -81,6 +102,9 @@ namespace StarryEngine::RenderGraph {
     }
 
     bool RenderGraph::compile() {
+
+        std::cout << "debug0: " << std::endl;
+
         // 0. 检查是否有 Pass
         if (m_passes.empty()) {
             std::cerr << "[RenderGraph] No passes to compile." << std::endl;
@@ -105,6 +129,8 @@ namespace StarryEngine::RenderGraph {
             for (auto buf : m_passes[i]->getReadBuffers()) bufReaders[buf].insert(i);
             for (auto buf : m_passes[i]->getWriteBuffers()) bufWriters[buf].insert(i);
         }
+
+        std::cout << "debug1: " << std::endl;
 
         // 根据资源依赖添加边
         auto addDependency = [&](uint32_t src, uint32_t dst) {
@@ -138,7 +164,7 @@ namespace StarryEngine::RenderGraph {
                 addDependency(wlist[i], wlist[i + 1]);
             }
         }
-
+        std::cout << "debug2: " << std::endl;
         // 3. 拓扑排序
         try {
             auto order = topologicalSort(adj);
@@ -152,6 +178,12 @@ namespace StarryEngine::RenderGraph {
             return false;
         }
 
+        std::cout << "[RenderGraph] Current nameToTextureId: ";
+        for (const auto& [name, id] : m_nameToTextureId) {
+            std::cout << name << " ";
+        }
+        std::cout << std::endl;
+
         for (auto& vt : m_virtualTextures) {
             if (vt.imported) {
                 m_textureMap[vt.id] = vt.externalHandle;
@@ -159,12 +191,48 @@ namespace StarryEngine::RenderGraph {
             }
             else {
                 RHI::TextureHandle handle = m_resMgr->createTexture(vt.desc, vt.name);
-                if (!handle.isValid()) { std::cerr << "[RenderGraph] Failed to create physical texture: " << vt.name << std::endl; }
+                std::cout << "[RenderGraph] Created texture handle: " << handle.toString()
+                    << ", isValid=" << handle.isValid()
+                    << ", category=" << (int)handle.getCategoryRaw()
+                    << ", expected_category=" << static_cast<int>(RHI::ResourceCategory::Texture) << std::endl;
+                if (!handle.isValid()) {
+                    std::cerr << "[RenderGraph] Failed to create physical texture (handle invalid): " << vt.name << std::endl;
+                    std::cerr << "  extent: " << vt.desc.extent.width << "x" << vt.desc.extent.height
+                        << ", format: " << static_cast<int>(vt.desc.format)
+                        << ", allowRenderTarget=" << vt.desc.allowRenderTarget
+                        << ", allowInputAttachment=" << vt.desc.allowInputAttachment << std::endl;
+                    // 清理已创建的纹理
+                    for (auto& createdVt : m_virtualTextures) {
+                        if (createdVt.physicalHandle.isValid() && !createdVt.imported) {
+                            m_resMgr->destroy(createdVt.physicalHandle);
+                        }
+                    }
+                    return false;
+                }
+
+                // 获取对象指针并检查有效性
+                auto* textureObj = m_resMgr->getTexture(handle);
+                if (!textureObj) {
+                    std::cerr << "[RenderGraph] textureObj is null for handle " << handle.toString() << std::endl;
+                    m_resMgr->destroy(handle);
+                    // 清理已创建的纹理...
+                    return false;
+                }
+                if (!textureObj->isValid()) {
+                    std::cerr << "[RenderGraph] textureObj is invalid for handle " << handle.toString() << std::endl;
+                    // 可以尝试获取更详细的内部状态（如果纹理类提供了方法）
+                    m_resMgr->destroy(handle);
+                    // 清理已创建的纹理...
+                    return false;
+                }
+
                 m_textureMap[vt.id] = handle;
                 vt.physicalHandle = handle;
             }
         }
 
+        std::cout << "debug3: " << std::endl;
+        // 缓冲区同理
         for (auto& vb : m_virtualBuffers) {
             if (vb.imported) {
                 m_bufferMap[vb.id] = vb.externalHandle;
@@ -172,11 +240,20 @@ namespace StarryEngine::RenderGraph {
             }
             else {
                 RHI::BufferHandle handle = m_resMgr->createBuffer(vb.desc, vb.name);
-                if (!handle.isValid()) { std::cerr << "[RenderGraph] Failed to create physical buffer: " << vb.name << std::endl; }
+                if (!handle.isValid()) {
+                    std::cerr << "[RenderGraph] Failed to create physical buffer: " << vb.name << std::endl;
+                    for (auto& createdVb : m_virtualBuffers) {
+                        if (createdVb.physicalHandle.isValid() && !createdVb.imported) {
+                            m_resMgr->destroy(createdVb.physicalHandle);
+                        }
+                    }
+                    return false;
+                }
                 m_bufferMap[vb.id] = handle;
                 vb.physicalHandle = handle;
             }
         }
+        std::cout << "debug4: " << std::endl;
 
         // 5. 编译每个 Pass
         for (auto pass : m_sortedPasses) {
@@ -185,7 +262,7 @@ namespace StarryEngine::RenderGraph {
                 return false;
             }
         }
-
+        std::cout << "debug5: " << std::endl;
         return true;
     }
 
