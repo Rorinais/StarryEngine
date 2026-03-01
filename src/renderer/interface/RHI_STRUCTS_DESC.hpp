@@ -975,6 +975,7 @@ namespace StarryEngine::RHI {
         bool memoryless = false;               ///< 仅临时内存（移动平台）
         bool protectedMemory = false;          ///< 受保护内存
         bool sparseBinding = false;            ///< 稀疏绑定
+        bool allowInputAttachment = false;
         std::string debugName;                 ///< 调试名称
 
         bool operator==(const TextureDesc& other) const {

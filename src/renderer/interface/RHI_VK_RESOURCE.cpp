@@ -857,6 +857,7 @@ namespace StarryEngine::RHI {
             if (desc.allowRenderTarget) usage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
             if (desc.allowDepthStencil) usage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
             if (desc.allowUnorderedAccess) usage |= VK_IMAGE_USAGE_STORAGE_BIT;
+            if (desc.allowInputAttachment) usage |= VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
             usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
             usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
             return usage;
@@ -1519,5 +1520,26 @@ namespace StarryEngine::RHI {
                 static_cast<uint32_t>(vkCopies.size()),
                 vkCopies.data());
         }
+    }
+
+    void RHI_VK_DescriptorSet::writeInputAttachment(uint32_t binding, uint32_t arrayElement,
+        RHITexture* texture, ImageLayout layout) {
+        if (!texture) return;
+
+        VkDescriptorImageInfo imageInfo{};
+        imageInfo.imageView = static_cast<VkImageView>(texture->getDefaultView());
+        imageInfo.imageLayout = FUNC::RHI_TO_VK_ImageLayout(layout);
+        mImageInfos.push_back(imageInfo);
+
+        VkWriteDescriptorSet write{};
+        write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        write.dstSet = mSet;
+        write.dstBinding = binding;
+        write.dstArrayElement = arrayElement;
+        write.descriptorCount = 1;
+        write.descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
+        write.pImageInfo = &mImageInfos.back();
+
+        mPendingWrites.push_back(write);
     }
 }

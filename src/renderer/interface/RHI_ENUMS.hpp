@@ -455,6 +455,28 @@ namespace StarryEngine::RHI {
         All = AllGraphics | Compute | RayGen | AnyHit | ClosestHit | Miss | Intersection | Callable
     };
 
+    inline ShaderStage operator|(ShaderStage lhs, ShaderStage rhs) {
+        return static_cast<ShaderStage>(static_cast<uint32_t>(lhs) | static_cast<uint32_t>(rhs));
+    }
+    inline ShaderStage operator&(ShaderStage lhs, ShaderStage rhs) {
+        return static_cast<ShaderStage>(static_cast<uint32_t>(lhs) & static_cast<uint32_t>(rhs));
+    }
+    inline ShaderStage& operator|=(ShaderStage& lhs, ShaderStage rhs) {
+        lhs = lhs | rhs;
+        return lhs;
+    }
+    inline ShaderStage& operator&=(ShaderStage& lhs, ShaderStage rhs) {
+        lhs = lhs & rhs;
+        return lhs;
+    }
+    inline ShaderStage operator~(ShaderStage val) {
+        return static_cast<ShaderStage>(~static_cast<uint32_t>(val));
+    }
+    // 方便将枚举转为整数标志
+    inline uint32_t toFlags(ShaderStage val) {
+        return static_cast<uint32_t>(val);
+    }
+
     // ==================== 采样器枚举 ====================
     enum class SamplerFilter {
         Nearest,

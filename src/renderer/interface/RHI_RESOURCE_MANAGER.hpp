@@ -700,7 +700,7 @@ namespace StarryEngine::RHI {
         }
 
         // 3. 无空闲槽位 → 添加新块，直接分配第 0 个槽位
-        chunks_.push_back(Chunk{});
+        chunks_.emplace_back();          // 修改点
         Chunk& newChunk = chunks_.back();
         uint32_t globalIdx = static_cast<uint32_t>((chunks_.size() - 1) * CHUNK_SIZE);
         Entry& entry = newChunk.entries[0];

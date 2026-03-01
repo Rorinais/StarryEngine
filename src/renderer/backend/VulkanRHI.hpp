@@ -229,6 +229,8 @@ namespace StarryEngine{
         uint32_t getWidth() const { return mWidth; }
         uint32_t getHeight() const { return mHeight; }
 
+        std::shared_ptr<RHI::ResourceManager> getResourceManager() { return mResourceManager; }
+
         FrameContext::Ptr getFrameContext() const { return mFrameContext; }
   
         RHI::TextureHandle getDepthTexture() const { return mDepthTextureHandle; }
@@ -251,6 +253,9 @@ namespace StarryEngine{
         Handle createResource(const Desc& desc, const std::string& name = "", const std::string& debugTag = "") {
             return HandleTraits<Handle>::create(mResourceManager.get(), desc, name, debugTag);
         }
+
+        uint32_t getSwapChainImageCount() const { return mSwapChain->getImageCount(); }
+        void* getSwapChainImageView(uint32_t index) const { return mSwapChain->getImageView(index); }
 
     private:
         bool createDepthTexture();

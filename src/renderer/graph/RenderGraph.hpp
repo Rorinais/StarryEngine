@@ -1,98 +1,108 @@
 #pragma once
-#include "../interface/RHI_ENUMS.hpp"
-#include "../interface/RHI_STRUCTS_DESC.hpp"
-#include "../interface/RHI_HANDLES_SYSTEM.hpp"
-#include "../interface/RHI_STRUCTS_RESOURCE.hpp" 
+
 #include <functional>
 #include <memory>
 #include <string>
 #include <vector>
 
+#include "../interface/RHI_ENUMS.hpp"
+#include "../interface/RHI_STRUCTS_DESC.hpp"
+#include "../interface/RHI_HANDLES_SYSTEM.hpp"
+#include "../interface/RHI_STRUCTS_RESOURCE.hpp" 
+#include "../backend/VulkanRHI.hpp"
+#include "PassNode.hpp"
+
 namespace StarryEngine::RenderGraph {
-    struct ResourceId { uint32_t value; };
-    struct SubpassId { uint32_t value; };
-    struct RenderPassGroupId { uint32_t value; }; 
-
-    class Scene;
-
     class RenderGraph {
     public:
-        RenderGraph();  
+        explicit RenderGraph(std::shared_ptr<VulkanRHI> rhi);
+        ~RenderGraph();
 
-        // ========== 资源管理 ==========
-        ResourceId importTexture(const std::string& name,
-            RHI::TextureHandle texture,
-            RHI::ImageLayout initialLayout);
-        ResourceId importBuffer(const std::string& name,
-            RHI::BufferHandle buffer);
+        // 禁止拷贝
+        RenderGraph(const RenderGraph&) = delete;
+        RenderGraph& operator=(const RenderGraph&) = delete;
 
-        ResourceId createTransientTexture(const std::string& name,
-            const RHI::TextureDesc& desc);
-        ResourceId createTransientBuffer(const std::string& name,
-            const RHI::BufferDesc& desc);
+        // 创建虚拟纹理资源
+        TextureId createVirtualTexture(const RHI::TextureDesc& desc, const std::string& name = "");
 
-        // ========== 构建 render pass 组 ==========
-        // 单个独立 subpass（自动成为一个单独的 render pass）
-        SubpassId addSubpass(const std::string& name);
+        // 导入外部纹理（如交换链图像）
+        TextureId importExternalTexture(RHI::TextureHandle externalHandle,
+            const RHI::TextureDesc& desc,
+            RHI::ImageLayout initialLayout,
+            const std::string& name = "");
 
-        // 复合 render pass 组
-        RenderPassGroupId beginRenderPassGroup(const std::string& name);
-        SubpassId addSubpassToGroup(RenderPassGroupId group, const std::string& name);
-        void endRenderPassGroup(RenderPassGroupId group);
+        // 创建虚拟缓冲区
+        BufferId createVirtualBuffer(const RHI::BufferDesc& desc, const std::string& name = "");
 
-        // ========== Subpass 配置 ==========
-        // 颜色附件
-        void addColorOutput(SubpassId subpass,
-            ResourceId resource,
-            RHI::AttachmentLoadOp loadOp,
-            RHI::AttachmentStoreOp storeOp,
-            const RHI::ClearValue& clearValue = {},
-            const RHI::ImageSubresourceRange& range = RHI::ImageSubresourceRange{});
+        // 添加 PassNode
+        PassNode* addPassNode(const std::string& name);
 
-        // 深度/模板附件
-        void setDepthStencil(SubpassId subpass,
-            ResourceId resource,
-            RHI::AttachmentLoadOp loadOp,
-            RHI::AttachmentStoreOp storeOp,
-            const RHI::ClearValue& clearValue = {},
-            const RHI::ImageSubresourceRange& range = RHI::ImageSubresourceRange{});
-
-        // 输入附件或普通只读资源
-        void addInput(SubpassId subpass,
-            ResourceId resource,
-            RHI::ImageLayout expectedLayout,
-            RHI::PipelineStageFlags stages,
-            RHI::AccessFlags access,
-            const RHI::ImageSubresourceRange& range = RHI::ImageSubresourceRange{});
-
-        // 设置管线（图形或计算）
-        void setPipeline(SubpassId subpass, RHI::PipelineHandle pipeline);
-
-        // 设置绘制/调度回调（场景数据由外部传入）
-        void setExecuteCallback(SubpassId subpass,
-            std::function<void(RHI::RHICommandEncoder*,
-                const Scene&)> callback);
-
-        // ========== 高级依赖（可选）==========
-        void addSubpassDependency(RenderPassGroupId group,
-            uint32_t srcSubpass, uint32_t dstSubpass,
-            RHI::PipelineStageFlags srcStageMask,
-            RHI::PipelineStageFlags dstStageMask,
-            RHI::AccessFlags srcAccessMask,
-            RHI::AccessFlags dstAccessMask,
-            bool byRegion = true);
-
-        // ========== 编译和执行 ==========
+        // 编译整个图
         bool compile();
-        void execute(RHI::RHICommandEncoder* encoder, const Scene& scene);
 
-        // 窗口重建时标记失效
-        void invalidate();
+        // 执行一帧
+        void execute(uint32_t frameIndex, RHI::RHICommandEncoder* encoder);
+
+        // 获取物理资源（调试用）
+        RHI::TextureHandle getPhysicalTexture(TextureId id) const;
+        RHI::BufferHandle getPhysicalBuffer(BufferId id) const;
+
+        void setPassFramebuffers(const std::vector<RHI::FramebufferHandle>& framebuffers) {
+            m_passFramebuffers = framebuffers;
+        }
+
+        const std::vector<PassNode*>& getSortedPasses() const { return m_sortedPasses; }
 
     private:
-        // 内部实现（前向声明）
-        struct Impl;
-        std::unique_ptr<Impl> pImpl;
+        struct VirtualTexture {
+            TextureId id;                      
+            RHI::TextureDesc desc;
+            std::string name;
+            bool imported;
+            RHI::TextureHandle externalHandle;
+            RHI::ImageLayout initialLayout;
+            RHI::TextureHandle physicalHandle;
+        };
+
+        struct VirtualBuffer {
+            BufferId id;
+            RHI::BufferDesc desc;
+            std::string name;
+            bool imported = false;
+            RHI::BufferHandle externalHandle;
+            RHI::BufferHandle physicalHandle;
+        };
+
+        // 依赖分析时记录每个资源的读写 Pass
+        struct ResourceUsage {
+            std::set<uint32_t> readingPasses;   // 读取该资源的 Pass 索引
+            std::set<uint32_t> writingPasses;   // 写入该资源的 Pass 索引
+        };
+
+        // 拓扑排序辅助
+        std::vector<uint32_t> topologicalSort(const std::vector<std::vector<uint32_t>>& adj) const;
+
+        std::shared_ptr<VulkanRHI> m_rhi;
+        std::shared_ptr<RHI::ResourceManager> m_resMgr;
+
+        // 虚拟资源存储
+        std::vector<VirtualTexture> m_virtualTextures;
+        std::unordered_map<std::string, TextureId> m_nameToTextureId;  // 名称到虚拟纹理 ID
+        uint32_t m_nextTextureId = 1;
+
+        std::vector<VirtualBuffer> m_virtualBuffers;
+        std::unordered_map<std::string, BufferId> m_nameToBufferId;
+        uint32_t m_nextBufferId = 1;
+
+        // Pass 存储
+        std::vector<std::unique_ptr<PassNode>> m_passes;
+
+        // 编译后数据
+        std::vector<PassNode*> m_sortedPasses;               // 拓扑排序后的 Pass 执行顺序
+        std::unordered_map<TextureId, RHI::TextureHandle> m_textureMap; // 虚拟 -> 物理
+        std::unordered_map<BufferId, RHI::BufferHandle> m_bufferMap;
+
+        std::vector<RHI::FramebufferHandle> m_passFramebuffers;
     };
 
 } // namespace StarryEngine::RenderGraph

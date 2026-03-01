@@ -560,6 +560,9 @@ namespace StarryEngine::RHI {
         void update() override;
         void copyFrom(const RHIDescriptorSet* src, const std::vector<DescriptorCopy>& copies) override;
 
+        void writeInputAttachment(uint32_t binding, uint32_t arrayElement,
+            RHITexture* texture, ImageLayout layout) override;
+
     private:
         VkDescriptorType getBindingDescriptorType(uint32_t binding) const {
             if (!mLayout) return VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER; // fallback

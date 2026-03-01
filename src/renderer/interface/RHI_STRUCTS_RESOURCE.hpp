@@ -354,6 +354,12 @@ namespace StarryEngine::RHI {
             uint32_t size,
             const void* data) = 0;
 
+        virtual void writeInputAttachment(
+            uint32_t binding,
+            uint32_t arrayElement,
+            RHITexture* texture,
+            ImageLayout layout) = 0;
+
         virtual void update() = 0;
         virtual void copyFrom(const RHIDescriptorSet* src, const std::vector<DescriptorCopy>& copies) = 0;
     };
