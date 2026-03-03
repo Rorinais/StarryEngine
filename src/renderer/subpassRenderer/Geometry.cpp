@@ -151,13 +151,26 @@ namespace StarryEngine::RenderGraph {
 
     void Geometry::setVertexBuffer(uint32_t binding, const std::vector<float>& vertices,
         const VertexLayout& layout, const std::string& debugName) {
-        mLayout = layout;  // 保存布局，后续用于获取输入状态和 binding 列表
+        mLayout = layout;
 
         uint32_t stride = layout.getBindingStride(binding);
         if (stride == 0) {
             std::cerr << "[Geometry] Binding " << binding << " not found in vertex layout for "
                 << debugName << std::endl;
             return;
+        }
+
+        // 计算顶点数
+        uint32_t vertexCount = static_cast<uint32_t>(vertices.size() * sizeof(float) / stride);
+        if (mVertexCount == 0) {
+            mVertexCount = vertexCount;  // 第一个缓冲区，记录顶点数
+        }
+        else if (mVertexCount != vertexCount) {
+            // 可选：如果后续缓冲区的顶点数不一致，可以抛出警告或错误
+            std::cerr << "[Geometry] Warning: Vertex count mismatch for binding " << binding
+                << " (" << vertexCount << " vs " << mVertexCount << ")" << std::endl;
+            // 为了安全，可以选择继续使用原有 mVertexCount，或者更新为最小值
+            // 这里我们选择不更新，但输出警告
         }
 
         RHI::BufferDesc bufferDesc;

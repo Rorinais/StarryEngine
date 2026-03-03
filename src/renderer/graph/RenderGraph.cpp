@@ -2,6 +2,8 @@
 #include <queue>
 #include <stack>
 #include <iostream>
+#include <stdexcept>
+#include <algorithm>
 
 namespace StarryEngine::RenderGraph {
 
@@ -14,27 +16,22 @@ namespace StarryEngine::RenderGraph {
             m_rhi->waitIdle();
         }
 
-        std::cout << "[RenderGraph] Destructor started" << std::endl;
-        for (auto& vt : m_virtualTextures) {
-            if (!vt.imported && vt.physicalHandle.isValid()) {
-                std::cout << "[RenderGraph] Destroying texture: " << vt.name << " handle=" << vt.physicalHandle.toString() << std::endl;
-                m_resMgr->destroy(vt.physicalHandle);
-            }
+        // 销毁物理纹理
+        for (auto& [id, handle] : m_textureMap) {
+            if (handle.isValid()) m_resMgr->destroy(handle);
         }
-        for (auto& vb : m_virtualBuffers) {
-            if (!vb.imported && vb.physicalHandle.isValid()) {
-                std::cout << "[RenderGraph] Destroying buffer: " << vb.name << std::endl;
-                m_resMgr->destroy(vb.physicalHandle);
-            }
+        // 销毁物理缓冲区
+        for (auto& [id, handle] : m_bufferMap) {
+            if (handle.isValid()) m_resMgr->destroy(handle);
         }
-        m_textureMap.clear();
-        m_bufferMap.clear();
-        std::cout << "[RenderGraph] Destructor finished" << std::endl;
     }
 
     TextureId RenderGraph::createVirtualTexture(const RHI::TextureDesc& desc, const std::string& name) {
+        if (!name.empty() && m_nameToTextureId.find(name) != m_nameToTextureId.end()) {
+            throw std::runtime_error("Texture name already exists: " + name);
+        }
         TextureId id = TextureId::Create(m_nextTextureId++, 1);
-        VirtualTexture vt{ id,desc, name, false, RHI::TextureHandle::Null(), RHI::ImageLayout::Undefined, RHI::TextureHandle::Null() };
+        VirtualTexture vt{ id, desc, name, false, RHI::TextureHandle::Null(), RHI::ImageLayout::Undefined };
         m_virtualTextures.push_back(vt);
         if (!name.empty()) {
             m_nameToTextureId[name] = id;
@@ -46,8 +43,11 @@ namespace StarryEngine::RenderGraph {
         const RHI::TextureDesc& desc,
         RHI::ImageLayout initialLayout,
         const std::string& name) {
+        if (!name.empty() && m_nameToTextureId.find(name) != m_nameToTextureId.end()) {
+            throw std::runtime_error("Texture name already exists: " + name);
+        }
         TextureId id = TextureId::Create(m_nextTextureId++, 1);
-        VirtualTexture vt{ id,desc, name, true, externalHandle, initialLayout, externalHandle };
+        VirtualTexture vt{ id, desc, name, true, externalHandle, initialLayout };
         m_virtualTextures.push_back(vt);
         if (!name.empty()) {
             m_nameToTextureId[name] = id;
@@ -56,8 +56,11 @@ namespace StarryEngine::RenderGraph {
     }
 
     BufferId RenderGraph::createVirtualBuffer(const RHI::BufferDesc& desc, const std::string& name) {
+        if (!name.empty() && m_nameToBufferId.find(name) != m_nameToBufferId.end()) {
+            throw std::runtime_error("Buffer name already exists: " + name);
+        }
         BufferId id = BufferId::Create(m_nextBufferId++, 1);
-        VirtualBuffer vb{ id,desc, name, false, RHI::BufferHandle::Null(), RHI::BufferHandle::Null() };
+        VirtualBuffer vb{ id, desc, name, false, RHI::BufferHandle::Null() };
         m_virtualBuffers.push_back(vb);
         if (!name.empty()) {
             m_nameToBufferId[name] = id;
@@ -102,24 +105,19 @@ namespace StarryEngine::RenderGraph {
     }
 
     bool RenderGraph::compile() {
-
-        std::cout << "debug0: " << std::endl;
-
-        // 0. 检查是否有 Pass
         if (m_passes.empty()) {
-            std::cerr << "[RenderGraph] No passes to compile." << std::endl;
-            return false;
+            throw std::runtime_error("No passes to compile.");
         }
 
+        // 收集资源使用
         for (auto& pass : m_passes) {
             pass->collectResourceUsage(m_nameToTextureId, m_nameToBufferId);
         }
 
-        // 2. 构建依赖图
+        // 构建依赖图
         size_t passCount = m_passes.size();
         std::vector<std::vector<uint32_t>> adj(passCount);
 
-        // 创建一个资源到读写 Pass 的映射
         std::unordered_map<TextureId, std::set<uint32_t>> texReaders, texWriters;
         std::unordered_map<BufferId, std::set<uint32_t>> bufReaders, bufWriters;
 
@@ -130,155 +128,104 @@ namespace StarryEngine::RenderGraph {
             for (auto buf : m_passes[i]->getWriteBuffers()) bufWriters[buf].insert(i);
         }
 
-        std::cout << "debug1: " << std::endl;
-
-        // 根据资源依赖添加边
         auto addDependency = [&](uint32_t src, uint32_t dst) {
             adj[src].push_back(dst);
             };
 
+        // 纹理读写依赖
         for (const auto& [tex, writers] : texWriters) {
             auto& readers = texReaders[tex];
             for (uint32_t w : writers) {
                 for (uint32_t r : readers) {
-                    if (w != r) addDependency(w, r); // 写者必须在读者之前
+                    if (w != r && writers.find(r) == writers.end()) {
+                        addDependency(w, r);
+                    }
                 }
             }
-            // 写后写依赖：如果多个 Pass 写入同一资源，按顺序执行
             std::vector<uint32_t> wlist(writers.begin(), writers.end());
+            std::sort(wlist.begin(), wlist.end());
             for (size_t i = 0; i + 1 < wlist.size(); ++i) {
                 addDependency(wlist[i], wlist[i + 1]);
             }
         }
 
-        // 类似处理 Buffer
+        // 缓冲区读写依赖
         for (const auto& [buf, writers] : bufWriters) {
             auto& readers = bufReaders[buf];
             for (uint32_t w : writers) {
                 for (uint32_t r : readers) {
-                    if (w != r) addDependency(w, r);
+                    if (w != r && writers.find(r) == writers.end()) {
+                        addDependency(w, r);
+                    }
                 }
             }
             std::vector<uint32_t> wlist(writers.begin(), writers.end());
+            std::sort(wlist.begin(), wlist.end());
             for (size_t i = 0; i + 1 < wlist.size(); ++i) {
                 addDependency(wlist[i], wlist[i + 1]);
             }
         }
-        std::cout << "debug2: " << std::endl;
-        // 3. 拓扑排序
-        try {
-            auto order = topologicalSort(adj);
-            m_sortedPasses.clear();
-            for (uint32_t idx : order) {
-                m_sortedPasses.push_back(m_passes[idx].get());
-            }
-        }
-        catch (const std::exception& e) {
-            std::cerr << "[RenderGraph] " << e.what() << std::endl;
-            return false;
+        // ---------- 添加手动依赖 ----------
+        for (const auto& [src, dst] : m_manualDependencies) {
+            adj[src].push_back(dst);
         }
 
-        std::cout << "[RenderGraph] Current nameToTextureId: ";
-        for (const auto& [name, id] : m_nameToTextureId) {
-            std::cout << name << " ";
+        // 拓扑排序
+        auto order = topologicalSort(adj);
+        m_sortedPasses.clear();
+        for (uint32_t idx : order) {
+            m_sortedPasses.push_back(m_passes[idx].get());
         }
-        std::cout << std::endl;
 
+        // 创建物理纹理
         for (auto& vt : m_virtualTextures) {
             if (vt.imported) {
                 m_textureMap[vt.id] = vt.externalHandle;
-                vt.physicalHandle = vt.externalHandle;
             }
             else {
                 RHI::TextureHandle handle = m_resMgr->createTexture(vt.desc, vt.name);
-                std::cout << "[RenderGraph] Created texture handle: " << handle.toString()
-                    << ", isValid=" << handle.isValid()
-                    << ", category=" << (int)handle.getCategoryRaw()
-                    << ", expected_category=" << static_cast<int>(RHI::ResourceCategory::Texture) << std::endl;
                 if (!handle.isValid()) {
-                    std::cerr << "[RenderGraph] Failed to create physical texture (handle invalid): " << vt.name << std::endl;
-                    std::cerr << "  extent: " << vt.desc.extent.width << "x" << vt.desc.extent.height
-                        << ", format: " << static_cast<int>(vt.desc.format)
-                        << ", allowRenderTarget=" << vt.desc.allowRenderTarget
-                        << ", allowInputAttachment=" << vt.desc.allowInputAttachment << std::endl;
-                    // 清理已创建的纹理
-                    for (auto& createdVt : m_virtualTextures) {
-                        if (createdVt.physicalHandle.isValid() && !createdVt.imported) {
-                            m_resMgr->destroy(createdVt.physicalHandle);
-                        }
-                    }
-                    return false;
+                    throw std::runtime_error("Failed to create physical texture: " + vt.name);
                 }
-
-                // 获取对象指针并检查有效性
-                auto* textureObj = m_resMgr->getTexture(handle);
-                if (!textureObj) {
-                    std::cerr << "[RenderGraph] textureObj is null for handle " << handle.toString() << std::endl;
-                    m_resMgr->destroy(handle);
-                    // 清理已创建的纹理...
-                    return false;
-                }
-                if (!textureObj->isValid()) {
-                    std::cerr << "[RenderGraph] textureObj is invalid for handle " << handle.toString() << std::endl;
-                    // 可以尝试获取更详细的内部状态（如果纹理类提供了方法）
-                    m_resMgr->destroy(handle);
-                    // 清理已创建的纹理...
-                    return false;
-                }
-
                 m_textureMap[vt.id] = handle;
-                vt.physicalHandle = handle;
             }
         }
 
-        std::cout << "debug3: " << std::endl;
-        // 缓冲区同理
+        // 创建物理缓冲区
         for (auto& vb : m_virtualBuffers) {
             if (vb.imported) {
                 m_bufferMap[vb.id] = vb.externalHandle;
-                vb.physicalHandle = vb.externalHandle;
             }
             else {
                 RHI::BufferHandle handle = m_resMgr->createBuffer(vb.desc, vb.name);
                 if (!handle.isValid()) {
-                    std::cerr << "[RenderGraph] Failed to create physical buffer: " << vb.name << std::endl;
-                    for (auto& createdVb : m_virtualBuffers) {
-                        if (createdVb.physicalHandle.isValid() && !createdVb.imported) {
-                            m_resMgr->destroy(createdVb.physicalHandle);
-                        }
-                    }
-                    return false;
+                    throw std::runtime_error("Failed to create physical buffer: " + vb.name);
                 }
                 m_bufferMap[vb.id] = handle;
-                vb.physicalHandle = handle;
             }
         }
-        std::cout << "debug4: " << std::endl;
 
-        // 5. 编译每个 Pass
+        // 编译每个 Pass
         for (auto pass : m_sortedPasses) {
             if (!pass->compile(m_resMgr, m_textureMap, m_bufferMap)) {
-                std::cerr << "[RenderGraph] Failed to compile pass: " << pass->getName() << std::endl;
-                return false;
+                throw std::runtime_error("Failed to compile pass: " + pass->getName());
             }
         }
-        std::cout << "debug5: " << std::endl;
+
         return true;
     }
 
     void RenderGraph::execute(uint32_t frameIndex, RHI::RHICommandEncoder* encoder) {
         if (m_sortedPasses.empty()) return;
         if (m_passFramebuffers.size() != m_sortedPasses.size()) {
-            std::cerr << "[RenderGraph] Framebuffer count mismatch" << std::endl;
-            return;
+            throw std::runtime_error("Framebuffer count mismatch in RenderGraph");
         }
 
         for (size_t i = 0; i < m_sortedPasses.size(); ++i) {
             auto* pass = m_sortedPasses[i];
             RHI::FramebufferHandle fb = m_passFramebuffers[i];
             if (!fb.isValid()) {
-                std::cerr << "[RenderGraph] Invalid framebuffer for pass: " << pass->getName() << std::endl;
-                continue;
+                throw std::runtime_error("Invalid framebuffer for pass: " + pass->getName());
             }
             pass->execute(encoder, frameIndex, fb);
         }

@@ -1,41 +1,23 @@
 #pragma once
-#include "Subpass.hpp"
-#include "../../subpassRenderer/ISubpassRenderer.hpp"
+#include <vector>
+#include <memory>
+#include <unordered_map>
+#include <set>
+#include <string>
+#include <stdexcept>
+#include "SubpassBuilder.hpp"
 
 namespace StarryEngine::RenderGraph {
-    class RenderPass {
-    public:
-        RenderPass();
-        ~RenderPass() = default;
 
-        // 添加附件描述
-        void addAttachment(const RHI::AttachmentDesc& attachment);
-
-        // 添加子流程（接收 Subpass 对象的所有权）
-        void addSubpass(std::unique_ptr<Subpass> subpass);
-
-        // 添加子流程依赖
-        void addDependency(const RHI::SubpassDependency& dependency);
-
-        // 获取构建完成的 RenderPassDesc（用于创建底层 RenderPass 对象）
-        RHI::RenderPassDesc getRenderPassDesc() const;
-
-    private:
-        std::vector<RHI::AttachmentDesc> mAttachments;
-        std::vector<std::unique_ptr<Subpass>> mSubpasses;
-        std::vector<RHI::SubpassDependency> mDependencies;
-    };
-
+    // 构建结果结构体，存储最终描述和辅助信息
     struct RenderPassBuildResult {
         std::string name;
-        std::unique_ptr<RenderPass> renderPass;
+        RHI::RenderPassDesc renderPassDesc;                       // 最终的 RenderPass 描述
         std::unordered_map<std::string, uint32_t> pipelineNameToSubpassIndexMap;
-
-        // 新增字段
-        std::vector<std::string> attachmentNames;                       // 附件名称（按索引顺序）
+        std::vector<std::string> attachmentNames;                 // 附件名称（按索引顺序）
         std::unordered_map<std::string, uint32_t> attachmentNameToIndex; // 名称到索引映射
-        std::vector<RHI::GraphicsPipelineDesc> pipelineDescriptions;           // 每个 Subpass 的 Pipeline 描述
-        std::vector<ISubpassRenderer*> subpassRenderers;                 // 每个 Subpass 的 Renderer 指针
+        std::vector<RHI::GraphicsPipelineDesc> pipelineDescriptions;      // 每个 Subpass 的 Pipeline 描述
+        std::vector<ISubpassRenderer*> subpassRenderers;          // 每个 Subpass 的 Renderer 指针
     };
 
     class RenderPassBuilder {
@@ -46,31 +28,35 @@ namespace StarryEngine::RenderGraph {
         // 使用字符串名称添加附件
         RenderPassBuilder& addAttachment(const std::string& name, const RHI::AttachmentDesc& attachment);
 
-        // 添加子流程构建器
+        // 添加子流程构建器（注意：传入右值，返回 SubpassBuilder 引用以便继续配置）
         SubpassBuilder& addSubpass(SubpassBuilder&& subpassBuilder);
 
         // 手动添加子流程依赖
         RenderPassBuilder& addDependency(const RHI::SubpassDependency& dependency);
 
         // 便捷方法：添加颜色附件
-        RenderPassBuilder& addColorAttachment(const std::string& name,
+        RenderPassBuilder& registerColorAttachment(const std::string& name,
             RHI::Format format,
             RHI::ImageLayout finalLayout = RHI::ImageLayout::ColorAttachment,
             RHI::AttachmentLoadOp loadOp = RHI::AttachmentLoadOp::Clear,
-            RHI::AttachmentStoreOp storeOp = RHI::AttachmentStoreOp::Store);
+            RHI::AttachmentStoreOp storeOp = RHI::AttachmentStoreOp::Store,
+            RHI::ImageLayout initialLayout = RHI::ImageLayout::Undefined);
 
         // 便捷方法：添加深度附件
-        RenderPassBuilder& addDepthAttachment(const std::string& name,
+        RenderPassBuilder& registerDepthAttachment(const std::string& name,
             RHI::Format format,
             RHI::AttachmentLoadOp loadOp = RHI::AttachmentLoadOp::Clear,
-            RHI::AttachmentStoreOp storeOp = RHI::AttachmentStoreOp::DontCare);
+            RHI::AttachmentStoreOp storeOp = RHI::AttachmentStoreOp::DontCare,
+            RHI::ImageLayout initialLayout = RHI::ImageLayout::Undefined,
+            RHI::ImageLayout finalLayout = RHI::ImageLayout::DepthStencilAttachment);
 
         // 便捷方法：添加解析附件
-        RenderPassBuilder& addResolveAttachment(const std::string& name,
+        RenderPassBuilder& registerResolveAttachment(const std::string& name,
             RHI::Format format,
             RHI::ImageLayout finalLayout = RHI::ImageLayout::ColorAttachment);
 
-        RenderPassBuilder& addInputAttachment(const std::string& name,
+        // 便捷方法：添加输入附件
+        RenderPassBuilder& registerInputAttachment(const std::string& name,
             RHI::Format format,
             RHI::ImageLayout finalLayout = RHI::ImageLayout::ShaderReadOnly,
             RHI::ImageLayout initialLayout = RHI::ImageLayout::Undefined,
@@ -81,23 +67,23 @@ namespace StarryEngine::RenderGraph {
         std::unique_ptr<RenderPassBuildResult> build(bool autoDependencies = true);
 
         // 获取附件索引映射（仅用于调试）
-        const std::unordered_map<std::string, uint32_t>& getAttachmentIndices() const { return mAttachmentIndices; }
+        const std::unordered_map<std::string, uint32_t>& getAttachmentIndices() const { return m_attachmentIndices; }
 
-        // 获取推导出的依赖关系（供 RenderGraph 使用）
-        const std::vector<RHI::SubpassDependency>& getAutoDependencies() const { return mAutoDependencies; }
+        // 获取推导出的依赖关系
+        const std::vector<RHI::SubpassDependency>& getAutoDependencies() const { return m_autoDependencies; }
 
-        const std::vector<SubpassBuilder>& getSubpassBuilders() const { return mSubpassBuilders; }
+        const std::vector<SubpassBuilder>& getSubpassBuilders() const { return m_subpassBuilders; }
 
     private:
-        std::string mName;
-        std::vector<RHI::AttachmentDesc> mAttachments;
-        std::vector<SubpassBuilder> mSubpassBuilders;
-        std::vector<RHI::SubpassDependency> mManualDependencies;
-        std::vector<RHI::SubpassDependency> mAutoDependencies;
+        std::string m_name;
+        std::vector<RHI::AttachmentDesc> m_attachments;
+        std::vector<SubpassBuilder> m_subpassBuilders;
+        std::vector<RHI::SubpassDependency> m_manualDependencies;
+        std::vector<RHI::SubpassDependency> m_autoDependencies;
 
         // 名称到索引的映射
-        std::unordered_map<std::string, uint32_t> mAttachmentIndices;
-        std::vector<std::string> mAttachmentNames;
+        std::unordered_map<std::string, uint32_t> m_attachmentIndices;
+        std::vector<std::string> m_attachmentNames;
 
         // 附件使用分析（用于依赖推导）
         struct AttachmentUsage {
@@ -106,7 +92,7 @@ namespace StarryEngine::RenderGraph {
             RHI::ImageLayout initialLayout;
             RHI::ImageLayout finalLayout;
         };
-        std::unordered_map<std::string, AttachmentUsage> mAttachmentUsage;
+        std::unordered_map<std::string, AttachmentUsage> m_attachmentUsage;
 
         // 依赖推导方法
         void analyzeAttachmentUsage();
@@ -117,7 +103,6 @@ namespace StarryEngine::RenderGraph {
         void addColorWriteAfterWriteDependency(uint32_t first, uint32_t second);
         void addDepthWriteAfterWriteDependency(uint32_t first, uint32_t second);
         void generateExternalDependencies(const AttachmentUsage& usage, bool isDepthStencil);
-        void generateExecutionDependencies();
 
         // 判断附件是否为深度模板格式
         bool isDepthStencilFormat(RHI::Format format) const;
@@ -125,4 +110,5 @@ namespace StarryEngine::RenderGraph {
         // 依赖合并
         std::vector<RHI::SubpassDependency> mergeDependencies() const;
     };
-}
+
+} // namespace StarryEngine::RenderGraph

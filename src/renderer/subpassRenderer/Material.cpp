@@ -84,13 +84,15 @@ namespace StarryEngine::RenderGraph {
         auto* texture = mResMgr->getTexture(texHandle);
         texture->update(pixels, texWidth * texHeight * 4,
             { RHI::ImageAspect::Color, 0, 1, 0, 1 });
+        // 在 Material::addTexture 中，纹理上传后立即转换布局
         texture->transitionLayout(
-            RHI::ImageLayout::ShaderReadOnly,
-            RHI::PipelineStage::Transfer,
-            RHI::PipelineStage::FragmentShader,
-            static_cast<RHI::AccessFlags>(RHI::AccessFlag::TransferWrite),
-            static_cast<RHI::AccessFlags>(RHI::AccessFlag::ShaderRead),
-            { RHI::ImageAspect::Color, 0, 1, 0, 1 });
+            RHI::ImageLayout::ShaderReadOnly,              // 目标布局
+            RHI::PipelineStage::Transfer,                  // 源阶段（上传操作）
+            RHI::PipelineStage::FragmentShader,             // 目标阶段（片段着色器）
+            static_cast<RHI::AccessFlags>(RHI::AccessFlag::TransferWrite), // 源访问
+            static_cast<RHI::AccessFlags>(RHI::AccessFlag::ShaderRead),     // 目标访问
+            { RHI::ImageAspect::Color, 0, 1, 0, 1 }        // 子资源范围
+        );
 
         // 创建采样器
         RHI::SamplerDesc samplerDesc;
@@ -115,6 +117,19 @@ namespace StarryEngine::RenderGraph {
 
         stbi_image_free(pixels);
         return texHandle;
+    }
+
+    void Material::addInputAttachment(RHI::TextureHandle texture, uint32_t binding,
+        RHI::ImageLayout layout, RHI::ShaderStage stageFlags) {
+        RHI::DescriptorImageInfo info;
+        info.texture = texture;
+        info.sampler = RHI::SamplerHandle::Null();
+        info.imageLayout = layout;
+        addBinding(binding, RHI::DescriptorType::InputAttachment, 1, stageFlags);
+        DescriptorResourceInfo resInfo;
+        resInfo.data = info;          // 将 info 存入 variant
+        resInfo.type = RHI::DescriptorType::InputAttachment; // 手动设置类型
+        mResources[binding] = resInfo;
     }
 
     // --- 创建描述符集布局（基于已添加的 binding）---
@@ -168,32 +183,44 @@ namespace StarryEngine::RenderGraph {
 
     // --- 更新描述符集（遍历所有资源）---
     void Material::updateDescriptorSet() {
-        if (!mDescriptorSet.isValid()) {
-            std::cerr << "[Material] Descriptor set not allocated." << std::endl;
-            return;
-        }
-
+        if (!mDescriptorSet.isValid()) return;
         auto* set = mResMgr->getDescriptorSet(mDescriptorSet);
         if (!set) return;
 
-        // 遍历所有 binding 的资源并写入
         for (const auto& [binding, resource] : mResources) {
             if (std::holds_alternative<RHI::DescriptorBufferInfo>(resource.data)) {
                 const auto& bufferInfo = std::get<RHI::DescriptorBufferInfo>(resource.data);
                 auto* buffer = mResMgr->getBuffer(bufferInfo.buffer);
-                if (buffer) {
-                    set->writeBuffer(binding, 0, buffer, bufferInfo.offset, bufferInfo.range);
-                }
+                if (buffer) set->writeBuffer(binding, 0, buffer, bufferInfo.offset, bufferInfo.range);
             }
             else if (std::holds_alternative<RHI::DescriptorImageInfo>(resource.data)) {
                 const auto& imageInfo = std::get<RHI::DescriptorImageInfo>(resource.data);
                 auto* texture = mResMgr->getTexture(imageInfo.texture);
-                auto* sampler = mResMgr->getSampler(imageInfo.sampler);
-                if (texture && sampler) {
-                    set->writeTexture(binding, 0, texture, sampler, imageInfo.imageLayout);
+                std::cout << "[Material] Updating descriptor set, binding " << binding
+                    << " texture handle: " << imageInfo.texture.toString() << std::endl;
+                if (resource.type == RHI::DescriptorType::InputAttachment) {
+                    // 输入附件写入
+                    if (texture) set->writeInputAttachment(binding, 0, texture, imageInfo.imageLayout);
+                }
+                else {
+                    // 假设是 CombinedImageSampler
+                    auto* sampler = mResMgr->getSampler(imageInfo.sampler);
+                    if (texture && sampler) set->writeTexture(binding, 0, texture, sampler, imageInfo.imageLayout);
                 }
             }
         }
+
         set->update();
+    }
+
+    void Material::updateInputAttachment(uint32_t binding, RHI::TextureHandle texture, RHI::ImageLayout layout) {
+        if (!mDescriptorSet.isValid()) return;
+        auto* set = mResMgr->getDescriptorSet(mDescriptorSet);
+        if (!set) return;
+        auto* tex = mResMgr->getTexture(texture);
+        if (tex) {
+            set->writeInputAttachment(binding, 0, tex, layout);
+            set->update();
+        }
     }
 }

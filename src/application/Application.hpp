@@ -13,7 +13,7 @@
 #include "../renderer/interface/RHI_STRUCTS_CONFIG.hpp"
 #include "../renderer/interface/RHI_STRUCTS_DESC.hpp"
 #include "../renderer/graph/RenderGraph.hpp"
-#include "../renderer/graph/renderpass/Renderpass.hpp"
+#include "../renderer/graph/RenderPassBuilder.hpp"
 #include "../renderer/subpassRenderer/GbufferRender.hpp"
 
 namespace StarryEngine {
@@ -39,9 +39,6 @@ namespace StarryEngine {
         double m_lastTitleUpdate;
     };
 
-    static constexpr uint32_t SUBPASS_EXTERNAL = ~0U;
-    constexpr uint32_t ATTACHMENT_UNUSED = std::numeric_limits<uint32_t>::max();
-
     struct Uniforms {
         glm::mat4 model;
         glm::mat4 view;
@@ -52,18 +49,16 @@ namespace StarryEngine {
     public:
         Application();
         ~Application();
-        void run();
 
-    private:
-        void createShaderProgram();
-        void createBuffer();
-        void createUniformResources();
-        void createPipelineLayout();
-        void loadTexture();
-        void createPostProcessResources(); // 新增后处理资源创建
+        void run();
+        void createDescriptorPool();
+        void createGbuffer();
+        void createGrid();
+        void createPostBuffer();
         void buildRenderGraph();
         void createFramebuffers();
 
+    private:
         Window::Ptr m_window;
         uint32_t m_width = 800;
         uint32_t m_height = 600;
@@ -75,32 +70,20 @@ namespace StarryEngine {
         std::shared_ptr<VulkanRHI> m_rhi;
         std::shared_ptr<RHI::ResourceManager> m_resMgr;
 
-        // 几何 Pass 资源
-        std::shared_ptr<RenderGraph::Geometry> m_geometry;
-        std::shared_ptr<RenderGraph::Material> m_material;
         std::shared_ptr<RenderGraph::GBufferRenderer> m_gbufferRenderer;
+        //std::shared_ptr<RenderGraph::PostProcessRenderer> m_postRenderer;
+        std::shared_ptr<RenderGraph::GridRenderer> m_gridRenderer;
 
-        // 后处理 Pass 资源
-        std::shared_ptr<RenderGraph::PostProcessRenderer> m_postRenderer;
-        RHI::ShaderHandle m_postVS;
-        RHI::ShaderHandle m_postFS;
-        RHI::DescriptorSetLayoutHandle m_postInputLayout;
-        RHI::PipelineLayoutHandle m_postPipelineLayout;
-        RHI::DescriptorSetHandle m_postDescriptorSet;
-        // 中间纹理 ID
         RenderGraph::TextureId m_intermediateTexId;
         RenderGraph::TextureId m_depthTexId;
-        RenderGraph::TextureId m_swapchainTexId;
 
         // RHI 资源句柄
         RHI::DescriptorPoolHandle mDescriptorPoolHandle;
         RHI::PipelineLayoutHandle mPipelineLayoutHandle;
-        RHI::RHIBuffer* mUniformBuffer = nullptr;
         RHI::BufferHandle m_uniformBufferHandle;
+        RHI::BufferHandle m_gridUniformBufferHandle;
 
         // RenderGraph 相关
         std::unique_ptr<RenderGraph::RenderGraph> m_renderGraph;
-        std::vector<RHI::FramebufferHandle> m_geomFramebuffers;     
-        std::vector<RHI::FramebufferHandle> m_postFramebuffers;   
     };
 } // namespace StarryEngine

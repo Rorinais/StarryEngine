@@ -55,11 +55,21 @@ namespace StarryEngine::RenderGraph {
             uint32_t binding = 1,
             RHI::ShaderStage stageFlags = RHI::ShaderStage::Fragment);
 
+        // 添加输入附件（外部纹理句柄）
+        void addInputAttachment(RHI::TextureHandle texture, uint32_t binding,
+            RHI::ImageLayout layout = RHI::ImageLayout::ShaderReadOnly,
+            RHI::ShaderStage stageFlags = RHI::ShaderStage::Fragment);
+
         bool createDescriptorSetLayout();
 
         bool allocateDescriptorSet(RHI::DescriptorPoolHandle pool,
             RHI::PipelineLayoutHandle pipelineLayout,
             uint32_t setIndex = 0);
+
+        void addInputAttachmentBinding(uint32_t binding, RHI::ShaderStage stageFlags = RHI::ShaderStage::Fragment) {
+            addBinding(binding, RHI::DescriptorType::InputAttachment, 1, stageFlags);
+        }
+        void updateInputAttachment(uint32_t binding, RHI::TextureHandle texture, RHI::ImageLayout layout = RHI::ImageLayout::ShaderReadOnly);
 
         void updateDescriptorSet();
 

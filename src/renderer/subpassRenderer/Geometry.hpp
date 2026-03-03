@@ -49,6 +49,7 @@ namespace StarryEngine::RenderGraph {
         RHI::BufferHandle getVertexBufferHandle(uint32_t binding) const;
         RHI::BufferHandle getIndexBufferHandle() const { return mIndexBufferHandle; }
         uint32_t getIndexCount() const { return mIndexCount; }
+        uint32_t getVertexCount() const { return mVertexCount; }
 
         // 获取所有已定义的 binding 列表
         std::vector<uint32_t> getBindings() const;
@@ -61,6 +62,7 @@ namespace StarryEngine::RenderGraph {
         std::unordered_map<uint32_t, RHI::BufferHandle> mVertexBufferHandles;
         RHI::BufferHandle mIndexBufferHandle = RHI::BufferHandle::Null();
         uint32_t mIndexCount = 0;
+        uint32_t mVertexCount = 0;
         VertexLayout mLayout;
     };
 

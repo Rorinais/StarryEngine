@@ -4,21 +4,21 @@
 #include <memory>
 #include <string>
 #include <vector>
-
+#include <unordered_map>
+#include <set>
 #include "../interface/RHI_ENUMS.hpp"
 #include "../interface/RHI_STRUCTS_DESC.hpp"
 #include "../interface/RHI_HANDLES_SYSTEM.hpp"
-#include "../interface/RHI_STRUCTS_RESOURCE.hpp" 
 #include "../backend/VulkanRHI.hpp"
 #include "PassNode.hpp"
 
 namespace StarryEngine::RenderGraph {
+
     class RenderGraph {
     public:
         explicit RenderGraph(std::shared_ptr<VulkanRHI> rhi);
         ~RenderGraph();
 
-        // 禁止拷贝
         RenderGraph(const RenderGraph&) = delete;
         RenderGraph& operator=(const RenderGraph&) = delete;
 
@@ -52,16 +52,26 @@ namespace StarryEngine::RenderGraph {
         }
 
         const std::vector<PassNode*>& getSortedPasses() const { return m_sortedPasses; }
-
+        std::vector<RHI::FramebufferHandle> getPassFramebuffers() { return m_passFramebuffers; }
+        void addDependency(PassNode* from, PassNode* to) {
+            // 查找索引
+            uint32_t srcIdx = UINT32_MAX, dstIdx = UINT32_MAX;
+            for (uint32_t i = 0; i < m_passes.size(); ++i) {
+                if (m_passes[i].get() == from) srcIdx = i;
+                if (m_passes[i].get() == to) dstIdx = i;
+            }
+            if (srcIdx != UINT32_MAX && dstIdx != UINT32_MAX) {
+                m_manualDependencies.push_back({ srcIdx, dstIdx });
+            }
+        }
     private:
         struct VirtualTexture {
-            TextureId id;                      
+            TextureId id;
             RHI::TextureDesc desc;
             std::string name;
             bool imported;
             RHI::TextureHandle externalHandle;
             RHI::ImageLayout initialLayout;
-            RHI::TextureHandle physicalHandle;
         };
 
         struct VirtualBuffer {
@@ -70,13 +80,6 @@ namespace StarryEngine::RenderGraph {
             std::string name;
             bool imported = false;
             RHI::BufferHandle externalHandle;
-            RHI::BufferHandle physicalHandle;
-        };
-
-        // 依赖分析时记录每个资源的读写 Pass
-        struct ResourceUsage {
-            std::set<uint32_t> readingPasses;   // 读取该资源的 Pass 索引
-            std::set<uint32_t> writingPasses;   // 写入该资源的 Pass 索引
         };
 
         // 拓扑排序辅助
@@ -87,7 +90,7 @@ namespace StarryEngine::RenderGraph {
 
         // 虚拟资源存储
         std::vector<VirtualTexture> m_virtualTextures;
-        std::unordered_map<std::string, TextureId> m_nameToTextureId;  // 名称到虚拟纹理 ID
+        std::unordered_map<std::string, TextureId> m_nameToTextureId;
         uint32_t m_nextTextureId = 1;
 
         std::vector<VirtualBuffer> m_virtualBuffers;
@@ -96,9 +99,10 @@ namespace StarryEngine::RenderGraph {
 
         // Pass 存储
         std::vector<std::unique_ptr<PassNode>> m_passes;
+        std::vector<std::pair<uint32_t, uint32_t>> m_manualDependencies;
 
         // 编译后数据
-        std::vector<PassNode*> m_sortedPasses;               // 拓扑排序后的 Pass 执行顺序
+        std::vector<PassNode*> m_sortedPasses;                       // 拓扑排序后的 Pass 执行顺序
         std::unordered_map<TextureId, RHI::TextureHandle> m_textureMap; // 虚拟 -> 物理
         std::unordered_map<BufferId, RHI::BufferHandle> m_bufferMap;
 

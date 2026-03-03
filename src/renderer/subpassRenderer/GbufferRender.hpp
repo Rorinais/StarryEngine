@@ -1,16 +1,11 @@
 #pragma once
 #include"ISubpassRenderer.hpp"
-#include"../interface/RHI_RESOURCE_FACTORY.hpp"
+#include "../graph/PassNode.hpp"
 
 namespace StarryEngine::RenderGraph {
     class GBufferRenderer : public ISubpassRenderer {
     public:
-        GBufferRenderer(std::shared_ptr<Geometry> geometry,
-            std::shared_ptr<Material> material,
-            std::shared_ptr<RHI::ResourceManager> resMgr)
-            : mGeometry(geometry), mMaterial(material), mResMgr(resMgr) {
-        }
-
+        using ISubpassRenderer::ISubpassRenderer;
         void recordCommands(RHI::RHICommandEncoder* encoder,
             const PassContext& pctx,
             uint32_t subpassIndex,
@@ -60,40 +55,169 @@ namespace StarryEngine::RenderGraph {
             encoder->drawIndexed(mGeometry->getIndexCount(), 1, 0, 0, 0);
         }
 
-    private:
-        std::shared_ptr<Geometry> mGeometry;
-        std::shared_ptr<Material> mMaterial;
-        std::shared_ptr<RHI::ResourceManager> mResMgr;
+        std::vector<RHI::FramebufferHandle> createFramebuffers(
+            void* /*intermediateView*/,        // 不再使用
+            void* depthView,
+            const std::vector<void*>& swapchainViews,
+            uint32_t width, uint32_t height) override
+        {
+            destroyFramebuffers();
+            if (!mPassNode) return {};
+            RHI::RenderPassHandle rpHandle = mPassNode->getRenderPassHandle();
+            auto* rpObj = mResMgr->getRenderPass(rpHandle);
+            if (!rpObj) return {};
+
+            for (void* swapView : swapchainViews) {
+                RHI::FramebufferDesc fbDesc;
+                fbDesc.renderPass = rpObj->getNativeHandle();
+                fbDesc.attachments = { swapView, depthView }; // 颜色 + 深度
+                fbDesc.extent.width = width;
+                fbDesc.extent.height = height;
+                fbDesc.layers = 1;
+                RHI::FramebufferHandle fb = mResMgr->createFramebuffer(fbDesc);
+                mframeBuffers.push_back(fb);
+            }
+            return mframeBuffers;
+        }
     };
 
     class PostProcessRenderer : public ISubpassRenderer {
     public:
-        PostProcessRenderer(RHI::ShaderHandle vs, RHI::ShaderHandle fs,
-            RHI::PipelineLayoutHandle layout,
-            RHI::DescriptorSetHandle descSet,
-            std::shared_ptr<RHI::ResourceManager> resMgr)
-            : m_vs(vs), m_fs(fs), m_layout(layout), m_descSet(descSet), m_resMgr(resMgr) {
+        using ISubpassRenderer::ISubpassRenderer;
+
+        void recordCommands(RHI::RHICommandEncoder* encoder,
+            const PassContext& pctx,
+            uint32_t subpassIndex,
+            uint32_t frameIndex) override {
+            // 绘制全屏三角形
+            auto pipeline = pctx.getPipeline(subpassIndex);
+            if (!pipeline.isValid()) return;
+            encoder->bindPipeline(mResMgr->getPipeline(pipeline));
+
+            auto descSet = mMaterial->getDescriptorSet();
+            auto pipelineLayoutHandle = mMaterial->getPipelineLayout();
+            auto* pipelineLayout = mResMgr->getPipelineLayout(pipelineLayoutHandle);
+            encoder->bindDescriptorSets(RHI::PipelineBindPoint::Graphics,
+                pipelineLayout,
+                mMaterial->getSetIndex(),
+                { descSet }, {});
+
+            encoder->draw(3, 1, 0, 0);
         }
+
+        void updateInputAttachment(uint32_t binding, RHI::TextureHandle texture, RHI::ImageLayout layout = RHI::ImageLayout::ShaderReadOnly) {
+            mMaterial->updateInputAttachment(binding, texture, layout);
+        }
+
+        std::vector<RHI::FramebufferHandle> createFramebuffers(
+            void* intermediateView,
+            void* depthView,
+            const std::vector<void*>& swapchainViews,
+            uint32_t width, uint32_t height) override
+        {
+            std::cout << "[Renderer] Creating framebuffers for pass: "
+                << (mPassNode ? mPassNode->getName() : "null") << std::endl;
+
+            // 关键：打印当前 Renderer 持有的 RenderPass 句柄
+            RHI::RenderPassHandle currentRpHandle = mPassNode ? mPassNode->getRenderPassHandle() : RHI::RenderPassHandle::Null();
+            std::cout << "  Current RenderPass handle: " << currentRpHandle.toString() << std::endl;
+
+            for (size_t i = 0; i < swapchainViews.size(); ++i) {
+                std::cout << "  swapchainViews[" << i << "] = " << swapchainViews[i] << std::endl;
+            }
+
+            destroyFramebuffers();
+            if (!mPassNode) return {};
+            RHI::RenderPassHandle rpHandle = mPassNode->getRenderPassHandle();
+            auto* rpObj = mResMgr->getRenderPass(rpHandle);
+            if (!rpObj) return {};
+
+            for (void* swapView : swapchainViews) {
+                RHI::FramebufferDesc fbDesc;
+                fbDesc.renderPass = rpObj->getNativeHandle();
+                std::cout << "  Using RenderPass handle for FB creation: " << rpHandle.toString() << std::endl;
+                // 正确顺序：附件0 = 颜色输出 (Final) -> swapView
+                //          附件1 = 输入 (Color) -> intermediateView
+                fbDesc.attachments = { swapView, intermediateView };
+                fbDesc.extent.width = width;
+                fbDesc.extent.height = height;
+                fbDesc.layers = 1;
+                RHI::FramebufferHandle fb = mResMgr->createFramebuffer(fbDesc);
+                std::cout << "  Created Framebuffer handle: " << fb.toString() << std::endl;
+                mframeBuffers.push_back(fb);
+            }
+            return mframeBuffers;
+        }
+    };
+
+    class GridRenderer : public ISubpassRenderer {
+    public:
+        using ISubpassRenderer::ISubpassRenderer;
 
         void recordCommands(RHI::RHICommandEncoder* encoder,
             const PassContext& pctx,
             uint32_t subpassIndex,
             uint32_t frameIndex) override {
             auto pipeline = pctx.getPipeline(subpassIndex);
-            encoder->bindPipeline(m_resMgr->getPipeline(pipeline));
+            if (!pipeline.isValid()) return;
+            encoder->bindPipeline(mResMgr->getPipeline(pipeline));
 
+            // 绑定描述符集（如果有 UniformBuffer）
+            auto descSet = mMaterial->getDescriptorSet();
+            auto pipelineLayoutHandle = mMaterial->getPipelineLayout();
+            auto* pipelineLayout = mResMgr->getPipelineLayout(pipelineLayoutHandle);
             encoder->bindDescriptorSets(RHI::PipelineBindPoint::Graphics,
-                m_resMgr->getPipelineLayout(m_layout),
-                0, // setIndex 固定为 0（因为只有一个描述符集）
-                { m_descSet }, {});
+                pipelineLayout,
+                mMaterial->getSetIndex(),
+                { descSet }, {});
 
-            encoder->draw(3, 1, 0, 0); // 全屏三角形
+            // 绑定顶点缓冲区
+            auto bindings = mGeometry->getBindings();
+            for (uint32_t binding : bindings) {
+                auto vbHandle = mGeometry->getVertexBufferHandle(binding);
+                if (!vbHandle.isValid()) continue;
+                encoder->bindVertexBuffers(binding,
+                    { mResMgr->getBuffer(vbHandle) },
+                    { 0 });
+            }
+
+            // 绑定索引缓冲区
+            auto ibHandle = mGeometry->getIndexBufferHandle();
+            if (ibHandle.isValid()) {
+                encoder->bindIndexBuffer(mResMgr->getBuffer(ibHandle),
+                    0,
+                    RHI::IndexType::UInt32);
+                encoder->drawIndexed(mGeometry->getIndexCount(), 1, 0, 0, 0);
+            }
+            else {
+                // 如果没有索引缓冲区，直接绘制顶点数量（假设顶点数据为线列表）
+                encoder->draw(mGeometry->getVertexCount(), 1, 0, 0);
+            }
         }
 
-    private:
-        RHI::ShaderHandle m_vs, m_fs;
-        RHI::PipelineLayoutHandle m_layout;
-        RHI::DescriptorSetHandle m_descSet;
-        std::shared_ptr<RHI::ResourceManager> m_resMgr;
+        std::vector<RHI::FramebufferHandle> createFramebuffers(
+            void* /*intermediateView*/,
+            void* depthView,
+            const std::vector<void*>& swapchainViews,
+            uint32_t width, uint32_t height) override
+        {
+            destroyFramebuffers();
+            if (!mPassNode) return {};
+            RHI::RenderPassHandle rpHandle = mPassNode->getRenderPassHandle();
+            auto* rpObj = mResMgr->getRenderPass(rpHandle);
+            if (!rpObj) return {};
+
+            for (void* swapView : swapchainViews) {
+                RHI::FramebufferDesc fbDesc;
+                fbDesc.renderPass = rpObj->getNativeHandle();
+                fbDesc.attachments = { swapView, depthView };
+                fbDesc.extent.width = width;
+                fbDesc.extent.height = height;
+                fbDesc.layers = 1;
+                RHI::FramebufferHandle fb = mResMgr->createFramebuffer(fbDesc);
+                mframeBuffers.push_back(fb);
+            }
+            return mframeBuffers;
+        }
     };
 }

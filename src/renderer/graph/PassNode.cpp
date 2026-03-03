@@ -8,8 +8,21 @@ namespace StarryEngine::RenderGraph {
         : m_name(name), m_builder(name) {
     }
 
+    PassNode::~PassNode() {
+        if (m_resMgr) {
+            if (m_renderPassHandle.isValid()) {
+                m_resMgr->destroy(m_renderPassHandle);
+            }
+            for (auto& pipe : m_pipelines) {
+                if (pipe.isValid()) {
+                    m_resMgr->destroy(pipe);
+                }
+            }
+        }
+    }
+
     SubpassBuilder& PassNode::addSubpass(const std::string& subpassName) {
-        return m_builder.addSubpass(SubpassBuilder(subpassName)); // 返回 SubpassBuilder&
+        return m_builder.addSubpass(SubpassBuilder(subpassName));
     }
 
     void PassNode::setClearColor(const std::string& attachmentName, const RHI::Color& color) {
@@ -27,12 +40,10 @@ namespace StarryEngine::RenderGraph {
 
     void PassNode::collectResourceUsage(const std::unordered_map<std::string, TextureId>& nameToTexId,
         const std::unordered_map<std::string, BufferId>& nameToBufId) {
-        // 如果没有缓存构建结果，则构建并缓存
         if (!m_cachedBuildResult) {
             m_cachedBuildResult = m_builder.build(true);
         }
 
-        // 获取 SubpassBuilder 列表（需要在 RenderPassBuilder 中添加 getter）
         const auto& subpassBuilders = m_builder.getSubpassBuilders();
 
         m_readTextures.clear();
@@ -61,13 +72,11 @@ namespace StarryEngine::RenderGraph {
         }
     }
 
-    // 修改 compile 函数，使用缓存的 buildResult
     bool PassNode::compile(std::shared_ptr<RHI::ResourceManager> resMgr,
         const std::unordered_map<TextureId, RHI::TextureHandle>& texMap,
         const std::unordered_map<BufferId, RHI::BufferHandle>& bufMap) {
         m_resMgr = resMgr;
 
-        // 如果没有缓存，则构建（理论上 collectResourceUsage 已构建）
         if (!m_cachedBuildResult) {
             m_cachedBuildResult = m_builder.build(true);
         }
@@ -75,17 +84,17 @@ namespace StarryEngine::RenderGraph {
         auto& buildResult = *m_cachedBuildResult;
         m_attachmentNameToIndex = buildResult.attachmentNameToIndex;
 
-        auto renderPassDesc = buildResult.renderPass->getRenderPassDesc();
-        std::cerr << "Attempting to create RenderPass with " << renderPassDesc.attachments.size() << " attachments:" << std::endl;
-        for (size_t i = 0; i < renderPassDesc.attachments.size(); ++i) {
-            const auto& att = renderPassDesc.attachments[i];
-            std::cerr << "  att[" << i << "]: format=" << static_cast<int>(att.format)
-                << ", loadOp=" << static_cast<int>(att.loadOp)
-                << ", storeOp=" << static_cast<int>(att.storeOp)
-                << ", initialLayout=" << static_cast<int>(att.initialLayout)
-                << ", finalLayout=" << static_cast<int>(att.finalLayout) << std::endl;
+        for (size_t i = 0; i < buildResult.renderPassDesc.subpasses.size(); ++i) {
+            const auto& subpass = buildResult.renderPassDesc.subpasses[i];
+            std::cout << "[PassNode::compile] Subpass " << i << " depth layout: "
+                << static_cast<int>(subpass.depthStencilAttachment.layout) << std::endl;
         }
-        m_renderPassHandle = resMgr->createRenderPass(renderPassDesc, m_name);
+
+        // 创建 RenderPass
+        m_renderPassHandle = resMgr->createRenderPass(buildResult.renderPassDesc, m_name);
+        if (!m_renderPassHandle.isValid()) {
+            throw std::runtime_error("Failed to create RenderPass: " + m_name);
+        }
 
         m_pipelines.clear();
         m_subpassRenderers.clear();
@@ -94,27 +103,17 @@ namespace StarryEngine::RenderGraph {
             const auto& pipelineDesc = buildResult.pipelineDescriptions[i];
             auto renderer = buildResult.subpassRenderers[i];
 
-            // 构建 GraphicsPipelineDesc（从 pipelineDesc 复制）
-            RHI::GraphicsPipelineDesc gpDesc;
-            gpDesc.vertexShader = pipelineDesc.vertexShader;
-            gpDesc.fragmentShader = pipelineDesc.fragmentShader;
-            gpDesc.vertexInput = pipelineDesc.vertexInput;
-            gpDesc.topology = pipelineDesc.topology;
-            gpDesc.rasterizer = pipelineDesc.rasterizer;
-            gpDesc.multisample = pipelineDesc.multisample;
-            gpDesc.depthStencil = pipelineDesc.depthStencil;
-            gpDesc.colorBlend = pipelineDesc.colorBlend;
-            gpDesc.dynamicStates = pipelineDesc.dynamicStates;
-            gpDesc.viewport = pipelineDesc.viewport;
-            gpDesc.pipelineLayoutHandle = pipelineDesc.pipelineLayoutHandle;
+            // 构建 GraphicsPipelineDesc
+            RHI::GraphicsPipelineDesc gpDesc = pipelineDesc;
             gpDesc.renderPass = m_renderPassHandle;
             gpDesc.subpass = static_cast<uint32_t>(i);
-            gpDesc.debugName = pipelineDesc.debugName.empty() ? m_name + "_subpass" + std::to_string(i) : pipelineDesc.debugName;
+            if (gpDesc.debugName.empty()) {
+                gpDesc.debugName = m_name + "_subpass" + std::to_string(i);
+            }
 
             auto pipelineHandle = resMgr->createGraphicsPipeline(gpDesc);
             if (!pipelineHandle.isValid()) {
-                std::cerr << "[PassNode] Failed to create Pipeline for subpass " << i << std::endl;
-                return false;
+                throw std::runtime_error("Failed to create Pipeline for subpass " + std::to_string(i));
             }
 
             m_pipelines.push_back(pipelineHandle);
@@ -137,12 +136,6 @@ namespace StarryEngine::RenderGraph {
             }
         }
 
-        std::cout << "PassNode::compile: attachmentNames.size() = " << buildResult.attachmentNames.size() << std::endl;
-        std::cout << "m_clearValues.size() = " << m_clearValues.size() << std::endl;
-        for (size_t i = 0; i < m_clearValues.size(); ++i) {
-            std::cout << "  clearValue[" << i << "] type: " << (i == 0 ? "color" : "depth") << std::endl; // 假设你的假设
-        }
-
         return true;
     }
 
@@ -150,15 +143,13 @@ namespace StarryEngine::RenderGraph {
         uint32_t frameIndex,
         RHI::FramebufferHandle framebuffer) {
         if (!m_renderPassHandle.isValid() || m_pipelines.empty()) {
-            std::cerr << "[PassNode] Pass not compiled: " << m_name << std::endl;
-            return;
+            throw std::runtime_error("Pass not compiled: " + m_name);
         }
 
         auto* renderPassObj = m_resMgr->getRenderPass(m_renderPassHandle);
         auto* fbObj = m_resMgr->getFramebuffer(framebuffer);
         if (!renderPassObj || !fbObj) return;
 
-        // 构建 RenderPassBeginInfo
         RHI::RenderPassBeginInfo beginInfo{};
         beginInfo.renderPass = renderPassObj->getNativeHandle();
         beginInfo.framebuffer = fbObj->getNativeHandle();
@@ -173,12 +164,10 @@ namespace StarryEngine::RenderGraph {
                 encoder->nextSubpass(RHI::SubpassContents::Inline);
             }
 
-            // ***** 在这里设置动态状态 *****
+            // 设置动态状态
             RHI::Viewport viewport{
-                0.0f,
-                0.0f,                      // 从顶部开始
-                static_cast<float>(m_width),
-                static_cast<float>(m_height),
+                0.0f, 0.0f,
+                static_cast<float>(m_width), static_cast<float>(m_height),
                 0.0f, 1.0f
             };
             encoder->setViewport(viewport);
@@ -194,4 +183,5 @@ namespace StarryEngine::RenderGraph {
 
         encoder->endRenderPass();
     }
+
 } // namespace StarryEngine::RenderGraph

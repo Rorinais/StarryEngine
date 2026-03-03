@@ -455,11 +455,13 @@ namespace StarryEngine::RHI {
         std::vector<std::vector<VkAttachmentReference>> vkColorRefs;
         std::vector<std::vector<VkAttachmentReference>> vkResolveRefs;
         std::vector<VkAttachmentReference> vkDepthStencilRefs;
-        vkSubpasses.reserve(mDesc.subpasses.size());
 
-        for (size_t i = 0; i < vkAttachments.size(); ++i) {
-            std::cout << "vkAttachments[" << i << "].format = " << vkAttachments[i].format << std::endl;
-        }
+        // 关键修复：预分配容量，避免重新分配导致指针失效
+        vkSubpasses.reserve(mDesc.subpasses.size());
+        vkInputRefs.reserve(mDesc.subpasses.size());
+        vkColorRefs.reserve(mDesc.subpasses.size());
+        vkResolveRefs.reserve(mDesc.subpasses.size());
+        vkDepthStencilRefs.reserve(mDesc.subpasses.size());
 
         for (const auto& subpass : mDesc.subpasses) {
             // 输入附件
@@ -469,7 +471,7 @@ namespace StarryEngine::RHI {
             for (const auto& ref : subpass.inputAttachments) {
                 VkAttachmentReference vkRef = {
                     ref.attachment,
-                    FUNC::RHI_TO_VK_ImageLayout(ref.layout)   
+                    FUNC::RHI_TO_VK_ImageLayout(ref.layout)
                 };
                 inputRefs.push_back(vkRef);
             }
@@ -481,7 +483,7 @@ namespace StarryEngine::RHI {
             for (const auto& ref : subpass.colorAttachments) {
                 VkAttachmentReference vkRef = {
                     ref.attachment,
-                    FUNC::RHI_TO_VK_ImageLayout(ref.layout)   
+                    FUNC::RHI_TO_VK_ImageLayout(ref.layout)
                 };
                 colorRefs.push_back(vkRef);
             }
@@ -493,7 +495,7 @@ namespace StarryEngine::RHI {
             for (const auto& ref : subpass.resolveAttachments) {
                 VkAttachmentReference vkRef = {
                     ref.attachment,
-                    FUNC::RHI_TO_VK_ImageLayout(ref.layout)  
+                    FUNC::RHI_TO_VK_ImageLayout(ref.layout)
                 };
                 resolveRefs.push_back(vkRef);
             }
@@ -505,7 +507,7 @@ namespace StarryEngine::RHI {
             };
             if (subpass.depthStencilAttachment.attachment != VK_ATTACHMENT_UNUSED) {
                 depthRef.attachment = subpass.depthStencilAttachment.attachment;
-                depthRef.layout = FUNC::RHI_TO_VK_ImageLayout(subpass.depthStencilAttachment.layout); // 映射
+                depthRef.layout = FUNC::RHI_TO_VK_ImageLayout(subpass.depthStencilAttachment.layout);
             }
             vkDepthStencilRefs.push_back(depthRef);
 
@@ -516,6 +518,7 @@ namespace StarryEngine::RHI {
             vkSubpass.colorAttachmentCount = static_cast<uint32_t>(colorRefs.size());
             vkSubpass.pColorAttachments = colorRefs.empty() ? nullptr : colorRefs.data();
             vkSubpass.pResolveAttachments = resolveRefs.empty() ? nullptr : resolveRefs.data();
+            // 关键：这里使用 vkDepthStencilRefs.back() 的地址，由于已预分配容量，地址稳定
             vkSubpass.pDepthStencilAttachment = &vkDepthStencilRefs.back();
             vkSubpass.preserveAttachmentCount = static_cast<uint32_t>(subpass.preserveAttachments.size());
             vkSubpass.pPreserveAttachments = subpass.preserveAttachments.empty() ? nullptr : subpass.preserveAttachments.data();

@@ -4,29 +4,18 @@
 #include <vector>
 #include <memory>
 #include <unordered_map>
-#include <functional>
-
+#include <set>
+#include <optional>
 #include "Types.hpp"
-#include "renderpass/Subpass.hpp"
-#include "renderpass/RenderPass.hpp"
-#include "../subpassRenderer/ISubpassRenderer.hpp"
+#include "RenderPassBuilder.hpp"
 
 namespace StarryEngine::RenderGraph {
+    class ISubpassRenderer;
+
     class PassNode {
     public:
         explicit PassNode(const std::string& name);
-        ~PassNode() {
-            if (m_resMgr) {
-                if (m_renderPassHandle.isValid()) {
-                    m_resMgr->destroy(m_renderPassHandle);
-                }
-                for (auto& pipe : m_pipelines) {
-                    if (pipe.isValid()) {
-                        m_resMgr->destroy(pipe);
-                    }
-                }
-            }
-        }
+        ~PassNode();
 
         // 获取 RenderPassBuilder 进行附件和 Subpass 配置
         RenderPassBuilder& getBuilder() { return m_builder; }
@@ -81,9 +70,9 @@ namespace StarryEngine::RenderGraph {
         uint32_t m_height = 0;
 
         RHI::RenderPassHandle m_renderPassHandle;
-        std::vector<RHI::PipelineHandle> m_pipelines;      // 每个 Subpass 一个 Pipeline
-        std::vector<ISubpassRenderer*> m_subpassRenderers; // 原始指针
-        std::vector<RHI::ClearValue> m_clearValues;        // 按附件索引
+        std::vector<RHI::PipelineHandle> m_pipelines;          // 每个 Subpass 一个 Pipeline
+        std::vector<ISubpassRenderer*> m_subpassRenderers;      // 原始指针
+        std::vector<RHI::ClearValue> m_clearValues;             // 按附件索引
         std::unordered_map<std::string, uint32_t> m_attachmentNameToIndex;
         std::unordered_map<std::string, RHI::ClearValue> m_clearValueMap;
     };
