@@ -56,7 +56,6 @@ namespace StarryEngine {
         void createGrid();
         void createPostBuffer();
         void buildRenderGraph();
-        void createFramebuffers();
 
     private:
         Window::Ptr m_window;
@@ -71,11 +70,11 @@ namespace StarryEngine {
         std::shared_ptr<RHI::ResourceManager> m_resMgr;
         std::unique_ptr<RenderGraph::RenderGraph> m_renderGraph;
 
-        RenderGraph::TextureId m_intermediateTexId;
         RenderGraph::TextureId m_depthTexId;
 
         std::shared_ptr<RenderGraph::GBufferRenderer> m_gbufferRenderer;
         std::shared_ptr<RenderGraph::GridRenderer> m_gridRenderer;
+        std::shared_ptr<RenderGraph::PostProcessRenderer> m_postRenderer;
 
         RHI::DescriptorPoolHandle mDescriptorPoolHandle;
         RHI::PipelineLayoutHandle mPipelineLayoutHandle;

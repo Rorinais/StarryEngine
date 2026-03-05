@@ -13,7 +13,6 @@
 #include "PassNode.hpp"
 
 namespace StarryEngine::RenderGraph {
-
     class RenderGraph {
     public:
         explicit RenderGraph(std::shared_ptr<VulkanRHI> rhi);
@@ -22,11 +21,15 @@ namespace StarryEngine::RenderGraph {
         RenderGraph(const RenderGraph&) = delete;
         RenderGraph& operator=(const RenderGraph&) = delete;
 
+        // 设置交换链图像数量（必须在 compile 前调用）
+        void setSwapchainImageCount(uint32_t count);
+
         // 创建虚拟纹理资源
         TextureId createVirtualTexture(const RHI::TextureDesc& desc, const std::string& name = "");
 
-        // 导入外部纹理（如交换链图像）
+        // 导入外部纹理（支持多视图，如交换链）
         TextureId importExternalTexture(RHI::TextureHandle externalHandle,
+            const std::vector<void*>& imageViews,
             const RHI::TextureDesc& desc,
             RHI::ImageLayout initialLayout,
             const std::string& name = "");
@@ -37,33 +40,20 @@ namespace StarryEngine::RenderGraph {
         // 添加 PassNode
         PassNode* addPassNode(const std::string& name);
 
-        // 编译整个图
+        // 编译整个图（自动创建帧缓冲）
         bool compile();
 
         // 执行一帧
         void execute(uint32_t frameIndex, RHI::RHICommandEncoder* encoder);
 
         // 获取物理资源（调试用）
-        RHI::TextureHandle getPhysicalTexture(TextureId id) const;
+        RHI::TextureHandle getPhysicalTextureHandle(TextureId id) const;
         RHI::BufferHandle getPhysicalBuffer(BufferId id) const;
 
-        void setPassFramebuffers(const std::vector<RHI::FramebufferHandle>& framebuffers) {
-            m_passFramebuffers = framebuffers;
-        }
-
         const std::vector<PassNode*>& getSortedPasses() const { return m_sortedPasses; }
-        std::vector<RHI::FramebufferHandle> getPassFramebuffers() { return m_passFramebuffers; }
-        void addDependency(PassNode* from, PassNode* to) {
-            // 查找索引
-            uint32_t srcIdx = UINT32_MAX, dstIdx = UINT32_MAX;
-            for (uint32_t i = 0; i < m_passes.size(); ++i) {
-                if (m_passes[i].get() == from) srcIdx = i;
-                if (m_passes[i].get() == to) dstIdx = i;
-            }
-            if (srcIdx != UINT32_MAX && dstIdx != UINT32_MAX) {
-                m_manualDependencies.push_back({ srcIdx, dstIdx });
-            }
-        }
+
+        void addDependency(PassNode* from, PassNode* to);
+
     private:
         struct VirtualTexture {
             TextureId id;
@@ -71,6 +61,7 @@ namespace StarryEngine::RenderGraph {
             std::string name;
             bool imported;
             RHI::TextureHandle externalHandle;
+            std::vector<void*> externalViews;  // 导入时的多视图
             RHI::ImageLayout initialLayout;
         };
 
@@ -82,11 +73,13 @@ namespace StarryEngine::RenderGraph {
             RHI::BufferHandle externalHandle;
         };
 
-        // 拓扑排序辅助
         std::vector<uint32_t> topologicalSort(const std::vector<std::vector<uint32_t>>& adj) const;
 
         std::shared_ptr<VulkanRHI> m_rhi;
         std::shared_ptr<RHI::ResourceManager> m_resMgr;
+
+        // 交换链图像数量
+        uint32_t m_swapchainImageCount = 0;
 
         // 虚拟资源存储
         std::vector<VirtualTexture> m_virtualTextures;
@@ -102,11 +95,12 @@ namespace StarryEngine::RenderGraph {
         std::vector<std::pair<uint32_t, uint32_t>> m_manualDependencies;
 
         // 编译后数据
-        std::vector<PassNode*> m_sortedPasses;                       // 拓扑排序后的 Pass 执行顺序
-        std::unordered_map<TextureId, RHI::TextureHandle> m_textureMap; // 虚拟 -> 物理
+        std::vector<PassNode*> m_sortedPasses;
+        std::unordered_map<TextureId, PhysicalTextureInfo> m_textureMap;  // 虚拟 -> 物理信息
         std::unordered_map<BufferId, RHI::BufferHandle> m_bufferMap;
 
-        std::vector<RHI::FramebufferHandle> m_passFramebuffers;
+        // 每个 Pass 的帧缓冲（[passIndex][imageIndex]）
+        std::vector<std::vector<RHI::FramebufferHandle>> m_perPassFramebuffers;
     };
 
 } // namespace StarryEngine::RenderGraph

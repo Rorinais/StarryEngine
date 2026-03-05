@@ -54,31 +54,7 @@ namespace StarryEngine::RenderGraph {
             // 5. 绘制
             encoder->drawIndexed(mGeometry->getIndexCount(), 1, 0, 0, 0);
         }
-
-        std::vector<RHI::FramebufferHandle> createFramebuffers(
-            void* /*intermediateView*/,        // 不再使用
-            void* depthView,
-            const std::vector<void*>& swapchainViews,
-            uint32_t width, uint32_t height) override
-        {
-            destroyFramebuffers();
-            if (!mPassNode) return {};
-            RHI::RenderPassHandle rpHandle = mPassNode->getRenderPassHandle();
-            auto* rpObj = mResMgr->getRenderPass(rpHandle);
-            if (!rpObj) return {};
-
-            for (void* swapView : swapchainViews) {
-                RHI::FramebufferDesc fbDesc;
-                fbDesc.renderPass = rpObj->getNativeHandle();
-                fbDesc.attachments = { swapView, depthView }; // 颜色 + 深度
-                fbDesc.extent.width = width;
-                fbDesc.extent.height = height;
-                fbDesc.layers = 1;
-                RHI::FramebufferHandle fb = mResMgr->createFramebuffer(fbDesc);
-                mframeBuffers.push_back(fb);
-            }
-            return mframeBuffers;
-        }
+        
     };
 
     class PostProcessRenderer : public ISubpassRenderer {
@@ -107,31 +83,6 @@ namespace StarryEngine::RenderGraph {
 
         void updateInputAttachment(uint32_t binding, RHI::TextureHandle texture, RHI::ImageLayout layout = RHI::ImageLayout::ShaderReadOnly) {
             mMaterial->updateInputAttachment(binding, texture, layout);
-        }
-
-        std::vector<RHI::FramebufferHandle> createFramebuffers(
-            void* intermediateView,
-            void* depthView,
-            const std::vector<void*>& swapchainViews,
-            uint32_t width, uint32_t height) override
-        {
-            destroyFramebuffers();
-            if (!mPassNode) return {};
-            RHI::RenderPassHandle rpHandle = mPassNode->getRenderPassHandle();
-            auto* rpObj = mResMgr->getRenderPass(rpHandle);
-            if (!rpObj) return {};
-
-            for (void* swapView : swapchainViews) {
-                RHI::FramebufferDesc fbDesc;
-                fbDesc.renderPass = rpObj->getNativeHandle();
-                fbDesc.attachments = { swapView, intermediateView };
-                fbDesc.extent.width = width;
-                fbDesc.extent.height = height;
-                fbDesc.layers = 1;
-                RHI::FramebufferHandle fb = mResMgr->createFramebuffer(fbDesc);
-                mframeBuffers.push_back(fb);
-            }
-            return mframeBuffers;
         }
     };
 
@@ -178,31 +129,6 @@ namespace StarryEngine::RenderGraph {
                 // 如果没有索引缓冲区，直接绘制顶点数量（假设顶点数据为线列表）
                 encoder->draw(mGeometry->getVertexCount(), 1, 0, 0);
             }
-        }
-
-        std::vector<RHI::FramebufferHandle> createFramebuffers(
-            void* /*intermediateView*/,
-            void* depthView,
-            const std::vector<void*>& swapchainViews,
-            uint32_t width, uint32_t height) override
-        {
-            destroyFramebuffers();
-            if (!mPassNode) return {};
-            RHI::RenderPassHandle rpHandle = mPassNode->getRenderPassHandle();
-            auto* rpObj = mResMgr->getRenderPass(rpHandle);
-            if (!rpObj) return {};
-
-            for (void* swapView : swapchainViews) {
-                RHI::FramebufferDesc fbDesc;
-                fbDesc.renderPass = rpObj->getNativeHandle();
-                fbDesc.attachments = { swapView, depthView };
-                fbDesc.extent.width = width;
-                fbDesc.extent.height = height;
-                fbDesc.layers = 1;
-                RHI::FramebufferHandle fb = mResMgr->createFramebuffer(fbDesc);
-                mframeBuffers.push_back(fb);
-            }
-            return mframeBuffers;
         }
     };
 }

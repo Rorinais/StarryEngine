@@ -25,21 +25,32 @@ namespace StarryEngine::RenderGraph {
         return m_builder.addSubpass(SubpassBuilder(subpassName));
     }
 
-    void PassNode::setClearColor(const std::string& attachmentName, const RHI::Color& color) {
+    void PassNode::setClearColor(const std::string& key, const RHI::Color& color) {
         RHI::ClearValue cv;
         cv.color = color;
-        m_clearValueMap[attachmentName] = cv;
+        m_clearValueMap[key] = cv;  // 注意：这里用键存储，后续映射到索引
     }
 
-    void PassNode::setClearDepthStencil(const std::string& attachmentName, float depth, uint32_t stencil) {
+    void PassNode::setClearDepthStencil(const std::string& key, float depth, uint32_t stencil) {
         RHI::ClearValue cv;
         cv.depth = depth;
         cv.stencil = stencil;
-        m_clearValueMap[attachmentName] = cv;
+        m_clearValueMap[key] = cv;
     }
 
-    void PassNode::collectResourceUsage(const std::unordered_map<std::string, TextureId>& nameToTexId,
-        const std::unordered_map<std::string, BufferId>& nameToBufId) {
+    void PassNode::bindAttachment(const std::string& key, TextureId textureId) {
+        m_attachmentBindings[key] = textureId;
+    }
+
+    TextureId PassNode::getBoundTextureId(const std::string& key) const {
+        auto it = m_attachmentBindings.find(key);
+        if (it == m_attachmentBindings.end()) {
+            throw std::runtime_error("Attachment key not bound: " + key);
+        }
+        return it->second;
+    }
+
+    void PassNode::collectResourceUsage() {
         if (!m_cachedBuildResult) {
             m_cachedBuildResult = m_builder.build(true);
         }
@@ -52,29 +63,42 @@ namespace StarryEngine::RenderGraph {
         m_writeBuffers.clear();
 
         for (const auto& subpass : subpassBuilders) {
-            for (const auto& name : subpass.getColorAttachmentNames()) {
-                auto it = nameToTexId.find(name);
-                if (it != nameToTexId.end()) m_writeTextures.insert(it->second);
+            for (const auto& key : subpass.getColorAttachmentNames()) {
+                auto it = m_attachmentBindings.find(key);
+                if (it != m_attachmentBindings.end()) {
+                    m_writeTextures.insert(it->second);
+                }
+                else {
+                    throw std::runtime_error("Attachment key not bound: " + key);
+                }
             }
-            for (const auto& name : subpass.getInputAttachmentNames()) {
-                auto it = nameToTexId.find(name);
-                if (it != nameToTexId.end()) m_readTextures.insert(it->second);
+            for (const auto& key : subpass.getInputAttachmentNames()) {
+                auto it = m_attachmentBindings.find(key);
+                if (it != m_attachmentBindings.end()) {
+                    m_readTextures.insert(it->second);
+                }
+                else {
+                    throw std::runtime_error("Attachment key not bound: " + key);
+                }
             }
             if (subpass.getDepthStencilAttachmentName()) {
-                const auto& name = *subpass.getDepthStencilAttachmentName();
-                auto it = nameToTexId.find(name);
-                if (it != nameToTexId.end()) {
+                const auto& key = *subpass.getDepthStencilAttachmentName();
+                auto it = m_attachmentBindings.find(key);
+                if (it != m_attachmentBindings.end()) {
                     m_writeTextures.insert(it->second);
                     m_readTextures.insert(it->second);
                 }
+                else {
+                    throw std::runtime_error("Attachment key not bound: " + key);
+                }
             }
-            // 缓冲区类似，可忽略或后续扩展
+            // 缓冲区暂时忽略
         }
     }
 
     bool PassNode::compile(std::shared_ptr<RHI::ResourceManager> resMgr,
-        const std::unordered_map<TextureId, RHI::TextureHandle>& texMap,
-        const std::unordered_map<BufferId, RHI::BufferHandle>& bufMap) {
+        const std::unordered_map<TextureId, PhysicalTextureInfo>& /*texMap*/,
+        const std::unordered_map<BufferId, RHI::BufferHandle>& /*bufMap*/) {
         m_resMgr = resMgr;
 
         if (!m_cachedBuildResult) {
@@ -97,7 +121,6 @@ namespace StarryEngine::RenderGraph {
             const auto& pipelineDesc = buildResult.pipelineDescriptions[i];
             auto renderer = buildResult.subpassRenderers[i];
 
-            // 构建 GraphicsPipelineDesc
             RHI::GraphicsPipelineDesc gpDesc = pipelineDesc;
             gpDesc.renderPass = m_renderPassHandle;
             gpDesc.subpass = static_cast<uint32_t>(i);
@@ -114,10 +137,10 @@ namespace StarryEngine::RenderGraph {
             m_subpassRenderers.push_back(renderer);
         }
 
-        // 构建清除值列表
+        // 构建清除值列表（按附件顺序）
         m_clearValues.clear();
-        for (const auto& name : buildResult.attachmentNames) {
-            auto it = m_clearValueMap.find(name);
+        for (const auto& key : buildResult.attachmentNames) {
+            auto it = m_clearValueMap.find(key);
             if (it != m_clearValueMap.end()) {
                 m_clearValues.push_back(it->second);
             }
@@ -158,7 +181,6 @@ namespace StarryEngine::RenderGraph {
                 encoder->nextSubpass(RHI::SubpassContents::Inline);
             }
 
-            // 设置动态状态
             RHI::Viewport viewport{
                 0.0f, 0.0f,
                 static_cast<float>(m_width), static_cast<float>(m_height),
@@ -176,6 +198,13 @@ namespace StarryEngine::RenderGraph {
         }
 
         encoder->endRenderPass();
+    }
+
+    const std::vector<std::string>& PassNode::getAttachmentNames() const {
+        if (!m_cachedBuildResult) {
+            throw std::runtime_error("PassNode not built yet: " + m_name);
+        }
+        return m_cachedBuildResult->attachmentNames;
     }
 
 } // namespace StarryEngine::RenderGraph

@@ -92,12 +92,6 @@ namespace StarryEngine::RenderGraph {
             mMaterial->createDescriptorSetLayout();
         }
 
-        virtual std::vector<RHI::FramebufferHandle> createFramebuffers(
-            void* intermediateView,
-            void* depthView,
-            const std::vector<void*>& swapchainViews,
-            uint32_t width, uint32_t height) = 0;
-
         void destroyFramebuffers() {
             for (auto & fbo :mframeBuffers){
                 mResMgr->destroy(fbo);

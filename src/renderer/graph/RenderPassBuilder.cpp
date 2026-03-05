@@ -9,14 +9,14 @@ namespace StarryEngine::RenderGraph {
         : m_name(std::move(name)) {
     }
 
-    RenderPassBuilder& RenderPassBuilder::addAttachment(const std::string& name, const RHI::AttachmentDesc& attachment) {
-        if (m_attachmentIndices.find(name) != m_attachmentIndices.end()) {
-            throw std::runtime_error("Attachment with name '" + name + "' already exists");
+    RenderPassBuilder& RenderPassBuilder::addAttachment(const std::string& key, const RHI::AttachmentDesc& attachment) {
+        if (m_attachmentIndices.find(key) != m_attachmentIndices.end()) {
+            throw std::runtime_error("Attachment with key '" + key + "' already exists");
         }
 
         uint32_t index = static_cast<uint32_t>(m_attachments.size());
-        m_attachmentIndices[name] = index;
-        m_attachmentNames.push_back(name);
+        m_attachmentIndices[key] = index;
+        m_attachmentNames.push_back(key);
         m_attachments.push_back(attachment);
         return *this;
     }
@@ -31,7 +31,7 @@ namespace StarryEngine::RenderGraph {
         return *this;
     }
 
-    RenderPassBuilder& RenderPassBuilder::registerColorAttachment(const std::string& name,
+    RenderPassBuilder& RenderPassBuilder::registerColorAttachment(const std::string& key,
         RHI::Format format,
         RHI::ImageLayout finalLayout,
         RHI::AttachmentLoadOp loadOp,
@@ -46,10 +46,10 @@ namespace StarryEngine::RenderGraph {
         attachment.stencilStoreOp = RHI::AttachmentStoreOp::DontCare;
         attachment.initialLayout = initialLayout;
         attachment.finalLayout = finalLayout;
-        return addAttachment(name, attachment);
+        return addAttachment(key, attachment);
     }
 
-    RenderPassBuilder& RenderPassBuilder::registerDepthAttachment(const std::string& name,
+    RenderPassBuilder& RenderPassBuilder::registerDepthAttachment(const std::string& key,
         RHI::Format format,
         RHI::AttachmentLoadOp loadOp,
         RHI::AttachmentStoreOp storeOp,
@@ -64,10 +64,10 @@ namespace StarryEngine::RenderGraph {
         attachment.stencilStoreOp = RHI::AttachmentStoreOp::DontCare;
         attachment.initialLayout = initialLayout;
         attachment.finalLayout = finalLayout;
-        return addAttachment(name, attachment);
+        return addAttachment(key, attachment);
     }
 
-    RenderPassBuilder& RenderPassBuilder::registerResolveAttachment(const std::string& name,
+    RenderPassBuilder& RenderPassBuilder::registerResolveAttachment(const std::string& key,
         RHI::Format format,
         RHI::ImageLayout finalLayout) {
         RHI::AttachmentDesc attachment{};
@@ -79,10 +79,10 @@ namespace StarryEngine::RenderGraph {
         attachment.stencilStoreOp = RHI::AttachmentStoreOp::DontCare;
         attachment.initialLayout = RHI::ImageLayout::Undefined;
         attachment.finalLayout = finalLayout;
-        return addAttachment(name, attachment);
+        return addAttachment(key, attachment);
     }
 
-    RenderPassBuilder& RenderPassBuilder::registerInputAttachment(const std::string& name,
+    RenderPassBuilder& RenderPassBuilder::registerInputAttachment(const std::string& key,
         RHI::Format format,
         RHI::ImageLayout finalLayout,
         RHI::ImageLayout initialLayout,
@@ -97,14 +97,12 @@ namespace StarryEngine::RenderGraph {
         attachment.stencilStoreOp = RHI::AttachmentStoreOp::DontCare;
         attachment.initialLayout = initialLayout;
         attachment.finalLayout = finalLayout;
-        return addAttachment(name, attachment);
+        return addAttachment(key, attachment);
     }
 
     std::unique_ptr<RenderPassBuildResult> RenderPassBuilder::build(bool autoDependencies) {
-        // 分析附件使用情况
         analyzeAttachmentUsage();
 
-        // 自动推导依赖（不再包含执行依赖）
         if (autoDependencies) {
             generateDependenciesFromUsage();
         }
@@ -113,121 +111,91 @@ namespace StarryEngine::RenderGraph {
         result->name = m_name;
         result->attachmentNames = m_attachmentNames;
         result->attachmentNameToIndex = m_attachmentIndices;
-
-        // 构建 RenderPassDesc
         result->renderPassDesc.attachments = m_attachments;
 
-        // 构建所有子流程描述
         for (uint32_t subpassIndex = 0; subpassIndex < m_subpassBuilders.size(); ++subpassIndex) {
             auto& subpassBuilder = m_subpassBuilders[subpassIndex];
 
-            // 验证子流程中引用的附件都存在
-            for (const auto& name : subpassBuilder.getColorAttachmentNames()) {
-                if (m_attachmentIndices.find(name) == m_attachmentIndices.end()) {
-                    throw std::runtime_error("Color attachment '" + name + "' not found in render pass");
+            // 验证附件存在
+            for (const auto& key : subpassBuilder.getColorAttachmentNames()) {
+                if (m_attachmentIndices.find(key) == m_attachmentIndices.end()) {
+                    throw std::runtime_error("Color attachment key '" + key + "' not found");
                 }
             }
-            for (const auto& name : subpassBuilder.getInputAttachmentNames()) {
-                if (m_attachmentIndices.find(name) == m_attachmentIndices.end()) {
-                    throw std::runtime_error("Input attachment '" + name + "' not found in render pass");
+            for (const auto& key : subpassBuilder.getInputAttachmentNames()) {
+                if (m_attachmentIndices.find(key) == m_attachmentIndices.end()) {
+                    throw std::runtime_error("Input attachment key '" + key + "' not found");
                 }
             }
             if (subpassBuilder.getDepthStencilAttachmentName()) {
-                const auto& name = *subpassBuilder.getDepthStencilAttachmentName();
-                if (m_attachmentIndices.find(name) == m_attachmentIndices.end()) {
-                    throw std::runtime_error("Depth/stencil attachment '" + name + "' not found in render pass");
+                const auto& key = *subpassBuilder.getDepthStencilAttachmentName();
+                if (m_attachmentIndices.find(key) == m_attachmentIndices.end()) {
+                    throw std::runtime_error("Depth/stencil attachment key '" + key + "' not found");
                 }
             }
 
-            for (size_t i = 0; i < m_attachments.size(); ++i) {
-                const auto& att = m_attachments[i];
-            }
-
-            // 构建子流程描述并添加到 renderPassDesc
             result->renderPassDesc.subpasses.push_back(subpassBuilder.buildSubpassDesc(m_attachmentIndices));
-
             result->pipelineNameToSubpassIndexMap[subpassBuilder.getPipelineName()] = subpassIndex;
         }
 
-        // 合并依赖
         result->renderPassDesc.dependencies = mergeDependencies();
 
-
-        // 填充 Pipeline 描述和 Renderer
         for (const auto& subpassBuilder : m_subpassBuilders) {
             result->pipelineDescriptions.push_back(subpassBuilder.getPipelineDescription());
             result->subpassRenderers.push_back(subpassBuilder.getRenderer());
         }
+
         return result;
     }
-
-    // ========== 依赖推导私有方法 ==========
 
     void RenderPassBuilder::analyzeAttachmentUsage() {
         m_attachmentUsage.clear();
 
-        // 初始化附件使用信息
         for (uint32_t i = 0; i < m_attachments.size(); ++i) {
             const auto& attachment = m_attachments[i];
-            const auto& name = m_attachmentNames[i];
-            m_attachmentUsage[name] = {
-                {}, {},
-                attachment.initialLayout,
-                attachment.finalLayout
-            };
+            const auto& key = m_attachmentNames[i];
+            m_attachmentUsage[key] = { {}, {}, attachment.initialLayout, attachment.finalLayout };
         }
 
-        // 分析每个子流程的附件使用
         for (uint32_t subpassIndex = 0; subpassIndex < m_subpassBuilders.size(); ++subpassIndex) {
             const auto& subpassBuilder = m_subpassBuilders[subpassIndex];
 
-            // 颜色附件 = 写入
-            for (const auto& name : subpassBuilder.getColorAttachmentNames()) {
-                m_attachmentUsage[name].writingSubpasses.insert(subpassIndex);
+            for (const auto& key : subpassBuilder.getColorAttachmentNames()) {
+                m_attachmentUsage[key].writingSubpasses.insert(subpassIndex);
             }
-
-            // 输入附件 = 读取
-            for (const auto& name : subpassBuilder.getInputAttachmentNames()) {
-                m_attachmentUsage[name].readingSubpasses.insert(subpassIndex);
+            for (const auto& key : subpassBuilder.getInputAttachmentNames()) {
+                m_attachmentUsage[key].readingSubpasses.insert(subpassIndex);
             }
-
-            // 深度模板附件 = 读写
             if (subpassBuilder.getDepthStencilAttachmentName()) {
-                const auto& name = *subpassBuilder.getDepthStencilAttachmentName();
-                m_attachmentUsage[name].writingSubpasses.insert(subpassIndex);
-                m_attachmentUsage[name].readingSubpasses.insert(subpassIndex);
+                const auto& key = *subpassBuilder.getDepthStencilAttachmentName();
+                m_attachmentUsage[key].writingSubpasses.insert(subpassIndex);
+                m_attachmentUsage[key].readingSubpasses.insert(subpassIndex);
             }
-
-            // 解析附件 = 写入
-            for (const auto& name : subpassBuilder.getResolveAttachmentNames()) {
-                m_attachmentUsage[name].writingSubpasses.insert(subpassIndex);
+            for (const auto& key : subpassBuilder.getResolveAttachmentNames()) {
+                m_attachmentUsage[key].writingSubpasses.insert(subpassIndex);
             }
         }
     }
 
     void RenderPassBuilder::generateDependenciesFromUsage() {
         m_autoDependencies.clear();
-
-        // 为每个附件生成依赖
-        for (const auto& [attachmentName, usage] : m_attachmentUsage) {
-            generateDependenciesForAttachment(attachmentName, usage);
+        for (const auto& [key, usage] : m_attachmentUsage) {
+            generateDependenciesForAttachment(key, usage);
         }
     }
 
-    void RenderPassBuilder::generateDependenciesForAttachment(const std::string& name, const AttachmentUsage& usage) {
+    void RenderPassBuilder::generateDependenciesForAttachment(const std::string& key, const AttachmentUsage& usage) {
         const auto& writers = usage.writingSubpasses;
         const auto& readers = usage.readingSubpasses;
 
-        // 判断附件是否为深度模板
         bool isDepthStencil = false;
-        auto it = m_attachmentIndices.find(name);
+        auto it = m_attachmentIndices.find(key);
         if (it != m_attachmentIndices.end()) {
             uint32_t index = it->second;
             RHI::Format format = m_attachments[index].format;
             isDepthStencil = isDepthStencilFormat(format);
         }
 
-        // 处理写入 -> 读取依赖
         for (uint32_t writer : writers) {
             for (uint32_t reader : readers) {
                 if (reader > writer) {
@@ -241,7 +209,6 @@ namespace StarryEngine::RenderGraph {
             }
         }
 
-        // 处理写入 -> 写入依赖（避免覆盖，如果写入区域可能重叠，则必须序列化）
         std::vector<uint32_t> writersVec(writers.begin(), writers.end());
         for (size_t i = 0; i < writersVec.size(); ++i) {
             for (size_t j = i + 1; j < writersVec.size(); ++j) {
@@ -253,10 +220,8 @@ namespace StarryEngine::RenderGraph {
                 }
             }
         }
-
-        // 外部依赖
         generateExternalDependencies(usage, isDepthStencil);
-    }
+    }  
 
     void RenderPassBuilder::addColorReadAfterWriteDependency(uint32_t src, uint32_t dst) {
         RHI::SubpassDependency dep{};

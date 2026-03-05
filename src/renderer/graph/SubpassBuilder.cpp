@@ -6,32 +6,32 @@ namespace StarryEngine::RenderGraph {
         : m_subpassName(std::move(name)) {
     }
 
-    SubpassBuilder& SubpassBuilder::addColorAttachmentRef(const std::string& name, RHI::ImageLayout layout) {
-        m_colorAttachmentNames.push_back(name);
-        m_attachmentLayouts[name] = layout;
+    SubpassBuilder& SubpassBuilder::addColorAttachmentRef(const std::string& key, RHI::ImageLayout layout) {
+        m_colorAttachmentKeys.push_back(key);
+        m_attachmentLayouts[key] = layout;
         return *this;
     }
 
-    SubpassBuilder& SubpassBuilder::addInputAttachmentRef(const std::string& name, RHI::ImageLayout layout) {
-        m_inputAttachmentNames.push_back(name);
-        m_attachmentLayouts[name] = layout;
+    SubpassBuilder& SubpassBuilder::addInputAttachmentRef(const std::string& key, RHI::ImageLayout layout) {
+        m_inputAttachmentKeys.push_back(key);
+        m_attachmentLayouts[key] = layout;
         return *this;
     }
 
-    SubpassBuilder& SubpassBuilder::addResolveAttachmentRef(const std::string& name, RHI::ImageLayout layout) {
-        m_resolveAttachmentNames.push_back(name);
-        m_attachmentLayouts[name] = layout;
+    SubpassBuilder& SubpassBuilder::addResolveAttachmentRef(const std::string& key, RHI::ImageLayout layout) {
+        m_resolveAttachmentKeys.push_back(key);
+        m_attachmentLayouts[key] = layout;
         return *this;
     }
 
-    SubpassBuilder& SubpassBuilder::addDepthStencilAttachmentRef(const std::string& name, RHI::ImageLayout layout) {
-        m_depthStencilAttachmentName = name;
-        m_attachmentLayouts[name] = layout;
+    SubpassBuilder& SubpassBuilder::addDepthStencilAttachmentRef(const std::string& key, RHI::ImageLayout layout) {
+        m_depthStencilAttachmentKey = key;
+        m_attachmentLayouts[key] = layout;
         return *this;
     }
 
-    SubpassBuilder& SubpassBuilder::addPreserveAttachmentRef(const std::string& name) {
-        m_preserveAttachmentNames.push_back(name);
+    SubpassBuilder& SubpassBuilder::addPreserveAttachmentRef(const std::string& key) {
+        m_preserveAttachmentKeys.push_back(key);
         return *this;
     }
 
@@ -40,75 +40,55 @@ namespace StarryEngine::RenderGraph {
         return *this;
     }
 
-    RHI::SubpassDesc SubpassBuilder::buildSubpassDesc(const std::unordered_map<std::string, uint32_t>& nameToIndexMap) const {
+    SubpassBuilder& SubpassBuilder::setPipelineDescription(const RHI::GraphicsPipelineDesc& desc) {
+        m_pipelineDesc = desc;
+        return *this;
+    }
+
+    SubpassBuilder& SubpassBuilder::setRenderer(ISubpassRenderer* renderer) {
+        m_renderer = renderer;
+        return *this;
+    }
+
+    RHI::SubpassDesc SubpassBuilder::buildSubpassDesc(const std::unordered_map<std::string, uint32_t>& keyToIndexMap) const {
         RHI::SubpassDesc desc;
-        // 显式初始化深度附件为未使用
         desc.depthStencilAttachment = { ATTACHMENT_UNUSED, RHI::ImageLayout::Undefined };
 
-        // 颜色附件
-        for (const auto& name : m_colorAttachmentNames) {
-            auto it = nameToIndexMap.find(name);
-            if (it == nameToIndexMap.end()) {
-                throw std::runtime_error("Color attachment not found: " + name);
-            }
-            auto layoutIt = m_attachmentLayouts.find(name);
-            if (layoutIt == m_attachmentLayouts.end()) {
-                throw std::runtime_error("Layout missing for color attachment: " + name);
-            }
+        for (const auto& key : m_colorAttachmentKeys) {
+            auto it = keyToIndexMap.find(key);
+            if (it == keyToIndexMap.end()) throw std::runtime_error("Color attachment key not found: " + key);
+            auto layoutIt = m_attachmentLayouts.find(key);
+            if (layoutIt == m_attachmentLayouts.end()) throw std::runtime_error("Layout missing for color attachment: " + key);
             desc.colorAttachments.push_back({ it->second, layoutIt->second });
         }
 
-        if (m_depthStencilAttachmentName) {
-            auto it = nameToIndexMap.find(*m_depthStencilAttachmentName);
-            auto layoutIt = m_attachmentLayouts.find(*m_depthStencilAttachmentName);
+        if (m_depthStencilAttachmentKey) {
+            auto it = keyToIndexMap.find(*m_depthStencilAttachmentKey);
+            if (it == keyToIndexMap.end()) throw std::runtime_error("Depth attachment key not found: " + *m_depthStencilAttachmentKey);
+            auto layoutIt = m_attachmentLayouts.find(*m_depthStencilAttachmentKey);
+            if (layoutIt == m_attachmentLayouts.end()) throw std::runtime_error("Layout missing for depth attachment: " + *m_depthStencilAttachmentKey);
             desc.depthStencilAttachment = { it->second, layoutIt->second };
         }
 
-        // 输入附件
-        for (const auto& name : m_inputAttachmentNames) {
-            auto it = nameToIndexMap.find(name);
-            if (it == nameToIndexMap.end()) {
-                throw std::runtime_error("Input attachment not found: " + name);
-            }
-            auto layoutIt = m_attachmentLayouts.find(name);
-            if (layoutIt == m_attachmentLayouts.end()) {
-                throw std::runtime_error("Layout missing for input attachment: " + name);
-            }
+        for (const auto& key : m_inputAttachmentKeys) {
+            auto it = keyToIndexMap.find(key);
+            if (it == keyToIndexMap.end()) throw std::runtime_error("Input attachment key not found: " + key);
+            auto layoutIt = m_attachmentLayouts.find(key);
+            if (layoutIt == m_attachmentLayouts.end()) throw std::runtime_error("Layout missing for input attachment: " + key);
             desc.inputAttachments.push_back({ it->second, layoutIt->second });
         }
 
-        // 解析附件
-        for (const auto& name : m_resolveAttachmentNames) {
-            auto it = nameToIndexMap.find(name);
-            if (it == nameToIndexMap.end()) {
-                throw std::runtime_error("Resolve attachment not found: " + name);
-            }
-            auto layoutIt = m_attachmentLayouts.find(name);
-            if (layoutIt == m_attachmentLayouts.end()) {
-                throw std::runtime_error("Layout missing for resolve attachment: " + name);
-            }
+        for (const auto& key : m_resolveAttachmentKeys) {
+            auto it = keyToIndexMap.find(key);
+            if (it == keyToIndexMap.end()) throw std::runtime_error("Resolve attachment key not found: " + key);
+            auto layoutIt = m_attachmentLayouts.find(key);
+            if (layoutIt == m_attachmentLayouts.end()) throw std::runtime_error("Layout missing for resolve attachment: " + key);
             desc.resolveAttachments.push_back({ it->second, layoutIt->second });
         }
 
-        // 深度模板附件（如果设置了）
-        if (m_depthStencilAttachmentName) {
-            auto it = nameToIndexMap.find(*m_depthStencilAttachmentName);
-            if (it == nameToIndexMap.end()) {
-                throw std::runtime_error("Depth/stencil attachment not found: " + *m_depthStencilAttachmentName);
-            }
-            auto layoutIt = m_attachmentLayouts.find(*m_depthStencilAttachmentName);
-            if (layoutIt == m_attachmentLayouts.end()) {
-                throw std::runtime_error("Layout missing for depth/stencil attachment: " + *m_depthStencilAttachmentName);
-            }
-            desc.depthStencilAttachment = { it->second, layoutIt->second };
-        }
-
-        // 保留附件
-        for (const auto& name : m_preserveAttachmentNames) {
-            auto it = nameToIndexMap.find(name);
-            if (it == nameToIndexMap.end()) {
-                throw std::runtime_error("Preserve attachment not found: " + name);
-            }
+        for (const auto& key : m_preserveAttachmentKeys) {
+            auto it = keyToIndexMap.find(key);
+            if (it == keyToIndexMap.end()) throw std::runtime_error("Preserve attachment key not found: " + key);
             desc.preserveAttachments.push_back(it->second);
         }
 

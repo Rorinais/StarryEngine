@@ -133,7 +133,6 @@ namespace StarryEngine {
         createPostBuffer();
         createGrid();
         buildRenderGraph();
-        createFramebuffers();
 
         m_rhi->printResourceStatistics();
     }
@@ -366,294 +365,220 @@ namespace StarryEngine {
     }
 
     void Application::createPostBuffer() {
-        //m_postRenderer = std::make_shared<RenderGraph::PostProcessRenderer>(m_resMgr);
-        //std::string fullscreenVS = R"(
-        //        #version 450
-        //        layout(location = 0) out vec2 outUV;
-        //        void main() {
-        //            const vec3 positions[3] = vec3[](
-        //                vec3(-1.0, -1.0, 0.0),
-        //                vec3( 3.0, -1.0, 0.0),
-        //                vec3(-1.0,  3.0, 0.0)
-        //            );
-        //            gl_Position = vec4(positions[gl_VertexIndex], 1.0);
-        //            outUV = positions[gl_VertexIndex].xy * 0.5 + 0.5;
-        //        }
-        //    )";
-        //m_postRenderer->setVertexShader(fullscreenVS, "VertexShader");
+        m_postRenderer = std::make_shared<RenderGraph::PostProcessRenderer>(m_resMgr);
+        std::string fullscreenVS = R"(
+                #version 450
+                layout(location = 0) out vec2 outUV;
+                void main() {
+                    const vec3 positions[3] = vec3[](
+                        vec3(-1.0, -1.0, 0.0),
+                        vec3( 3.0, -1.0, 0.0),
+                        vec3(-1.0,  3.0, 0.0)
+                    );
+                    gl_Position = vec4(positions[gl_VertexIndex], 1.0);
+                    outUV = positions[gl_VertexIndex].xy * 0.5 + 0.5;
+                }
+            )";
+        m_postRenderer->setVertexShader(fullscreenVS, "VertexShader");
 
-        //// 后处理片元着色器（使用输入附件）
-        //std::string postFS = R"(
-        //        #version 450
-        //        layout(location = 0) in vec2 inUV;
-        //        layout(location = 0) out vec4 outColor;
-        //        layout(input_attachment_index = 0, binding = 0) uniform subpassInput inputColor;
+        // 后处理片元着色器（使用输入附件）
+        std::string postFS = R"(
+            #version 450
+            layout(location = 0) in vec2 inUV;
+            layout(location = 0) out vec4 outColor;
+            layout(input_attachment_index = 0, binding = 0) uniform subpassInput inputColor;
 
-        //        void main() {
-        //            // 1. 计算像素到屏幕中心的距离（UV 范围 0-1，中心为 0.5）
-        //            vec2 center = vec2(0.5, 0.5);
-        //            float dist = distance(inUV, center);
+            void main() {
+                // 1. 计算像素到屏幕中心的距离（UV 范围 0-1，中心为 0.5）
+                vec2 center = vec2(0.5, 0.5);
+                float dist = distance(inUV, center);
+                // 2. 定义渐变半径范围（可调节）
+                float innerRadius = 0.0;      // 内部完全反转
+                float outerRadius = 0.5;      // 外部完全保留原色（距离最大可能约 0.707，取 0.5 时圆形较大）
+                // 3. 根据距离计算混合因子（平滑过渡）
+                float t = clamp((dist - innerRadius) / (outerRadius - innerRadius), 0.0, 1.0);
+                // t = 0 时完全反转，t = 1 时完全保留原色
+                // 4. 获取原始颜色
+                vec3 originalColor = subpassLoad(inputColor).rgb;
+                // 5. 计算反转颜色
+                vec3 invertedColor = 1.0 - originalColor;
+                // 6. 线性混合
+                vec3 finalColor = mix(invertedColor, originalColor, t);
+                outColor = vec4(finalColor, 1.0);
+            }
+        )";
+        m_postRenderer->setFragmentShader(postFS, "PostFS");
 
-        //            // 2. 定义渐变半径范围（可调节）
-        //            float innerRadius = 0.0;      // 内部完全反转
-        //            float outerRadius = 0.5;      // 外部完全保留原色（距离最大可能约 0.707，取 0.5 时圆形较大）
-
-        //            // 3. 根据距离计算混合因子（平滑过渡）
-        //            float t = clamp((dist - innerRadius) / (outerRadius - innerRadius), 0.0, 1.0);
-        //            // t = 0 时完全反转，t = 1 时完全保留原色
-
-        //            // 4. 获取原始颜色
-        //            vec3 originalColor = subpassLoad(inputColor).rgb;
-
-        //            // 5. 计算反转颜色
-        //            vec3 invertedColor = 1.0 - originalColor;
-
-        //            // 6. 线性混合
-        //            vec3 finalColor = mix(invertedColor, originalColor, t);
-
-        //            outColor = vec4(finalColor, 1.0);
-        //        }
-        //    )";
-        //m_postRenderer->setFragmentShader(postFS, "PostFS");
-
-        //m_postRenderer->addInputAttachmentBinding(0, RHI::ShaderStage::Fragment);
-        //m_postRenderer->createDescriptorSetLayout();
-        //m_postRenderer->createPipelineLayout("PostPipelineLayout");
-        //m_postRenderer->allocateDescriptorSet(mDescriptorPoolHandle, 0);
+        m_postRenderer->addInputAttachmentBinding(0, RHI::ShaderStage::Fragment);
+        m_postRenderer->createDescriptorSetLayout();
+        m_postRenderer->createPipelineLayout("PostPipelineLayout");
+        m_postRenderer->allocateDescriptorSet(mDescriptorPoolHandle, 0);
     }
 
-    //void Application::buildRenderGraph() {
-    //    m_renderGraph = std::make_unique<RenderGraph::RenderGraph>(m_rhi);
+    void Application::buildRenderGraph() {
+        m_renderGraph = std::make_unique<RenderGraph::RenderGraph>(m_rhi);
 
-    //    // 创建深度虚拟纹理
-    //    RHI::TextureDesc depthDesc;
-    //    depthDesc.extent = { m_width, m_height, 1 };
-    //    depthDesc.format = m_rhi->getDepthFormat();
-    //    depthDesc.type = RHI::TextureType::Texture2D;
-    //    depthDesc.allowDepthStencil = true;
-    //    m_depthTexId = m_renderGraph->createVirtualTexture(depthDesc, "Depth");
+        // 设置交换链图像数量
+        m_renderGraph->setSwapchainImageCount(m_rhi->getSwapChainImageCount());
 
-    //    // 基础管线描述
-    //    RHI::GraphicsPipelineDesc basePipelineDesc;
-    //    basePipelineDesc.topology = RHI::PrimitiveTopology::TriangleList;
-    //    basePipelineDesc.rasterizer.cullMode = RHI::CullMode::None;
-    //    basePipelineDesc.multisample.rasterizationSamples = 1;
-    //    basePipelineDesc.colorBlend.attachments = { RHI::BlendAttachmentState{} };
-    //    basePipelineDesc.dynamicStates = { RHI::DynamicState::Viewport, RHI::DynamicState::Scissor };
-    //    basePipelineDesc.viewport.viewports = { {0, 0, (float)m_width, (float)m_height, 0, 1} };
-    //    basePipelineDesc.viewport.scissors = { {{0, 0}, {m_width, m_height}} };
+        // 创建中间纹理（主 Pass 输出，后处理 Pass 输入）
+        RHI::TextureDesc intermediateDesc;
+        intermediateDesc.extent = { m_width, m_height, 1 };
+        intermediateDesc.format = RHI::Format::RGBA8_UNorm;   // 中间格式，不一定是 sRGB
+        intermediateDesc.type = RHI::TextureType::Texture2D;
+        intermediateDesc.allowRenderTarget = true;
+        intermediateDesc.allowInputAttachment = true;
+        RenderGraph::TextureId intermediateTexId = m_renderGraph->createVirtualTexture(intermediateDesc, "Intermediate");
 
-    //    // ========== 1. 网格 Pass（先渲染） ==========
-    //    auto* gridPass = m_renderGraph->addPassNode("GridPass");
-    //    auto& gridBuilder = gridPass->getBuilder();
+        // 创建深度纹理（两个 Pass 共用同一个深度纹理，但后处理 Pass 不需要深度）
+        RHI::TextureDesc depthDesc;
+        depthDesc.extent = { m_width, m_height, 1 };
+        depthDesc.format = m_rhi->getDepthFormat();
+        depthDesc.type = RHI::TextureType::Texture2D;
+        depthDesc.allowDepthStencil = true;
+        m_depthTexId = m_renderGraph->createVirtualTexture(depthDesc, "Depth");
 
-    //    // 注册附件
-    //    gridBuilder.registerColorAttachment("Color", RHI::Format::BGRA8_sRGB,
-    //        RHI::ImageLayout::ColorAttachment,                // 最终布局：颜色附件（供几何Pass使用）
-    //        RHI::AttachmentLoadOp::Clear, RHI::AttachmentStoreOp::Store,
-    //        RHI::ImageLayout::Undefined);
-    //    gridBuilder.registerDepthAttachment("Depth", m_rhi->getDepthFormat(),
-    //        RHI::AttachmentLoadOp::Clear, RHI::AttachmentStoreOp::Store,
-    //        RHI::ImageLayout::Undefined, RHI::ImageLayout::DepthStencilAttachment);
-
-    //    auto& gridSubpass = gridBuilder.addSubpass(RenderGraph::SubpassBuilder("GridSubpass"));
-    //    gridSubpass.addColorAttachmentRef("Color")
-    //        .addDepthStencilAttachmentRef("Depth")
-    //        .setPipelineName("GridPipeline")
-    //        .setRenderer(m_gridRenderer.get());
-
-    //    RHI::GraphicsPipelineDesc gridPipelineDesc = basePipelineDesc;
-    //    gridPipelineDesc.topology = RHI::PrimitiveTopology::LineList;
-    //    gridPipelineDesc.vertexShader = m_gridRenderer->getVertexShader();
-    //    gridPipelineDesc.fragmentShader = m_gridRenderer->getFragmentShader();
-    //    gridPipelineDesc.vertexInput = m_gridRenderer->getVertexInputState();
-    //    gridPipelineDesc.pipelineLayoutHandle = m_gridRenderer->getPipelineLayout();
-    //    gridPipelineDesc.depthStencil.depthTestEnable = false;
-    //    gridPipelineDesc.depthStencil.depthWriteEnable = false;   
-    //    gridPipelineDesc.depthStencil.depthCompareOp = RHI::CompareOp::Less;
-    //    gridPipelineDesc.rasterizer.lineWidth = 1.0f;
-    //    gridPipelineDesc.colorBlend.attachments[0].blendEnable = false;
-    //    gridSubpass.setPipelineDescription(gridPipelineDesc);
-
-    //    gridPass->setRenderArea(m_width, m_height);
-    //    gridPass->setClearColor("Color", { 0.0f, 0.0f, 0.0f, 1.0f });
-    //    gridPass->setClearDepthStencil("Depth", 1.0f, 0);
-
-    //    // ========== 2. 几何 Pass（后渲染） ==========
-    //    auto* geomPass = m_renderGraph->addPassNode("GeometryPass");
-    //    auto& geomBuilder = geomPass->getBuilder();
-
-    //    // 注册附件（使用 Load，保留网格Pass的结果）
-    //    geomBuilder.registerColorAttachment("Color", RHI::Format::BGRA8_sRGB,
-    //        RHI::ImageLayout::PresentSrc,                      // 最终布局：呈现
-    //        RHI::AttachmentLoadOp::Load, RHI::AttachmentStoreOp::Store,
-    //        RHI::ImageLayout::ColorAttachment);                 // 初始布局：颜色附件（来自网格Pass）
-    //    geomBuilder.registerDepthAttachment("Depth", m_rhi->getDepthFormat(),
-    //        RHI::AttachmentLoadOp::Load, RHI::AttachmentStoreOp::Store,
-    //        RHI::ImageLayout::DepthStencilAttachment, RHI::ImageLayout::DepthStencilAttachment);
-
-    //    auto& geomSubpass = geomBuilder.addSubpass(RenderGraph::SubpassBuilder("GeomSubpass"));
-    //    geomSubpass.addColorAttachmentRef("Color")
-    //        .addDepthStencilAttachmentRef("Depth")
-    //        .setPipelineName("GeomPipeline")
-    //        .setRenderer(m_gbufferRenderer.get());
-
-    //    RHI::GraphicsPipelineDesc geomPipelineDesc = basePipelineDesc;
-    //    geomPipelineDesc.topology = RHI::PrimitiveTopology::TriangleList;
-    //    geomPipelineDesc.vertexShader = m_gbufferRenderer->getVertexShader();
-    //    geomPipelineDesc.fragmentShader = m_gbufferRenderer->getFragmentShader();
-    //    geomPipelineDesc.vertexInput = m_gbufferRenderer->getVertexInputState();
-    //    geomPipelineDesc.pipelineLayoutHandle = m_gbufferRenderer->getPipelineLayout();
-    //    geomPipelineDesc.depthStencil.depthTestEnable = true;
-    //    geomPipelineDesc.depthStencil.depthWriteEnable = true;   
-    //    geomPipelineDesc.depthStencil.depthCompareOp = RHI::CompareOp::Less;
-    //    geomPipelineDesc.colorBlend.attachments[0].blendEnable = false;
-    //    geomSubpass.setPipelineDescription(geomPipelineDesc);
-
-    //    geomPass->setRenderArea(m_width, m_height);
-
-    //    // ========== 添加依赖 ==========
-    //    m_renderGraph->addDependency(gridPass, geomPass);
-
-    //    // ========== 编译 ==========
-    //    if (!m_renderGraph->compile()) {
-    //        throw std::runtime_error("Failed to compile RenderGraph");
-    //    }
-    //}
-
-void Application::buildRenderGraph() {
-    m_renderGraph = std::make_unique<RenderGraph::RenderGraph>(m_rhi);
-
-    // 创建深度虚拟纹理
-    RHI::TextureDesc depthDesc;
-    depthDesc.extent = { m_width, m_height, 1 };
-    depthDesc.format = m_rhi->getDepthFormat();
-    depthDesc.type = RHI::TextureType::Texture2D;
-    depthDesc.allowDepthStencil = true;
-    m_depthTexId = m_renderGraph->createVirtualTexture(depthDesc, "Depth");
-
-    // 创建一个 PassNode，包含两个 Subpass
-    auto* mainPass = m_renderGraph->addPassNode("MainPass");
-    auto& builder = mainPass->getBuilder();
-
-    // 注册附件
-    builder.registerColorAttachment("Color", RHI::Format::BGRA8_sRGB,
-        RHI::ImageLayout::PresentSrc,                
-        RHI::AttachmentLoadOp::Clear,                 
-        RHI::AttachmentStoreOp::Store,
-        RHI::ImageLayout::Undefined);                  
-
-    builder.registerDepthAttachment("Depth", m_rhi->getDepthFormat(),
-        RHI::AttachmentLoadOp::Clear,                  
-        RHI::AttachmentStoreOp::Store,
-        RHI::ImageLayout::Undefined,
-        RHI::ImageLayout::DepthStencilAttachment);
-
-    RHI::GraphicsPipelineDesc basePipelineDesc;
-    basePipelineDesc.topology = RHI::PrimitiveTopology::TriangleList;
-    basePipelineDesc.rasterizer.cullMode = RHI::CullMode::None;
-    basePipelineDesc.multisample.rasterizationSamples = 1;
-    basePipelineDesc.colorBlend.attachments = { RHI::BlendAttachmentState{} };
-    basePipelineDesc.dynamicStates = { RHI::DynamicState::Viewport, RHI::DynamicState::Scissor };
-    basePipelineDesc.viewport.viewports = { {0, 0, (float)m_width, (float)m_height, 0, 1} };
-    basePipelineDesc.viewport.scissors = { {{0, 0}, {m_width, m_height}} };
-
-    // === Subpass 0：网格pass ===
-    auto& gridSubpass = builder.addSubpass(RenderGraph::SubpassBuilder("GridSubpass"));
-    gridSubpass.addColorAttachmentRef("Color")
-        .addDepthStencilAttachmentRef("Depth")
-        .setPipelineName("GridPipeline")
-        .setRenderer(m_gridRenderer.get());
-
-    RHI::GraphicsPipelineDesc gridPipelineDesc = basePipelineDesc;
-    gridPipelineDesc.topology = RHI::PrimitiveTopology::LineList;
-    gridPipelineDesc.vertexShader = m_gridRenderer->getVertexShader();
-    gridPipelineDesc.fragmentShader = m_gridRenderer->getFragmentShader();
-    gridPipelineDesc.vertexInput = m_gridRenderer->getVertexInputState();
-    gridPipelineDesc.pipelineLayoutHandle = m_gridRenderer->getPipelineLayout();
-    gridPipelineDesc.depthStencil.depthTestEnable = true;
-    gridPipelineDesc.depthStencil.depthWriteEnable = true;   // 网格写入深度
-    gridPipelineDesc.depthStencil.depthCompareOp = RHI::CompareOp::Less;
-    gridPipelineDesc.rasterizer.lineWidth = 1.0f;
-    gridPipelineDesc.colorBlend.attachments[0].blendEnable = true;
-    gridSubpass.setPipelineDescription(gridPipelineDesc);
-
-    // === Subpass 1：立方体渲染（后执行） ===
-    auto& geomSubpass = builder.addSubpass(RenderGraph::SubpassBuilder("GeomSubpass"));
-    geomSubpass.addColorAttachmentRef("Color")
-        .addDepthStencilAttachmentRef("Depth")
-        .setPipelineName("GeomPipeline")
-        .setRenderer(m_gbufferRenderer.get());
-
-    RHI::GraphicsPipelineDesc geomPipelineDesc = basePipelineDesc;
-    geomPipelineDesc.topology = RHI::PrimitiveTopology::TriangleList;
-    geomPipelineDesc.vertexShader = m_gbufferRenderer->getVertexShader();
-    geomPipelineDesc.fragmentShader = m_gbufferRenderer->getFragmentShader();
-    geomPipelineDesc.vertexInput = m_gbufferRenderer->getVertexInputState();
-    geomPipelineDesc.pipelineLayoutHandle = m_gbufferRenderer->getPipelineLayout();
-    geomPipelineDesc.depthStencil.depthTestEnable = true;
-    geomPipelineDesc.depthStencil.depthWriteEnable = true;   // 立方体也写入深度（覆盖网格）
-    geomPipelineDesc.depthStencil.depthCompareOp = RHI::CompareOp::Less;
-    geomPipelineDesc.colorBlend.attachments[0].blendEnable = false;
-    geomSubpass.setPipelineDescription(geomPipelineDesc);
-
-    // 设置整个 Pass 的渲染区域和清除值
-    mainPass->setRenderArea(m_width, m_height);
-    mainPass->setClearColor("Color", { 0.05f, 0.05f, 0.05f, 1.0f });
-    mainPass->setClearDepthStencil("Depth", 1.0f, 0);
-
-    // 手动添加子通道间依赖（确保深度数据正确传递）
-    // 注意：RenderPassBuilder 的自动依赖生成（autoDependencies=true）通常会自动添加，
-    // 但显式添加更安全，特别是当您有特殊需求时。
-    //RHI::SubpassDependency depthDep;
-    //depthDep.srcSubpass = 0;               // 网格子通道
-    //depthDep.dstSubpass = 1;               // 立方体子通道
-    //depthDep.srcStageMask = static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::LateFragmentTests);
-    //depthDep.dstStageMask = static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::EarlyFragmentTests);
-    //depthDep.srcAccessMask = static_cast<RHI::AccessFlags>(RHI::AccessFlag::DepthStencilAttachmentWrite);
-    //depthDep.dstAccessMask = static_cast<RHI::AccessFlags>(RHI::AccessFlag::DepthStencilAttachmentRead);
-    //depthDep.byRegion = true;
-    //builder.addDependency(depthDep);
-
-    // 编译渲染图
-    if (!m_renderGraph->compile()) {
-        throw std::runtime_error("Failed to compile RenderGraph");
-    }
-}
-
-    void Application::createFramebuffers() {
-        RHI::TextureHandle depthPhys = m_renderGraph->getPhysicalTexture(m_depthTexId);
-        //RHI::TextureHandle interPhys = m_renderGraph->getPhysicalTexture(m_intermediateTexId);
-        if (!depthPhys.isValid())
-            throw std::runtime_error("Missing physical textures");
-
-        auto* depthTex = m_resMgr->getTexture(depthPhys);
-        //auto* interTex = m_resMgr->getTexture(interPhys);
-        void* depthView = depthTex->getDefaultView();
-        //void* interView = interTex->getDefaultView();
-
-        const auto& sortedPasses = m_renderGraph->getSortedPasses();
-
-        for (auto* pass : sortedPasses) {
-            m_gbufferRenderer->setPassNode(pass);
-            m_gridRenderer->setPassNode(pass);
-        }
-
+        // 导入交换链纹理（最终输出）
         std::vector<void*> swapchainViews;
         for (uint32_t i = 0; i < m_rhi->getSwapChainImageCount(); ++i) {
             swapchainViews.push_back(m_rhi->getSwapChainImageView(i));
         }
+        RHI::TextureDesc swapchainDesc;
+        swapchainDesc.extent = { m_width, m_height, 1 };
+        swapchainDesc.format = RHI::Format::BGRA8_sRGB;
+        swapchainDesc.type = RHI::TextureType::Texture2D;
+        swapchainDesc.allowRenderTarget = true;
+        RenderGraph::TextureId swapchainTexId = m_renderGraph->importExternalTexture(
+            RHI::TextureHandle::Null(),
+            swapchainViews,
+            swapchainDesc,
+            RHI::ImageLayout::Undefined,
+            "Swapchain"
+        );
 
-        m_gbufferRenderer->createFramebuffers(nullptr, depthView, swapchainViews, m_width, m_height);
-        m_gridRenderer->createFramebuffers(nullptr, depthView, swapchainViews, m_width, m_height);
-        //m_postRenderer->createFramebuffers(interView, depthView, swapchainViews, m_width, m_height);
+        // ========== 主 Pass（几何 + 网格） ==========
+        auto* mainPass = m_renderGraph->addPassNode("MainPass");
+        auto& mainBuilder = mainPass->getBuilder();
 
+        // 注册附件：颜色输出到中间纹理，深度使用内部深度
+        mainBuilder.registerColorAttachment("color", RHI::Format::RGBA8_UNorm,
+            RHI::ImageLayout::ColorAttachment,          // 最终布局供后处理读取
+            RHI::AttachmentLoadOp::Clear,
+            RHI::AttachmentStoreOp::Store,
+            RHI::ImageLayout::Undefined);
 
-        //std::cout << "After creation: GBuffer FB = " << m_gbufferRenderer->getFramebuffers()[0].toString() << std::endl;
-        //std::cout << "After creation: Grid FB = " << m_gridRenderer->getFramebuffers()[0].toString() << std::endl;
-        //std::cout << "After creation: Post FB[0] = " << m_postRenderer->getFramebuffers()[0].toString() << std::endl;
-        //std::cout << "After creation: Post FB[1] = " << m_postRenderer->getFramebuffers()[1].toString() << std::endl;
-        //m_postRenderer->updateInputAttachment(0, interPhys, RHI::ImageLayout::ShaderReadOnly);
+        mainBuilder.registerDepthAttachment("depth", m_rhi->getDepthFormat(),
+            RHI::AttachmentLoadOp::Clear,
+            RHI::AttachmentStoreOp::Store,
+            RHI::ImageLayout::Undefined,
+            RHI::ImageLayout::DepthStencilAttachment);
+
+        // 基础管线描述
+        RHI::GraphicsPipelineDesc basePipelineDesc;
+        basePipelineDesc.topology = RHI::PrimitiveTopology::TriangleList;
+        basePipelineDesc.rasterizer.cullMode = RHI::CullMode::None;
+        basePipelineDesc.multisample.rasterizationSamples = 1;
+        basePipelineDesc.colorBlend.attachments = { RHI::BlendAttachmentState{} };
+        basePipelineDesc.dynamicStates = { RHI::DynamicState::Viewport, RHI::DynamicState::Scissor };
+        basePipelineDesc.viewport.viewports = { {0, 0, (float)m_width, (float)m_height, 0, 1} };
+        basePipelineDesc.viewport.scissors = { {{0, 0}, {m_width, m_height}} };
+
+        // 子通道 0：网格
+        auto& gridSubpass = mainBuilder.addSubpass(RenderGraph::SubpassBuilder("GridSubpass"));
+        gridSubpass.addColorAttachmentRef("color")
+            .addDepthStencilAttachmentRef("depth")
+            .setPipelineName("GridPipeline")
+            .setRenderer(m_gridRenderer.get());
+
+        RHI::GraphicsPipelineDesc gridPipelineDesc = basePipelineDesc;
+        gridPipelineDesc.topology = RHI::PrimitiveTopology::LineList;
+        gridPipelineDesc.vertexShader = m_gridRenderer->getVertexShader();
+        gridPipelineDesc.fragmentShader = m_gridRenderer->getFragmentShader();
+        gridPipelineDesc.vertexInput = m_gridRenderer->getVertexInputState();
+        gridPipelineDesc.pipelineLayoutHandle = m_gridRenderer->getPipelineLayout();
+        gridPipelineDesc.depthStencil.depthTestEnable = true;
+        gridPipelineDesc.depthStencil.depthWriteEnable = true;
+        gridPipelineDesc.depthStencil.depthCompareOp = RHI::CompareOp::Less;
+        gridPipelineDesc.rasterizer.lineWidth = 1.0f;
+        gridPipelineDesc.colorBlend.attachments[0].blendEnable = false;
+        gridSubpass.setPipelineDescription(gridPipelineDesc);
+
+        // 子通道 1：立方体
+        auto& geomSubpass = mainBuilder.addSubpass(RenderGraph::SubpassBuilder("GeomSubpass"));
+        geomSubpass.addColorAttachmentRef("color")
+            .addDepthStencilAttachmentRef("depth")
+            .setPipelineName("GeomPipeline")
+            .setRenderer(m_gbufferRenderer.get());
+
+        RHI::GraphicsPipelineDesc geomPipelineDesc = basePipelineDesc;
+        geomPipelineDesc.topology = RHI::PrimitiveTopology::TriangleList;
+        geomPipelineDesc.vertexShader = m_gbufferRenderer->getVertexShader();
+        geomPipelineDesc.fragmentShader = m_gbufferRenderer->getFragmentShader();
+        geomPipelineDesc.vertexInput = m_gbufferRenderer->getVertexInputState();
+        geomPipelineDesc.pipelineLayoutHandle = m_gbufferRenderer->getPipelineLayout();
+        geomPipelineDesc.depthStencil.depthTestEnable = true;
+        geomPipelineDesc.depthStencil.depthWriteEnable = true;
+        geomPipelineDesc.depthStencil.depthCompareOp = RHI::CompareOp::Less;
+        geomPipelineDesc.colorBlend.attachments[0].blendEnable = false;
+        geomSubpass.setPipelineDescription(geomPipelineDesc);
+
+        mainPass->setRenderArea(m_width, m_height);
+        mainPass->setClearColor("color", { 0.05f, 0.05f, 0.05f, 1.0f });
+        mainPass->setClearDepthStencil("depth", 1.0f, 0);
+        mainPass->bindAttachment("color", intermediateTexId);
+        mainPass->bindAttachment("depth", m_depthTexId);
+
+        // ========== 后处理 Pass ==========
+        auto* postPass = m_renderGraph->addPassNode("PostPass");
+        auto& postBuilder = postPass->getBuilder();
+
+        // 注册附件：颜色输出到交换链，输入来自中间纹理
+        postBuilder.registerColorAttachment("finalColor", RHI::Format::BGRA8_sRGB,
+            RHI::ImageLayout::PresentSrc,                // 最终呈现
+            RHI::AttachmentLoadOp::Load,                  // 保留主 Pass 颜色
+            RHI::AttachmentStoreOp::Store,
+            RHI::ImageLayout::Undefined);
+
+        postBuilder.registerInputAttachment("inputColor", RHI::Format::RGBA8_UNorm,
+            RHI::ImageLayout::ShaderReadOnly,
+            RHI::ImageLayout::Undefined,
+            RHI::AttachmentLoadOp::Load,
+            RHI::AttachmentStoreOp::DontCare);
+
+        // 添加子通道
+        auto& postSubpass = postBuilder.addSubpass(RenderGraph::SubpassBuilder("PostSubpass"));
+        postSubpass.addColorAttachmentRef("finalColor")
+            .addInputAttachmentRef("inputColor")
+            .setPipelineName("PostPipeline")
+            .setRenderer(m_postRenderer.get());
+
+        // 管线描述（全屏三角形，无深度）
+        RHI::GraphicsPipelineDesc postPipelineDesc = basePipelineDesc;
+        postPipelineDesc.vertexShader = m_postRenderer->getVertexShader();
+        postPipelineDesc.fragmentShader = m_postRenderer->getFragmentShader();
+        postPipelineDesc.vertexInput = {}; 
+        postPipelineDesc.pipelineLayoutHandle = m_postRenderer->getPipelineLayout();
+        postPipelineDesc.depthStencil.depthTestEnable = false;
+        postPipelineDesc.colorBlend.attachments[0].blendEnable = false;
+        postSubpass.setPipelineDescription(postPipelineDesc);
+
+        postPass->setRenderArea(m_width, m_height);
+        postPass->bindAttachment("finalColor", swapchainTexId);
+        postPass->bindAttachment("inputColor", intermediateTexId);
+
+        m_renderGraph->addDependency(mainPass, postPass);
+
+        if (!m_renderGraph->compile()) {
+            throw std::runtime_error("Failed to compile RenderGraph");
+        }
+
+        // ========== 更新后处理渲染器的输入附件描述符 ==========
+        // 编译后，中间纹理的物理句柄才可用
+        RHI::TextureHandle interPhys = m_renderGraph->getPhysicalTextureHandle(intermediateTexId);
+        if (!interPhys.isValid()) {
+            throw std::runtime_error("Intermediate texture physical handle invalid");
+        }
+        m_postRenderer->updateInputAttachment(0, interPhys, RHI::ImageLayout::ShaderReadOnly);
     }
 
     void Application::run() {
@@ -669,9 +594,6 @@ void Application::buildRenderGraph() {
                 mFramebufferResized = false;
                 if (m_width == 0 || m_height == 0) continue;
 
-                //m_gbufferRenderer->destroyFramebuffers();
-                //m_postRenderer->destroyFramebuffers();
-                m_gridRenderer->destroyFramebuffers();
                 m_renderGraph.reset();
 
                 if (!m_rhi->recreateSwapChain(m_width, m_height)) {
@@ -680,7 +602,6 @@ void Application::buildRenderGraph() {
                 }
 
                 buildRenderGraph();
-                createFramebuffers();
             }
             if (m_width == 0 || m_height == 0) continue;
 
@@ -699,12 +620,6 @@ void Application::buildRenderGraph() {
                 auto* gridUniformBuffer = m_resMgr->getBuffer(m_gridUniformBufferHandle);
                 gridUniformBuffer->update(&gridUbo, sizeof(gridUbo), 0);
 
-                std::vector<RHI::FramebufferHandle> fbs;
-                fbs.push_back(m_gridRenderer->getFramebuffers()[imageIndex]);             // Grid
-                //fbs.push_back(m_gbufferRenderer->getFramebuffers()[imageIndex]);          // Geometry
-                //fbs.push_back(m_postRenderer->getFramebuffers()[imageIndex]);    // Post
-                m_renderGraph->setPassFramebuffers(fbs);
-
                 m_renderGraph->execute(imageIndex, encoder);
             });
             monitor.updateTitle();
@@ -715,7 +630,7 @@ void Application::buildRenderGraph() {
         if (m_rhi) m_rhi->waitIdle();
 
         m_gbufferRenderer.reset();
-        //m_postRenderer.reset();
+        m_postRenderer.reset();
         m_renderGraph.reset();
         m_rhi.reset();
         m_window.reset();
