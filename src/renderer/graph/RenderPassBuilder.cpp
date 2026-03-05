@@ -371,9 +371,7 @@ namespace StarryEngine::RenderGraph {
                     break;
                 }
             }
-            if (!duplicate) {
-                result.push_back(autoDep);
-            }
+            if (!duplicate) result.push_back(autoDep);
         }
         return result;
     }

@@ -123,13 +123,10 @@ namespace StarryEngine::RenderGraph {
             throw std::runtime_error("No passes to compile.");
         }
 
-        // 收集资源使用（现在使用绑定信息）
         for (auto& pass : m_passes) {
-            // 注意：collectResourceUsage 现在使用 pass 内部的绑定映射
-            pass->collectResourceUsage();  // 需要修改 PassNode 的 collectResourceUsage 不再需要外部映射
+            pass->collectResourceUsage(); 
         }
 
-        // 构建依赖图
         size_t passCount = m_passes.size();
         std::vector<std::vector<uint32_t>> adj(passCount);
 
@@ -147,7 +144,6 @@ namespace StarryEngine::RenderGraph {
             adj[src].push_back(dst);
             };
 
-        // 纹理读写依赖
         for (const auto& [tex, writers] : texWriters) {
             auto& readers = texReaders[tex];
             for (uint32_t w : writers) {
@@ -164,7 +160,6 @@ namespace StarryEngine::RenderGraph {
             }
         }
 
-        // 缓冲区读写依赖
         for (const auto& [buf, writers] : bufWriters) {
             auto& readers = bufReaders[buf];
             for (uint32_t w : writers) {
@@ -181,7 +176,6 @@ namespace StarryEngine::RenderGraph {
             }
         }
 
-        // 添加手动依赖
         for (const auto& [src, dst] : m_manualDependencies) {
             adj[src].push_back(dst);
         }
@@ -193,7 +187,49 @@ namespace StarryEngine::RenderGraph {
             m_sortedPasses.push_back(m_passes[idx].get());
         }
 
-        // 创建物理纹理
+        struct TexturePassInfo {
+            int32_t lastWriterIndex = -1;
+            int32_t firstReaderIndex = -1;
+            RHI::PipelineStageFlags writeStage = static_cast<RHI::PipelineStageFlags>(0);
+            RHI::AccessFlags writeAccess = static_cast<RHI::AccessFlags>(0);
+            RHI::PipelineStageFlags readStage = static_cast<RHI::PipelineStageFlags>(0);
+            RHI::AccessFlags readAccess = static_cast<RHI::AccessFlags>(0);
+        };
+
+        std::unordered_map<TextureId, TexturePassInfo> texPassInfo;
+
+        for (int32_t passIdx = 0; passIdx < static_cast<int32_t>(m_sortedPasses.size()); ++passIdx) {
+            auto* pass = m_sortedPasses[passIdx];
+            for (auto tex : pass->getWriteTextures()) {
+                auto& info = texPassInfo[tex];
+                info.lastWriterIndex = passIdx;
+                info.writeStage = static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::ColorAttachmentOutput);
+                info.writeAccess = static_cast<RHI::AccessFlags>(RHI::AccessFlag::ColorAttachmentWrite);
+            }
+            for (auto tex : pass->getReadTextures()) {
+                auto& info = texPassInfo[tex];
+                if (info.firstReaderIndex == -1) {
+                    info.firstReaderIndex = passIdx;
+                    info.readStage = static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::FragmentShader);
+                    info.readAccess = static_cast<RHI::AccessFlags>(RHI::AccessFlag::InputAttachmentRead);
+                }
+            }
+        }
+
+        for (const auto& [tex, info] : texPassInfo) {
+            if (info.lastWriterIndex != -1 && info.firstReaderIndex != -1 && info.firstReaderIndex > info.lastWriterIndex) {
+                RHI::SubpassDependency dep{};
+                dep.srcSubpass = SUBPASS_EXTERNAL;
+                dep.dstSubpass = 0;
+                dep.srcStageMask = static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::AllGraphics);
+                dep.dstStageMask = static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::FragmentShader);
+                dep.srcAccessMask = static_cast<RHI::AccessFlags>(RHI::AccessFlag::MemoryWrite);
+                dep.dstAccessMask = static_cast<RHI::AccessFlags>(RHI::AccessFlag::InputAttachmentRead);
+                dep.byRegion = true;
+                m_sortedPasses[info.firstReaderIndex]->getBuilder().addDependency(dep);
+            }
+        }
+
         for (auto& vt : m_virtualTextures) {
             if (vt.imported) {
                 PhysicalTextureInfo info;
@@ -214,7 +250,6 @@ namespace StarryEngine::RenderGraph {
             }
         }
 
-        // 创建物理缓冲区
         for (auto& vb : m_virtualBuffers) {
             if (vb.imported) {
                 m_bufferMap[vb.id] = vb.externalHandle;
@@ -228,14 +263,12 @@ namespace StarryEngine::RenderGraph {
             }
         }
 
-        // 编译每个 Pass
         for (auto pass : m_sortedPasses) {
             if (!pass->compile(m_resMgr, m_textureMap, m_bufferMap)) {
                 throw std::runtime_error("Failed to compile pass: " + pass->getName());
             }
         }
 
-        // 创建帧缓冲
         if (m_swapchainImageCount == 0) {
             throw std::runtime_error("Swapchain image count not set before compile!");
         }
@@ -247,7 +280,7 @@ namespace StarryEngine::RenderGraph {
             std::vector<RHI::FramebufferHandle> framebuffersForPass;
             framebuffersForPass.reserve(m_swapchainImageCount);
 
-            const auto& attachmentKeys = pass->getAttachmentNames(); // 键列表
+            const auto& attachmentKeys = pass->getAttachmentNames();
             auto rpHandle = pass->getRenderPassHandle();
             auto* rpObj = m_resMgr->getRenderPass(rpHandle);
             if (!rpObj) {
@@ -257,7 +290,7 @@ namespace StarryEngine::RenderGraph {
             for (uint32_t imgIdx = 0; imgIdx < m_swapchainImageCount; ++imgIdx) {
                 std::vector<void*> attachments;
                 for (const auto& key : attachmentKeys) {
-                    TextureId texId = pass->getBoundTextureId(key); // 通过键获取绑定的纹理ID
+                    TextureId texId = pass->getBoundTextureId(key); 
                     auto it = m_textureMap.find(texId);
                     if (it == m_textureMap.end()) {
                         throw std::runtime_error("Texture not found for key: " + key);
@@ -289,7 +322,6 @@ namespace StarryEngine::RenderGraph {
             }
             m_perPassFramebuffers.push_back(std::move(framebuffersForPass));
         }
-
         return true;
     }
 

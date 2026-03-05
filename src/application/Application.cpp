@@ -460,9 +460,8 @@ namespace StarryEngine {
         auto* mainPass = m_renderGraph->addPassNode("MainPass");
         auto& mainBuilder = mainPass->getBuilder();
 
-        // 注册附件：颜色输出到中间纹理，深度使用内部深度
         mainBuilder.registerColorAttachment("color", RHI::Format::RGBA8_UNorm,
-            RHI::ImageLayout::ColorAttachment,          // 最终布局供后处理读取
+            RHI::ImageLayout::ShaderReadOnly,    
             RHI::AttachmentLoadOp::Clear,
             RHI::AttachmentStoreOp::Store,
             RHI::ImageLayout::Undefined);
@@ -534,15 +533,15 @@ namespace StarryEngine {
 
         // 注册附件：颜色输出到交换链，输入来自中间纹理
         postBuilder.registerColorAttachment("finalColor", RHI::Format::BGRA8_sRGB,
-            RHI::ImageLayout::PresentSrc,                // 最终呈现
-            RHI::AttachmentLoadOp::Load,                  // 保留主 Pass 颜色
+            RHI::ImageLayout::PresentSrc,
+            RHI::AttachmentLoadOp::Clear,                  // 改为 Clear
             RHI::AttachmentStoreOp::Store,
-            RHI::ImageLayout::Undefined);
+            RHI::ImageLayout::Undefined);                   // 初始布局 Undefined 允许
 
         postBuilder.registerInputAttachment("inputColor", RHI::Format::RGBA8_UNorm,
             RHI::ImageLayout::ShaderReadOnly,
-            RHI::ImageLayout::Undefined,
-            RHI::AttachmentLoadOp::Load,
+            RHI::ImageLayout::ShaderReadOnly,               // 初始布局必须为 ShaderReadOnly
+            RHI::AttachmentLoadOp::Load,                    // 保留上一 Pass 内容
             RHI::AttachmentStoreOp::DontCare);
 
         // 添加子通道
@@ -619,6 +618,8 @@ namespace StarryEngine {
                 Uniforms gridUbo = { glm::mat4(1.0f), view, proj };
                 auto* gridUniformBuffer = m_resMgr->getBuffer(m_gridUniformBufferHandle);
                 gridUniformBuffer->update(&gridUbo, sizeof(gridUbo), 0);
+
+
 
                 m_renderGraph->execute(imageIndex, encoder);
             });

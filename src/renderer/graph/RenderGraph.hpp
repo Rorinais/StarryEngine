@@ -13,6 +13,15 @@
 #include "PassNode.hpp"
 
 namespace StarryEngine::RenderGraph {
+    struct TexturePassInfo {
+        int32_t lastWriterIndex = -1;       
+        int32_t firstReaderIndex = -1;       
+        RHI::PipelineStageFlags writeStage = static_cast<RHI::PipelineStageFlags>(0);
+        RHI::AccessFlags writeAccess = static_cast<RHI::AccessFlags>(0);
+        RHI::PipelineStageFlags readStage = static_cast<RHI::PipelineStageFlags>(0);
+        RHI::AccessFlags readAccess = static_cast<RHI::AccessFlags>(0);
+    }; 
+
     class RenderGraph {
     public:
         explicit RenderGraph(std::shared_ptr<VulkanRHI> rhi);
@@ -61,7 +70,7 @@ namespace StarryEngine::RenderGraph {
             std::string name;
             bool imported;
             RHI::TextureHandle externalHandle;
-            std::vector<void*> externalViews;  // 导入时的多视图
+            std::vector<void*> externalViews; 
             RHI::ImageLayout initialLayout;
         };
 

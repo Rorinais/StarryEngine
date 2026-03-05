@@ -51,10 +51,6 @@ namespace StarryEngine::RenderGraph {
     }
 
     void PassNode::collectResourceUsage() {
-        if (!m_cachedBuildResult) {
-            m_cachedBuildResult = m_builder.build(true);
-        }
-
         const auto& subpassBuilders = m_builder.getSubpassBuilders();
 
         m_readTextures.clear();

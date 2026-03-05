@@ -91,7 +91,6 @@ namespace StarryEngine::RenderGraph {
             if (it == keyToIndexMap.end()) throw std::runtime_error("Preserve attachment key not found: " + key);
             desc.preserveAttachments.push_back(it->second);
         }
-
         return desc;
     }
 
