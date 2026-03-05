@@ -25,8 +25,6 @@ namespace StarryEngine::RenderGraph {
     }
 
     SubpassBuilder& SubpassBuilder::addDepthStencilAttachmentRef(const std::string& name, RHI::ImageLayout layout) {
-        std::cout << "[addDepthStencilAttachmentRef] name=" << name
-            << " layout=" << static_cast<int>(layout) << std::endl;
         m_depthStencilAttachmentName = name;
         m_attachmentLayouts[name] = layout;
         return *this;
@@ -63,8 +61,6 @@ namespace StarryEngine::RenderGraph {
         if (m_depthStencilAttachmentName) {
             auto it = nameToIndexMap.find(*m_depthStencilAttachmentName);
             auto layoutIt = m_attachmentLayouts.find(*m_depthStencilAttachmentName);
-            std::cout << "[buildSubpassDesc] depth name=" << *m_depthStencilAttachmentName
-                << " index=" << it->second << " layout=" << static_cast<int>(layoutIt->second) << std::endl;
             desc.depthStencilAttachment = { it->second, layoutIt->second };
         }
 

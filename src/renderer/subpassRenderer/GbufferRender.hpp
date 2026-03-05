@@ -115,17 +115,6 @@ namespace StarryEngine::RenderGraph {
             const std::vector<void*>& swapchainViews,
             uint32_t width, uint32_t height) override
         {
-            std::cout << "[Renderer] Creating framebuffers for pass: "
-                << (mPassNode ? mPassNode->getName() : "null") << std::endl;
-
-            // 关键：打印当前 Renderer 持有的 RenderPass 句柄
-            RHI::RenderPassHandle currentRpHandle = mPassNode ? mPassNode->getRenderPassHandle() : RHI::RenderPassHandle::Null();
-            std::cout << "  Current RenderPass handle: " << currentRpHandle.toString() << std::endl;
-
-            for (size_t i = 0; i < swapchainViews.size(); ++i) {
-                std::cout << "  swapchainViews[" << i << "] = " << swapchainViews[i] << std::endl;
-            }
-
             destroyFramebuffers();
             if (!mPassNode) return {};
             RHI::RenderPassHandle rpHandle = mPassNode->getRenderPassHandle();
@@ -135,15 +124,11 @@ namespace StarryEngine::RenderGraph {
             for (void* swapView : swapchainViews) {
                 RHI::FramebufferDesc fbDesc;
                 fbDesc.renderPass = rpObj->getNativeHandle();
-                std::cout << "  Using RenderPass handle for FB creation: " << rpHandle.toString() << std::endl;
-                // 正确顺序：附件0 = 颜色输出 (Final) -> swapView
-                //          附件1 = 输入 (Color) -> intermediateView
                 fbDesc.attachments = { swapView, intermediateView };
                 fbDesc.extent.width = width;
                 fbDesc.extent.height = height;
                 fbDesc.layers = 1;
                 RHI::FramebufferHandle fb = mResMgr->createFramebuffer(fbDesc);
-                std::cout << "  Created Framebuffer handle: " << fb.toString() << std::endl;
                 mframeBuffers.push_back(fb);
             }
             return mframeBuffers;

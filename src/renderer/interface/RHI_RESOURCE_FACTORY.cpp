@@ -73,7 +73,6 @@ namespace StarryEngine::RHI {
     }
 
     std::unique_ptr<RHISampler> VKResourceFactory::createSampler(const SamplerDesc& desc) {
-        // TODO: 实现采样器创建
         return std::make_unique<RHI_VK_Sampler>(mDevice, desc);
     }
 
@@ -366,7 +365,6 @@ namespace StarryEngine::RHI {
         auto vkLayout = static_cast<VkPipelineLayout>(layout->getNativeHandle());
         std::vector<VkDescriptorSet> vkSets;
         for (auto handle : descriptorSets) {
-            // 需要通过 ResourceManager 获取 RHIDescriptorSet 对象
             auto set = mResourceManager->getDescriptorSet(handle);
             if (set) {
                 vkSets.push_back(static_cast<VkDescriptorSet>(set->getNativeHandle()));

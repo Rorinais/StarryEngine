@@ -492,21 +492,6 @@ namespace StarryEngine {
             }
         }
 
-        // 设备摘要信息（调试用）
-        void printSummary() const {
-            std::cout << "=== Device Summary ===" << std::endl;
-            std::cout << "Name: " << getDeviceName() << std::endl;
-            std::cout << "Type: " << getTypeString() << std::endl;
-            std::cout << "Vendor: " << getVendorName() << std::endl;
-            std::cout << "Vulkan (Supported): " << getSupportedApiMajor() << "."
-                << getSupportedApiMinor() << std::endl;
-            std::cout << "Vulkan (Requested): " << getRequestedApiMajor() << "."
-                << getRequestedApiMinor() << std::endl;
-            std::cout << "Anisotropy: " << (supportsAnisotropy() ? "Yes" : "No") << std::endl;
-            std::cout << "Max 2D Texture: " << getMaxImageDimension2D() << "px" << std::endl;
-            std::cout << "Max Descriptor Sets: " << getMaxDescriptorSets() << std::endl;
-        }
-
         // ==================== 性能计数器 ====================
         bool isPerformanceCounterSupported() const { return mPerformanceCounterSupported; }
         std::vector<uint64_t> getPerformanceCounterValues(QueueHandles::QueueType queueType,
@@ -517,7 +502,7 @@ namespace StarryEngine {
         void setObjectName(uint64_t object, VkObjectType objectType, const char* name);
         void setBufferName(VkBuffer buffer, const char* name);
         void setImageName(VkImage image, const char* name);
-
+        void printQueueInfo() const { mQueueHandles->printQueueInfo(); }
         // ==================== 等待和同步 ====================
         void waitIdle() const;
 

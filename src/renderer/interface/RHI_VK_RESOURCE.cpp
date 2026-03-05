@@ -7,7 +7,6 @@ namespace StarryEngine::RHI {
         try {
             auto spirv = compileGLSL(mDesc.sourcecode, FUNC::RHI_TO_Shaderc_ShaderKind(mDesc.stage), mDesc.defines, mDesc.debugName);
             mShaderModule = mDevice->createShaderModule(spirv, mDesc.debugName);
-            std::cout << "[RHI_VK_ShaderModule] Created shader module: "<< mShaderModule << " for " << mDesc.debugName << std::endl;
         }
         catch (const std::exception& e) {
             std::cerr << "[RHI_VK_ShaderModule] ERROR: Failed to create shader: "<< mDesc.debugName << " - " << e.what() << std::endl;
@@ -70,8 +69,6 @@ namespace StarryEngine::RHI {
         , mCurrentAccess(AccessFlag::None)
         , mCurrentStage(PipelineStage::TopOfPipe) {
         createBuffer();
-
-		std::cout << ANSIColor::BG_RED<<"[RHI_VK_Buffer] Created buffer: " << ANSIColor::RESET<< mBuffer << " of size " << mDesc.size << " bytes with VMA: " << (mUsingVMA ? "Yes" : "No") << std::endl;
     }
 
     RHI_VK_Buffer::~RHI_VK_Buffer() {
@@ -541,13 +538,6 @@ namespace StarryEngine::RHI {
         }
 
         mVkRenderPass = mDevice->createRenderPass(vkAttachments, vkSubpasses, vkDependencies);
-
-        std::cout << "RenderPass attachments:" << std::endl;
-        for (size_t i = 0; i < mDesc.attachments.size(); ++i) {
-            const auto& att = mDesc.attachments[i];
-            std::cout << "  Index " << i << ": format=" << static_cast<int>(att.format)
-                << ", loadOp=" << static_cast<int>(att.loadOp) << std::endl;
-        }
     }
 
     void RHI_VK_RenderPass::release() {
@@ -732,8 +722,6 @@ namespace StarryEngine::RHI {
 
         // 调用设备创建管线
         mPipeline = mDevice->createGraphicsPipeline(pipelineInfo);
-
-		std::cout << ANSIColor::BG_YELLOW<<"[RHI_VK_Pipeline] Created graphics pipeline: "<<ANSIColor::RESET << mPipeline << " for subpass " << mDesc.subpass << std::endl;
     }
 
     void RHI_VK_Pipeline::release() {

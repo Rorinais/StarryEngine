@@ -126,6 +126,7 @@ namespace StarryEngine {
             std::cerr << "Failed to initialize Vulkan RHI!" << std::endl;
             return;
         }
+        m_rhi->printAllDeivceInfo();
 
         createDescriptorPool();
         createGbuffer();
@@ -134,7 +135,7 @@ namespace StarryEngine {
         buildRenderGraph();
         createFramebuffers();
 
-        std::cout << "Application initialized successfully!" << std::endl;
+        m_rhi->printResourceStatistics();
     }
 
     void Application::createDescriptorPool() {
@@ -255,78 +256,99 @@ namespace StarryEngine {
     void Application::createGrid() {
         m_gridRenderer = std::make_shared<RenderGraph::GridRenderer>(m_resMgr);
 
-        // 顶点着色器（简单传递位置和颜色）
+        // 顶点着色器（不变）
         std::string vsCode = R"(
-            #version 450
-            layout(location = 0) in vec3 inPosition;
-            layout(location = 1) in vec3 inColor;
-            layout(location = 0) out vec3 fragColor;
-            layout(binding = 0) uniform UniformBufferObject {
-                mat4 model;
-                mat4 view;
-                mat4 proj;
-            } ubo;
-            void main() {
-                gl_Position = ubo.proj * ubo.view * ubo.model * vec4(inPosition, 1.0);
-                fragColor = inColor;
-            }
-        )";
+        #version 450
+        layout(location = 0) in vec3 inPosition;
+        layout(location = 1) in vec3 inColor;
+        layout(location = 0) out vec3 fragColor;
+        layout(binding = 0) uniform UniformBufferObject {
+            mat4 model;
+            mat4 view;
+            mat4 proj;
+        } ubo;
+        void main() {
+            gl_Position = ubo.proj * ubo.view * ubo.model * vec4(inPosition, 1.0);
+            fragColor = inColor;
+        }
+    )";
         m_gridRenderer->setVertexShader(vsCode, "GridVS");
 
-        // 片段着色器（输出固定颜色，带透明度）
+        // 片段着色器（不变）
         std::string fsCode = R"(
-            #version 450
-            layout(location = 0) in vec3 fragColor;
-            layout(location = 0) out vec4 outColor;
-            void main() {
-                outColor = vec4(fragColor, 1);  // 半透明，可调节
-            }
-        )";
+        #version 450
+        layout(location = 0) in vec3 fragColor;
+        layout(location = 0) out vec4 outColor;
+        void main() {
+            outColor = vec4(fragColor, 0.5);
+        }
+    )";
         m_gridRenderer->setFragmentShader(fsCode, "GridFS");
 
-        // 生成网格数据（10x10 网格，范围 [-5,5]）
+        // 生成网格数据
         std::vector<float> vertices;
         std::vector<uint32_t> indices;
-        const float size = 10.0f;
-        const int divisions = 10;
+        const float size = 50.0f;
+        const int divisions = 50;
         const float step = size / divisions;
         const float half = size * 0.5f;
-        const glm::vec3 colorAxis(0.8f, 0.8f, 0.8f);   // 轴线颜色
-        const glm::vec3 colorLine(0.4f, 0.4f, 0.4f);   // 普通线颜色
 
-        // 生成顶点：位置 (x, 0, z) 和颜色
-        auto addVertex = [&](float x, float z, const glm::vec3& col) {
+        // 定义颜色常量（RGB 标识坐标轴）
+        const glm::vec3 colorXAxis(1.0f, 0.0f, 0.0f);   // 红色：X 轴
+        const glm::vec3 colorYAxis(0.0f, 1.0f, 0.0f);   // 绿色：Y 轴
+        const glm::vec3 colorZAxis(0.0f, 0.0f, 1.0f);   // 蓝色：Z 轴
+        const glm::vec3 colorLine(0.4f, 0.4f, 0.4f);     // 灰色：普通网格线
+
+        // 添加顶点的辅助函数（接受 x, y, z 和颜色）
+        auto addVertex = [&](float x, float y, float z, const glm::vec3& col) {
             vertices.push_back(x);
-            vertices.push_back(0.0f);
+            vertices.push_back(y);
             vertices.push_back(z);
             vertices.push_back(col.r);
             vertices.push_back(col.g);
             vertices.push_back(col.b);
             };
 
-        // 生成平行于 X 轴的线条
+        // --- 生成平行于 X 轴的线条 (y = 0) ---
         for (int i = 0; i <= divisions; ++i) {
             float z = -half + i * step;
-            bool isAxis = (std::abs(z) < 0.001f);
-            addVertex(-half, z, isAxis ? colorAxis : colorLine);
-            addVertex(half, z, isAxis ? colorAxis : colorLine);
-        }
-        // 生成平行于 Z 轴的线条
-        for (int i = 0; i <= divisions; ++i) {
-            float x = -half + i * step;
-            bool isAxis = (std::abs(x) < 0.001f);
-            addVertex(x, -half, isAxis ? colorAxis : colorLine);
-            addVertex(x, half, isAxis ? colorAxis : colorLine);
+            // 判断是否为 X 轴（即 z ≈ 0）
+            bool isXAxis = (std::abs(z) < 0.001f);
+            addVertex(-half, 0.0f, z, isXAxis ? colorXAxis : colorLine);
+            addVertex(half, 0.0f, z, isXAxis ? colorXAxis : colorLine);
         }
 
-        // 生成索引：每条线两个顶点构成线段
-        uint32_t vertexCount = static_cast<uint32_t>(vertices.size() / 6); // 每个顶点6个float
+        // --- 生成平行于 Z 轴的线条 (y = 0) ---
+        for (int i = 0; i <= divisions; ++i) {
+            float x = -half + i * step;
+            // 判断是否为 Z 轴（即 x ≈ 0）
+            bool isZAxis = (std::abs(x) < 0.001f);
+            addVertex(x, 0.0f, -half, isZAxis ? colorZAxis : colorLine);
+            addVertex(x, 0.0f, half, isZAxis ? colorZAxis : colorLine);
+        }
+
+        // --- 生成 Y 轴线（通过原点，从 y = -half 到 y = half）---
+        addVertex(0.0f, -half, 0.0f, colorYAxis);   // 起点
+        addVertex(0.0f, half, 0.0f, colorYAxis);   // 终点
+
+        // 生成索引：每两个连续顶点构成一条线段
+        uint32_t vertexCount = static_cast<uint32_t>(vertices.size() / 6);
         for (uint32_t i = 0; i < vertexCount; i += 2) {
             indices.push_back(i);
             indices.push_back(i + 1);
         }
 
-        // 设置顶点布局
+        for (size_t i = 0; i < vertices.size(); i += 6) {
+            float x = vertices[i];
+            float y = vertices[i + 1];
+            float z = vertices[i + 2];
+            float r = vertices[i + 3];
+            float g = vertices[i + 4];
+            float b = vertices[i + 5];
+            // 可以打印感兴趣的点
+        }
+
+        // 设置顶点布局（不变）
         RenderGraph::VertexLayout layout;
         layout.addBinding(0, 6 * sizeof(float), RHI::VertexInputRate::PerVertex)
             .addAttribute(0, 0, RHI::Format::RGB32_Float)   // 位置
@@ -335,9 +357,8 @@ namespace StarryEngine {
         m_gridRenderer->setVertexBuffer(0, vertices, layout, "GridVertexBuffer");
         m_gridRenderer->setIndexBuffer(indices, "GridIndexBuffer");
 
-        // 创建 UniformBuffer（复用与几何Pass相同的 Uniforms 结构）
+        // 创建 UniformBuffer 等后续操作（不变）
         m_gridUniformBufferHandle = m_gridRenderer->createAndAddUniformBuffer(sizeof(Uniforms), 0, "GridUniformBuffer");
-
         m_gridRenderer->createDescriptorSetLayout();
         m_gridRenderer->createPipelineLayout("GridPipelineLayout");
         m_gridRenderer->allocateDescriptorSet(mDescriptorPoolHandle);
@@ -515,20 +536,19 @@ void Application::buildRenderGraph() {
     auto* mainPass = m_renderGraph->addPassNode("MainPass");
     auto& builder = mainPass->getBuilder();
 
-    // 注册附件（注意顺序：颜色在前，深度在后，与帧缓冲创建一致）
+    // 注册附件
     builder.registerColorAttachment("Color", RHI::Format::BGRA8_sRGB,
-        RHI::ImageLayout::PresentSrc,                // 最终布局：呈现
-        RHI::AttachmentLoadOp::Clear,                 // 第一帧清除颜色
+        RHI::ImageLayout::PresentSrc,                
+        RHI::AttachmentLoadOp::Clear,                 
         RHI::AttachmentStoreOp::Store,
-        RHI::ImageLayout::Undefined);                  // 初始布局由 Vulkan 自动转换
+        RHI::ImageLayout::Undefined);                  
 
     builder.registerDepthAttachment("Depth", m_rhi->getDepthFormat(),
-        RHI::AttachmentLoadOp::Clear,                  // 第一帧清除深度
+        RHI::AttachmentLoadOp::Clear,                  
         RHI::AttachmentStoreOp::Store,
         RHI::ImageLayout::Undefined,
         RHI::ImageLayout::DepthStencilAttachment);
 
-    // 基础管线描述（共享属性）
     RHI::GraphicsPipelineDesc basePipelineDesc;
     basePipelineDesc.topology = RHI::PrimitiveTopology::TriangleList;
     basePipelineDesc.rasterizer.cullMode = RHI::CullMode::None;
@@ -538,7 +558,7 @@ void Application::buildRenderGraph() {
     basePipelineDesc.viewport.viewports = { {0, 0, (float)m_width, (float)m_height, 0, 1} };
     basePipelineDesc.viewport.scissors = { {{0, 0}, {m_width, m_height}} };
 
-    // === Subpass 0：网格渲染（先执行） ===
+    // === Subpass 0：网格pass ===
     auto& gridSubpass = builder.addSubpass(RenderGraph::SubpassBuilder("GridSubpass"));
     gridSubpass.addColorAttachmentRef("Color")
         .addDepthStencilAttachmentRef("Depth")
@@ -552,10 +572,10 @@ void Application::buildRenderGraph() {
     gridPipelineDesc.vertexInput = m_gridRenderer->getVertexInputState();
     gridPipelineDesc.pipelineLayoutHandle = m_gridRenderer->getPipelineLayout();
     gridPipelineDesc.depthStencil.depthTestEnable = true;
-    gridPipelineDesc.depthStencil.depthWriteEnable = false;   // 网格写入深度
+    gridPipelineDesc.depthStencil.depthWriteEnable = true;   // 网格写入深度
     gridPipelineDesc.depthStencil.depthCompareOp = RHI::CompareOp::Less;
     gridPipelineDesc.rasterizer.lineWidth = 1.0f;
-    gridPipelineDesc.colorBlend.attachments[0].blendEnable = false;
+    gridPipelineDesc.colorBlend.attachments[0].blendEnable = true;
     gridSubpass.setPipelineDescription(gridPipelineDesc);
 
     // === Subpass 1：立方体渲染（后执行） ===
@@ -579,7 +599,7 @@ void Application::buildRenderGraph() {
 
     // 设置整个 Pass 的渲染区域和清除值
     mainPass->setRenderArea(m_width, m_height);
-    mainPass->setClearColor("Color", { 0.0f, 0.0f, 0.0f, 1.0f });
+    mainPass->setClearColor("Color", { 0.05f, 0.05f, 0.05f, 1.0f });
     mainPass->setClearDepthStencil("Depth", 1.0f, 0);
 
     // 手动添加子通道间依赖（确保深度数据正确传递）
@@ -614,11 +634,6 @@ void Application::buildRenderGraph() {
 
         const auto& sortedPasses = m_renderGraph->getSortedPasses();
 
-        std::cout << "Sorted passes order:" << std::endl;
-        for (size_t i = 0; i < sortedPasses.size(); ++i) {
-            std::cout << "  [" << i << "] " << sortedPasses[i]->getName() << std::endl;
-        }
-
         for (auto* pass : sortedPasses) {
             m_gbufferRenderer->setPassNode(pass);
             m_gridRenderer->setPassNode(pass);
@@ -642,7 +657,6 @@ void Application::buildRenderGraph() {
     }
 
     void Application::run() {
-        std::cout << "Starting application main loop..." << std::endl;
         auto frameContext = m_rhi->getFrameContext();
         FrameMonitor monitor(m_window, frameContext, m_FlightFrame);
 
@@ -655,7 +669,7 @@ void Application::buildRenderGraph() {
                 mFramebufferResized = false;
                 if (m_width == 0 || m_height == 0) continue;
 
-                m_gbufferRenderer->destroyFramebuffers();
+                //m_gbufferRenderer->destroyFramebuffers();
                 //m_postRenderer->destroyFramebuffers();
                 m_gridRenderer->destroyFramebuffers();
                 m_renderGraph.reset();
@@ -674,8 +688,9 @@ void Application::buildRenderGraph() {
                 float time = monitor.getTime();
                 glm::mat4 model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
                 glm::mat4 view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-                glm::mat4 proj = glm::perspective(glm::radians(45.0f), static_cast<float>(m_width) / m_height, 0.1f, 10.0f);
+                glm::mat4 proj = glm::perspective(glm::radians(60.0f), static_cast<float>(m_width) / m_height, 0.1f, 100.0f);
                 proj[1][1] *= -1;
+
                 Uniforms ubo = { model, view, proj };
                 auto* UniformBuffer = m_resMgr->getBuffer(m_uniformBufferHandle);
                 UniformBuffer->update(&ubo, sizeof(ubo), 0);
@@ -694,7 +709,6 @@ void Application::buildRenderGraph() {
             });
             monitor.updateTitle();
         }
-        std::cout << "Application main loop ended." << std::endl;
     }
 
     Application::~Application() {
@@ -705,7 +719,6 @@ void Application::buildRenderGraph() {
         m_renderGraph.reset();
         m_rhi.reset();
         m_window.reset();
-        std::cout << "Application shutdown." << std::endl;
     }
 } 
 

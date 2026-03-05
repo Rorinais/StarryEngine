@@ -196,8 +196,6 @@ namespace StarryEngine::RenderGraph {
             else if (std::holds_alternative<RHI::DescriptorImageInfo>(resource.data)) {
                 const auto& imageInfo = std::get<RHI::DescriptorImageInfo>(resource.data);
                 auto* texture = mResMgr->getTexture(imageInfo.texture);
-                std::cout << "[Material] Updating descriptor set, binding " << binding
-                    << " texture handle: " << imageInfo.texture.toString() << std::endl;
                 if (resource.type == RHI::DescriptorType::InputAttachment) {
                     // 输入附件写入
                     if (texture) set->writeInputAttachment(binding, 0, texture, imageInfo.imageLayout);

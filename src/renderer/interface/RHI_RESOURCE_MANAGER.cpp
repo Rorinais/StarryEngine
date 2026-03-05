@@ -55,26 +55,8 @@ namespace StarryEngine::RHI {
             return TextureHandle::Null();
         }
 
-        // 打印当前纹理存储状态
-        auto stats = textures_.getStatistics();
-        std::cout << "[ResourceManager] Before create: totalCreated=" << stats.totalCreated
-            << ", totalDestroyed=" << stats.totalDestroyed
-            << ", currentCount=" << stats.currentCount
-            << ", chunkCount=" << stats.chunkCount << std::endl;
-
-        auto handle = textures_.create(std::move(resource), name, debugTag);
-
-        if (!handle.isValid()) {
-            std::cerr << "[ResourceManager] textures_.create returned null handle for texture: " << name << std::endl;
-            auto stats2 = textures_.getStatistics();
-            std::cout << "[ResourceManager] After failed create: totalCreated=" << stats2.totalCreated
-                << ", totalDestroyed=" << stats2.totalDestroyed
-                << ", currentCount=" << stats2.currentCount << std::endl;
-        }
-        else {
-            logResourceCreation(ResourceCategory::Texture, name);
-        }
-        return handle;
+        logResourceCreation(ResourceCategory::Texture, name);
+        return textures_.create(std::move(resource), name, debugTag);
     }
 
     PipelineHandle ResourceManager::createGraphicsPipeline(const GraphicsPipelineDesc& desc,
@@ -124,14 +106,8 @@ namespace StarryEngine::RHI {
         const std::string& name,
         const std::string& debugTag) {
 
-        std::cout << "[ResourceManager] Creating shader: name='" << name
-            << "', debugName='" << desc.debugName << "'" << std::endl;
-
         // 创建资源
         auto resource = factory_->createShader(desc);
-
-        // 打印资源指针
-        std::cout << "[ResourceManager] Factory created resource pointer: " << resource.get() << std::endl;
 
         if (!resource) {
             std::cerr << "[ResourceManager] ERROR: Factory returned null resource for shader: "
@@ -146,19 +122,7 @@ namespace StarryEngine::RHI {
         }
 
         logResourceCreation(ResourceCategory::Shader, name);
-
-        // 创建handle
-        auto handle = shaders_.create(std::move(resource), name, debugTag);
-
-        if (!handle.isValid()) {
-            std::cerr << "[ResourceManager] ERROR: Failed to create handle for shader: "
-                << desc.debugName << std::endl;
-        }
-        else {
-            std::cout << "[ResourceManager] Created shader handle: " << handle.toString() << std::endl << std::endl;;
-        }
-
-        return handle;
+        return shaders_.create(std::move(resource), name, debugTag);
     }
 
     SamplerHandle ResourceManager::createSampler(const SamplerDesc& desc,
@@ -758,7 +722,6 @@ namespace StarryEngine::RHI {
     }
 
     bool ResourceManager::destroy(TextureHandle handle) {
-        std::cout << "[ResourceManager] destroy texture: " << handle.toString() << std::endl;
         return textures_.destroy(handle);
     }
 
@@ -1167,12 +1130,12 @@ namespace StarryEngine::RHI {
         std::cout << "Descriptor Sets: " << stats.descriptorSetCount << std::endl;
         std::cout << "Descriptor Pools: " << stats.descriptorPoolCount << std::endl;
         std::cout << "Descriptor Set Layouts: " << stats.descriptorSetLayoutCount << std::endl;
-        std::cout << "Command Buffers: " << stats.commandBufferCount << std::endl;
-        std::cout << "Command Pools: " << stats.commandPoolCount << std::endl;
-        std::cout << "Acceleration Structures: " << stats.accelerationStructureCount << " ("
-            << stats.accelerationStructureMemoryUsage / 1024.0 / 1024.0 << " MB)" << std::endl;
-        std::cout << "Swap Chains: " << stats.swapChainCount << std::endl;
-        std::cout << "Queues: " << stats.queueCount << std::endl;
+        //std::cout << "Command Buffers: " << stats.commandBufferCount << std::endl;
+        //std::cout << "Command Pools: " << stats.commandPoolCount << std::endl;
+        //std::cout << "Acceleration Structures: " << stats.accelerationStructureCount << " ("
+        //    << stats.accelerationStructureMemoryUsage / 1024.0 / 1024.0 << " MB)" << std::endl;
+        //std::cout << "Swap Chains: " << stats.swapChainCount << std::endl;
+        //std::cout << "Queues: " << stats.queueCount << std::endl;
         std::cout << "\n--- Memory Usage ---" << std::endl;
         std::cout << "Total Memory: " << stats.totalMemoryUsage / 1024.0 / 1024.0 << " MB" << std::endl;
         std::cout << "Peak Memory: " << stats.peakMemoryUsage / 1024.0 / 1024.0 << " MB" << std::endl;
@@ -1319,6 +1282,7 @@ namespace StarryEngine::RHI {
         //std::lock_guard<std::mutex> lock(statsMutex_);
         std::cout << "[ResourceManager] Created resource: Category="
             << static_cast<int>(category)
+            << ",ResourceType :" << ResourceCategoryToString(category)
             << ", Name='" << name << "'"
             << std::endl;
     }
@@ -1329,8 +1293,36 @@ namespace StarryEngine::RHI {
         //std::lock_guard<std::mutex> lock(statsMutex_);
         std::cout << "[ResourceManager] Destroyed resource: Category="
             << static_cast<int>(category)
+            << ",ResourceType :" << ResourceCategoryToString(category)
             << ", Name='" << name << "'"
             << std::endl;
+    }
+
+    const char* ResourceManager::ResourceCategoryToString(ResourceCategory category) {
+        switch (category) {
+        case ResourceCategory::Buffer:                 return "Buffer";
+        case ResourceCategory::Texture:                return "Texture";
+        case ResourceCategory::Pipeline:               return "Pipeline";
+        case ResourceCategory::PipelineLayout:         return "PipelineLayout";
+        case ResourceCategory::Shader:                 return "Shader";
+        case ResourceCategory::RenderPass:             return "RenderPass";
+        case ResourceCategory::Framebuffer:            return "Framebuffer";
+        case ResourceCategory::DescriptorSet:          return "DescriptorSet";
+        case ResourceCategory::DescriptorPool:         return "DescriptorPool";
+        case ResourceCategory::DescriptorSetLayout:    return "DescriptorSetLayout";
+        case ResourceCategory::Sampler:                 return "Sampler";
+        case ResourceCategory::QueryPool:               return "QueryPool";
+        case ResourceCategory::CommandBuffer:           return "CommandBuffer";
+        case ResourceCategory::CommandPool:             return "CommandPool";
+        case ResourceCategory::Fence:                   return "Fence";
+        case ResourceCategory::Semaphore:               return "Semaphore";
+        case ResourceCategory::Event:                   return "Event";
+        case ResourceCategory::SwapChain:               return "SwapChain";
+        case ResourceCategory::AccelerationStructure:   return "AccelerationStructure";
+        case ResourceCategory::Queue:                   return "Queue";
+        case ResourceCategory::MAX_CATEGORIES:          return "MAX_CATEGORIES"; 
+        default:                                         return "Unknown";
+        }
     }
 
 } // namespace StarryEngine::RHI

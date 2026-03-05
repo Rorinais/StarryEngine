@@ -35,10 +35,6 @@ namespace StarryEngine {
 
             createLogicalDevice();
 
-            if (mConfig.enableVMA) {
-                std::cout << "[DEBUG] VMA will be initialized later, not in constructor" << std::endl;
-            }
-
             // 获取调试函数指针
             if (mConfig.enableValidation) {
                 mSetDebugUtilsObjectNameEXT = (PFN_vkSetDebugUtilsObjectNameEXT)
@@ -109,8 +105,6 @@ namespace StarryEngine {
             std::cerr << "Failed to create VMA allocator: " << result << std::endl;
             return false;
         }
-
-        std::cout << "VMA allocator created successfully" << std::endl;
         return true;
     }
 
@@ -1541,27 +1535,22 @@ namespace StarryEngine {
         // 检查并启用实际支持的特性
         if (mConfig.samplerAnisotropy && mPhysicalDeviceFeatures.samplerAnisotropy) {
             deviceFeatures.samplerAnisotropy = VK_TRUE;
-            std::cout << "[DEBUG] Enabling sampler anisotropy" << std::endl;
         }
 
         if (mConfig.geometryShader && mPhysicalDeviceFeatures.geometryShader) {
             deviceFeatures.geometryShader = VK_TRUE;
-            std::cout << "[DEBUG] Enabling geometry shader" << std::endl;
         }
 
         if (mConfig.tessellationShader && mPhysicalDeviceFeatures.tessellationShader) {
             deviceFeatures.tessellationShader = VK_TRUE;
-            std::cout << "[DEBUG] Enabling tessellation shader" << std::endl;
         }
 
         if (mConfig.fillModeNonSolid && mPhysicalDeviceFeatures.fillModeNonSolid) {
             deviceFeatures.fillModeNonSolid = VK_TRUE;
-            std::cout << "[DEBUG] Enabling fill mode non-solid" << std::endl;
         }
 
         if (mConfig.wideLines && mPhysicalDeviceFeatures.wideLines) {
             deviceFeatures.wideLines = VK_TRUE;
-            std::cout << "[DEBUG] Enabling wide lines" << std::endl;
         }
 
         // ==================== 扩展处理 - 修复重复问题 ====================
@@ -1601,7 +1590,6 @@ namespace StarryEngine {
 
             if (supported) {
                 enabledExtensions.push_back(extension.c_str());
-                std::cout << "[DEBUG] Enabling extension: " << extension << std::endl;
             }
             else {
                 // 只对关键扩展抛出错误，非关键扩展只警告
@@ -1670,8 +1658,6 @@ namespace StarryEngine {
         if (!enabledLayers.empty()) {
             createInfo.enabledLayerCount = static_cast<uint32_t>(enabledLayers.size());
             createInfo.ppEnabledLayerNames = enabledLayers.data();
-            std::cout << "[DEBUG] Enabling " << enabledLayers.size()
-                << " validation layers on device" << std::endl;
         }
         else {
             createInfo.enabledLayerCount = 0;
@@ -1715,10 +1701,6 @@ namespace StarryEngine {
             throw std::runtime_error(errorMsg);
         }
 
-        std::cout << "[DEBUG] Logical device created successfully" << std::endl;
-
-        printSummary();
-
         // ==================== 获取队列句柄 ====================
         // 确保 mQueueHandles 已经初始化
         if (!mQueueHandles) {
@@ -1735,7 +1717,6 @@ namespace StarryEngine {
                     mQueueFamilyIndices.graphicsFamily.value(),
                     0,
                     mConfig.queuePriority);
-                std::cout << "[DEBUG] Graphics queue obtained" << std::endl;
             }
             else {
                 std::cerr << "[WARNING] Failed to get graphics queue" << std::endl;
@@ -1752,7 +1733,6 @@ namespace StarryEngine {
                     mQueueFamilyIndices.presentFamily.value(),
                     0,
                     mConfig.queuePriority);
-                std::cout << "[DEBUG] Present queue obtained" << std::endl;
             }
             else {
                 std::cerr << "[WARNING] Failed to get present queue" << std::endl;
@@ -1789,8 +1769,6 @@ namespace StarryEngine {
                 std::cout << "[DEBUG] Transfer queue obtained" << std::endl;
             }
         }
-
-        std::cout << "[DEBUG] Total queues obtained: " << mQueueHandles->getAllQueues().size() << std::endl;
     }
     // ==================== 查询功能 ====================
 
@@ -1919,7 +1897,7 @@ namespace StarryEngine {
     // ==================== 调试和统计 ====================
 
     void Device::printDeviceInfo() const {
-        std::cout << "\n=== Device Information ===" << std::endl;
+        std::cout << "=== Device Information ===" << std::endl;
         std::cout << "Device Name: " << mProperties.deviceName << std::endl;
         std::cout << "Device Type: ";
 
@@ -1984,7 +1962,6 @@ namespace StarryEngine {
         for (const auto& extension : mConfig.extensions) {
             std::cout << "  " << extension << std::endl;
         }
-
-        std::cout << std::endl;
+        std::cout << std::endl; 
     }
 }

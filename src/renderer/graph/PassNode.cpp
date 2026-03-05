@@ -84,12 +84,6 @@ namespace StarryEngine::RenderGraph {
         auto& buildResult = *m_cachedBuildResult;
         m_attachmentNameToIndex = buildResult.attachmentNameToIndex;
 
-        for (size_t i = 0; i < buildResult.renderPassDesc.subpasses.size(); ++i) {
-            const auto& subpass = buildResult.renderPassDesc.subpasses[i];
-            std::cout << "[PassNode::compile] Subpass " << i << " depth layout: "
-                << static_cast<int>(subpass.depthStencilAttachment.layout) << std::endl;
-        }
-
         // 创建 RenderPass
         m_renderPassHandle = resMgr->createRenderPass(buildResult.renderPassDesc, m_name);
         if (!m_renderPassHandle.isValid()) {

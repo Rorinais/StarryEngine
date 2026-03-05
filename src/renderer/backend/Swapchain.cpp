@@ -319,6 +319,7 @@ namespace StarryEngine {
         std::cout << "Status: " << (isValid() ? "Valid" : "Invalid") << std::endl;
         std::cout << "Out of Date: " << (isOutOfDate() ? "Yes" : "No") << std::endl;
         std::cout << "Suboptimal: " << (isSuboptimal() ? "Yes" : "No") << std::endl;
+        std::cout << std::endl;
     }
 
 } // namespace StarryEngine

@@ -259,6 +259,15 @@ namespace StarryEngine{
 
         void waitIdle() {mDevice->waitIdle(); }
 
+        void printAllDeivceInfo(){
+            mDevice->printDeviceInfo();
+            mDevice->printQueueInfo();
+            mSwapChain->printInfo();
+        }
+
+        void printResourceStatistics() {
+            mResourceManager->dumpStatistics();
+        }
     private:
         bool createDepthTexture();
         bool createFramebuffers();  

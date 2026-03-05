@@ -176,22 +176,18 @@ namespace StarryEngine {
     }
 
     bool VulkanRHI::initialize(const RHI::RHIInitConfig& config) {
-        // 1. 检查窗口句柄
         if (!config.windowHandle) {
             if (config.debugCallback) config.debugCallback(RHI::MessageSeverity::Error,RHI::MessageSource::API,"VulkanStarryEngine::RHI::initialize: windowHandle is null!");
             return false;
         }
 
-        // 2. 转换配置
         auto instanceConfig = ConfigConverter::convertInstanceConfig(config);
         auto deviceConfig = ConfigConverter::convertDeviceConfig(config);
         auto swapChainConfig = ConfigConverter::convertSwapChainConfig(config);
         auto frameContextConfig = ConfigConverter::convertFrameContextConfig(config);
 
-        // 3. 创建Vulkan实例
         try {
             mInstance = Instance::create(instanceConfig);
-            std::cout << "[INFO] Vulkan instance created successfully" << std::endl;
         }
         catch (const std::exception& e) {
             if (config.debugCallback) config.debugCallback(RHI::MessageSeverity::Error,RHI::MessageSource::API,std::string("Failed to create Vulkan instance: ") + e.what());
@@ -200,7 +196,6 @@ namespace StarryEngine {
 
         if (!mInstance || !mInstance->getHandle()) return false;
 
-        // 4. 创建Surface（使用GLFW）
         GLFWwindow* window = static_cast<GLFWwindow*>(config.windowHandle);
 
         // 检查窗口是否有效
@@ -223,11 +218,8 @@ namespace StarryEngine {
             return false;
         }
 
-        // 5. 创建设备
         try {
-            std::cout << "[INFO] Creating Vulkan device..." << std::endl;
             mDevice = Device::create(mInstance, mSurface, deviceConfig);
-            std::cout << "[INFO] Device created successfully" << std::endl;
         }
         catch (const std::exception& e) {
             std::string errorMsg = std::string("Failed to create device: ") + e.what();
@@ -244,10 +236,8 @@ namespace StarryEngine {
             return false;
         }
 
-        // 6. 延迟初始化 VMA（在设备完全创建后）
         try {
             if (deviceConfig.enableVMA) {
-                std::cout << "[INFO] Initializing VMA allocator..." << std::endl;
                 if (!mDevice->initializeVMA()) {
                     std::cerr << "[WARNING] VMA initialization failed, but continuing..." << std::endl;
                 }
@@ -257,16 +247,13 @@ namespace StarryEngine {
             std::cerr << "[WARNING] VMA initialization error: " << e.what() << std::endl;
         }
 
-        // 7. 创建交换链
         try {
-            std::cout << "[INFO] Creating swap chain..." << std::endl;
             mSwapChain = SwapChain::create(mDevice, mSurface, swapChainConfig);
 
             if (!mSwapChain || !mSwapChain->isValid()) {
                 throw std::runtime_error("Swap chain creation returned invalid object");
             }
 
-            std::cout << "[INFO] Swap chain created with " << mSwapChain->getImageCount()<< " images" << std::endl;
         }
         catch (const std::exception& e) {
             std::string errorMsg = std::string("Failed to create swap chain: ") + e.what();
@@ -278,22 +265,17 @@ namespace StarryEngine {
             return false;
         }
 
-        // 8. 创建帧上下文
         try {
-            std::cout << "[INFO] Creating frame context..." << std::endl;
             mFrameContext = FrameContext::create(mDevice, frameContextConfig);
 
-            // 获取图形队列族索引
             auto queueFamilyIndices = mDevice->getQueueFamilyIndices();
             if (!queueFamilyIndices.graphicsFamily.has_value()) {
                 throw std::runtime_error("No graphics queue family found!");
             }
 
-            // 初始化帧上下文
             if (!mFrameContext->initialize(queueFamilyIndices.graphicsFamily.value())) {
                 throw std::runtime_error("Failed to initialize frame context!");
             }
-            std::cout << "[INFO] Frame context created successfully" << std::endl;
         }
         catch (const std::exception& e) {
             std::string errorMsg = std::string("Failed to create frame context: ") + e.what();
@@ -308,7 +290,6 @@ namespace StarryEngine {
         mWidth = config.windowWidth;
         mHeight = config.windowHeight;
 
-        // 设置内部 acquire 和 present 回调
         mAcquireFunc = [this](VkSemaphore semaphore, VkFence fence, uint32_t& index) {
             return mSwapChain->acquireNextImage(semaphore, fence, UINT16_MAX, index);
         };
@@ -316,7 +297,6 @@ namespace StarryEngine {
             return mSwapChain->present(queue, index, semaphore);
         };
 
-        // 设置帧上下文的重建回调
         mFrameContext->setRecreateCallback([this](uint32_t width, uint32_t height) {
             return mSwapChain->recreate(width, height);
         });
@@ -325,13 +305,8 @@ namespace StarryEngine {
         mResourceManager = std::make_shared<StarryEngine::RHI::ResourceManager>(factory);
         mResourceManager->setDebugMode(config.enableDebug);
 
-        // 9. 输出成功信息
         if (config.debugCallback) {
             std::string info = "Vulkan RHI initialized successfully!\n";
-            info += "  Device: " + std::string(mDevice->getDeviceName()) + "\n";
-            info += "  SwapChain: " + std::to_string(mSwapChain->getImageCount()) + " images\n";
-            info += "  FrameBuffering: " + std::to_string(config.frameBuffering);
-
             config.debugCallback(RHI::MessageSeverity::Info, RHI::MessageSource::API, info);
         }
         return true;

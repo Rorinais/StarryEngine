@@ -141,31 +141,10 @@ namespace StarryEngine::RenderGraph {
 
             for (size_t i = 0; i < m_attachments.size(); ++i) {
                 const auto& att = m_attachments[i];
-                std::cout << "  Attachment[" << i << "] initialLayout=" << static_cast<int>(att.initialLayout)
-                    << ", finalLayout=" << static_cast<int>(att.finalLayout) << std::endl;
             }
 
             // 构建子流程描述并添加到 renderPassDesc
             result->renderPassDesc.subpasses.push_back(subpassBuilder.buildSubpassDesc(m_attachmentIndices));
-
-            // 在 result->renderPassDesc.subpasses.push_back(...) 之后立即添加
-            for (size_t i = 0; i < result->renderPassDesc.subpasses.size(); ++i) {
-                const auto& subpass = result->renderPassDesc.subpasses[i];
-                const auto& builder = m_subpassBuilders[i];
-                std::cout << "Subpass " << i << " (" << builder.getSubpassName() << "):\n";
-                std::cout << "  Color attachments: ";
-                for (const auto& ref : subpass.colorAttachments)
-                    std::cout << ref.attachment << " ";
-                std::cout << "\n  Input attachments: ";
-                for (const auto& ref : subpass.inputAttachments)
-                    std::cout << ref.attachment << " ";
-                if (subpass.depthStencilAttachment.attachment != ATTACHMENT_UNUSED)
-                    std::cout << "\n  Depth attachment: " << subpass.depthStencilAttachment.attachment
-                    << " (layout: " << (int)subpass.depthStencilAttachment.layout << ")";
-                else
-                    std::cout << "\n  Depth attachment: UNUSED";
-                std::cout << std::endl;
-            }
 
             result->pipelineNameToSubpassIndexMap[subpassBuilder.getPipelineName()] = subpassIndex;
         }
@@ -173,22 +152,12 @@ namespace StarryEngine::RenderGraph {
         // 合并依赖
         result->renderPassDesc.dependencies = mergeDependencies();
 
-        std::cout << "Manual dependencies count: " << m_manualDependencies.size() << std::endl;
-        for (const auto& dep : m_manualDependencies) {
-            std::cout << "  src=" << dep.srcSubpass << " dst=" << dep.dstSubpass << std::endl;
-        }
+
         // 填充 Pipeline 描述和 Renderer
         for (const auto& subpassBuilder : m_subpassBuilders) {
             result->pipelineDescriptions.push_back(subpassBuilder.getPipelineDescription());
             result->subpassRenderers.push_back(subpassBuilder.getRenderer());
         }
-
-        for (size_t i = 0; i < result->renderPassDesc.subpasses.size(); ++i) {
-            const auto& subpass = result->renderPassDesc.subpasses[i];
-            std::cout << "[build] Final subpass " << i << " depth layout: "
-                << static_cast<int>(subpass.depthStencilAttachment.layout) << std::endl;
-        }
-
         return result;
     }
 

@@ -69,21 +69,18 @@ namespace StarryEngine {
 
         std::shared_ptr<VulkanRHI> m_rhi;
         std::shared_ptr<RHI::ResourceManager> m_resMgr;
-
-        std::shared_ptr<RenderGraph::GBufferRenderer> m_gbufferRenderer;
-        //std::shared_ptr<RenderGraph::PostProcessRenderer> m_postRenderer;
-        std::shared_ptr<RenderGraph::GridRenderer> m_gridRenderer;
+        std::unique_ptr<RenderGraph::RenderGraph> m_renderGraph;
 
         RenderGraph::TextureId m_intermediateTexId;
         RenderGraph::TextureId m_depthTexId;
 
-        // RHI 资源句柄
+        std::shared_ptr<RenderGraph::GBufferRenderer> m_gbufferRenderer;
+        std::shared_ptr<RenderGraph::GridRenderer> m_gridRenderer;
+
         RHI::DescriptorPoolHandle mDescriptorPoolHandle;
         RHI::PipelineLayoutHandle mPipelineLayoutHandle;
         RHI::BufferHandle m_uniformBufferHandle;
         RHI::BufferHandle m_gridUniformBufferHandle;
 
-        // RenderGraph 相关
-        std::unique_ptr<RenderGraph::RenderGraph> m_renderGraph;
     };
 } // namespace StarryEngine
