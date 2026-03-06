@@ -417,28 +417,26 @@ namespace StarryEngine {
 
     void Application::buildRenderGraph() {
         m_renderGraph = std::make_unique<RenderGraph::RenderGraph>(m_rhi);
-
-        // 设置交换链图像数量
         m_renderGraph->setSwapchainImageCount(m_rhi->getSwapChainImageCount());
 
-        // 创建中间纹理（主 Pass 输出，后处理 Pass 输入）
+        // 创建中间纹理
         RHI::TextureDesc intermediateDesc;
         intermediateDesc.extent = { m_width, m_height, 1 };
-        intermediateDesc.format = RHI::Format::RGBA8_UNorm;   // 中间格式，不一定是 sRGB
+        intermediateDesc.format = RHI::Format::RGBA8_UNorm;
         intermediateDesc.type = RHI::TextureType::Texture2D;
         intermediateDesc.allowRenderTarget = true;
         intermediateDesc.allowInputAttachment = true;
-        RenderGraph::TextureId intermediateTexId = m_renderGraph->createVirtualTexture(intermediateDesc, "Intermediate");
+        auto intermediateTexId = m_renderGraph->createVirtualTexture(intermediateDesc, "Intermediate");
 
-        // 创建深度纹理（两个 Pass 共用同一个深度纹理，但后处理 Pass 不需要深度）
+        // 创建深度纹理
         RHI::TextureDesc depthDesc;
         depthDesc.extent = { m_width, m_height, 1 };
         depthDesc.format = m_rhi->getDepthFormat();
         depthDesc.type = RHI::TextureType::Texture2D;
         depthDesc.allowDepthStencil = true;
-        m_depthTexId = m_renderGraph->createVirtualTexture(depthDesc, "Depth");
+        auto depthTexId = m_renderGraph->createVirtualTexture(depthDesc, "Depth");
 
-        // 导入交换链纹理（最终输出）
+        // 导入交换链纹理
         std::vector<void*> swapchainViews;
         for (uint32_t i = 0; i < m_rhi->getSwapChainImageCount(); ++i) {
             swapchainViews.push_back(m_rhi->getSwapChainImageView(i));
@@ -448,7 +446,7 @@ namespace StarryEngine {
         swapchainDesc.format = RHI::Format::BGRA8_sRGB;
         swapchainDesc.type = RHI::TextureType::Texture2D;
         swapchainDesc.allowRenderTarget = true;
-        RenderGraph::TextureId swapchainTexId = m_renderGraph->importExternalTexture(
+        auto swapchainTexId = m_renderGraph->importExternalTexture(
             RHI::TextureHandle::Null(),
             swapchainViews,
             swapchainDesc,
@@ -456,23 +454,18 @@ namespace StarryEngine {
             "Swapchain"
         );
 
-        // ========== 主 Pass（几何 + 网格） ==========
+        // ========== 主 Pass ==========
         auto* mainPass = m_renderGraph->addPassNode("MainPass");
-        auto& mainBuilder = mainPass->getBuilder();
 
-        mainBuilder.registerColorAttachment("color", RHI::Format::RGBA8_UNorm,
-            RHI::ImageLayout::ShaderReadOnly,    
-            RHI::AttachmentLoadOp::Clear,
-            RHI::AttachmentStoreOp::Store,
-            RHI::ImageLayout::Undefined);
+        // 声明附件（直接使用纹理 ID）
+        mainPass->addColorOutput(intermediateTexId)
+            .setClearColor({ 0.05f, 0.05f, 0.05f, 1.0f })
+            .setFinalLayout(RHI::ImageLayout::ShaderReadOnly);  // 供后处理读取
 
-        mainBuilder.registerDepthAttachment("depth", m_rhi->getDepthFormat(),
-            RHI::AttachmentLoadOp::Clear,
-            RHI::AttachmentStoreOp::Store,
-            RHI::ImageLayout::Undefined,
-            RHI::ImageLayout::DepthStencilAttachment);
+        mainPass->addDepthOutput(depthTexId)
+            .setClearDepth(1.0f);
 
-        // 基础管线描述
+        // 基础管线描述（与原来相同）
         RHI::GraphicsPipelineDesc basePipelineDesc;
         basePipelineDesc.topology = RHI::PrimitiveTopology::TriangleList;
         basePipelineDesc.rasterizer.cullMode = RHI::CullMode::None;
@@ -483,9 +476,9 @@ namespace StarryEngine {
         basePipelineDesc.viewport.scissors = { {{0, 0}, {m_width, m_height}} };
 
         // 子通道 0：网格
-        auto& gridSubpass = mainBuilder.addSubpass(RenderGraph::SubpassBuilder("GridSubpass"));
-        gridSubpass.addColorAttachmentRef("color")
-            .addDepthStencilAttachmentRef("depth")
+        auto gridSubpass = mainPass->addSubpassProxy("GridSubpass");
+        gridSubpass.addColorAttachment(intermediateTexId)
+            .addDepthStencilAttachment(depthTexId)
             .setPipelineName("GridPipeline")
             .setRenderer(m_gridRenderer.get());
 
@@ -502,10 +495,10 @@ namespace StarryEngine {
         gridPipelineDesc.colorBlend.attachments[0].blendEnable = false;
         gridSubpass.setPipelineDescription(gridPipelineDesc);
 
-        // 子通道 1：立方体
-        auto& geomSubpass = mainBuilder.addSubpass(RenderGraph::SubpassBuilder("GeomSubpass"));
-        geomSubpass.addColorAttachmentRef("color")
-            .addDepthStencilAttachmentRef("depth")
+        // 子通道 1：几何体
+        auto geomSubpass = mainPass->addSubpassProxy("GeomSubpass");
+        geomSubpass.addColorAttachment(intermediateTexId)
+            .addDepthStencilAttachment(depthTexId)
             .setPipelineName("GeomPipeline")
             .setRenderer(m_gbufferRenderer.get());
 
@@ -522,57 +515,43 @@ namespace StarryEngine {
         geomSubpass.setPipelineDescription(geomPipelineDesc);
 
         mainPass->setRenderArea(m_width, m_height);
-        mainPass->setClearColor("color", { 0.05f, 0.05f, 0.05f, 1.0f });
-        mainPass->setClearDepthStencil("depth", 1.0f, 0);
-        mainPass->bindAttachment("color", intermediateTexId);
-        mainPass->bindAttachment("depth", m_depthTexId);
 
         // ========== 后处理 Pass ==========
         auto* postPass = m_renderGraph->addPassNode("PostPass");
-        auto& postBuilder = postPass->getBuilder();
 
-        // 注册附件：颜色输出到交换链，输入来自中间纹理
-        postBuilder.registerColorAttachment("finalColor", RHI::Format::BGRA8_sRGB,
-            RHI::ImageLayout::PresentSrc,
-            RHI::AttachmentLoadOp::Clear,                  // 改为 Clear
-            RHI::AttachmentStoreOp::Store,
-            RHI::ImageLayout::Undefined);                   // 初始布局 Undefined 允许
+        // 声明附件
+        postPass->addColorOutput(swapchainTexId)
+            .setClearColor({ 0.0f, 0.0f, 0.0f, 1.0f })
+            .setFinalLayout(RHI::ImageLayout::PresentSrc);
 
-        postBuilder.registerInputAttachment("inputColor", RHI::Format::RGBA8_UNorm,
-            RHI::ImageLayout::ShaderReadOnly,
-            RHI::ImageLayout::ShaderReadOnly,               // 初始布局必须为 ShaderReadOnly
-            RHI::AttachmentLoadOp::Load,                    // 保留上一 Pass 内容
-            RHI::AttachmentStoreOp::DontCare);
+        postPass->addInput(intermediateTexId);  // 声明为输入
 
-        // 添加子通道
-        auto& postSubpass = postBuilder.addSubpass(RenderGraph::SubpassBuilder("PostSubpass"));
-        postSubpass.addColorAttachmentRef("finalColor")
-            .addInputAttachmentRef("inputColor")
+        auto postSubpass = postPass->addSubpassProxy("PostSubpass");
+        postSubpass.addColorAttachment(swapchainTexId)
+            .addInputAttachment(intermediateTexId)
             .setPipelineName("PostPipeline")
             .setRenderer(m_postRenderer.get());
 
-        // 管线描述（全屏三角形，无深度）
         RHI::GraphicsPipelineDesc postPipelineDesc = basePipelineDesc;
         postPipelineDesc.vertexShader = m_postRenderer->getVertexShader();
         postPipelineDesc.fragmentShader = m_postRenderer->getFragmentShader();
-        postPipelineDesc.vertexInput = {}; 
+        postPipelineDesc.vertexInput = {};
         postPipelineDesc.pipelineLayoutHandle = m_postRenderer->getPipelineLayout();
         postPipelineDesc.depthStencil.depthTestEnable = false;
         postPipelineDesc.colorBlend.attachments[0].blendEnable = false;
         postSubpass.setPipelineDescription(postPipelineDesc);
 
         postPass->setRenderArea(m_width, m_height);
-        postPass->bindAttachment("finalColor", swapchainTexId);
-        postPass->bindAttachment("inputColor", intermediateTexId);
 
-        m_renderGraph->addDependency(mainPass, postPass);
+        // 手动依赖（可选，自动分析已足够）
+        //m_renderGraph->addDependency(mainPass, postPass);
 
+        // 编译
         if (!m_renderGraph->compile()) {
             throw std::runtime_error("Failed to compile RenderGraph");
         }
 
-        // ========== 更新后处理渲染器的输入附件描述符 ==========
-        // 编译后，中间纹理的物理句柄才可用
+        // 更新后处理渲染器的输入附件描述符（保持不变）
         RHI::TextureHandle interPhys = m_renderGraph->getPhysicalTextureHandle(intermediateTexId);
         if (!interPhys.isValid()) {
             throw std::runtime_error("Intermediate texture physical handle invalid");

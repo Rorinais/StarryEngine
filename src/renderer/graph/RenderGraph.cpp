@@ -263,8 +263,14 @@ namespace StarryEngine::RenderGraph {
             }
         }
 
-        for (auto pass : m_sortedPasses) {
-            if (!pass->compile(m_resMgr, m_textureMap, m_bufferMap)) {
+        std::unordered_map<TextureId, RHI::TextureDesc> texDescMap;
+        for (const auto& vt : m_virtualTextures) {
+            texDescMap[vt.id] = vt.desc;
+        }
+
+        // 编译每个 Pass
+        for (auto* pass : m_sortedPasses) {
+            if (!pass->compile(m_resMgr, m_textureMap, texDescMap, m_bufferMap)) {
                 throw std::runtime_error("Failed to compile pass: " + pass->getName());
             }
         }

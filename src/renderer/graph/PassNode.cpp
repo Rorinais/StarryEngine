@@ -21,6 +21,7 @@ namespace StarryEngine::RenderGraph {
         }
     }
 
+    // ----- 原有 API 实现 -----
     SubpassBuilder& PassNode::addSubpass(const std::string& subpassName) {
         return m_builder.addSubpass(SubpassBuilder(subpassName));
     }
@@ -28,7 +29,7 @@ namespace StarryEngine::RenderGraph {
     void PassNode::setClearColor(const std::string& key, const RHI::Color& color) {
         RHI::ClearValue cv;
         cv.color = color;
-        m_clearValueMap[key] = cv;  // 注意：这里用键存储，后续映射到索引
+        m_clearValueMap[key] = cv;
     }
 
     void PassNode::setClearDepthStencil(const std::string& key, float depth, uint32_t stencil) {
@@ -50,6 +51,79 @@ namespace StarryEngine::RenderGraph {
         return it->second;
     }
 
+    // ----- 新增 API 实现 -----
+    AttachmentConfig& PassNode::addColorOutput(TextureId texId) {
+        if (m_texToRequestIndex.find(texId) != m_texToRequestIndex.end())
+            throw std::runtime_error("Texture already added to this pass");
+        AttachmentRequest req;
+        req.texId = texId;
+        req.type = AttachmentRequestType::ColorOutput;
+        req.key = "auto_color_" + std::to_string(texId.id());  // 立即生成键
+        m_texToRequestIndex[texId] = m_attachmentRequests.size();
+        m_attachmentRequests.push_back(req);
+        return m_attachmentRequests.back().config;
+    }
+
+    AttachmentConfig& PassNode::addDepthOutput(TextureId texId) {
+        if (m_texToRequestIndex.find(texId) != m_texToRequestIndex.end())
+            throw std::runtime_error("Texture already added to this pass");
+        AttachmentRequest req;
+        req.texId = texId;
+        req.type = AttachmentRequestType::DepthOutput;
+        req.key = "auto_depth_" + std::to_string(texId.id());
+        m_texToRequestIndex[texId] = m_attachmentRequests.size();
+        m_attachmentRequests.push_back(req);
+        return m_attachmentRequests.back().config;
+    }
+
+    AttachmentConfig& PassNode::addInput(TextureId texId) {
+        if (m_texToRequestIndex.find(texId) != m_texToRequestIndex.end())
+            throw std::runtime_error("Texture already added to this pass");
+        AttachmentRequest req;
+        req.texId = texId;
+        req.type = AttachmentRequestType::Input;
+        req.key = "auto_input_" + std::to_string(texId.id());
+        m_texToRequestIndex[texId] = m_attachmentRequests.size();
+        m_attachmentRequests.push_back(req);
+        return m_attachmentRequests.back().config;
+    }
+
+    AttachmentConfig& PassNode::addResolve(TextureId texId) {
+        if (m_texToRequestIndex.find(texId) != m_texToRequestIndex.end())
+            throw std::runtime_error("Texture already added to this pass");
+        AttachmentRequest req;
+        req.texId = texId;
+        req.type = AttachmentRequestType::Resolve;
+        req.key = "auto_resolve_" + std::to_string(texId.id());
+        m_texToRequestIndex[texId] = m_attachmentRequests.size();
+        m_attachmentRequests.push_back(req);
+        return m_attachmentRequests.back().config;
+    }
+
+    AttachmentConfig& PassNode::addPreserve(TextureId texId) {
+        if (m_texToRequestIndex.find(texId) != m_texToRequestIndex.end())
+            throw std::runtime_error("Texture already added to this pass");
+        AttachmentRequest req;
+        req.texId = texId;
+        req.type = AttachmentRequestType::Preserve;
+        req.key = "auto_preserve_" + std::to_string(texId.id());
+        m_texToRequestIndex[texId] = m_attachmentRequests.size();
+        m_attachmentRequests.push_back(req);
+        return m_attachmentRequests.back().config;
+    }
+
+    SubpassBuilderProxy PassNode::addSubpassProxy(const std::string& subpassName) {
+        auto& builder = m_builder.addSubpass(SubpassBuilder(subpassName));
+        return SubpassBuilderProxy(*this, builder);
+    }
+
+    std::string PassNode::getKeyForTexture(TextureId texId) const {
+        auto it = m_texToRequestIndex.find(texId);
+        if (it == m_texToRequestIndex.end())
+            throw std::runtime_error("Texture not declared in pass");
+        return m_attachmentRequests[it->second].key;
+    }
+
     void PassNode::collectResourceUsage() {
         const auto& subpassBuilders = m_builder.getSubpassBuilders();
 
@@ -58,23 +132,18 @@ namespace StarryEngine::RenderGraph {
         m_readBuffers.clear();
         m_writeBuffers.clear();
 
+        // 从原有的子通道收集（基于键）
         for (const auto& subpass : subpassBuilders) {
             for (const auto& key : subpass.getColorAttachmentNames()) {
                 auto it = m_attachmentBindings.find(key);
                 if (it != m_attachmentBindings.end()) {
                     m_writeTextures.insert(it->second);
                 }
-                else {
-                    throw std::runtime_error("Attachment key not bound: " + key);
-                }
             }
             for (const auto& key : subpass.getInputAttachmentNames()) {
                 auto it = m_attachmentBindings.find(key);
                 if (it != m_attachmentBindings.end()) {
                     m_readTextures.insert(it->second);
-                }
-                else {
-                    throw std::runtime_error("Attachment key not bound: " + key);
                 }
             }
             if (subpass.getDepthStencilAttachmentName()) {
@@ -84,19 +153,87 @@ namespace StarryEngine::RenderGraph {
                     m_writeTextures.insert(it->second);
                     m_readTextures.insert(it->second);
                 }
-                else {
-                    throw std::runtime_error("Attachment key not bound: " + key);
-                }
             }
-            // 缓冲区暂时忽略
+        }
+
+        // 从附件请求收集（用于依赖分析）
+        for (const auto& req : m_attachmentRequests) {
+            if (req.type == AttachmentRequestType::ColorOutput ||
+                req.type == AttachmentRequestType::DepthOutput ||
+                req.type == AttachmentRequestType::Resolve) {
+                m_writeTextures.insert(req.texId);
+            }
+            if (req.type == AttachmentRequestType::Input) {
+                m_readTextures.insert(req.texId);
+            }
+            if (req.type == AttachmentRequestType::DepthOutput) {
+                m_readTextures.insert(req.texId); // 深度也可能被后续读取
+            }
         }
     }
 
     bool PassNode::compile(std::shared_ptr<RHI::ResourceManager> resMgr,
-        const std::unordered_map<TextureId, PhysicalTextureInfo>& /*texMap*/,
+        const std::unordered_map<TextureId, PhysicalTextureInfo>& texMap,
+        const std::unordered_map<TextureId, RHI::TextureDesc>& texDescMap,
         const std::unordered_map<BufferId, RHI::BufferHandle>& /*bufMap*/) {
         m_resMgr = resMgr;
 
+        // 处理附件请求：调用 register 和 bind
+        for (auto& req : m_attachmentRequests) {
+            const auto& key = req.key;  // 键已在创建时生成
+            // 获取纹理描述
+            auto descIt = texDescMap.find(req.texId);
+            if (descIt == texDescMap.end()) {
+                throw std::runtime_error("Texture description not found for texId");
+            }
+            const auto& texDesc = descIt->second;
+
+            // 根据类型调用相应的 register 函数
+            const auto& config = req.config;
+            switch (req.type) {
+            case AttachmentRequestType::ColorOutput:
+                m_builder.registerColorAttachment(key, texDesc.format,
+                    config.getFinalLayout().value_or(RHI::ImageLayout::ColorAttachment),
+                    config.getLoadOp().value_or(RHI::AttachmentLoadOp::Clear),
+                    config.getStoreOp().value_or(RHI::AttachmentStoreOp::Store),
+                    config.getInitialLayout().value_or(RHI::ImageLayout::Undefined));
+                break;
+            case AttachmentRequestType::DepthOutput:
+                m_builder.registerDepthAttachment(key, texDesc.format,
+                    config.getLoadOp().value_or(RHI::AttachmentLoadOp::Clear),
+                    config.getStoreOp().value_or(RHI::AttachmentStoreOp::Store),
+                    config.getInitialLayout().value_or(RHI::ImageLayout::Undefined),
+                    config.getFinalLayout().value_or(RHI::ImageLayout::DepthStencilAttachment));
+                break;
+            case AttachmentRequestType::Input:
+                m_builder.registerInputAttachment(key, texDesc.format,
+                    config.getFinalLayout().value_or(RHI::ImageLayout::ShaderReadOnly),
+                    config.getInitialLayout().value_or(RHI::ImageLayout::Undefined),
+                    config.getLoadOp().value_or(RHI::AttachmentLoadOp::Load),
+                    config.getStoreOp().value_or(RHI::AttachmentStoreOp::DontCare));
+                break;
+            case AttachmentRequestType::Resolve:
+                m_builder.registerResolveAttachment(key, texDesc.format,
+                    config.getFinalLayout().value_or(RHI::ImageLayout::ColorAttachment));
+                break;
+            case AttachmentRequestType::Preserve:
+                // Preserve 不需要注册，只需绑定
+                break;
+            }
+
+            // 绑定附件键到纹理 ID
+            bindAttachment(key, req.texId);
+
+            // 如果有清除值设置，记录到 m_clearValueMap
+            if (config.getClearColor().has_value()) {
+                setClearColor(key, *config.getClearColor());
+            }
+            else if (config.getClearDepth().has_value()) {
+                setClearDepthStencil(key, *config.getClearDepth(), config.getClearStencil().value_or(0));
+            }
+        }
+
+        // 原有的构建流程
         if (!m_cachedBuildResult) {
             m_cachedBuildResult = m_builder.build(true);
         }
@@ -104,7 +241,6 @@ namespace StarryEngine::RenderGraph {
         auto& buildResult = *m_cachedBuildResult;
         m_attachmentNameToIndex = buildResult.attachmentNameToIndex;
 
-        // 创建 RenderPass
         m_renderPassHandle = resMgr->createRenderPass(buildResult.renderPassDesc, m_name);
         if (!m_renderPassHandle.isValid()) {
             throw std::runtime_error("Failed to create RenderPass: " + m_name);
