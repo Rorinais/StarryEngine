@@ -357,10 +357,10 @@ namespace StarryEngine::RHI {
         void beginDebugLabel(const char* label, const float color[4])override;
         void endDebugLabel()override;
         void insertDebugLabel(const char* label, const float color[4]) override;
+        void* getCommandBuffer() { return reinterpret_cast<void*>(m_vkCmdBuf); }
 
         private:
-            VkCommandBuffer getVkCommandBuffer() const { return m_vkCmdBuf; }
-
+        VkCommandBuffer getVkCommandBuffer() const { return m_vkCmdBuf; }
 		private:
 			Device::Ptr mDevice;
 			RHI_VK_CommandBuffer* mCommandBuffer;

@@ -1,11 +1,14 @@
 #pragma once
-#include"ISubpassRenderer.hpp"
+#include"ISubpassRecorder.hpp"
 #include "../graph/PassNode.hpp"
+#include "../backend/VulkanRHI.hpp"
+#include "../../base.hpp"
+
 
 namespace StarryEngine::RenderGraph {
-    class GBufferRenderer : public ISubpassRenderer {
+    class GBufferRecorder : public ISubpassRecorder {
     public:
-        using ISubpassRenderer::ISubpassRenderer;
+        using ISubpassRecorder::ISubpassRecorder;
         void recordCommands(RHI::RHICommandEncoder* encoder,
             const PassContext& pctx,
             uint32_t subpassIndex,
@@ -33,7 +36,7 @@ namespace StarryEngine::RenderGraph {
             for (uint32_t binding : bindings) {
                 auto vbHandle = mGeometry->getVertexBufferHandle(binding);
                 if (!vbHandle.isValid()) {
-                    std::cerr << "[GBufferRenderer] Missing vertex buffer for binding " << binding << std::endl;
+                    std::cerr << "[GBufferRecorder] Missing vertex buffer for binding " << binding << std::endl;
                     continue;
                 }
                 encoder->bindVertexBuffers(binding,
@@ -44,7 +47,7 @@ namespace StarryEngine::RenderGraph {
             // 4. 绑定索引缓冲区
             auto ibHandle = mGeometry->getIndexBufferHandle();
             if (!ibHandle.isValid()) {
-                std::cerr << "[GBufferRenderer] Missing index buffer" << std::endl;
+                std::cerr << "[GBufferRecorder] Missing index buffer" << std::endl;
                 return;
             }
             encoder->bindIndexBuffer(mResMgr->getBuffer(ibHandle),
@@ -57,9 +60,9 @@ namespace StarryEngine::RenderGraph {
         
     };
 
-    class PostProcessRenderer : public ISubpassRenderer {
+    class PostProcessRecorder : public ISubpassRecorder {
     public:
-        using ISubpassRenderer::ISubpassRenderer;
+        using ISubpassRecorder::ISubpassRecorder;
 
         void recordCommands(RHI::RHICommandEncoder* encoder,
             const PassContext& pctx,
@@ -86,9 +89,9 @@ namespace StarryEngine::RenderGraph {
         }
     };
 
-    class GridRenderer : public ISubpassRenderer {
+    class GridRecorder : public ISubpassRecorder {
     public:
-        using ISubpassRenderer::ISubpassRenderer;
+        using ISubpassRecorder::ISubpassRecorder;
 
         void recordCommands(RHI::RHICommandEncoder* encoder,
             const PassContext& pctx,
@@ -131,4 +134,86 @@ namespace StarryEngine::RenderGraph {
             }
         }
     };
+
+    class ImGuiRecorder : public ISubpassRecorder {
+    public:
+        using ISubpassRecorder::ISubpassRecorder;
+
+        ~ImGuiRecorder() {
+            if (m_initialized) {
+                ImGui_ImplVulkan_Shutdown();
+                ImGui_ImplGlfw_Shutdown();
+                ImGui::DestroyContext();
+            }
+        }
+
+        inline void init(VulkanRHI* rhi, VkDescriptorPool descriptorPool, GLFWwindow* window, VkRenderPass renderPass) {
+            // 如果已经初始化，先清理旧的 ImGui 资源
+            if (m_initialized) {
+                ImGui_ImplVulkan_Shutdown();
+                ImGui_ImplGlfw_Shutdown();
+                ImGui::DestroyContext();
+                m_initialized = false;
+            }
+
+            // 重新创建 ImGui 上下文
+            IMGUI_CHECKVERSION();
+            ImGui::CreateContext();
+            ImGuiIO& io = ImGui::GetIO(); (void)io;
+            io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+
+            // 初始化 GLFW 后端
+            ImGui_ImplGlfw_InitForVulkan(window, true);
+
+            // 获取 Vulkan 必要信息
+            VkInstance instance = rhi->getInstance();
+            VkPhysicalDevice physicalDevice = rhi->getPhysicalDevice();
+            VkDevice device = rhi->getDevice();
+            uint32_t queueFamily = rhi->getGraphicsQueueFamilyIndex();
+            VkQueue queue = rhi->getGraphicsQueue();
+            uint32_t imageCount = rhi->getSwapChainImageCount();
+
+            // 初始化 Vulkan 后端
+            ImGui_ImplVulkan_InitInfo init_info = {};
+            init_info.Instance = instance;
+            init_info.PhysicalDevice = physicalDevice;
+            init_info.Device = device;
+            init_info.QueueFamily = queueFamily;
+            init_info.Queue = queue;
+            init_info.DescriptorPool = descriptorPool;
+            init_info.RenderPass = renderPass;  // 使用传入的 RenderPass
+            init_info.MinImageCount = imageCount;
+            init_info.ImageCount = imageCount;
+            init_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+            init_info.CheckVkResultFn = [](VkResult err) {
+                if (err != VK_SUCCESS) {
+                    std::cerr << "[ImGui] Vulkan error: " << err << std::endl;
+                }
+                };
+
+            ImGui_ImplVulkan_Init(&init_info);
+            ImGui_ImplVulkan_CreateFontsTexture();
+
+            m_initialized = true;
+        }
+
+        inline void newFrame() {
+            ImGui_ImplVulkan_NewFrame();
+            ImGui_ImplGlfw_NewFrame();
+            ImGui::NewFrame();
+        }
+
+        inline void recordCommands(RHI::RHICommandEncoder* encoder,
+            const PassContext& ctx,
+            uint32_t subpassIndex,
+            uint32_t frameIndex) {
+            if (!m_initialized) return;
+            ImGui::Render();
+            ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), static_cast<VkCommandBuffer>(encoder->getCommandBuffer()));
+        }
+    private:
+        std::shared_ptr<RHI::ResourceManager> m_resMgr;
+        bool m_initialized = false;
+    };
+ 
 }

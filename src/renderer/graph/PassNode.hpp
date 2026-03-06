@@ -10,7 +10,7 @@
 #include "RenderPassBuilder.hpp"
 
 namespace StarryEngine::RenderGraph {
-    class ISubpassRenderer;
+    class ISubpassRecorder;
 
     struct PhysicalTextureInfo {
         RHI::TextureHandle handle;
@@ -84,7 +84,7 @@ namespace StarryEngine::RenderGraph {
 
         SubpassBuilderProxy& setPipelineName(const std::string& name) { m_builder.setPipelineName(name); return *this; }
         SubpassBuilderProxy& setPipelineDescription(const RHI::GraphicsPipelineDesc& desc) { m_builder.setPipelineDescription(desc); return *this; }
-        SubpassBuilderProxy& setRenderer(ISubpassRenderer* renderer) { m_builder.setRenderer(renderer); return *this; }
+        SubpassBuilderProxy& setRecorder(ISubpassRecorder* recorder) { m_builder.setRecorder(recorder); return *this; }
 
     private:
         PassNode& m_pass;
@@ -173,7 +173,7 @@ namespace StarryEngine::RenderGraph {
 
         RHI::RenderPassHandle m_renderPassHandle;
         std::vector<RHI::PipelineHandle> m_pipelines;
-        std::vector<ISubpassRenderer*> m_subpassRenderers;
+        std::vector<ISubpassRecorder*> m_subpassRecorders;
         std::vector<RHI::ClearValue> m_clearValues;
         std::unordered_map<std::string, uint32_t> m_attachmentNameToIndex;
         std::unordered_map<std::string, RHI::ClearValue> m_clearValueMap;

@@ -14,7 +14,10 @@
 #include "../renderer/interface/RHI_STRUCTS_DESC.hpp"
 #include "../renderer/graph/RenderGraph.hpp"
 #include "../renderer/graph/RenderPassBuilder.hpp"
-#include "../renderer/subpassRenderer/GbufferRender.hpp"
+#include "../renderer/subpassRecorder/GbufferRecorder.hpp"
+#include "imgui.h"
+#include "backends/imgui_impl_glfw.h"
+#include "backends/imgui_impl_vulkan.h"
 
 namespace StarryEngine {
     class FrameMonitor {
@@ -56,6 +59,9 @@ namespace StarryEngine {
         void createGrid();
         void createPostBuffer();
         void buildRenderGraph();
+        void createImGui();
+
+        void createImGuiShaders();
 
     private:
         Window::Ptr m_window;
@@ -72,14 +78,22 @@ namespace StarryEngine {
 
         RenderGraph::TextureId m_depthTexId;
 
-        std::shared_ptr<RenderGraph::GBufferRenderer> m_gbufferRenderer;
-        std::shared_ptr<RenderGraph::GridRenderer> m_gridRenderer;
-        std::shared_ptr<RenderGraph::PostProcessRenderer> m_postRenderer;
+        std::shared_ptr<RenderGraph::GBufferRecorder> m_gbufferRecorder;
+        std::shared_ptr<RenderGraph::GridRecorder> m_gridRecorder;
+        std::shared_ptr<RenderGraph::PostProcessRecorder> m_postRecorder;
+        std::shared_ptr<RenderGraph::ImGuiRecorder> m_imguiRecorder;
 
         RHI::DescriptorPoolHandle mDescriptorPoolHandle;
         RHI::PipelineLayoutHandle mPipelineLayoutHandle;
         RHI::BufferHandle m_uniformBufferHandle;
         RHI::BufferHandle m_gridUniformBufferHandle;
+
+        // Application.hpp 中添加
+        RHI::ShaderHandle m_imguiVertexShader;
+        RHI::ShaderHandle m_imguiFragmentShader;
+        RHI::PipelineLayoutHandle m_imguiPipelineLayout;
+
+        RenderGraph::PassNode* m_imguiPassNode = nullptr;
 
     };
 } // namespace StarryEngine

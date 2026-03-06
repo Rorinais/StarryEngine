@@ -45,8 +45,8 @@ namespace StarryEngine::RenderGraph {
         return *this;
     }
 
-    SubpassBuilder& SubpassBuilder::setRenderer(ISubpassRenderer* renderer) {
-        m_renderer = renderer;
+    SubpassBuilder& SubpassBuilder::setRecorder(ISubpassRecorder* recorder) {
+        m_recorder = recorder;
         return *this;
     }
 

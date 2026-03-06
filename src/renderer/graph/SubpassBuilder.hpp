@@ -9,7 +9,7 @@
 #include "../interface/RHI_ENUMS.hpp"
 #include "../interface/RHI_HANDLES_SYSTEM.hpp"
 #include "../interface/RHI_STRUCTS_DESC.hpp"
-#include "../subpassRenderer/ISubpassRenderer.hpp"
+#include "../subpassRecorder/ISubpassRecorder.hpp"
 
 namespace StarryEngine::RenderGraph {
 
@@ -34,9 +34,9 @@ namespace StarryEngine::RenderGraph {
 
         SubpassBuilder& setPipelineName(const std::string& pipelineName);
         SubpassBuilder& setPipelineDescription(const RHI::GraphicsPipelineDesc& desc);
-        SubpassBuilder& setRenderer(ISubpassRenderer* renderer);
+        SubpassBuilder& setRecorder(ISubpassRecorder* recorder);
 
-        ISubpassRenderer* getRenderer() const { return m_renderer; }
+        ISubpassRecorder* getRecorder() const { return m_recorder; }
         const RHI::GraphicsPipelineDesc& getPipelineDescription() const { return m_pipelineDesc; }
 
         // 构建子流程描述
@@ -62,7 +62,7 @@ namespace StarryEngine::RenderGraph {
         std::optional<std::string> m_depthStencilAttachmentKey;
 
         RHI::GraphicsPipelineDesc m_pipelineDesc;
-        ISubpassRenderer* m_renderer = nullptr;
+        ISubpassRecorder* m_recorder = nullptr;
 
         std::unordered_map<std::string, RHI::ImageLayout> m_attachmentLayouts;
     };

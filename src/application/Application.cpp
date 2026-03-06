@@ -132,7 +132,9 @@ namespace StarryEngine {
         createGbuffer();
         createPostBuffer();
         createGrid();
+        createImGuiShaders();
         buildRenderGraph();
+        createImGui();
 
         m_rhi->printResourceStatistics();
     }
@@ -147,12 +149,13 @@ namespace StarryEngine {
             { RHI::DescriptorType::CombinedImageSampler, 10 },
             { RHI::DescriptorType::InputAttachment, 10 }
         };
+        poolDesc.freeDescriptorSet = true;
         poolDesc.debugName = "GlobalDescriptorPool";
         mDescriptorPoolHandle = m_rhi->getResourceManager()->createDescriptorPool(poolDesc);
     }
 
     void Application::createGbuffer() {
-        m_gbufferRenderer = std::make_shared<RenderGraph::GBufferRenderer>(m_resMgr);
+        m_gbufferRecorder = std::make_shared<RenderGraph::GBufferRecorder>(m_resMgr);
 
         std::string vsCode = R"(
                 #version 450
@@ -172,7 +175,7 @@ namespace StarryEngine {
                     fragTexCoord = inTexCoord;
                 }
             )";
-        m_gbufferRenderer->setVertexShader(vsCode, "VertexShader");
+        m_gbufferRecorder->setVertexShader(vsCode, "VertexShader");
 
         std::string fsCode = R"(
                 #version 450
@@ -184,7 +187,7 @@ namespace StarryEngine {
                     outColor = texture(texSampler, fragTexCoord) * vec4(fragColor, 1.0);
                 }
             )";
-        m_gbufferRenderer->setFragmentShader(fsCode, "FragmentShader");
+        m_gbufferRecorder->setFragmentShader(fsCode, "FragmentShader");
 
         std::vector<float> vertices = {
             // 背面 (z = -0.5)
@@ -234,55 +237,55 @@ namespace StarryEngine {
             .addAttribute(2, 0, RHI::Format::RG32_Float);   // 纹理坐标
 
 
-        m_gbufferRenderer->setVertexBuffer(0, vertices, layout, "posBuffer");
-        m_gbufferRenderer->setIndexBuffer(indices, "CubeIndexBuffer");
+        m_gbufferRecorder->setVertexBuffer(0, vertices, layout, "posBuffer");
+        m_gbufferRecorder->setIndexBuffer(indices, "CubeIndexBuffer");
 
 
-        m_uniformBufferHandle = m_gbufferRenderer->createAndAddUniformBuffer(sizeof(Uniforms), 0, "UniformBuffer");
+        m_uniformBufferHandle = m_gbufferRecorder->createAndAddUniformBuffer(sizeof(Uniforms), 0, "UniformBuffer");
 
-        m_gbufferRenderer->addTexture("C:\\Users\\41384\\Desktop\\Snipaste.png",
+        m_gbufferRecorder->addTexture("C:\\Users\\41384\\Desktop\\Snipaste.png",
             RHI::Format::RGBA8_UNorm,
             "DiffuseTexture",
             1);
 
-        m_gbufferRenderer->createDescriptorSetLayout();
-        m_gbufferRenderer->createPipelineLayout("pipelineLayout");
-        m_gbufferRenderer->allocateDescriptorSet(mDescriptorPoolHandle);
-        m_gbufferRenderer->updateDescriptorSet();
+        m_gbufferRecorder->createDescriptorSetLayout();
+        m_gbufferRecorder->createPipelineLayout("pipelineLayout");
+        m_gbufferRecorder->allocateDescriptorSet(mDescriptorPoolHandle);
+        m_gbufferRecorder->updateDescriptorSet();
 
     }
 
     void Application::createGrid() {
-        m_gridRenderer = std::make_shared<RenderGraph::GridRenderer>(m_resMgr);
+        m_gridRecorder = std::make_shared<RenderGraph::GridRecorder>(m_resMgr);
 
-        // 顶点着色器（不变）
-        std::string vsCode = R"(
-        #version 450
-        layout(location = 0) in vec3 inPosition;
-        layout(location = 1) in vec3 inColor;
-        layout(location = 0) out vec3 fragColor;
-        layout(binding = 0) uniform UniformBufferObject {
-            mat4 model;
-            mat4 view;
-            mat4 proj;
-        } ubo;
-        void main() {
-            gl_Position = ubo.proj * ubo.view * ubo.model * vec4(inPosition, 1.0);
-            fragColor = inColor;
-        }
-    )";
-        m_gridRenderer->setVertexShader(vsCode, "GridVS");
+            // 顶点着色器（不变）
+            std::string vsCode = R"(
+            #version 450
+            layout(location = 0) in vec3 inPosition;
+            layout(location = 1) in vec3 inColor;
+            layout(location = 0) out vec3 fragColor;
+            layout(binding = 0) uniform UniformBufferObject {
+                mat4 model;
+                mat4 view;
+                mat4 proj;
+            } ubo;
+            void main() {
+                gl_Position = ubo.proj * ubo.view * ubo.model * vec4(inPosition, 1.0);
+                fragColor = inColor;
+            }
+        )";
+        m_gridRecorder->setVertexShader(vsCode, "GridVS");
 
         // 片段着色器（不变）
         std::string fsCode = R"(
-        #version 450
-        layout(location = 0) in vec3 fragColor;
-        layout(location = 0) out vec4 outColor;
-        void main() {
-            outColor = vec4(fragColor, 0.5);
-        }
-    )";
-        m_gridRenderer->setFragmentShader(fsCode, "GridFS");
+            #version 450
+            layout(location = 0) in vec3 fragColor;
+            layout(location = 0) out vec4 outColor;
+            void main() {
+                outColor = vec4(fragColor, 0.5);
+            }
+        )";
+        m_gridRecorder->setFragmentShader(fsCode, "GridFS");
 
         // 生成网格数据
         std::vector<float> vertices;
@@ -353,19 +356,19 @@ namespace StarryEngine {
             .addAttribute(0, 0, RHI::Format::RGB32_Float)   // 位置
             .addAttribute(1, 0, RHI::Format::RGB32_Float);  // 颜色
 
-        m_gridRenderer->setVertexBuffer(0, vertices, layout, "GridVertexBuffer");
-        m_gridRenderer->setIndexBuffer(indices, "GridIndexBuffer");
+        m_gridRecorder->setVertexBuffer(0, vertices, layout, "GridVertexBuffer");
+        m_gridRecorder->setIndexBuffer(indices, "GridIndexBuffer");
 
         // 创建 UniformBuffer 等后续操作（不变）
-        m_gridUniformBufferHandle = m_gridRenderer->createAndAddUniformBuffer(sizeof(Uniforms), 0, "GridUniformBuffer");
-        m_gridRenderer->createDescriptorSetLayout();
-        m_gridRenderer->createPipelineLayout("GridPipelineLayout");
-        m_gridRenderer->allocateDescriptorSet(mDescriptorPoolHandle);
-        m_gridRenderer->updateDescriptorSet();
+        m_gridUniformBufferHandle = m_gridRecorder->createAndAddUniformBuffer(sizeof(Uniforms), 0, "GridUniformBuffer");
+        m_gridRecorder->createDescriptorSetLayout();
+        m_gridRecorder->createPipelineLayout("GridPipelineLayout");
+        m_gridRecorder->allocateDescriptorSet(mDescriptorPoolHandle);
+        m_gridRecorder->updateDescriptorSet();
     }
 
     void Application::createPostBuffer() {
-        m_postRenderer = std::make_shared<RenderGraph::PostProcessRenderer>(m_resMgr);
+        m_postRecorder = std::make_shared<RenderGraph::PostProcessRecorder>(m_resMgr);
         std::string fullscreenVS = R"(
                 #version 450
                 layout(location = 0) out vec2 outUV;
@@ -379,7 +382,7 @@ namespace StarryEngine {
                     outUV = positions[gl_VertexIndex].xy * 0.5 + 0.5;
                 }
             )";
-        m_postRenderer->setVertexShader(fullscreenVS, "VertexShader");
+        m_postRecorder->setVertexShader(fullscreenVS, "VertexShader");
 
         // 后处理片元着色器（使用输入附件）
         std::string postFS = R"(
@@ -407,12 +410,70 @@ namespace StarryEngine {
                 outColor = vec4(finalColor, 1.0);
             }
         )";
-        m_postRenderer->setFragmentShader(postFS, "PostFS");
+        m_postRecorder->setFragmentShader(postFS, "PostFS");
 
-        m_postRenderer->addInputAttachmentBinding(0, RHI::ShaderStage::Fragment);
-        m_postRenderer->createDescriptorSetLayout();
-        m_postRenderer->createPipelineLayout("PostPipelineLayout");
-        m_postRenderer->allocateDescriptorSet(mDescriptorPoolHandle, 0);
+        m_postRecorder->addInputAttachmentBinding(0, RHI::ShaderStage::Fragment);
+        m_postRecorder->createDescriptorSetLayout();
+        m_postRecorder->createPipelineLayout("PostPipelineLayout");
+        m_postRecorder->allocateDescriptorSet(mDescriptorPoolHandle, 0);
+    }
+
+    void Application::createImGui() {
+        auto rpHandle = m_imguiPassNode->getRenderPassHandle();
+        auto* rpObj = m_resMgr->getRenderPass(rpHandle);
+        VkRenderPass imguiRenderPass = static_cast<VkRenderPass>(rpObj->getNativeHandle());
+
+        // 获取描述符池原生句柄
+        auto* pool = m_resMgr->getDescriptorPool(mDescriptorPoolHandle);
+        VkDescriptorPool descPool = static_cast<VkDescriptorPool>(pool->getNativeHandle());
+
+        // 初始化 ImGuiRecorder
+        m_imguiRecorder->init(m_rhi.get(), descPool, m_window->getHandle(), imguiRenderPass);
+
+    }
+
+    void Application::createImGuiShaders() {
+        m_imguiRecorder = std::make_shared<RenderGraph::ImGuiRecorder>(m_resMgr);
+        std::string vsCode = R"(
+                #version 450
+                layout(location = 0) out vec2 outUV;
+                void main() {
+                    const vec3 positions[3] = vec3[](
+                        vec3(-1.0, -1.0, 0.0),
+                        vec3( 3.0, -1.0, 0.0),
+                        vec3(-1.0,  3.0, 0.0)
+                    );
+                    gl_Position = vec4(positions[gl_VertexIndex], 1.0);
+                    outUV = positions[gl_VertexIndex].xy * 0.5 + 0.5;
+                }
+            )";
+        RHI::ShaderModuleDesc vsDesc;
+        vsDesc.sourcecode = vsCode;
+        vsDesc.stage = RHI::ShaderStage::Vertex;
+        vsDesc.debugName = "ImGuiVS";
+        m_imguiVertexShader = m_resMgr->createShader(vsDesc, "ImGuiVS");
+
+        // 片段着色器代码（输出固定颜色）
+        std::string fsCode = R"(
+                #version 450
+                layout(location = 0) in vec2 inUV;
+                layout(location = 0) out vec4 outColor;
+                void main() {
+                    outColor = vec4(1.0, 0.0, 1.0, 1.0); // 品红，便于调试
+                }
+            )";
+        RHI::ShaderModuleDesc fsDesc;
+        fsDesc.sourcecode = fsCode;
+        fsDesc.stage = RHI::ShaderStage::Fragment;
+        fsDesc.debugName = "ImGuiFS";
+        m_imguiFragmentShader = m_resMgr->createShader(fsDesc, "ImGuiFS");
+
+        // 创建空的 PipelineLayout（不需要任何描述符）
+        RHI::PipelineLayoutDesc layoutDesc;
+        layoutDesc.descriptorSetLayouts = {}; // 空
+        layoutDesc.pushConstants = {};
+        layoutDesc.debugName = "ImGuiPipelineLayout";
+        m_imguiPipelineLayout = m_resMgr->createPipelineLayout(layoutDesc, "ImGuiPipelineLayout");
     }
 
     void Application::buildRenderGraph() {
@@ -480,14 +541,14 @@ namespace StarryEngine {
         gridSubpass.addColorAttachment(intermediateTexId)
             .addDepthStencilAttachment(depthTexId)
             .setPipelineName("GridPipeline")
-            .setRenderer(m_gridRenderer.get());
+            .setRecorder(m_gridRecorder.get());
 
         RHI::GraphicsPipelineDesc gridPipelineDesc = basePipelineDesc;
         gridPipelineDesc.topology = RHI::PrimitiveTopology::LineList;
-        gridPipelineDesc.vertexShader = m_gridRenderer->getVertexShader();
-        gridPipelineDesc.fragmentShader = m_gridRenderer->getFragmentShader();
-        gridPipelineDesc.vertexInput = m_gridRenderer->getVertexInputState();
-        gridPipelineDesc.pipelineLayoutHandle = m_gridRenderer->getPipelineLayout();
+        gridPipelineDesc.vertexShader = m_gridRecorder->getVertexShader();
+        gridPipelineDesc.fragmentShader = m_gridRecorder->getFragmentShader();
+        gridPipelineDesc.vertexInput = m_gridRecorder->getVertexInputState();
+        gridPipelineDesc.pipelineLayoutHandle = m_gridRecorder->getPipelineLayout();
         gridPipelineDesc.depthStencil.depthTestEnable = true;
         gridPipelineDesc.depthStencil.depthWriteEnable = true;
         gridPipelineDesc.depthStencil.depthCompareOp = RHI::CompareOp::Less;
@@ -500,14 +561,14 @@ namespace StarryEngine {
         geomSubpass.addColorAttachment(intermediateTexId)
             .addDepthStencilAttachment(depthTexId)
             .setPipelineName("GeomPipeline")
-            .setRenderer(m_gbufferRenderer.get());
+            .setRecorder(m_gbufferRecorder.get());
 
         RHI::GraphicsPipelineDesc geomPipelineDesc = basePipelineDesc;
         geomPipelineDesc.topology = RHI::PrimitiveTopology::TriangleList;
-        geomPipelineDesc.vertexShader = m_gbufferRenderer->getVertexShader();
-        geomPipelineDesc.fragmentShader = m_gbufferRenderer->getFragmentShader();
-        geomPipelineDesc.vertexInput = m_gbufferRenderer->getVertexInputState();
-        geomPipelineDesc.pipelineLayoutHandle = m_gbufferRenderer->getPipelineLayout();
+        geomPipelineDesc.vertexShader = m_gbufferRecorder->getVertexShader();
+        geomPipelineDesc.fragmentShader = m_gbufferRecorder->getFragmentShader();
+        geomPipelineDesc.vertexInput = m_gbufferRecorder->getVertexInputState();
+        geomPipelineDesc.pipelineLayoutHandle = m_gbufferRecorder->getPipelineLayout();
         geomPipelineDesc.depthStencil.depthTestEnable = true;
         geomPipelineDesc.depthStencil.depthWriteEnable = true;
         geomPipelineDesc.depthStencil.depthCompareOp = RHI::CompareOp::Less;
@@ -519,44 +580,67 @@ namespace StarryEngine {
         // ========== 后处理 Pass ==========
         auto* postPass = m_renderGraph->addPassNode("PostPass");
 
-        // 声明附件
         postPass->addColorOutput(swapchainTexId)
             .setClearColor({ 0.0f, 0.0f, 0.0f, 1.0f })
             .setFinalLayout(RHI::ImageLayout::PresentSrc);
 
-        postPass->addInput(intermediateTexId);  // 声明为输入
+        postPass->addInput(intermediateTexId)
+            .setInitialLayout(RHI::ImageLayout::ShaderReadOnly);
 
         auto postSubpass = postPass->addSubpassProxy("PostSubpass");
         postSubpass.addColorAttachment(swapchainTexId)
             .addInputAttachment(intermediateTexId)
             .setPipelineName("PostPipeline")
-            .setRenderer(m_postRenderer.get());
+            .setRecorder(m_postRecorder.get());
 
         RHI::GraphicsPipelineDesc postPipelineDesc = basePipelineDesc;
-        postPipelineDesc.vertexShader = m_postRenderer->getVertexShader();
-        postPipelineDesc.fragmentShader = m_postRenderer->getFragmentShader();
+        postPipelineDesc.vertexShader = m_postRecorder->getVertexShader();
+        postPipelineDesc.fragmentShader = m_postRecorder->getFragmentShader();
         postPipelineDesc.vertexInput = {};
-        postPipelineDesc.pipelineLayoutHandle = m_postRenderer->getPipelineLayout();
+        postPipelineDesc.pipelineLayoutHandle = m_postRecorder->getPipelineLayout();
         postPipelineDesc.depthStencil.depthTestEnable = false;
         postPipelineDesc.colorBlend.attachments[0].blendEnable = false;
         postSubpass.setPipelineDescription(postPipelineDesc);
 
         postPass->setRenderArea(m_width, m_height);
 
+
+        // ========== ImGui Pass ==========
+        m_imguiPassNode = m_renderGraph->addPassNode("ImGuiPass");
+        m_imguiPassNode->addColorOutput(swapchainTexId)
+            .setLoadOp(RHI::AttachmentLoadOp::Load)   // 保留之前的画面
+            .setStoreOp(RHI::AttachmentStoreOp::Store)
+            .setInitialLayout(RHI::ImageLayout::PresentSrc)  // 关键：设置初始布局
+            .setFinalLayout(RHI::ImageLayout::PresentSrc);
+        m_imguiPassNode->setRenderArea(m_width, m_height);
+
+        auto guiSubpass = m_imguiPassNode->addSubpassProxy("ImGuiRendering");
+        guiSubpass.addColorAttachment(swapchainTexId)
+            .setPipelineName("ImGuiPipeline")
+            .setRecorder(m_imguiRecorder.get());
+
+        RHI::GraphicsPipelineDesc guiPipelineDesc = basePipelineDesc; // 复用基础描述
+        guiPipelineDesc.vertexShader = m_imguiVertexShader;
+        guiPipelineDesc.fragmentShader = m_imguiFragmentShader;
+        guiPipelineDesc.vertexInput = {}; // 无顶点输入
+        guiPipelineDesc.pipelineLayoutHandle = m_imguiPipelineLayout;
+        guiPipelineDesc.depthStencil.depthTestEnable = false;
+        guiPipelineDesc.colorBlend.attachments[0].blendEnable = false;
+        guiSubpass.setPipelineDescription(guiPipelineDesc);
+
         // 手动依赖（可选，自动分析已足够）
         //m_renderGraph->addDependency(mainPass, postPass);
 
-        // 编译
         if (!m_renderGraph->compile()) {
             throw std::runtime_error("Failed to compile RenderGraph");
         }
 
-        // 更新后处理渲染器的输入附件描述符（保持不变）
+        // 更新后处理渲染器的输入附件描述符
         RHI::TextureHandle interPhys = m_renderGraph->getPhysicalTextureHandle(intermediateTexId);
         if (!interPhys.isValid()) {
             throw std::runtime_error("Intermediate texture physical handle invalid");
         }
-        m_postRenderer->updateInputAttachment(0, interPhys, RHI::ImageLayout::ShaderReadOnly);
+        m_postRecorder->updateInputAttachment(0, interPhys, RHI::ImageLayout::ShaderReadOnly);
     }
 
     void Application::run() {
@@ -580,6 +664,9 @@ namespace StarryEngine {
                 }
 
                 buildRenderGraph();
+                createImGui();
+
+                continue;
             }
             if (m_width == 0 || m_height == 0) continue;
 
@@ -598,7 +685,15 @@ namespace StarryEngine {
                 auto* gridUniformBuffer = m_resMgr->getBuffer(m_gridUniformBufferHandle);
                 gridUniformBuffer->update(&gridUbo, sizeof(gridUbo), 0);
 
+                m_imguiRecorder->newFrame();
 
+                ImGui::ShowDemoWindow();
+                {
+                    ImGui::Begin("Statistics");
+                    ImGui::Text("FPS: %.1f", monitor.getFPS());
+                    ImGui::Text("Frame Time: %.3f ms", monitor.getDeltaTime() * 1000.0f);
+                    ImGui::End();
+                }
 
                 m_renderGraph->execute(imageIndex, encoder);
             });
@@ -609,8 +704,8 @@ namespace StarryEngine {
     Application::~Application() {
         if (m_rhi) m_rhi->waitIdle();
 
-        m_gbufferRenderer.reset();
-        m_postRenderer.reset();
+        m_gbufferRecorder.reset();
+        m_postRecorder.reset();
         m_renderGraph.reset();
         m_rhi.reset();
         m_window.reset();

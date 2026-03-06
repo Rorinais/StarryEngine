@@ -1337,7 +1337,6 @@ namespace StarryEngine::RHI {
 
     RHI_VK_DescriptorPool::RHI_VK_DescriptorPool(Device::Ptr device, const DescriptorPoolDesc& desc)
         : mDevice(device), mDesc(desc) {
-
         std::vector<VkDescriptorPoolSize> vkPoolSizes;
         for (const auto& size : desc.poolSizes) {
             VkDescriptorPoolSize vkSize{};
@@ -1346,12 +1345,22 @@ namespace StarryEngine::RHI {
             vkPoolSizes.push_back(vkSize);
         }
 
-        // 直接调用 Device 的封装函数
-        mPool = mDevice->createDescriptorPool(vkPoolSizes, desc.maxSets);
+        VkDescriptorPoolCreateInfo poolInfo{};
+        poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        poolInfo.flags = desc.freeDescriptorSet ? VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT : 0;
+        poolInfo.maxSets = desc.maxSets;
+        poolInfo.poolSizeCount = static_cast<uint32_t>(vkPoolSizes.size());
+        poolInfo.pPoolSizes = vkPoolSizes.data();
 
-        if (!desc.debugName.empty())
+        if (vkCreateDescriptorPool(mDevice->getLogicalDevice(), &poolInfo, nullptr, &mPool) != VK_SUCCESS) {
+            throw std::runtime_error("Failed to create descriptor pool");
+        }
+
+        if (!desc.debugName.empty()) {
             mDevice->setObjectName(reinterpret_cast<uint64_t>(mPool),
-                VK_OBJECT_TYPE_DESCRIPTOR_POOL, desc.debugName.c_str());
+                VK_OBJECT_TYPE_DESCRIPTOR_POOL,
+                desc.debugName.c_str());
+        }
     }
 
     void RHI_VK_DescriptorPool::release() {

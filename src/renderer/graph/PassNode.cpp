@@ -247,11 +247,11 @@ namespace StarryEngine::RenderGraph {
         }
 
         m_pipelines.clear();
-        m_subpassRenderers.clear();
+        m_subpassRecorders.clear();
 
         for (size_t i = 0; i < buildResult.pipelineDescriptions.size(); ++i) {
             const auto& pipelineDesc = buildResult.pipelineDescriptions[i];
-            auto renderer = buildResult.subpassRenderers[i];
+            auto recorder = buildResult.subpassRecorders[i];
 
             RHI::GraphicsPipelineDesc gpDesc = pipelineDesc;
             gpDesc.renderPass = m_renderPassHandle;
@@ -266,7 +266,7 @@ namespace StarryEngine::RenderGraph {
             }
 
             m_pipelines.push_back(pipelineHandle);
-            m_subpassRenderers.push_back(renderer);
+            m_subpassRecorders.push_back(recorder);
         }
 
         // 构建清除值列表（按附件顺序）
@@ -324,8 +324,8 @@ namespace StarryEngine::RenderGraph {
             encoder->setScissor(scissor);
 
             PassContext ctx(m_resMgr, m_pipelines, frameIndex, framebuffer);
-            if (m_subpassRenderers[i]) {
-                m_subpassRenderers[i]->recordCommands(encoder, ctx, i, frameIndex);
+            if (m_subpassRecorders[i]) {
+                m_subpassRecorders[i]->recordCommands(encoder, ctx, i, frameIndex);
             }
         }
 

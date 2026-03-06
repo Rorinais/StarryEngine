@@ -647,5 +647,7 @@ namespace StarryEngine::RHI {
         virtual void beginDebugLabel(const char* label, const float color[4]) = 0;
         virtual void endDebugLabel() = 0;
         virtual void insertDebugLabel(const char* label, const float color[4]) = 0;
+
+        virtual void* getCommandBuffer() = 0;
     };
 }

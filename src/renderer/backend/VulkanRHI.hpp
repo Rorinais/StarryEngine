@@ -254,9 +254,6 @@ namespace StarryEngine{
             return HandleTraits<Handle>::create(mResourceManager.get(), desc, name, debugTag);
         }
 
-        uint32_t getSwapChainImageCount() const { return mSwapChain->getImageCount(); }
-        void* getSwapChainImageView(uint32_t index) const { return mSwapChain->getImageView(index); }
-
         void waitIdle() {mDevice->waitIdle(); }
 
         void printAllDeivceInfo(){
@@ -268,6 +265,17 @@ namespace StarryEngine{
         void printResourceStatistics() {
             mResourceManager->dumpStatistics();
         }
+
+        VkInstance getInstance() { return mDevice->getInstance()->getHandle(); }
+        VkPhysicalDevice getPhysicalDevice() { return mDevice->getPhysicalDevice(); }
+        VkDevice getDevice() { return mDevice->getLogicalDevice(); }
+        uint32_t getGraphicsQueueFamilyIndex() { return mDevice->getGraphicsQueueFamilyIndex(); }
+        VkQueue getGraphicsQueue() { return mDevice->getGraphicsQueue(); }
+        VkFormat getSwapChainImageFormat() { return mSwapChain->getFormat(); }
+        uint32_t getSwapChainImageCount() const { return mSwapChain->getImageCount(); }
+        void* getSwapChainImageView(uint32_t index) const { return mSwapChain->getImageView(index); }
+
+
     private:
         bool createDepthTexture();
         bool createFramebuffers();  

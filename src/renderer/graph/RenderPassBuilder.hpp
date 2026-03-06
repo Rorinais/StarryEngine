@@ -17,7 +17,7 @@ namespace StarryEngine::RenderGraph {
         std::vector<std::string> attachmentNames;                 // 附件键列表（按索引顺序）
         std::unordered_map<std::string, uint32_t> attachmentNameToIndex; // 键到索引映射
         std::vector<RHI::GraphicsPipelineDesc> pipelineDescriptions;
-        std::vector<ISubpassRenderer*> subpassRenderers;
+        std::vector<ISubpassRecorder*> subpassRecorders;
     };
 
     class RenderPassBuilder {

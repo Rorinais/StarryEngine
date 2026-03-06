@@ -34,9 +34,9 @@ namespace StarryEngine::RenderGraph {
         RHI::FramebufferHandle mFramebuffer;
     };
 
-    class ISubpassRenderer {
+    class ISubpassRecorder {
     public:
-        ISubpassRenderer(std::shared_ptr<RHI::ResourceManager> resMgr)
+        ISubpassRecorder(std::shared_ptr<RHI::ResourceManager> resMgr)
             :mResMgr(resMgr) {
             mGeometry = std::make_shared<Geometry>(resMgr);
             mMaterial = std::make_shared<Material>(resMgr);
@@ -107,7 +107,7 @@ namespace StarryEngine::RenderGraph {
 
         void setPassNode(PassNode* pass) { mPassNode = pass; }
 
-        virtual ~ISubpassRenderer() = default;
+        virtual ~ISubpassRecorder() = default;
         virtual void recordCommands(RHI::RHICommandEncoder* encoder,
             const PassContext& pctx,
             uint32_t subpassIndex,   
