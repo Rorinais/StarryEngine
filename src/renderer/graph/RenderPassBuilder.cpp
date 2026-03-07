@@ -143,6 +143,7 @@ namespace StarryEngine::RenderGraph {
         for (const auto& subpassBuilder : m_subpassBuilders) {
             result->pipelineDescriptions.push_back(subpassBuilder.getPipelineDescription());
             result->subpassRecorders.push_back(subpassBuilder.getRecorder());
+            result->subpassHasPipeline.push_back(subpassBuilder.hasPipeline()); 
         }
 
         return result;

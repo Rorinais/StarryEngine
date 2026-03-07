@@ -252,20 +252,25 @@ namespace StarryEngine::RenderGraph {
         for (size_t i = 0; i < buildResult.pipelineDescriptions.size(); ++i) {
             const auto& pipelineDesc = buildResult.pipelineDescriptions[i];
             auto recorder = buildResult.subpassRecorders[i];
+            bool hasPipeline = buildResult.subpassHasPipeline[i];  // 获取标记
 
-            RHI::GraphicsPipelineDesc gpDesc = pipelineDesc;
-            gpDesc.renderPass = m_renderPassHandle;
-            gpDesc.subpass = static_cast<uint32_t>(i);
-            if (gpDesc.debugName.empty()) {
-                gpDesc.debugName = m_name + "_subpass" + std::to_string(i);
+            if (hasPipeline) {
+                RHI::GraphicsPipelineDesc gpDesc = pipelineDesc;
+                gpDesc.renderPass = m_renderPassHandle;
+                gpDesc.subpass = static_cast<uint32_t>(i);
+                if (gpDesc.debugName.empty()) {
+                    gpDesc.debugName = m_name + "_subpass" + std::to_string(i);
+                }
+                auto pipelineHandle = resMgr->createGraphicsPipeline(gpDesc);
+                if (!pipelineHandle.isValid()) {
+                    throw std::runtime_error("Failed to create Pipeline for subpass " + std::to_string(i));
+                }
+                m_pipelines.push_back(pipelineHandle);
             }
-
-            auto pipelineHandle = resMgr->createGraphicsPipeline(gpDesc);
-            if (!pipelineHandle.isValid()) {
-                throw std::runtime_error("Failed to create Pipeline for subpass " + std::to_string(i));
+            else {
+                // 无管线的子通道，放入无效句柄
+                m_pipelines.push_back(RHI::PipelineHandle::Null());
             }
-
-            m_pipelines.push_back(pipelineHandle);
             m_subpassRecorders.push_back(recorder);
         }
 

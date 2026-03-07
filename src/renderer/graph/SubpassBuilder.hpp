@@ -35,10 +35,11 @@ namespace StarryEngine::RenderGraph {
         SubpassBuilder& setPipelineName(const std::string& pipelineName);
         SubpassBuilder& setPipelineDescription(const RHI::GraphicsPipelineDesc& desc);
         SubpassBuilder& setRecorder(ISubpassRecorder* recorder);
+        SubpassBuilder& setNoPipeline();
 
         ISubpassRecorder* getRecorder() const { return m_recorder; }
         const RHI::GraphicsPipelineDesc& getPipelineDescription() const { return m_pipelineDesc; }
-
+        bool hasPipeline() const { return m_hasPipeline; }
         // 构建子流程描述
         RHI::SubpassDesc buildSubpassDesc(const std::unordered_map<std::string, uint32_t>& keyToIndexMap) const;
 
@@ -63,6 +64,7 @@ namespace StarryEngine::RenderGraph {
 
         RHI::GraphicsPipelineDesc m_pipelineDesc;
         ISubpassRecorder* m_recorder = nullptr;
+        bool m_hasPipeline = false;
 
         std::unordered_map<std::string, RHI::ImageLayout> m_attachmentLayouts;
     };

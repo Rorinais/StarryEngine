@@ -61,8 +61,6 @@ namespace StarryEngine {
         void buildRenderGraph();
         void createImGui();
 
-        void createImGuiShaders();
-
     private:
         Window::Ptr m_window;
         uint32_t m_width = 800;
@@ -87,11 +85,6 @@ namespace StarryEngine {
         RHI::PipelineLayoutHandle mPipelineLayoutHandle;
         RHI::BufferHandle m_uniformBufferHandle;
         RHI::BufferHandle m_gridUniformBufferHandle;
-
-        // Application.hpp 中添加
-        RHI::ShaderHandle m_imguiVertexShader;
-        RHI::ShaderHandle m_imguiFragmentShader;
-        RHI::PipelineLayoutHandle m_imguiPipelineLayout;
 
         RenderGraph::PassNode* m_imguiPassNode = nullptr;
 

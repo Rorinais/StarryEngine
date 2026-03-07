@@ -132,7 +132,6 @@ namespace StarryEngine {
         createGbuffer();
         createPostBuffer();
         createGrid();
-        createImGuiShaders();
         buildRenderGraph();
         createImGui();
 
@@ -426,57 +425,12 @@ namespace StarryEngine {
         // 获取描述符池原生句柄
         auto* pool = m_resMgr->getDescriptorPool(mDescriptorPoolHandle);
         VkDescriptorPool descPool = static_cast<VkDescriptorPool>(pool->getNativeHandle());
-
-        // 初始化 ImGuiRecorder
         m_imguiRecorder->init(m_rhi.get(), descPool, m_window->getHandle(), imguiRenderPass);
 
     }
 
-    void Application::createImGuiShaders() {
-        m_imguiRecorder = std::make_shared<RenderGraph::ImGuiRecorder>(m_resMgr);
-        std::string vsCode = R"(
-                #version 450
-                layout(location = 0) out vec2 outUV;
-                void main() {
-                    const vec3 positions[3] = vec3[](
-                        vec3(-1.0, -1.0, 0.0),
-                        vec3( 3.0, -1.0, 0.0),
-                        vec3(-1.0,  3.0, 0.0)
-                    );
-                    gl_Position = vec4(positions[gl_VertexIndex], 1.0);
-                    outUV = positions[gl_VertexIndex].xy * 0.5 + 0.5;
-                }
-            )";
-        RHI::ShaderModuleDesc vsDesc;
-        vsDesc.sourcecode = vsCode;
-        vsDesc.stage = RHI::ShaderStage::Vertex;
-        vsDesc.debugName = "ImGuiVS";
-        m_imguiVertexShader = m_resMgr->createShader(vsDesc, "ImGuiVS");
-
-        // 片段着色器代码（输出固定颜色）
-        std::string fsCode = R"(
-                #version 450
-                layout(location = 0) in vec2 inUV;
-                layout(location = 0) out vec4 outColor;
-                void main() {
-                    outColor = vec4(1.0, 0.0, 1.0, 1.0); // 品红，便于调试
-                }
-            )";
-        RHI::ShaderModuleDesc fsDesc;
-        fsDesc.sourcecode = fsCode;
-        fsDesc.stage = RHI::ShaderStage::Fragment;
-        fsDesc.debugName = "ImGuiFS";
-        m_imguiFragmentShader = m_resMgr->createShader(fsDesc, "ImGuiFS");
-
-        // 创建空的 PipelineLayout（不需要任何描述符）
-        RHI::PipelineLayoutDesc layoutDesc;
-        layoutDesc.descriptorSetLayouts = {}; // 空
-        layoutDesc.pushConstants = {};
-        layoutDesc.debugName = "ImGuiPipelineLayout";
-        m_imguiPipelineLayout = m_resMgr->createPipelineLayout(layoutDesc, "ImGuiPipelineLayout");
-    }
-
     void Application::buildRenderGraph() {
+        m_imguiRecorder = std::make_shared<RenderGraph::ImGuiRecorder>(m_resMgr);
         m_renderGraph = std::make_unique<RenderGraph::RenderGraph>(m_rhi);
         m_renderGraph->setSwapchainImageCount(m_rhi->getSwapChainImageCount());
 
@@ -616,17 +570,7 @@ namespace StarryEngine {
 
         auto guiSubpass = m_imguiPassNode->addSubpassProxy("ImGuiRendering");
         guiSubpass.addColorAttachment(swapchainTexId)
-            .setPipelineName("ImGuiPipeline")
             .setRecorder(m_imguiRecorder.get());
-
-        RHI::GraphicsPipelineDesc guiPipelineDesc = basePipelineDesc; // 复用基础描述
-        guiPipelineDesc.vertexShader = m_imguiVertexShader;
-        guiPipelineDesc.fragmentShader = m_imguiFragmentShader;
-        guiPipelineDesc.vertexInput = {}; // 无顶点输入
-        guiPipelineDesc.pipelineLayoutHandle = m_imguiPipelineLayout;
-        guiPipelineDesc.depthStencil.depthTestEnable = false;
-        guiPipelineDesc.colorBlend.attachments[0].blendEnable = false;
-        guiSubpass.setPipelineDescription(guiPipelineDesc);
 
         // 手动依赖（可选，自动分析已足够）
         //m_renderGraph->addDependency(mainPass, postPass);

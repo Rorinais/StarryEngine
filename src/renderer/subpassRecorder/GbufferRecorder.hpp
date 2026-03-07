@@ -212,7 +212,6 @@ namespace StarryEngine::RenderGraph {
             ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), static_cast<VkCommandBuffer>(encoder->getCommandBuffer()));
         }
     private:
-        std::shared_ptr<RHI::ResourceManager> m_resMgr;
         bool m_initialized = false;
     };
  

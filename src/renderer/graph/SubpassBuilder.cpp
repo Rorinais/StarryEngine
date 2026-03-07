@@ -42,6 +42,13 @@ namespace StarryEngine::RenderGraph {
 
     SubpassBuilder& SubpassBuilder::setPipelineDescription(const RHI::GraphicsPipelineDesc& desc) {
         m_pipelineDesc = desc;
+        m_hasPipeline = true;
+        return *this;
+    }
+
+    SubpassBuilder& SubpassBuilder::setNoPipeline() {
+        m_hasPipeline = false;
+        m_pipelineDesc = RHI::GraphicsPipelineDesc{}; // 重置为默认
         return *this;
     }
 
