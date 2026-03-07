@@ -74,7 +74,7 @@ namespace StarryEngine {
         std::shared_ptr<RHI::ResourceManager> m_resMgr;
         std::unique_ptr<RenderGraph::RenderGraph> m_renderGraph;
 
-        RenderGraph::TextureId m_depthTexId;
+        RHI::TextureHandle m_sceneFinalTexHandle;
 
         std::shared_ptr<RenderGraph::GBufferRecorder> m_gbufferRecorder;
         std::shared_ptr<RenderGraph::GridRecorder> m_gridRecorder;

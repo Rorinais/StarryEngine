@@ -145,10 +145,13 @@ namespace StarryEngine::RenderGraph {
                 ImGui_ImplGlfw_Shutdown();
                 ImGui::DestroyContext();
             }
+            if (m_rhi && m_sampler != VK_NULL_HANDLE) {
+                vkDestroySampler(m_rhi->getDevice(), m_sampler, nullptr);
+            }
         }
 
-        inline void init(VulkanRHI* rhi, VkDescriptorPool descriptorPool, GLFWwindow* window, VkRenderPass renderPass) {
-            // 如果已经初始化，先清理旧的 ImGui 资源
+        inline void init(std::shared_ptr<VulkanRHI> rhi, VkDescriptorPool descriptorPool, GLFWwindow* window, VkRenderPass renderPass) {
+            m_rhi = rhi;
             if (m_initialized) {
                 ImGui_ImplVulkan_Shutdown();
                 ImGui_ImplGlfw_Shutdown();
@@ -211,8 +214,97 @@ namespace StarryEngine::RenderGraph {
             ImGui::Render();
             ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), static_cast<VkCommandBuffer>(encoder->getCommandBuffer()));
         }
+
+        inline void setDisplayTexture(RHI::TextureHandle textureHandle) {
+            if (!m_initialized || !m_rhi) {
+                std::cerr << "[ImGuiRecorder] Not initialized or missing RHI" << std::endl;
+                return;
+            }
+
+            // 1. 创建采样器（如果尚未创建）
+            if (m_sampler == VK_NULL_HANDLE) {
+                VkSamplerCreateInfo samplerInfo = { VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO };
+                samplerInfo.magFilter = VK_FILTER_LINEAR;
+                samplerInfo.minFilter = VK_FILTER_LINEAR;
+                samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+                samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+                samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+                samplerInfo.anisotropyEnable = VK_FALSE;
+                samplerInfo.maxAnisotropy = 1.0f;
+                samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
+                samplerInfo.unnormalizedCoordinates = VK_FALSE;
+                samplerInfo.compareEnable = VK_FALSE;
+                samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+                samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+                samplerInfo.mipLodBias = 0.0f;
+                samplerInfo.minLod = 0.0f;
+                samplerInfo.maxLod = 0.0f;
+
+                VkDevice device = m_rhi->getDevice();
+                if (vkCreateSampler(device, &samplerInfo, nullptr, &m_sampler) != VK_SUCCESS) {
+                    std::cerr << "[ImGuiRecorder] Failed to create sampler" << std::endl;
+                    return;
+                }
+            }
+
+            // 2. 从纹理句柄获取 ImageView
+            if (!textureHandle.isValid()) {
+                std::cerr << "[ImGuiRecorder] Invalid texture handle" << std::endl;
+                m_sceneTextureID = 0;
+                return;
+            }
+            auto* texture = mResMgr->getTexture(textureHandle);
+            if (!texture) {
+                std::cerr << "[ImGuiRecorder] Texture object is null" << std::endl;
+                m_sceneTextureID = 0;
+                return;
+            }
+            VkImageView imageView = static_cast<VkImageView>(texture->getDefaultView()); // 确保使用 getDefaultView()
+            if (imageView == VK_NULL_HANDLE) {
+                std::cerr << "[ImGuiRecorder] Texture default view is null" << std::endl;
+                m_sceneTextureID = 0;
+                return;
+            }
+
+            // 3. 生成 ImTextureID
+            VkDescriptorSet descSet = ImGui_ImplVulkan_AddTexture(
+                m_sampler,
+                imageView,
+                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+            );
+            if (descSet == VK_NULL_HANDLE) {
+                std::cerr << "[ImGuiRecorder] ImGui_ImplVulkan_AddTexture failed" << std::endl;
+                m_sceneTextureID = 0;
+                return;
+            }
+            m_sceneTextureID = reinterpret_cast<ImTextureID>(descSet);
+            std::cout << "[ImGuiRecorder] Texture ID set to: " << m_sceneTextureID << std::endl;
+        }
+
+        inline void drawTextureWindow(const char* title) {
+            if (!m_initialized) return;
+
+            // 设置窗口初始大小（仅在首次使用时生效）
+            ImGui::SetNextWindowSize(ImVec2(400, 300), ImGuiCond_FirstUseEver);
+            // 可选：设置窗口位置
+            ImGui::SetNextWindowPos(ImVec2(50, 50), ImGuiCond_FirstUseEver);
+
+            ImGui::Begin(title);
+            if (m_sceneTextureID) {
+                ImVec2 viewportSize = ImGui::GetContentRegionAvail();
+                ImGui::Image(m_sceneTextureID, viewportSize);
+            }
+            else {
+                ImGui::Text("Texture not available (ID=%llu)", (unsigned long long)m_sceneTextureID);
+            }
+            ImGui::End();
+        }
+
     private:
         bool m_initialized = false;
+        std::shared_ptr<VulkanRHI> m_rhi;
+        VkSampler        m_sampler = VK_NULL_HANDLE;
+        ImTextureID      m_sceneTextureID = 0;
     };
  
 }

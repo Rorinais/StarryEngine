@@ -212,13 +212,27 @@ namespace StarryEngine::RenderGraph {
     }
 
     void Material::updateInputAttachment(uint32_t binding, RHI::TextureHandle texture, RHI::ImageLayout layout) {
-        if (!mDescriptorSet.isValid()) return;
-        auto* set = mResMgr->getDescriptorSet(mDescriptorSet);
-        if (!set) return;
-        auto* tex = mResMgr->getTexture(texture);
-        if (tex) {
-            set->writeInputAttachment(binding, 0, tex, layout);
-            set->update();
+        if (!mDescriptorSet.isValid()) {
+            std::cerr << "[Material] Descriptor set invalid, cannot update input attachment." << std::endl;
+            return;
         }
+        auto* set = mResMgr->getDescriptorSet(mDescriptorSet);
+        if (!set) {
+            std::cerr << "[Material] Failed to get descriptor set object." << std::endl;
+            return;
+        }
+        auto* tex = mResMgr->getTexture(texture);
+        if (!tex) {
+            std::cerr << "[Material] Texture handle invalid, cannot update input attachment." << std::endl;
+            return;
+        }
+        VkImageView view = static_cast<VkImageView>(tex->getNativeHandle()); // 或 getDefaultView()
+        if (view == VK_NULL_HANDLE) {
+            std::cerr << "[Material] Texture image view is null." << std::endl;
+            return;
+        }
+        set->writeInputAttachment(binding, 0, tex, layout);
+        set->update();
+        std::cout << "[Material] Input attachment updated successfully for binding " << binding << std::endl;
     }
 }

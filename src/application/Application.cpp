@@ -422,11 +422,14 @@ namespace StarryEngine {
         auto* rpObj = m_resMgr->getRenderPass(rpHandle);
         VkRenderPass imguiRenderPass = static_cast<VkRenderPass>(rpObj->getNativeHandle());
 
-        // 获取描述符池原生句柄
         auto* pool = m_resMgr->getDescriptorPool(mDescriptorPoolHandle);
         VkDescriptorPool descPool = static_cast<VkDescriptorPool>(pool->getNativeHandle());
-        m_imguiRecorder->init(m_rhi.get(), descPool, m_window->getHandle(), imguiRenderPass);
+        m_imguiRecorder->init(m_rhi, descPool, m_window->getHandle(), imguiRenderPass);
 
+        // 设置显示纹理（此时 Recorder 已初始化）
+        if (m_sceneFinalTexHandle.isValid()) {
+            m_imguiRecorder->setDisplayTexture(m_sceneFinalTexHandle);
+        }
     }
 
     void Application::buildRenderGraph() {
@@ -450,6 +453,15 @@ namespace StarryEngine {
         depthDesc.type = RHI::TextureType::Texture2D;
         depthDesc.allowDepthStencil = true;
         auto depthTexId = m_renderGraph->createVirtualTexture(depthDesc, "Depth");
+
+        // 创建最终场景纹理（后处理输出）
+        RHI::TextureDesc sceneFinalDesc;
+        sceneFinalDesc.extent = { m_width, m_height, 1 };
+        sceneFinalDesc.format = RHI::Format::RGBA8_UNorm;   // 可根据需要选择格式
+        sceneFinalDesc.type = RHI::TextureType::Texture2D;
+        sceneFinalDesc.allowRenderTarget = true;
+        sceneFinalDesc.allowInputAttachment = true;
+        auto sceneFinalTexId = m_renderGraph->createVirtualTexture(sceneFinalDesc, "SceneFinal");
 
         // 导入交换链纹理
         std::vector<void*> swapchainViews;
@@ -533,16 +545,14 @@ namespace StarryEngine {
 
         // ========== 后处理 Pass ==========
         auto* postPass = m_renderGraph->addPassNode("PostPass");
-
-        postPass->addColorOutput(swapchainTexId)
+        postPass->addColorOutput(sceneFinalTexId)
             .setClearColor({ 0.0f, 0.0f, 0.0f, 1.0f })
-            .setFinalLayout(RHI::ImageLayout::PresentSrc);
-
+            .setFinalLayout(RHI::ImageLayout::ShaderReadOnly);  // 供 ImGui 采样
         postPass->addInput(intermediateTexId)
             .setInitialLayout(RHI::ImageLayout::ShaderReadOnly);
 
         auto postSubpass = postPass->addSubpassProxy("PostSubpass");
-        postSubpass.addColorAttachment(swapchainTexId)
+        postSubpass.addColorAttachment(sceneFinalTexId)
             .addInputAttachment(intermediateTexId)
             .setPipelineName("PostPipeline")
             .setRecorder(m_postRecorder.get());
@@ -558,13 +568,13 @@ namespace StarryEngine {
 
         postPass->setRenderArea(m_width, m_height);
 
-
         // ========== ImGui Pass ==========
         m_imguiPassNode = m_renderGraph->addPassNode("ImGuiPass");
         m_imguiPassNode->addColorOutput(swapchainTexId)
-            .setLoadOp(RHI::AttachmentLoadOp::Load)   // 保留之前的画面
+            .setLoadOp(RHI::AttachmentLoadOp::Clear)           // 改为清除
+            .setClearColor({ 0.2f, 0.2f, 0.2f, 1.0f })          // 深灰色背景
             .setStoreOp(RHI::AttachmentStoreOp::Store)
-            .setInitialLayout(RHI::ImageLayout::PresentSrc)  // 关键：设置初始布局
+            .setInitialLayout(RHI::ImageLayout::Undefined)
             .setFinalLayout(RHI::ImageLayout::PresentSrc);
         m_imguiPassNode->setRenderArea(m_width, m_height);
 
@@ -572,19 +582,25 @@ namespace StarryEngine {
         guiSubpass.addColorAttachment(swapchainTexId)
             .setRecorder(m_imguiRecorder.get());
 
-        // 手动依赖（可选，自动分析已足够）
-        //m_renderGraph->addDependency(mainPass, postPass);
-
         if (!m_renderGraph->compile()) {
             throw std::runtime_error("Failed to compile RenderGraph");
         }
 
-        // 更新后处理渲染器的输入附件描述符
-        RHI::TextureHandle interPhys = m_renderGraph->getPhysicalTextureHandle(intermediateTexId);
-        if (!interPhys.isValid()) {
-            throw std::runtime_error("Intermediate texture physical handle invalid");
+        RHI::TextureHandle intermediatePhysAfter = m_renderGraph->getPhysicalTextureHandle(intermediateTexId);
+        if (intermediatePhysAfter.isValid()) {
+            m_postRecorder->updateInputAttachment(0, intermediatePhysAfter, RHI::ImageLayout::ShaderReadOnly);
         }
-        m_postRecorder->updateInputAttachment(0, interPhys, RHI::ImageLayout::ShaderReadOnly);
+        else {
+            std::cerr << "Failed to get valid intermediate texture handle after compile!" << std::endl;
+        }
+
+        RHI::TextureHandle sceneFinalPhys = m_renderGraph->getPhysicalTextureHandle(sceneFinalTexId);
+        if (sceneFinalPhys.isValid()) {
+            m_sceneFinalTexHandle = sceneFinalPhys; // 保存到成员变量
+        }
+        else {
+            std::cerr << "Failed to get physical handle for SceneFinal texture!" << std::endl;
+        }
     }
 
     void Application::run() {
@@ -638,6 +654,9 @@ namespace StarryEngine {
                     ImGui::Text("Frame Time: %.3f ms", monitor.getDeltaTime() * 1000.0f);
                     ImGui::End();
                 }
+
+                // 显示主渲染结果的窗口（封装在 recorder 中）
+                m_imguiRecorder->drawTextureWindow("Scene View");
 
                 m_renderGraph->execute(imageIndex, encoder);
             });
