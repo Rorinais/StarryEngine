@@ -14,7 +14,9 @@
 #include "../renderer/interface/RHI_STRUCTS_DESC.hpp"
 #include "../renderer/graph/RenderGraph.hpp"
 #include "../renderer/graph/RenderPassBuilder.hpp"
-#include "../renderer/subpassRecorder/GbufferRecorder.hpp"
+#include "../renderer/graph/Renderpass/GbufferPass.hpp"
+#include "../renderer/graph/Renderpass/PostProcessPass.hpp"
+#include "../renderer/VertexLayout.hpp"
 #include "imgui.h"
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_vulkan.h"
@@ -42,12 +44,6 @@ namespace StarryEngine {
         double m_lastTitleUpdate;
     };
 
-    struct Uniforms {
-        glm::mat4 model;
-        glm::mat4 view;
-        glm::mat4 proj;
-    };
-
     class Application {
     public:
         Application();
@@ -55,16 +51,12 @@ namespace StarryEngine {
 
         void run();
         void createDescriptorPool();
-        void createGbuffer();
-        void createGrid();
-        void createPostBuffer();
         void buildRenderGraph();
-        void createImGui();
 
     private:
         Window::Ptr m_window;
-        uint32_t m_width = 800;
-        uint32_t m_height = 600;
+        uint32_t m_width = 800*1.5;
+        uint32_t m_height = 600*1.5;
         const char* m_title = "StarryEngine";
         const char* m_icon_path = "assets/icons/window_icon.png";
         bool mFramebufferResized = false;
@@ -74,19 +66,14 @@ namespace StarryEngine {
         std::shared_ptr<RHI::ResourceManager> m_resMgr;
         std::unique_ptr<RenderGraph::RenderGraph> m_renderGraph;
 
-        RHI::TextureHandle m_sceneFinalTexHandle;
-
-        std::shared_ptr<RenderGraph::GBufferRecorder> m_gbufferRecorder;
-        std::shared_ptr<RenderGraph::GridRecorder> m_gridRecorder;
-        std::shared_ptr<RenderGraph::PostProcessRecorder> m_postRecorder;
-        std::shared_ptr<RenderGraph::ImGuiRecorder> m_imguiRecorder;
-
+        struct PassInfo{
+            std::unique_ptr<RenderGraph::IRenderPass> renderpass;
+            RenderGraph::TextureId inputTexture;
+            RenderGraph::TextureId outputTexture;
+            RHI::ImageLayout finalLayout;
+        };
+        std::vector<PassInfo> renderpasses;
         RHI::DescriptorPoolHandle mDescriptorPoolHandle;
-        RHI::PipelineLayoutHandle mPipelineLayoutHandle;
-        RHI::BufferHandle m_uniformBufferHandle;
-        RHI::BufferHandle m_gridUniformBufferHandle;
-
-        RenderGraph::PassNode* m_imguiPassNode = nullptr;
 
     };
 } // namespace StarryEngine

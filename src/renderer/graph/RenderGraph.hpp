@@ -33,6 +33,31 @@ namespace StarryEngine::RenderGraph {
         // 设置交换链图像数量（必须在 compile 前调用）
         void setSwapchainImageCount(uint32_t count);
 
+        RHI::TextureDesc createBaseTextureDesc(
+            uint32_t width, uint32_t height,
+            RHI::Format format = RHI::Format::RGBA8_UNorm,
+            bool allowDepthStencil = true,
+            bool allowRenderTarget = true,
+            bool allowInputAttachment = true,
+            RHI::TextureType type = RHI::TextureType::Texture2D);
+
+        RHI::GraphicsPipelineDesc createBasePipelineDesc(
+            RHI::ShaderHandle vertexShaderHandle,
+            RHI::ShaderHandle fragmentShaderHandle,
+            RHI::VertexInputState vertexInput,
+            RHI::PipelineLayoutHandle pipelineLayoutHandle,
+            uint32_t width, uint32_t height,
+            uint32_t rasterizationSamples = 1,
+            float lineWidth = 1.0f,
+            RHI::PrimitiveTopology topology = RHI::PrimitiveTopology::TriangleList,
+            RHI::CullMode cullMode = RHI::CullMode::None,
+            bool depthTestEnable = true,
+            bool depthWriteEnable = true,
+            RHI::CompareOp depthCompareOp = RHI::CompareOp::Less,
+            std::vector<RHI::BlendAttachmentState> attachments = { RHI::BlendAttachmentState{} },
+            std::vector<RHI::DynamicState> dynamicStates = { RHI::DynamicState::Viewport, RHI::DynamicState::Scissor }
+        );
+
         // 创建虚拟纹理资源
         TextureId createVirtualTexture(const RHI::TextureDesc& desc, const std::string& name = "");
 

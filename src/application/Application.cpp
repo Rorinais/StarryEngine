@@ -64,6 +64,7 @@ namespace StarryEngine {
         config.iconPath = m_icon_path;
         config.highDPI = false;
         config.resizable = true;
+        config.fullScreen = false;
         m_window = Window::create(config);
 
         m_window->setKeyCallback([this](int key, int action) {
@@ -129,11 +130,7 @@ namespace StarryEngine {
         m_rhi->printAllDeivceInfo();
 
         createDescriptorPool();
-        createGbuffer();
-        createPostBuffer();
-        createGrid();
         buildRenderGraph();
-        createImGui();
 
         m_rhi->printResourceStatistics();
     }
@@ -153,454 +150,52 @@ namespace StarryEngine {
         mDescriptorPoolHandle = m_rhi->getResourceManager()->createDescriptorPool(poolDesc);
     }
 
-    void Application::createGbuffer() {
-        m_gbufferRecorder = std::make_shared<RenderGraph::GBufferRecorder>(m_resMgr);
-
-        std::string vsCode = R"(
-                #version 450
-                layout(location = 0) in vec3 inPosition;
-                layout(location = 1) in vec3 inColor;
-                layout(location = 2) in vec2 inTexCoord;
-                layout(location = 0) out vec3 fragColor;
-                layout(location = 1) out vec2 fragTexCoord;
-                layout(binding = 0) uniform UniformBufferObject {
-                    mat4 model;
-                    mat4 view;
-                    mat4 proj;
-                } ubo;
-                void main() {
-                    gl_Position = ubo.proj * ubo.view * ubo.model * vec4(inPosition, 1.0);
-                    fragColor = inColor;
-                    fragTexCoord = inTexCoord;
-                }
-            )";
-        m_gbufferRecorder->setVertexShader(vsCode, "VertexShader");
-
-        std::string fsCode = R"(
-                #version 450
-                layout(location = 0) in vec3 fragColor;
-                layout(location = 1) in vec2 fragTexCoord;
-                layout(location = 0) out vec4 outColor;
-                layout(binding = 1) uniform sampler2D texSampler;
-                void main() {
-                    outColor = texture(texSampler, fragTexCoord) * vec4(fragColor, 1.0);
-                }
-            )";
-        m_gbufferRecorder->setFragmentShader(fsCode, "FragmentShader");
-
-        std::vector<float> vertices = {
-            // 背面 (z = -0.5)
-            -0.5f, -0.5f, -0.5f,  1.0f, 0.0f, 0.0f,  0.0f, 0.0f,
-             0.5f, -0.5f, -0.5f,  0.0f, 1.0f, 0.0f,  1.0f, 0.0f,
-             0.5f,  0.5f, -0.5f,  0.0f, 0.0f, 1.0f,  1.0f, 1.0f,
-            -0.5f,  0.5f, -0.5f,  1.0f, 1.0f, 0.0f,  0.0f, 1.0f,
-            // 正面 (z = 0.5)
-            -0.5f, -0.5f,  0.5f,  1.0f, 0.0f, 1.0f,  0.0f, 0.0f,
-             0.5f, -0.5f,  0.5f,  0.0f, 1.0f, 1.0f,  1.0f, 0.0f,
-             0.5f,  0.5f,  0.5f,  0.5f, 0.5f, 1.0f,  1.0f, 1.0f,
-            -0.5f,  0.5f,  0.5f,  1.0f, 0.5f, 0.5f,  0.0f, 1.0f,
-            // 左面 (x = -0.5)
-            -0.5f, -0.5f,  0.5f,  1.0f, 0.0f, 1.0f,  0.0f, 0.0f,
-            -0.5f, -0.5f, -0.5f,  1.0f, 0.0f, 0.0f,  1.0f, 0.0f,
-            -0.5f,  0.5f, -0.5f,  1.0f, 1.0f, 0.0f,  1.0f, 1.0f,
-            -0.5f,  0.5f,  0.5f,  1.0f, 0.5f, 0.5f,  0.0f, 1.0f,
-            // 右面 (x = 0.5)
-             0.5f, -0.5f, -0.5f,  0.0f, 1.0f, 0.0f,  0.0f, 0.0f,
-             0.5f, -0.5f,  0.5f,  0.0f, 1.0f, 1.0f,  1.0f, 0.0f,
-             0.5f,  0.5f,  0.5f,  0.5f, 0.5f, 1.0f,  1.0f, 1.0f,
-             0.5f,  0.5f, -0.5f,  0.0f, 0.0f, 1.0f,  0.0f, 1.0f,
-             // 顶面 (y = 0.5)
-             -0.5f,  0.5f, -0.5f,  1.0f, 1.0f, 0.0f,  0.0f, 0.0f,
-              0.5f,  0.5f, -0.5f,  0.0f, 0.0f, 1.0f,  1.0f, 0.0f,
-              0.5f,  0.5f,  0.5f,  0.5f, 0.5f, 1.0f,  1.0f, 1.0f,
-             -0.5f,  0.5f,  0.5f,  1.0f, 0.5f, 0.5f,  0.0f, 1.0f,
-             // 底面 (y = -0.5)
-             -0.5f, -0.5f,  0.5f,  1.0f, 0.0f, 1.0f,  0.0f, 0.0f,
-              0.5f, -0.5f,  0.5f,  0.0f, 1.0f, 1.0f,  1.0f, 0.0f,
-              0.5f, -0.5f, -0.5f,  0.0f, 1.0f, 0.0f,  1.0f, 1.0f,
-             -0.5f, -0.5f, -0.5f,  1.0f, 0.0f, 0.0f,  0.0f, 1.0f
-        };
-        std::vector<uint32_t> indices = {
-            0,1,2, 2,3,0,      // 背面
-            4,5,6, 6,7,4,      // 正面
-            8,9,10, 10,11,8,   // 左面
-            12,13,14, 14,15,12,// 右面
-            16,17,18, 18,19,16,// 顶面
-            20,21,22, 22,23,20 // 底面
-        };
-
-        RenderGraph::VertexLayout layout;
-        layout.addBinding(0, 8 * sizeof(float), RHI::VertexInputRate::PerVertex)
-            .addAttribute(0, 0, RHI::Format::RGB32_Float)   // 位置
-            .addAttribute(1, 0, RHI::Format::RGB32_Float)   // 颜色
-            .addAttribute(2, 0, RHI::Format::RG32_Float);   // 纹理坐标
-
-
-        m_gbufferRecorder->setVertexBuffer(0, vertices, layout, "posBuffer");
-        m_gbufferRecorder->setIndexBuffer(indices, "CubeIndexBuffer");
-
-
-        m_uniformBufferHandle = m_gbufferRecorder->createAndAddUniformBuffer(sizeof(Uniforms), 0, "UniformBuffer");
-
-        m_gbufferRecorder->addTexture("C:\\Users\\41384\\Desktop\\Snipaste.png",
-            RHI::Format::RGBA8_UNorm,
-            "DiffuseTexture",
-            1);
-
-        m_gbufferRecorder->createDescriptorSetLayout();
-        m_gbufferRecorder->createPipelineLayout("pipelineLayout");
-        m_gbufferRecorder->allocateDescriptorSet(mDescriptorPoolHandle);
-        m_gbufferRecorder->updateDescriptorSet();
-
-    }
-
-    void Application::createGrid() {
-        m_gridRecorder = std::make_shared<RenderGraph::GridRecorder>(m_resMgr);
-
-            // 顶点着色器（不变）
-            std::string vsCode = R"(
-            #version 450
-            layout(location = 0) in vec3 inPosition;
-            layout(location = 1) in vec3 inColor;
-            layout(location = 0) out vec3 fragColor;
-            layout(binding = 0) uniform UniformBufferObject {
-                mat4 model;
-                mat4 view;
-                mat4 proj;
-            } ubo;
-            void main() {
-                gl_Position = ubo.proj * ubo.view * ubo.model * vec4(inPosition, 1.0);
-                fragColor = inColor;
-            }
-        )";
-        m_gridRecorder->setVertexShader(vsCode, "GridVS");
-
-        // 片段着色器（不变）
-        std::string fsCode = R"(
-            #version 450
-            layout(location = 0) in vec3 fragColor;
-            layout(location = 0) out vec4 outColor;
-            void main() {
-                outColor = vec4(fragColor, 0.5);
-            }
-        )";
-        m_gridRecorder->setFragmentShader(fsCode, "GridFS");
-
-        // 生成网格数据
-        std::vector<float> vertices;
-        std::vector<uint32_t> indices;
-        const float size = 50.0f;
-        const int divisions = 50;
-        const float step = size / divisions;
-        const float half = size * 0.5f;
-
-        // 定义颜色常量（RGB 标识坐标轴）
-        const glm::vec3 colorXAxis(1.0f, 0.0f, 0.0f);   // 红色：X 轴
-        const glm::vec3 colorYAxis(0.0f, 1.0f, 0.0f);   // 绿色：Y 轴
-        const glm::vec3 colorZAxis(0.0f, 0.0f, 1.0f);   // 蓝色：Z 轴
-        const glm::vec3 colorLine(0.4f, 0.4f, 0.4f);     // 灰色：普通网格线
-
-        // 添加顶点的辅助函数（接受 x, y, z 和颜色）
-        auto addVertex = [&](float x, float y, float z, const glm::vec3& col) {
-            vertices.push_back(x);
-            vertices.push_back(y);
-            vertices.push_back(z);
-            vertices.push_back(col.r);
-            vertices.push_back(col.g);
-            vertices.push_back(col.b);
-            };
-
-        // --- 生成平行于 X 轴的线条 (y = 0) ---
-        for (int i = 0; i <= divisions; ++i) {
-            float z = -half + i * step;
-            // 判断是否为 X 轴（即 z ≈ 0）
-            bool isXAxis = (std::abs(z) < 0.001f);
-            addVertex(-half, 0.0f, z, isXAxis ? colorXAxis : colorLine);
-            addVertex(half, 0.0f, z, isXAxis ? colorXAxis : colorLine);
-        }
-
-        // --- 生成平行于 Z 轴的线条 (y = 0) ---
-        for (int i = 0; i <= divisions; ++i) {
-            float x = -half + i * step;
-            // 判断是否为 Z 轴（即 x ≈ 0）
-            bool isZAxis = (std::abs(x) < 0.001f);
-            addVertex(x, 0.0f, -half, isZAxis ? colorZAxis : colorLine);
-            addVertex(x, 0.0f, half, isZAxis ? colorZAxis : colorLine);
-        }
-
-        // --- 生成 Y 轴线（通过原点，从 y = -half 到 y = half）---
-        addVertex(0.0f, -half, 0.0f, colorYAxis);   // 起点
-        addVertex(0.0f, half, 0.0f, colorYAxis);   // 终点
-
-        // 生成索引：每两个连续顶点构成一条线段
-        uint32_t vertexCount = static_cast<uint32_t>(vertices.size() / 6);
-        for (uint32_t i = 0; i < vertexCount; i += 2) {
-            indices.push_back(i);
-            indices.push_back(i + 1);
-        }
-
-        for (size_t i = 0; i < vertices.size(); i += 6) {
-            float x = vertices[i];
-            float y = vertices[i + 1];
-            float z = vertices[i + 2];
-            float r = vertices[i + 3];
-            float g = vertices[i + 4];
-            float b = vertices[i + 5];
-            // 可以打印感兴趣的点
-        }
-
-        // 设置顶点布局（不变）
-        RenderGraph::VertexLayout layout;
-        layout.addBinding(0, 6 * sizeof(float), RHI::VertexInputRate::PerVertex)
-            .addAttribute(0, 0, RHI::Format::RGB32_Float)   // 位置
-            .addAttribute(1, 0, RHI::Format::RGB32_Float);  // 颜色
-
-        m_gridRecorder->setVertexBuffer(0, vertices, layout, "GridVertexBuffer");
-        m_gridRecorder->setIndexBuffer(indices, "GridIndexBuffer");
-
-        // 创建 UniformBuffer 等后续操作（不变）
-        m_gridUniformBufferHandle = m_gridRecorder->createAndAddUniformBuffer(sizeof(Uniforms), 0, "GridUniformBuffer");
-        m_gridRecorder->createDescriptorSetLayout();
-        m_gridRecorder->createPipelineLayout("GridPipelineLayout");
-        m_gridRecorder->allocateDescriptorSet(mDescriptorPoolHandle);
-        m_gridRecorder->updateDescriptorSet();
-    }
-
-    void Application::createPostBuffer() {
-        m_postRecorder = std::make_shared<RenderGraph::PostProcessRecorder>(m_resMgr);
-        std::string fullscreenVS = R"(
-                #version 450
-                layout(location = 0) out vec2 outUV;
-                void main() {
-                    const vec3 positions[3] = vec3[](
-                        vec3(-1.0, -1.0, 0.0),
-                        vec3( 3.0, -1.0, 0.0),
-                        vec3(-1.0,  3.0, 0.0)
-                    );
-                    gl_Position = vec4(positions[gl_VertexIndex], 1.0);
-                    outUV = positions[gl_VertexIndex].xy * 0.5 + 0.5;
-                }
-            )";
-        m_postRecorder->setVertexShader(fullscreenVS, "VertexShader");
-
-        // 后处理片元着色器（使用输入附件）
-        std::string postFS = R"(
-            #version 450
-            layout(location = 0) in vec2 inUV;
-            layout(location = 0) out vec4 outColor;
-            layout(input_attachment_index = 0, binding = 0) uniform subpassInput inputColor;
-
-            void main() {
-                // 1. 计算像素到屏幕中心的距离（UV 范围 0-1，中心为 0.5）
-                vec2 center = vec2(0.5, 0.5);
-                float dist = distance(inUV, center);
-                // 2. 定义渐变半径范围（可调节）
-                float innerRadius = 0.0;      // 内部完全反转
-                float outerRadius = 0.5;      // 外部完全保留原色（距离最大可能约 0.707，取 0.5 时圆形较大）
-                // 3. 根据距离计算混合因子（平滑过渡）
-                float t = clamp((dist - innerRadius) / (outerRadius - innerRadius), 0.0, 1.0);
-                // t = 0 时完全反转，t = 1 时完全保留原色
-                // 4. 获取原始颜色
-                vec3 originalColor = subpassLoad(inputColor).rgb;
-                // 5. 计算反转颜色
-                vec3 invertedColor = 1.0 - originalColor;
-                // 6. 线性混合
-                vec3 finalColor = mix(invertedColor, originalColor, t);
-                outColor = vec4(finalColor, 1.0);
-            }
-        )";
-        m_postRecorder->setFragmentShader(postFS, "PostFS");
-
-        m_postRecorder->addInputAttachmentBinding(0, RHI::ShaderStage::Fragment);
-        m_postRecorder->createDescriptorSetLayout();
-        m_postRecorder->createPipelineLayout("PostPipelineLayout");
-        m_postRecorder->allocateDescriptorSet(mDescriptorPoolHandle, 0);
-    }
-
-    void Application::createImGui() {
-        auto rpHandle = m_imguiPassNode->getRenderPassHandle();
-        auto* rpObj = m_resMgr->getRenderPass(rpHandle);
-        VkRenderPass imguiRenderPass = static_cast<VkRenderPass>(rpObj->getNativeHandle());
-
-        auto* pool = m_resMgr->getDescriptorPool(mDescriptorPoolHandle);
-        VkDescriptorPool descPool = static_cast<VkDescriptorPool>(pool->getNativeHandle());
-        m_imguiRecorder->init(m_rhi, descPool, m_window->getHandle(), imguiRenderPass);
-
-        // 设置显示纹理（此时 Recorder 已初始化）
-        if (m_sceneFinalTexHandle.isValid()) {
-            m_imguiRecorder->setDisplayTexture(m_sceneFinalTexHandle);
-        }
-    }
-
     void Application::buildRenderGraph() {
-        m_imguiRecorder = std::make_shared<RenderGraph::ImGuiRecorder>(m_resMgr);
         m_renderGraph = std::make_unique<RenderGraph::RenderGraph>(m_rhi);
         m_renderGraph->setSwapchainImageCount(m_rhi->getSwapChainImageCount());
 
-        // 创建中间纹理
-        RHI::TextureDesc intermediateDesc;
-        intermediateDesc.extent = { m_width, m_height, 1 };
-        intermediateDesc.format = RHI::Format::RGBA8_UNorm;
-        intermediateDesc.type = RHI::TextureType::Texture2D;
-        intermediateDesc.allowRenderTarget = true;
-        intermediateDesc.allowInputAttachment = true;
+        auto intermediateDesc = m_renderGraph->createBaseTextureDesc(m_width, m_height, RHI::Format::RGBA8_UNorm,false);
         auto intermediateTexId = m_renderGraph->createVirtualTexture(intermediateDesc, "Intermediate");
 
-        // 创建深度纹理
-        RHI::TextureDesc depthDesc;
-        depthDesc.extent = { m_width, m_height, 1 };
-        depthDesc.format = m_rhi->getDepthFormat();
-        depthDesc.type = RHI::TextureType::Texture2D;
-        depthDesc.allowDepthStencil = true;
+        auto depthDesc = m_renderGraph->createBaseTextureDesc(m_width, m_height, m_rhi->getDepthFormat(), true, false, false);
         auto depthTexId = m_renderGraph->createVirtualTexture(depthDesc, "Depth");
-
-        // 创建最终场景纹理（后处理输出）
-        RHI::TextureDesc sceneFinalDesc;
-        sceneFinalDesc.extent = { m_width, m_height, 1 };
-        sceneFinalDesc.format = RHI::Format::RGBA8_UNorm;   // 可根据需要选择格式
-        sceneFinalDesc.type = RHI::TextureType::Texture2D;
-        sceneFinalDesc.allowRenderTarget = true;
-        sceneFinalDesc.allowInputAttachment = true;
-        auto sceneFinalTexId = m_renderGraph->createVirtualTexture(sceneFinalDesc, "SceneFinal");
 
         // 导入交换链纹理
         std::vector<void*> swapchainViews;
         for (uint32_t i = 0; i < m_rhi->getSwapChainImageCount(); ++i) {
             swapchainViews.push_back(m_rhi->getSwapChainImageView(i));
         }
-        RHI::TextureDesc swapchainDesc;
-        swapchainDesc.extent = { m_width, m_height, 1 };
-        swapchainDesc.format = RHI::Format::BGRA8_sRGB;
-        swapchainDesc.type = RHI::TextureType::Texture2D;
-        swapchainDesc.allowRenderTarget = true;
+        auto swapchainDesc = m_renderGraph->createBaseTextureDesc(m_width, m_height, RHI::Format::BGRA8_sRGB, false, true, false);
         auto swapchainTexId = m_renderGraph->importExternalTexture(
-            RHI::TextureHandle::Null(),
+            RHI::TextureHandle::Null(), 
             swapchainViews,
-            swapchainDesc,
-            RHI::ImageLayout::Undefined,
-            "Swapchain"
-        );
+            swapchainDesc, 
+            RHI::ImageLayout::Undefined, 
+            "Swapchain");
 
-        // ========== 主 Pass ==========
-        auto* mainPass = m_renderGraph->addPassNode("MainPass");
+        renderpasses.push_back({
+            std::make_unique<RenderGraph::GbufferPass>(m_resMgr, mDescriptorPoolHandle),
+            intermediateTexId,depthTexId,
+            });
 
-        // 声明附件（直接使用纹理 ID）
-        mainPass->addColorOutput(intermediateTexId)
-            .setClearColor({ 0.05f, 0.05f, 0.05f, 1.0f })
-            .setFinalLayout(RHI::ImageLayout::ShaderReadOnly);  // 供后处理读取
+        renderpasses.push_back({
+            std::make_unique<RenderGraph::PostProcessPass>(m_resMgr, mDescriptorPoolHandle),
+            intermediateTexId,swapchainTexId,RHI::ImageLayout::ShaderReadOnly
+            });
 
-        mainPass->addDepthOutput(depthTexId)
-            .setClearDepth(1.0f);
-
-        // 基础管线描述（与原来相同）
-        RHI::GraphicsPipelineDesc basePipelineDesc;
-        basePipelineDesc.topology = RHI::PrimitiveTopology::TriangleList;
-        basePipelineDesc.rasterizer.cullMode = RHI::CullMode::None;
-        basePipelineDesc.multisample.rasterizationSamples = 1;
-        basePipelineDesc.colorBlend.attachments = { RHI::BlendAttachmentState{} };
-        basePipelineDesc.dynamicStates = { RHI::DynamicState::Viewport, RHI::DynamicState::Scissor };
-        basePipelineDesc.viewport.viewports = { {0, 0, (float)m_width, (float)m_height, 0, 1} };
-        basePipelineDesc.viewport.scissors = { {{0, 0}, {m_width, m_height}} };
-
-        // 子通道 0：网格
-        auto gridSubpass = mainPass->addSubpassProxy("GridSubpass");
-        gridSubpass.addColorAttachment(intermediateTexId)
-            .addDepthStencilAttachment(depthTexId)
-            .setPipelineName("GridPipeline")
-            .setRecorder(m_gridRecorder.get());
-
-        RHI::GraphicsPipelineDesc gridPipelineDesc = basePipelineDesc;
-        gridPipelineDesc.topology = RHI::PrimitiveTopology::LineList;
-        gridPipelineDesc.vertexShader = m_gridRecorder->getVertexShader();
-        gridPipelineDesc.fragmentShader = m_gridRecorder->getFragmentShader();
-        gridPipelineDesc.vertexInput = m_gridRecorder->getVertexInputState();
-        gridPipelineDesc.pipelineLayoutHandle = m_gridRecorder->getPipelineLayout();
-        gridPipelineDesc.depthStencil.depthTestEnable = true;
-        gridPipelineDesc.depthStencil.depthWriteEnable = true;
-        gridPipelineDesc.depthStencil.depthCompareOp = RHI::CompareOp::Less;
-        gridPipelineDesc.rasterizer.lineWidth = 1.0f;
-        gridPipelineDesc.colorBlend.attachments[0].blendEnable = false;
-        gridSubpass.setPipelineDescription(gridPipelineDesc);
-
-        // 子通道 1：几何体
-        auto geomSubpass = mainPass->addSubpassProxy("GeomSubpass");
-        geomSubpass.addColorAttachment(intermediateTexId)
-            .addDepthStencilAttachment(depthTexId)
-            .setPipelineName("GeomPipeline")
-            .setRecorder(m_gbufferRecorder.get());
-
-        RHI::GraphicsPipelineDesc geomPipelineDesc = basePipelineDesc;
-        geomPipelineDesc.topology = RHI::PrimitiveTopology::TriangleList;
-        geomPipelineDesc.vertexShader = m_gbufferRecorder->getVertexShader();
-        geomPipelineDesc.fragmentShader = m_gbufferRecorder->getFragmentShader();
-        geomPipelineDesc.vertexInput = m_gbufferRecorder->getVertexInputState();
-        geomPipelineDesc.pipelineLayoutHandle = m_gbufferRecorder->getPipelineLayout();
-        geomPipelineDesc.depthStencil.depthTestEnable = true;
-        geomPipelineDesc.depthStencil.depthWriteEnable = true;
-        geomPipelineDesc.depthStencil.depthCompareOp = RHI::CompareOp::Less;
-        geomPipelineDesc.colorBlend.attachments[0].blendEnable = false;
-        geomSubpass.setPipelineDescription(geomPipelineDesc);
-
-        mainPass->setRenderArea(m_width, m_height);
-
-        // ========== 后处理 Pass ==========
-        auto* postPass = m_renderGraph->addPassNode("PostPass");
-        postPass->addColorOutput(sceneFinalTexId)
-            .setClearColor({ 0.0f, 0.0f, 0.0f, 1.0f })
-            .setFinalLayout(RHI::ImageLayout::ShaderReadOnly);  // 供 ImGui 采样
-        postPass->addInput(intermediateTexId)
-            .setInitialLayout(RHI::ImageLayout::ShaderReadOnly);
-
-        auto postSubpass = postPass->addSubpassProxy("PostSubpass");
-        postSubpass.addColorAttachment(sceneFinalTexId)
-            .addInputAttachment(intermediateTexId)
-            .setPipelineName("PostPipeline")
-            .setRecorder(m_postRecorder.get());
-
-        RHI::GraphicsPipelineDesc postPipelineDesc = basePipelineDesc;
-        postPipelineDesc.vertexShader = m_postRecorder->getVertexShader();
-        postPipelineDesc.fragmentShader = m_postRecorder->getFragmentShader();
-        postPipelineDesc.vertexInput = {};
-        postPipelineDesc.pipelineLayoutHandle = m_postRecorder->getPipelineLayout();
-        postPipelineDesc.depthStencil.depthTestEnable = false;
-        postPipelineDesc.colorBlend.attachments[0].blendEnable = false;
-        postSubpass.setPipelineDescription(postPipelineDesc);
-
-        postPass->setRenderArea(m_width, m_height);
-
-        // ========== ImGui Pass ==========
-        m_imguiPassNode = m_renderGraph->addPassNode("ImGuiPass");
-        m_imguiPassNode->addColorOutput(swapchainTexId)
-            .setLoadOp(RHI::AttachmentLoadOp::Clear)           // 改为清除
-            .setClearColor({ 0.2f, 0.2f, 0.2f, 1.0f })          // 深灰色背景
-            .setStoreOp(RHI::AttachmentStoreOp::Store)
-            .setInitialLayout(RHI::ImageLayout::Undefined)
-            .setFinalLayout(RHI::ImageLayout::PresentSrc);
-        m_imguiPassNode->setRenderArea(m_width, m_height);
-
-        auto guiSubpass = m_imguiPassNode->addSubpassProxy("ImGuiRendering");
-        guiSubpass.addColorAttachment(swapchainTexId)
-            .setRecorder(m_imguiRecorder.get());
+        for (auto& renderpass: renderpasses){
+            renderpass.renderpass->setViewport(m_width, m_height);
+            renderpass.renderpass->setup(*m_renderGraph.get(), renderpass.inputTexture, renderpass.outputTexture);
+        }
 
         if (!m_renderGraph->compile()) {
             throw std::runtime_error("Failed to compile RenderGraph");
         }
 
-        RHI::TextureHandle intermediatePhysAfter = m_renderGraph->getPhysicalTextureHandle(intermediateTexId);
-        if (intermediatePhysAfter.isValid()) {
-            m_postRecorder->updateInputAttachment(0, intermediatePhysAfter, RHI::ImageLayout::ShaderReadOnly);
-        }
-        else {
-            std::cerr << "Failed to get valid intermediate texture handle after compile!" << std::endl;
+        for (auto& renderpass : renderpasses) {
+            renderpass.renderpass->updateInputAttachment(renderpass.inputTexture, renderpass.finalLayout);
         }
 
-        RHI::TextureHandle sceneFinalPhys = m_renderGraph->getPhysicalTextureHandle(sceneFinalTexId);
-        if (sceneFinalPhys.isValid()) {
-            m_sceneFinalTexHandle = sceneFinalPhys; // 保存到成员变量
-        }
-        else {
-            std::cerr << "Failed to get physical handle for SceneFinal texture!" << std::endl;
-        }
     }
 
     void Application::run() {
@@ -616,15 +211,17 @@ namespace StarryEngine {
                 mFramebufferResized = false;
                 if (m_width == 0 || m_height == 0) continue;
 
+                for (auto& renderpass : renderpasses) {
+                    renderpass.renderpass.reset();
+                }
+                renderpasses.clear();
                 m_renderGraph.reset();
 
                 if (!m_rhi->recreateSwapChain(m_width, m_height)) {
                     std::cerr << "Failed to recreate swap chain!" << std::endl;
                     continue;
                 }
-
                 buildRenderGraph();
-                createImGui();
 
                 continue;
             }
@@ -637,27 +234,9 @@ namespace StarryEngine {
                 glm::mat4 proj = glm::perspective(glm::radians(60.0f), static_cast<float>(m_width) / m_height, 0.1f, 100.0f);
                 proj[1][1] *= -1;
 
-                Uniforms ubo = { model, view, proj };
-                auto* UniformBuffer = m_resMgr->getBuffer(m_uniformBufferHandle);
-                UniformBuffer->update(&ubo, sizeof(ubo), 0);
-
-                Uniforms gridUbo = { glm::mat4(1.0f), view, proj };
-                auto* gridUniformBuffer = m_resMgr->getBuffer(m_gridUniformBufferHandle);
-                gridUniformBuffer->update(&gridUbo, sizeof(gridUbo), 0);
-
-                m_imguiRecorder->newFrame();
-
-                ImGui::ShowDemoWindow();
-                {
-                    ImGui::Begin("Statistics");
-                    ImGui::Text("FPS: %.1f", monitor.getFPS());
-                    ImGui::Text("Frame Time: %.3f ms", monitor.getDeltaTime() * 1000.0f);
-                    ImGui::End();
+                for (auto& renderpass : renderpasses) {
+                    renderpass.renderpass->update({ model, view, proj });
                 }
-
-                // 显示主渲染结果的窗口（封装在 recorder 中）
-                m_imguiRecorder->drawTextureWindow("Scene View");
-
                 m_renderGraph->execute(imageIndex, encoder);
             });
             monitor.updateTitle();
@@ -666,9 +245,6 @@ namespace StarryEngine {
 
     Application::~Application() {
         if (m_rhi) m_rhi->waitIdle();
-
-        m_gbufferRecorder.reset();
-        m_postRecorder.reset();
         m_renderGraph.reset();
         m_rhi.reset();
         m_window.reset();

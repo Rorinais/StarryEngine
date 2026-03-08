@@ -1282,9 +1282,11 @@ namespace StarryEngine::RHI {
         //std::lock_guard<std::mutex> lock(statsMutex_);
         std::cout << "[ResourceManager] Created resource: Category="
             << static_cast<int>(category)
-            << ",ResourceType :" << ResourceCategoryToString(category)
-            << ", Name='" << name << "'"
-            << std::endl;
+            << ",ResourceType :" << ResourceCategoryToString(category);
+        if (!name.empty()){
+            std::cout << ", Name='" << name << "'";
+        }
+        std::cout << std::endl;
     }
 
     void ResourceManager::logResourceDestruction(ResourceCategory category, const std::string& name) {

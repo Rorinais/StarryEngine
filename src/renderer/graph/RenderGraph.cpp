@@ -38,6 +38,59 @@ namespace StarryEngine::RenderGraph {
         m_swapchainImageCount = count;
     }
 
+    RHI::TextureDesc RenderGraph::createBaseTextureDesc(
+        uint32_t width, uint32_t height,
+        RHI::Format format,
+        bool allowDepthStencil,
+        bool allowRenderTarget,
+        bool allowInputAttachment,
+        RHI::TextureType type
+    ) {
+        RHI::TextureDesc desc;
+        desc.extent = { width, height, 1 };
+        desc.format = format;
+        desc.type = type;
+        desc.allowRenderTarget = allowRenderTarget;
+        desc.allowDepthStencil = allowDepthStencil;
+        desc.allowInputAttachment = allowInputAttachment;
+        return desc;
+    }
+
+    RHI::GraphicsPipelineDesc RenderGraph::createBasePipelineDesc(
+        RHI::ShaderHandle vertexShaderHandle,
+        RHI::ShaderHandle fragmentShaderHandle,
+        RHI::VertexInputState vertexInput,
+        RHI::PipelineLayoutHandle pipelineLayoutHandle,
+        uint32_t width, uint32_t height,
+        uint32_t rasterizationSamples,
+        float lineWidth,
+        RHI::PrimitiveTopology topology,
+        RHI::CullMode cullMode,
+        bool depthTestEnable,
+        bool depthWriteEnable,
+        RHI::CompareOp depthCompareOp,
+        std::vector<RHI::BlendAttachmentState> attachments,
+        std::vector<RHI::DynamicState> dynamicStates
+    ) {
+        RHI::GraphicsPipelineDesc desc;
+        desc.topology = topology;
+        desc.vertexShader = vertexShaderHandle;
+        desc.fragmentShader = fragmentShaderHandle;
+        desc.vertexInput = vertexInput;
+        desc.pipelineLayoutHandle = pipelineLayoutHandle;
+        desc.depthStencil.depthTestEnable = depthTestEnable;
+        desc.depthStencil.depthWriteEnable = depthWriteEnable;
+        desc.depthStencil.depthCompareOp = depthCompareOp;
+        desc.rasterizer.lineWidth = lineWidth;
+        desc.rasterizer.cullMode = cullMode;
+        desc.multisample.rasterizationSamples = rasterizationSamples;
+        desc.colorBlend.attachments = attachments;
+        desc.dynamicStates = dynamicStates;
+        desc.viewport.viewports = { {0, 0, (float)width, (float)height, 0, 1} };
+        desc.viewport.scissors = { {{0, 0}, {width, height}} };
+        return desc;
+    }
+
     TextureId RenderGraph::createVirtualTexture(const RHI::TextureDesc& desc, const std::string& name) {
         if (!name.empty() && m_nameToTextureId.find(name) != m_nameToTextureId.end()) {
             throw std::runtime_error("Texture name already exists: " + name);

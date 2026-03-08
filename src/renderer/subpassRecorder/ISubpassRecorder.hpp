@@ -42,6 +42,10 @@ namespace StarryEngine::RenderGraph {
             mMaterial = std::make_shared<Material>(resMgr);
         }
 
+        virtual ~ISubpassRecorder() {
+            if (mPipelineLayout.isValid()) mResMgr->destroy(mPipelineLayout);
+        }
+
         void setVertexShader(const std::string& sourceCode, const std::string& debugName) {
             mMaterial->setVertexShader(sourceCode, debugName);
         }
@@ -92,22 +96,12 @@ namespace StarryEngine::RenderGraph {
             mMaterial->createDescriptorSetLayout();
         }
 
-        void destroyFramebuffers() {
-            for (auto & fbo :mframeBuffers){
-                mResMgr->destroy(fbo);
-            }
-            mframeBuffers.clear();
-        }
-
-        std::vector<RHI::FramebufferHandle> getFramebuffers() { return mframeBuffers; }
-
         void addInputAttachmentBinding(uint32_t binding, RHI::ShaderStage stageFlags = RHI::ShaderStage::Fragment) {
             mMaterial->addInputAttachmentBinding(binding, stageFlags);
         }
 
         void setPassNode(PassNode* pass) { mPassNode = pass; }
 
-        virtual ~ISubpassRecorder() = default;
         virtual void recordCommands(RHI::RHICommandEncoder* encoder,
             const PassContext& pctx,
             uint32_t subpassIndex,   
@@ -135,7 +129,5 @@ namespace StarryEngine::RenderGraph {
         std::shared_ptr<Material> mMaterial;
         RHI::PipelineLayoutHandle mPipelineLayout;
         std::shared_ptr<RHI::ResourceManager> mResMgr;
-
-        std::vector<RHI::FramebufferHandle> mframeBuffers;
     };
 }
