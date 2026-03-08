@@ -19,19 +19,26 @@ namespace StarryEngine::RenderGraph {
         }
 
         // 实现 IRenderPass 接口
-        void setup(RenderGraph& renderGraph, TextureId output, TextureId depth) override {
+        void setup(RenderGraph& renderGraph, TextureId output, TextureId input,
+            RHI::ImageLayout depthInitial,
+            RHI::ImageLayout depthFinal,
+            RHI::ImageLayout colorInitial,
+            RHI::ImageLayout colorFinal) {
             auto* mainPass = renderGraph.addPassNode("MainPass");
             mainPass->setRenderArea(width, height);
             mainPass->addColorOutput(output)
                 .setClearColor({ 0.05f, 0.05f, 0.05f, 1.0f })
-                .setFinalLayout(RHI::ImageLayout::ShaderReadOnly);
-            mainPass->addDepthOutput(depth)
+                .setInitialLayout(colorInitial)
+                .setFinalLayout(colorFinal);
+            mainPass->addDepthOutput(input)
+                .setInitialLayout(depthInitial)
+                .setFinalLayout(depthFinal)
                 .setClearDepth(1.0f);
 
             // 子通道 0：网格
             auto gridSubpass = mainPass->addSubpassProxy("GridSubpass")
                 .addColorAttachment(output)
-                .addDepthStencilAttachment(depth)
+                .addDepthStencilAttachment(input)
                 .setPipelineName("GridPipeline")
                 .setRecorder(m_gridRecorder.get())
                 .setPipelineDescription(
@@ -47,7 +54,7 @@ namespace StarryEngine::RenderGraph {
             // 子通道 1：几何体
             auto geomSubpass = mainPass->addSubpassProxy("GeomSubpass")
                 .addColorAttachment(output)
-                .addDepthStencilAttachment(depth)
+                .addDepthStencilAttachment(input)
                 .setPipelineName("GeomPipeline")
                 .setRecorder(m_gbufferRecorder.get())
                 .setPipelineDescription(

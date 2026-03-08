@@ -8,10 +8,11 @@ namespace StarryEngine::RenderGraph {
     public:
         virtual ~IRenderPass() = default;
 
-        // 在 RenderGraph 中设置 PassNode（添加附件、子通道、管线）
-        virtual void setup(RenderGraph& renderGraph,
-            TextureId input,
-            TextureId output) = 0;
+        virtual void setup(RenderGraph& renderGraph, TextureId output, TextureId input,
+            RHI::ImageLayout depthInitial = RHI::ImageLayout::Undefined,
+            RHI::ImageLayout depthFinal = RHI::ImageLayout::DepthStencilAttachment,
+            RHI::ImageLayout colorInitial = RHI::ImageLayout::Undefined,
+            RHI::ImageLayout colorFinal = RHI::ImageLayout::ShaderReadOnly) = 0;
 
         void setViewport(uint32_t width, uint32_t height) {
             this->width = width;

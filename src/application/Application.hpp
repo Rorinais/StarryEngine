@@ -66,11 +66,15 @@ namespace StarryEngine {
         std::shared_ptr<RHI::ResourceManager> m_resMgr;
         std::unique_ptr<RenderGraph::RenderGraph> m_renderGraph;
 
-        struct PassInfo{
+        struct PassInfo {
             std::unique_ptr<RenderGraph::IRenderPass> renderpass;
-            RenderGraph::TextureId inputTexture;
-            RenderGraph::TextureId outputTexture;
-            RHI::ImageLayout finalLayout;
+            RenderGraph::TextureId inputTexture;    // 输入纹理（深度或中间）
+            RenderGraph::TextureId outputTexture;   // 输出纹理（颜色）
+            RHI::ImageLayout inputInitial;          // 深度/输入初始布局
+            RHI::ImageLayout inputFinal;            // 深度/输入最终布局
+            RHI::ImageLayout outputInitial;         // 颜色初始布局
+            RHI::ImageLayout outputFinal;           // 颜色最终布局
+
         };
         std::vector<PassInfo> renderpasses;
         RHI::DescriptorPoolHandle mDescriptorPoolHandle;

@@ -14,16 +14,23 @@ namespace StarryEngine::RenderGraph {
         ~PostProcessPass() override = default;
 
         // 实现 IRenderPass 接口
-        void setup(RenderGraph& renderGraph, TextureId input, TextureId output) override {
+           // 可选：每帧更新
+        virtual void setup(RenderGraph& renderGraph, TextureId output, TextureId input,
+            RHI::ImageLayout depthInitial,
+            RHI::ImageLayout depthFinal,
+            RHI::ImageLayout colorInitial,
+            RHI::ImageLayout colorFinal) override {
             m_renderGraph = &renderGraph;
             auto postPass = renderGraph.addPassNode("PostPass");
             postPass->setRenderArea(width, height);
             postPass->addColorOutput(output)
                 .setClearColor({ 0.0f, 0.0f, 0.0f, 1.0f })
-                .setFinalLayout(RHI::ImageLayout::PresentSrc);
+                .setInitialLayout(colorInitial)
+                .setFinalLayout(colorFinal);
 
             postPass->addInput(input)
-                .setInitialLayout(RHI::ImageLayout::ShaderReadOnly);
+                .setInitialLayout(depthInitial)
+                .setFinalLayout(depthFinal);
 
             auto postSubpass = postPass->addSubpassProxy("PostSubpass")
                 .addColorAttachment(output)
@@ -45,7 +52,7 @@ namespace StarryEngine::RenderGraph {
 
         std::shared_ptr<PostProcessRecorder> getGridRecorder() const { return m_postRecorder; }
 
-        void updateInputAttachment(TextureId texture, RHI::ImageLayout layout) {
+        void updateInputAttachment(TextureId texture, RHI::ImageLayout layout)override {
             RHI::TextureHandle intermediatePhysAfter = m_renderGraph->getPhysicalTextureHandle(texture);
             if (intermediatePhysAfter.isValid()) {
                 m_postRecorder->updateInputAttachment(0, intermediatePhysAfter, layout);

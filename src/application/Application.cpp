@@ -173,19 +173,41 @@ namespace StarryEngine {
             RHI::ImageLayout::Undefined, 
             "Swapchain");
 
+        // GbufferPass: 输出颜色到 intermediate，深度到 depth
+// GbufferPass: 输出颜色到 intermediate，深度到 depth
         renderpasses.push_back({
             std::make_unique<RenderGraph::GbufferPass>(m_resMgr, mDescriptorPoolHandle),
-            intermediateTexId,depthTexId,
+            depthTexId,                        // inputTexture
+            swapchainTexId,                 // outputTexture
+            RHI::ImageLayout::Undefined,       // inputInitial (深度)
+            RHI::ImageLayout::DepthStencilAttachment, // inputFinal (深度)
+            RHI::ImageLayout::Undefined,       // outputInitial
+            RHI::ImageLayout::PresentSrc  // outputFinal (供后处理读取)
+
             });
 
-        renderpasses.push_back({
-            std::make_unique<RenderGraph::PostProcessPass>(m_resMgr, mDescriptorPoolHandle),
-            intermediateTexId,swapchainTexId,RHI::ImageLayout::ShaderReadOnly
-            });
+        //// PostProcessPass: 输出到交换链，输入来自 intermediate
+        //renderpasses.push_back({
+        //    std::make_unique<RenderGraph::PostProcessPass>(m_resMgr, mDescriptorPoolHandle),
+        //    intermediateTexId,                  // inputTexture
+        //    swapchainTexId,                    // outputTexture
+        //    RHI::ImageLayout::ShaderReadOnly,  // inputInitial
+        //    RHI::ImageLayout::ShaderReadOnly,   // inputFinal
+        //    RHI::ImageLayout::Undefined,       // outputInitial
+        //    RHI::ImageLayout::PresentSrc      // outputFinal (呈现)
+        //    });
 
-        for (auto& renderpass: renderpasses){
-            renderpass.renderpass->setViewport(m_width, m_height);
-            renderpass.renderpass->setup(*m_renderGraph.get(), renderpass.inputTexture, renderpass.outputTexture);
+        for (auto& info : renderpasses) {
+            info.renderpass->setViewport(m_width, m_height);
+            info.renderpass->setup(
+                *m_renderGraph,
+                info.outputTexture,      // 输出纹理
+                info.inputTexture,       // 输入纹理
+                info.inputInitial,
+                info.inputFinal,
+                info.outputInitial,
+                info.outputFinal
+            );
         }
 
         if (!m_renderGraph->compile()) {
@@ -193,7 +215,7 @@ namespace StarryEngine {
         }
 
         for (auto& renderpass : renderpasses) {
-            renderpass.renderpass->updateInputAttachment(renderpass.inputTexture, renderpass.finalLayout);
+            renderpass.renderpass->updateInputAttachment(renderpass.inputTexture, renderpass.inputFinal);
         }
 
     }
