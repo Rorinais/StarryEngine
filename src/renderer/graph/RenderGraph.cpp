@@ -7,7 +7,7 @@
 
 namespace StarryEngine::RenderGraph {
 
-    RenderGraph::RenderGraph(std::shared_ptr<VulkanRHI> rhi)
+    RenderGraph::RenderGraph(std::shared_ptr<RHI::IRHI> rhi)
         : m_rhi(rhi), m_resMgr(rhi->getResourceManager()) {
     }
 
@@ -142,26 +142,28 @@ namespace StarryEngine::RenderGraph {
         return ptr;
     }
 
+    //注：ai注释
+    // 拓扑排序函数，根据邻接表返回节点的执行顺序，若存在环则抛出异常
     std::vector<uint32_t> RenderGraph::topologicalSort(const std::vector<std::vector<uint32_t>>& adj) const {
         size_t n = adj.size();
-        std::vector<uint32_t> inDegree(n, 0);
+        std::vector<uint32_t> inDegree(n, 0);          // 记录每个节点的入度
         for (const auto& edges : adj) {
             for (uint32_t v : edges) {
-                inDegree[v]++;
+                inDegree[v]++;                          // 统计入度
             }
         }
 
-        std::queue<uint32_t> q;
+        std::queue<uint32_t> q;                         // 队列用于存储入度为0的节点
         for (uint32_t i = 0; i < n; ++i) {
             if (inDegree[i] == 0) q.push(i);
         }
 
-        std::vector<uint32_t> order;
+        std::vector<uint32_t> order;                    // 存储拓扑排序结果
         while (!q.empty()) {
             uint32_t u = q.front(); q.pop();
             order.push_back(u);
             for (uint32_t v : adj[u]) {
-                if (--inDegree[v] == 0) q.push(v);
+                if (--inDegree[v] == 0) q.push(v);      // 移除边，若入度变为0则入队
             }
         }
 
@@ -171,18 +173,21 @@ namespace StarryEngine::RenderGraph {
         return order;
     }
 
+    // 编译渲染图：分析依赖、排序、创建物理资源、生成帧缓冲
     bool RenderGraph::compile() {
         if (m_passes.empty()) {
             throw std::runtime_error("No passes to compile.");
         }
 
+        // 1. 收集每个 Pass 的资源使用信息（读取/写入的纹理和缓冲区）
         for (auto& pass : m_passes) {
-            pass->collectResourceUsage(); 
+            pass->collectResourceUsage();
         }
 
         size_t passCount = m_passes.size();
-        std::vector<std::vector<uint32_t>> adj(passCount);
+        std::vector<std::vector<uint32_t>> adj(passCount);   // 邻接表，表示 Pass 之间的依赖关系
 
+        // 记录每个纹理/缓冲区被哪些 Pass 读取或写入
         std::unordered_map<TextureId, std::set<uint32_t>> texReaders, texWriters;
         std::unordered_map<BufferId, std::set<uint32_t>> bufReaders, bufWriters;
 
@@ -193,12 +198,15 @@ namespace StarryEngine::RenderGraph {
             for (auto buf : m_passes[i]->getWriteBuffers()) bufWriters[buf].insert(i);
         }
 
+        // 辅助函数：添加一条从 src 到 dst 的依赖边
         auto addDependency = [&](uint32_t src, uint32_t dst) {
             adj[src].push_back(dst);
             };
 
+        // 2. 根据纹理的读写关系建立依赖
         for (const auto& [tex, writers] : texWriters) {
             auto& readers = texReaders[tex];
+            // 写后读：写 Pass 必须在读 Pass 之前
             for (uint32_t w : writers) {
                 for (uint32_t r : readers) {
                     if (w != r && writers.find(r) == writers.end()) {
@@ -206,6 +214,7 @@ namespace StarryEngine::RenderGraph {
                     }
                 }
             }
+            // 写后写：多个写 Pass 必须按顺序执行（通常需要）
             std::vector<uint32_t> wlist(writers.begin(), writers.end());
             std::sort(wlist.begin(), wlist.end());
             for (size_t i = 0; i + 1 < wlist.size(); ++i) {
@@ -213,6 +222,7 @@ namespace StarryEngine::RenderGraph {
             }
         }
 
+        // 3. 根据缓冲区的读写关系建立依赖（逻辑同上）
         for (const auto& [buf, writers] : bufWriters) {
             auto& readers = bufReaders[buf];
             for (uint32_t w : writers) {
@@ -229,28 +239,31 @@ namespace StarryEngine::RenderGraph {
             }
         }
 
+        // 4. 添加用户手动指定的依赖关系
         for (const auto& [src, dst] : m_manualDependencies) {
             adj[src].push_back(dst);
         }
 
-        // 拓扑排序
+        // 5. 拓扑排序得到 Pass 的执行顺序
         auto order = topologicalSort(adj);
         m_sortedPasses.clear();
         for (uint32_t idx : order) {
             m_sortedPasses.push_back(m_passes[idx].get());
         }
 
+        // 6. 分析纹理的读写 Pass 索引，用于自动插入子通道依赖（例如从上次写到第一次读）
         struct TexturePassInfo {
-            int32_t lastWriterIndex = -1;
-            int32_t firstReaderIndex = -1;
-            RHI::PipelineStageFlags writeStage = static_cast<RHI::PipelineStageFlags>(0);
-            RHI::AccessFlags writeAccess = static_cast<RHI::AccessFlags>(0);
-            RHI::PipelineStageFlags readStage = static_cast<RHI::PipelineStageFlags>(0);
-            RHI::AccessFlags readAccess = static_cast<RHI::AccessFlags>(0);
+            int32_t lastWriterIndex = -1;               // 最后一个写入该纹理的 Pass 索引
+            int32_t firstReaderIndex = -1;              // 第一个读取该纹理的 Pass 索引
+            RHI::PipelineStageFlags writeStage;          // 写阶段（暂未使用，可扩展）
+            RHI::AccessFlags writeAccess;                 // 写访问掩码
+            RHI::PipelineStageFlags readStage;            // 读阶段
+            RHI::AccessFlags readAccess;                  // 读访问掩码
         };
 
         std::unordered_map<TextureId, TexturePassInfo> texPassInfo;
 
+        // 遍历排序后的 Pass，记录每个纹理的最后写入和首次读取
         for (int32_t passIdx = 0; passIdx < static_cast<int32_t>(m_sortedPasses.size()); ++passIdx) {
             auto* pass = m_sortedPasses[passIdx];
             for (auto tex : pass->getWriteTextures()) {
@@ -269,28 +282,30 @@ namespace StarryEngine::RenderGraph {
             }
         }
 
+        // 7. 如果存在从写入到读取的跨 Pass 依赖，添加一个子通道依赖（从外部到第一个读 Pass 的子通道）
         for (const auto& [tex, info] : texPassInfo) {
             if (info.lastWriterIndex != -1 && info.firstReaderIndex != -1 && info.firstReaderIndex > info.lastWriterIndex) {
                 RHI::SubpassDependency dep{};
-                dep.srcSubpass = SUBPASS_EXTERNAL;
-                dep.dstSubpass = 0;
+                dep.srcSubpass = SUBPASS_EXTERNAL;                // 外部（即上一个 Pass）
+                dep.dstSubpass = 0;                                // 第一个子通道
                 dep.srcStageMask = static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::AllGraphics);
                 dep.dstStageMask = static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::FragmentShader);
                 dep.srcAccessMask = static_cast<RHI::AccessFlags>(RHI::AccessFlag::MemoryWrite);
                 dep.dstAccessMask = static_cast<RHI::AccessFlags>(RHI::AccessFlag::InputAttachmentRead);
-                dep.byRegion = true;
+                dep.byRegion = true;                               // 按区域依赖
                 m_sortedPasses[info.firstReaderIndex]->getBuilder().addDependency(dep);
             }
         }
 
+        // 8. 为每个虚拟纹理创建/获取物理纹理，建立 ID 到物理信息的映射
         for (auto& vt : m_virtualTextures) {
-            if (vt.imported) {
+            if (vt.imported) {                                     // 外部导入的纹理（如交换链）
                 PhysicalTextureInfo info;
                 info.handle = vt.externalHandle;
                 info.views = vt.externalViews;
                 m_textureMap[vt.id] = info;
             }
-            else {
+            else {                                                // 需要创建新纹理
                 RHI::TextureHandle handle = m_resMgr->createTexture(vt.desc, vt.name);
                 if (!handle.isValid()) {
                     throw std::runtime_error("Failed to create physical texture: " + vt.name);
@@ -298,11 +313,12 @@ namespace StarryEngine::RenderGraph {
                 auto* texObj = m_resMgr->getTexture(handle);
                 PhysicalTextureInfo info;
                 info.handle = handle;
-                info.views.push_back(texObj->getDefaultView());
+                info.views.push_back(texObj->getDefaultView());    // 默认视图（通常是第一个 mip/层）
                 m_textureMap[vt.id] = info;
             }
         }
 
+        // 9. 为每个虚拟缓冲区创建/获取物理缓冲区
         for (auto& vb : m_virtualBuffers) {
             if (vb.imported) {
                 m_bufferMap[vb.id] = vb.externalHandle;
@@ -316,22 +332,25 @@ namespace StarryEngine::RenderGraph {
             }
         }
 
+        // 10. 构建纹理描述映射（可能供 Pass 编译时使用）
         std::unordered_map<TextureId, RHI::TextureDesc> texDescMap;
         for (const auto& vt : m_virtualTextures) {
             texDescMap[vt.id] = vt.desc;
         }
 
-        // 编译每个 Pass
+        // 11. 编译每个 Pass（例如创建 RenderPass 对象、管线等）
         for (auto* pass : m_sortedPasses) {
             if (!pass->compile(m_resMgr, m_textureMap, texDescMap, m_bufferMap)) {
                 throw std::runtime_error("Failed to compile pass: " + pass->getName());
             }
         }
 
+        // 12. 检查交换链图像数量是否已设置
         if (m_swapchainImageCount == 0) {
             throw std::runtime_error("Swapchain image count not set before compile!");
         }
 
+        // 13. 为每个 Pass 的每个交换链图像创建帧缓冲
         m_perPassFramebuffers.clear();
         m_perPassFramebuffers.reserve(m_sortedPasses.size());
 
@@ -339,27 +358,28 @@ namespace StarryEngine::RenderGraph {
             std::vector<RHI::FramebufferHandle> framebuffersForPass;
             framebuffersForPass.reserve(m_swapchainImageCount);
 
-            const auto& attachmentKeys = pass->getAttachmentNames();
+            const auto& attachmentKeys = pass->getAttachmentNames(); // 该 Pass 声明的附件名称列表
             auto rpHandle = pass->getRenderPassHandle();
             auto* rpObj = m_resMgr->getRenderPass(rpHandle);
             if (!rpObj) {
                 throw std::runtime_error("Invalid render pass for pass: " + pass->getName());
             }
 
+            // 对每个交换链图像索引（或帧索引）创建对应的帧缓冲
             for (uint32_t imgIdx = 0; imgIdx < m_swapchainImageCount; ++imgIdx) {
-                std::vector<void*> attachments;
+                std::vector<void*> attachments;                       // 附件视图列表
                 for (const auto& key : attachmentKeys) {
-                    TextureId texId = pass->getBoundTextureId(key); 
+                    TextureId texId = pass->getBoundTextureId(key);  // 根据附件名称获取纹理 ID
                     auto it = m_textureMap.find(texId);
                     if (it == m_textureMap.end()) {
                         throw std::runtime_error("Texture not found for key: " + key);
                     }
                     const auto& texInfo = it->second;
                     void* view = nullptr;
-                    if (texInfo.views.size() == 1) {
+                    if (texInfo.views.size() == 1) {                  // 单视图纹理（如深度、颜色）
                         view = texInfo.views[0];
                     }
-                    else if (texInfo.views.size() > 1) {
+                    else if (texInfo.views.size() > 1) {            // 多视图纹理（如交换链，每个图像一个视图）
                         if (imgIdx >= texInfo.views.size()) {
                             throw std::runtime_error("View index out of range for texture");
                         }
@@ -372,10 +392,10 @@ namespace StarryEngine::RenderGraph {
                 }
 
                 RHI::FramebufferDesc fbDesc;
-                fbDesc.renderPass = rpObj->getNativeHandle();
-                fbDesc.attachments = attachments;
-                fbDesc.extent = { pass->getWidth(), pass->getHeight() };
-                fbDesc.layers = 1;
+                fbDesc.renderPass = rpObj->getNativeHandle();        // 原生 RenderPass 句柄
+                fbDesc.attachments = attachments;                     // 附件视图列表
+                fbDesc.extent = { pass->getWidth(), pass->getHeight() }; // 帧缓冲尺寸
+                fbDesc.layers = 1;                                     // 层数（通常为1）
                 auto fb = m_resMgr->createFramebuffer(fbDesc);
                 framebuffersForPass.push_back(fb);
             }

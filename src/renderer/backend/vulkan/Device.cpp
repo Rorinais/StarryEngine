@@ -1554,16 +1554,12 @@ namespace StarryEngine {
         }
 
         // ==================== 扩展处理 - 修复重复问题 ====================
-        std::vector<const char*> enabledExtensions;
         std::set<std::string> uniqueExtensionSet;
 
         // 先去重
         for (const char* extension : mConfig.extensions) {
-            if (extension != nullptr && strlen(extension) > 0) {
-                std::string extStr(extension);
-                if (uniqueExtensionSet.find(extStr) == uniqueExtensionSet.end()) {
-                    uniqueExtensionSet.insert(extStr);
-                }
+            if (extension != nullptr && extension[0] != '\0') {
+                uniqueExtensionSet.insert(extension);
             }
         }
 
@@ -1571,28 +1567,27 @@ namespace StarryEngine {
         uint32_t availableExtensionCount = 0;
         vkEnumerateDeviceExtensionProperties(mPhysicalDevice, nullptr, &availableExtensionCount, nullptr);
 
-        std::vector<VkExtensionProperties> availableExtensions;
+        std::vector<VkExtensionProperties> availableExtensions(availableExtensionCount);
         if (availableExtensionCount > 0) {
-            availableExtensions.resize(availableExtensionCount);
             vkEnumerateDeviceExtensionProperties(mPhysicalDevice, nullptr, &availableExtensionCount, availableExtensions.data());
         }
+
+        m_enabledExtensionStrings.clear();
 
         // 检查每个扩展是否支持
         for (const std::string& extension : uniqueExtensionSet) {
             bool supported = false;
-
             for (const auto& availableExt : availableExtensions) {
-                if (strcmp(availableExt.extensionName, extension.c_str()) == 0) {
+                if (availableExt.extensionName == extension) {
                     supported = true;
                     break;
                 }
             }
 
             if (supported) {
-                enabledExtensions.push_back(extension.c_str());
+                m_enabledExtensionStrings.push_back(extension);
             }
             else {
-                // 只对关键扩展抛出错误，非关键扩展只警告
                 bool isCritical = (extension == VK_KHR_SWAPCHAIN_EXTENSION_NAME);
                 if (isCritical) {
                     throw std::runtime_error("Critical device extension not supported: " + extension);
@@ -1604,9 +1599,15 @@ namespace StarryEngine {
             }
         }
 
-        // 确保至少有一个扩展被启用
-        if (enabledExtensions.empty()) {
+        if (m_enabledExtensionStrings.empty()) {
             throw std::runtime_error("No extensions enabled for device!");
+        }
+
+        // 构建临时指针数组（指向 m_enabledExtensionStrings 的内部数据）
+        std::vector<const char*> enabledExtensionPtrs;
+        enabledExtensionPtrs.reserve(m_enabledExtensionStrings.size());
+        for (const auto& extStr : m_enabledExtensionStrings) {
+            enabledExtensionPtrs.push_back(extStr.c_str());
         }
 
         // ==================== 验证层处理 ====================
@@ -1651,8 +1652,8 @@ namespace StarryEngine {
         createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
         createInfo.pQueueCreateInfos = queueCreateInfos.data();
         createInfo.pEnabledFeatures = &deviceFeatures;
-        createInfo.enabledExtensionCount = static_cast<uint32_t>(enabledExtensions.size());
-        createInfo.ppEnabledExtensionNames = enabledExtensions.data();
+        createInfo.enabledExtensionCount = static_cast<uint32_t>(enabledExtensionPtrs.size());
+        createInfo.ppEnabledExtensionNames = enabledExtensionPtrs.data();
 
         // 设置验证层
         if (!enabledLayers.empty()) {
@@ -1959,9 +1960,9 @@ namespace StarryEngine {
             std::to_string(mQueueFamilyIndices.transferFamily.value()) : "N/A") << std::endl;
 
         std::cout << "\n=== Enabled Extensions ===" << std::endl;
-        for (const auto& extension : mConfig.extensions) {
-            std::cout << "  " << extension << std::endl;
+        for (const auto& ext : m_enabledExtensionStrings) {
+            std::cout << "  " << ext << std::endl;
         }
-        std::cout << std::endl; 
+        std::cout << std::endl;
     }
 }

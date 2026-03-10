@@ -6,5 +6,7 @@ add_library(application STATIC ${SRC})
 target_link_libraries(application 
 PRIVATE
     BaseInterface
+    core
+    event
     renderer
 )

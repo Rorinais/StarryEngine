@@ -1,4 +1,5 @@
 #include "RHI_RESOURCE_MANAGER.hpp"
+#include "../../logging/Logger.hpp"
 
 namespace StarryEngine::RHI {
 
@@ -1278,26 +1279,20 @@ namespace StarryEngine::RHI {
 
     void ResourceManager::logResourceCreation(ResourceCategory category, const std::string& name) {
         if (!debugMode_) return;
-
-        //std::lock_guard<std::mutex> lock(statsMutex_);
-        std::cout << "[ResourceManager] Created resource: Category="
-            << static_cast<int>(category)
-            << ",ResourceType :" << ResourceCategoryToString(category);
-        if (!name.empty()){
-            std::cout << ", Name='" << name << "'";
-        }
-        std::cout << std::endl;
+        LOG_DEBUG("Created resource: Category={}, ResourceType={}{}",
+            static_cast<int>(category),
+            ResourceCategoryToString(category),
+            name.empty() ? "" : (", Name='" + name + "'"));
     }
 
     void ResourceManager::logResourceDestruction(ResourceCategory category, const std::string& name) {
         if (!debugMode_) return;
 
         //std::lock_guard<std::mutex> lock(statsMutex_);
-        std::cout << "[ResourceManager] Destroyed resource: Category="
-            << static_cast<int>(category)
-            << ",ResourceType :" << ResourceCategoryToString(category)
-            << ", Name='" << name << "'"
-            << std::endl;
+        LOG_DEBUG("Created resource: Category={}, ResourceType={}{}",
+            static_cast<int>(category),
+            ResourceCategoryToString(category),
+            name.empty() ? "" : (", Name='" + name + "'"));
     }
 
     const char* ResourceManager::ResourceCategoryToString(ResourceCategory category) {

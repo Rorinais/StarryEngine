@@ -532,6 +532,8 @@ namespace StarryEngine {
         VkSurfaceKHR mSurface;
         Config mConfig;
 
+        std::vector<std::string> m_enabledExtensionStrings;
+
         // 物理设备
         uint32_t mInstanceApiVersion;
         VkPhysicalDevice mPhysicalDevice = VK_NULL_HANDLE;

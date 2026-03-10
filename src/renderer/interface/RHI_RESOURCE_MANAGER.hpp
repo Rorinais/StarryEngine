@@ -1174,4 +1174,185 @@ namespace StarryEngine::RHI {
         }
     }
 
+    template<typename Handle>
+    struct HandleTraits;
+
+    // BufferHandle
+    template<>
+    struct HandleTraits<RHI::BufferHandle> {
+        using ResourceType = RHI::RHIBuffer;
+        static ResourceType* get(RHI::ResourceManager* mgr, RHI::BufferHandle handle) {
+            return mgr->getBuffer(handle);
+        }
+        static RHI::BufferHandle create(RHI::ResourceManager* mgr, const RHI::BufferDesc& desc,
+            const std::string& name = "", const std::string& debugTag = "") {
+            return mgr->createBuffer(desc, name.empty() ? desc.debugName : name, debugTag);
+        }
+        static bool destroy(RHI::ResourceManager* mgr, RHI::BufferHandle handle) {
+            return mgr->destroy(handle);
+        }
+    };
+
+    // TextureHandle
+    template<>
+    struct HandleTraits<RHI::TextureHandle> {
+        using ResourceType = RHI::RHITexture;
+        static ResourceType* get(RHI::ResourceManager* mgr, RHI::TextureHandle handle) {
+            return mgr->getTexture(handle);
+        }
+        static RHI::TextureHandle create(RHI::ResourceManager* mgr, const RHI::TextureDesc& desc,
+            const std::string& name = "", const std::string& debugTag = "") {
+            return mgr->createTexture(desc, name.empty() ? desc.debugName : name, debugTag);
+        }
+        static bool destroy(RHI::ResourceManager* mgr, RHI::TextureHandle handle) {
+            return mgr->destroy(handle);
+        }
+    };
+
+    // PipelineHandle
+    template<>
+    struct HandleTraits<RHI::PipelineHandle> {
+        using ResourceType = RHI::RHIPipeline;
+        static ResourceType* get(RHI::ResourceManager* mgr, RHI::PipelineHandle handle) {
+            return mgr->getPipeline(handle);
+        }
+        static RHI::PipelineHandle create(RHI::ResourceManager* mgr, const RHI::GraphicsPipelineDesc& desc,
+            const std::string& name = "", const std::string& debugTag = "") {
+            return mgr->createGraphicsPipeline(desc, name.empty() ? desc.debugName : name, debugTag);
+        }
+        // 注意：计算管线也返回 PipelineHandle，但描述符类型不同，可以再增加一个 createCompute 特化，或使用 if constexpr
+        // 这里为了简化，只提供图形管线的创建，计算管线单独处理（或通过另一个特化）
+        static bool destroy(RHI::ResourceManager* mgr, RHI::PipelineHandle handle) {
+            return mgr->destroy(handle);
+        }
+    };
+
+    // PipelineLayoutHandle
+    template<>
+    struct HandleTraits<RHI::PipelineLayoutHandle> {
+        using ResourceType = RHI::RHIPipelineLayout;
+        static ResourceType* get(RHI::ResourceManager* mgr, RHI::PipelineLayoutHandle handle) {
+            return mgr->getPipelineLayout(handle);
+        }
+        static RHI::PipelineLayoutHandle create(RHI::ResourceManager* mgr, const RHI::PipelineLayoutDesc& desc,
+            const std::string& name = "", const std::string& debugTag = "") {
+            return mgr->createPipelineLayout(desc, name.empty() ? desc.debugName : name, debugTag);
+        }
+        static bool destroy(RHI::ResourceManager* mgr, RHI::PipelineLayoutHandle handle) {
+            return mgr->destroy(handle);
+        }
+    };
+
+    // ShaderHandle
+    template<>
+    struct HandleTraits<RHI::ShaderHandle> {
+        using ResourceType = RHI::RHIShaderModule;
+        static ResourceType* get(RHI::ResourceManager* mgr, RHI::ShaderHandle handle) {
+            return mgr->getShader(handle);
+        }
+        static RHI::ShaderHandle create(RHI::ResourceManager* mgr, const RHI::ShaderModuleDesc& desc,
+            const std::string& name = "", const std::string& debugTag = "") {
+            return mgr->createShader(desc, name.empty() ? desc.debugName : name, debugTag);
+        }
+        static bool destroy(RHI::ResourceManager* mgr, RHI::ShaderHandle handle) {
+            return mgr->destroy(handle);
+        }
+    };
+
+    // SamplerHandle
+    template<>
+    struct HandleTraits<RHI::SamplerHandle> {
+        using ResourceType = RHI::RHISampler;
+        static ResourceType* get(RHI::ResourceManager* mgr, RHI::SamplerHandle handle) {
+            return mgr->getSampler(handle);
+        }
+        static RHI::SamplerHandle create(RHI::ResourceManager* mgr, const RHI::SamplerDesc& desc,
+            const std::string& name = "", const std::string& debugTag = "") {
+            return mgr->createSampler(desc, name.empty() ? desc.debugName : name, debugTag);
+        }
+        static bool destroy(RHI::ResourceManager* mgr, RHI::SamplerHandle handle) {
+            return mgr->destroy(handle);
+        }
+    };
+
+    // RenderPassHandle
+    template<>
+    struct HandleTraits<RHI::RenderPassHandle> {
+        using ResourceType = RHI::RHIRenderPass;
+        static ResourceType* get(RHI::ResourceManager* mgr, RHI::RenderPassHandle handle) {
+            return mgr->getRenderPass(handle);
+        }
+        static RHI::RenderPassHandle create(RHI::ResourceManager* mgr, const RHI::RenderPassDesc& desc,
+            const std::string& name = "", const std::string& debugTag = "") {
+            return mgr->createRenderPass(desc, name.empty() ? desc.debugName : name, debugTag);
+        }
+        static bool destroy(RHI::ResourceManager* mgr, RHI::RenderPassHandle handle) {
+            return mgr->destroy(handle);
+        }
+    };
+
+    // FramebufferHandle
+    template<>
+    struct HandleTraits<RHI::FramebufferHandle> {
+        using ResourceType = RHI::RHIFramebuffer;
+        static ResourceType* get(RHI::ResourceManager* mgr, RHI::FramebufferHandle handle) {
+            return mgr->getFramebuffer(handle);
+        }
+        static RHI::FramebufferHandle create(RHI::ResourceManager* mgr, const RHI::FramebufferDesc& desc,
+            const std::string& name = "", const std::string& debugTag = "") {
+            return mgr->createFramebuffer(desc, name.empty() ? desc.debugName : name, debugTag);
+        }
+        static bool destroy(RHI::ResourceManager* mgr, RHI::FramebufferHandle handle) {
+            return mgr->destroy(handle);
+        }
+    };
+
+    // DescriptorSetHandle
+    template<>
+    struct HandleTraits<RHI::DescriptorSetHandle> {
+        using ResourceType = RHI::RHIDescriptorSet;
+        static ResourceType* get(RHI::ResourceManager* mgr, RHI::DescriptorSetHandle handle) {
+            return mgr->getDescriptorSet(handle);
+        }
+        static RHI::DescriptorSetHandle create(RHI::ResourceManager* mgr, const RHI::DescriptorSetDesc& desc,
+            const std::string& name = "", const std::string& debugTag = "") {
+            return mgr->createDescriptorSet(desc, name.empty() ? desc.debugName : name, debugTag);
+        }
+        static bool destroy(RHI::ResourceManager* mgr, RHI::DescriptorSetHandle handle) {
+            return mgr->destroy(handle);
+        }
+    };
+
+    // DescriptorPoolHandle
+    template<>
+    struct HandleTraits<RHI::DescriptorPoolHandle> {
+        using ResourceType = RHI::RHIDescriptorPool;
+        static ResourceType* get(RHI::ResourceManager* mgr, RHI::DescriptorPoolHandle handle) {
+            return mgr->getDescriptorPool(handle);
+        }
+        static RHI::DescriptorPoolHandle create(RHI::ResourceManager* mgr, const RHI::DescriptorPoolDesc& desc,
+            const std::string& name = "", const std::string& debugTag = "") {
+            return mgr->createDescriptorPool(desc, name.empty() ? desc.debugName : name, debugTag);
+        }
+        static bool destroy(RHI::ResourceManager* mgr, RHI::DescriptorPoolHandle handle) {
+            return mgr->destroy(handle);
+        }
+    };
+
+    // DescriptorSetLayoutHandle
+    template<>
+    struct HandleTraits<RHI::DescriptorSetLayoutHandle> {
+        using ResourceType = RHI::RHIDescriptorSetLayout;
+        static ResourceType* get(RHI::ResourceManager* mgr, RHI::DescriptorSetLayoutHandle handle) {
+            return mgr->getDescriptorSetLayout(handle);
+        }
+        static RHI::DescriptorSetLayoutHandle create(RHI::ResourceManager* mgr, const RHI::DescriptorSetLayoutDesc& desc,
+            const std::string& name = "", const std::string& debugTag = "") {
+            return mgr->createDescriptorSetLayout(desc, name.empty() ? desc.debugName : name, debugTag);
+        }
+        static bool destroy(RHI::ResourceManager* mgr, RHI::DescriptorSetLayoutHandle handle) {
+            return mgr->destroy(handle);
+        }
+    };
+
 } // namespace StarryEngine::RHI

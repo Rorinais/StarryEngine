@@ -1,5 +1,5 @@
 #pragma once
-#include"../base.hpp"
+#include"base.hpp"
 
 namespace StarryEngine {
     class Window {
@@ -28,9 +28,6 @@ namespace StarryEngine {
 		uint16_t getWidth() const noexcept { return mConfig.width; }
 		uint16_t getHeight() const noexcept { return mConfig.height; }
 
-        void setResizeCallback(ResizeCallback callback);
-        void setKeyCallback(KeyCallback callback);
-
         bool setIcon(const char* imagePath);
         bool setIconFromMemory(const unsigned char* imageData, int width, int height, int channels = 4);
 
@@ -49,9 +46,6 @@ namespace StarryEngine {
     private:
         GLFWwindow* mWindow = nullptr;
         Config mConfig;
-
-        ResizeCallback mResizeCallback;
-        KeyCallback mKeyCallback;
 
         std::vector<unsigned char> mIconData;
     };

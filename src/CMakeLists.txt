@@ -14,6 +14,9 @@ target_link_libraries(BaseInterface INTERFACE
     shaderc
 )
 
+add_subdirectory(core)
+add_subdirectory(event)
+add_subdirectory(logging)
 add_subdirectory(application)
 add_subdirectory(renderer)
 
@@ -46,6 +49,7 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 
 target_link_libraries(${PROJECT_NAME} PRIVATE 
     BaseInterface
+    core
     application
     renderer
 )

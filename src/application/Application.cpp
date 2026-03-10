@@ -2,60 +2,6 @@
 #include <stb_image.h>
 
 namespace StarryEngine {
-    FrameMonitor::FrameMonitor(Window::Ptr window, std::shared_ptr<FrameContext> frameContext, uint32_t flightFrame)
-        : m_window(window)
-        , m_frameContext(frameContext)
-        , m_flightFrame(flightFrame)
-        , m_startTime(std::chrono::high_resolution_clock::now())
-        , m_lastFrameTime(m_startTime)
-        , m_deltaTime(0.0f)
-        , m_fps(0.0f)
-        , m_frameCount(0)
-        , m_lastFPSUpdate(0.0f)
-        , m_fpsUpdateInterval(1.0f)
-        , m_lastTitleUpdate(0.0) {
-    }
-
-    void FrameMonitor::tick() {
-        auto currentTime = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<float> delta = currentTime - m_lastFrameTime;
-        m_deltaTime = delta.count();
-        m_lastFrameTime = currentTime;
-
-        m_frameCount++;
-        float now = getTime();
-        if (now - m_lastFPSUpdate >= m_fpsUpdateInterval) {
-            m_fps = static_cast<float>(m_frameCount) / (now - m_lastFPSUpdate);
-            m_frameCount = 0;
-            m_lastFPSUpdate = now;
-        }
-    }
-
-    void FrameMonitor::updateTitle() {
-        double now = getTime();
-        if (now - m_lastTitleUpdate >= 1.0) {
-            const auto& stats = m_frameContext->getStatistics();
-            uint32_t lastFrameIdx = (m_frameContext->getCurrentFrameIndex() + m_flightFrame - 1) % m_flightFrame;
-            float lastGpuTime = m_frameContext->getFrameGPUTime(lastFrameIdx);
-
-            std::stringstream title;
-            title << "StarryEngine"
-                << " | FPS: " << std::fixed << std::setprecision(1) << m_fps
-                << " | GPU Time: " << std::setprecision(3) << lastGpuTime << " ms"
-                << " | CPU(avg): " << stats.averageCPUTime << " ms"
-                << " | Total Frames: " << stats.totalFrames;
-            glfwSetWindowTitle(m_window->getHandle(), title.str().c_str());
-
-            m_lastTitleUpdate = now;
-        }
-    }
-
-    float FrameMonitor::getTime() const {
-        auto now = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<float> elapsed = now - m_startTime;
-        return elapsed.count();
-    }
-
     Application::Application() {
         Window::Config config;
         config.width = m_width;
@@ -67,67 +13,40 @@ namespace StarryEngine {
         config.fullScreen = false;
         m_window = Window::create(config);
 
-        m_window->setKeyCallback([this](int key, int action) {
-            if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) glfwSetWindowShouldClose(m_window->getHandle(), GLFW_TRUE);
-        });
-
-        m_window->setResizeCallback([this](int width, int height) {
-            mFramebufferResized = true;
-            m_width = width;
-            m_height = height;
-        });
-
-        RHI::RHIInitConfig rhiConfig;
-        rhiConfig.windowHandle = m_window->getHandle();
-        rhiConfig.windowWidth = m_width;
-        rhiConfig.windowHeight = m_height;
-        rhiConfig.appName = "StarryEngine Application";
-        rhiConfig.appVersion = { 1, 0, 0 };
-        rhiConfig.engineName = "StarryEngine";
-        rhiConfig.engineVersion = { 1, 0, 0 };
-        rhiConfig.deviceFeatures.samplerAnisotropy = true;
-        rhiConfig.deviceFeatures.textureCompression = true;
-        rhiConfig.deviceFeatures.synchronization = true;
-        rhiConfig.deviceFeatures.dynamicRendering = true;
-        rhiConfig.presentMode = RHI::RHIInitConfig::PresentMode::FIFO;
-        rhiConfig.swapChainImages = m_FlightFrame;
-        rhiConfig.srgb = true;
-        rhiConfig.frameBuffering = m_FlightFrame;
-        rhiConfig.usePersistentCommandBuffers = true;
-        rhiConfig.enableTimestamps = true;
-
-        rhiConfig.enableDebug = true;
-        rhiConfig.debugCallback = [](RHI::MessageSeverity severity, RHI::MessageSource source, const std::string& message) {
-            switch (severity) {
-            case RHI::MessageSeverity::Verbose:
-#ifdef _DEBUG
-                std::cout << "[VERBOSE] " << message << std::endl;
-#endif
-                break;
-            case RHI::MessageSeverity::Info:
-                std::cout << "[INFO] " << message << std::endl;
-                break;
-            case RHI::MessageSeverity::Warning:
-                std::cout << "\033[33m[WARNING]\033[0m " << message << std::endl;
-                break;
-            case RHI::MessageSeverity::Error:
-                std::cerr << "\033[31m[ERROR]\033[0m " << message << std::endl;
-                break;
-            case RHI::MessageSeverity::Critical:
-                std::cerr << "\033[31;1m[CRITICAL]\033[0m " << message << std::endl;
-                break;
-            default:
-                std::cout << "[UNKNOWN] " << message << std::endl;
-                break;
+        GetEventDispatcher().subscribe(EventType::KeyPressed,
+            [this](IEvent& e) {
+                auto& ev = static_cast<KeyEvent&>(e);
+                if (ev.getKey() == GLFW_KEY_ESCAPE && ev.getAction() == GLFW_PRESS) {
+                    glfwSetWindowShouldClose(m_window->getHandle(), GLFW_TRUE);
+                }
             }
-        };
+        );
+        
+        GetEventDispatcher().subscribe(EventType::MouseButtonPressed,
+            [this](IEvent& e) {
+                auto& ev = static_cast<MouseButtonEvent&>(e);
+                int button = ev.getButton();
+                int action = ev.getAction();
+                int mods = ev.getMods();
+            }
+        );
 
-        m_rhi = std::make_unique<VulkanRHI>();
-        if (!m_rhi->initialize(rhiConfig)) {
-            std::cerr << "Failed to initialize Vulkan RHI!" << std::endl;
+        GetEventDispatcher().subscribe(EventType::WindowResize,
+            [this](IEvent& e) {
+                auto& ev = static_cast<WindowResizeEvent&>(e);
+                m_width = ev.getWidth();
+                m_height = ev.getHeight();
+                mFramebufferResized = true;
+                LOG_INFO("Window resized to {}x{}", m_width, m_height);
+            }
+        );
+
+        VulkanRHIFactory factory;
+        m_rhi = factory.createDefault(RHI::API::Vulkan, m_window, m_width, m_height, m_FlightFrame);
+        if (!m_rhi) {
+            std::cerr << "Failed to create RHI!" << std::endl;
             return;
         }
-        m_rhi->printAllDeivceInfo();
 
         createDescriptorPool();
         buildRenderGraph();
@@ -174,15 +93,14 @@ namespace StarryEngine {
             "Swapchain");
 
         // GbufferPass: 输出颜色到 intermediate，深度到 depth
-// GbufferPass: 输出颜色到 intermediate，深度到 depth
         renderpasses.push_back({
             std::make_unique<RenderGraph::GbufferPass>(m_resMgr, mDescriptorPoolHandle),
             depthTexId,                        // inputTexture
-            swapchainTexId,                 // outputTexture
+            intermediateTexId,                 // outputTexture
             RHI::ImageLayout::Undefined,       // inputInitial (深度)
             RHI::ImageLayout::DepthStencilAttachment, // inputFinal (深度)
             RHI::ImageLayout::Undefined,       // outputInitial
-            RHI::ImageLayout::PresentSrc  // outputFinal (供后处理读取)
+            RHI::ImageLayout::ShaderReadOnly  // outputFinal (供后处理读取)
 
             });
 
@@ -197,12 +115,19 @@ namespace StarryEngine {
         //    RHI::ImageLayout::PresentSrc      // outputFinal (呈现)
         //    });
 
+        renderpasses.push_back({
+            std::make_unique<RenderGraph::ImguiPass>(m_rhi, m_window, mDescriptorPoolHandle),
+            intermediateTexId, swapchainTexId,
+            RHI::ImageLayout::ShaderReadOnly, RHI::ImageLayout::ShaderReadOnly,
+            RHI::ImageLayout::Undefined, RHI::ImageLayout::PresentSrc
+            });
+
         for (auto& info : renderpasses) {
             info.renderpass->setViewport(m_width, m_height);
             info.renderpass->setup(
                 *m_renderGraph,
-                info.outputTexture,      // 输出纹理
-                info.inputTexture,       // 输入纹理
+                info.inputTexture,
+                info.outputTexture,  
                 info.inputInitial,
                 info.inputFinal,
                 info.outputInitial,
@@ -216,6 +141,9 @@ namespace StarryEngine {
 
         for (auto& renderpass : renderpasses) {
             renderpass.renderpass->updateInputAttachment(renderpass.inputTexture, renderpass.inputFinal);
+            if (auto* imguiPass = dynamic_cast<RenderGraph::ImguiPass*>(renderpass.renderpass.get())) {
+                imguiPass->postCompile();
+            }
         }
 
     }
@@ -292,7 +220,10 @@ int main() {
 #elif _WIN32
     _putenv_s("VK_LAYER_PATH", "layers");
 #endif
+    StarryEngine::Logger::init();
+    StarryEngine::Logger::setShowSourceLoc(false);
 
     StarryEngine::Application app;
     app.run();
+    StarryEngine::Logger::shutdown();
 }

@@ -462,7 +462,7 @@ namespace StarryEngine {
         }
     }
 
-    std::unique_ptr<RHI::RHICommandEncoder> VulkanRHI::getCommandEncoder(VkCommandBuffer cmdBuf) {
+    std::unique_ptr<RHI::RHICommandEncoder> VulkanRHI::getCommandEncoder(VkCommandBuffer cmdBuf) const {
         return std::make_unique<RHI::RHI_VK_CommandEncoder>(mDevice, cmdBuf, mResourceManager.get());
     }
 

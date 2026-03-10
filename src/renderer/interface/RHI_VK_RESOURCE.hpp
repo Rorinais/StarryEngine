@@ -1,9 +1,9 @@
 #pragma once
-#include "../backend/Instance.hpp"
-#include "../backend/QueueHandles.hpp"
-#include "../backend/Device.hpp"
-#include "../backend/Swapchain.hpp"
-#include "../backend/FrameContext.hpp"
+#include "../backend/vulkan/Instance.hpp"
+#include "../backend/vulkan/QueueHandles.hpp"
+#include "../backend/vulkan/Device.hpp"
+#include "../backend/vulkan/Swapchain.hpp"
+#include "../backend/vulkan/FrameContext.hpp"
 #include "RHI_STRUCTS_RESOURCE.hpp"
 #include "RHI_TO_VK_FUNC.hpp"
 #include <vulkan/vulkan.h>
@@ -12,34 +12,6 @@
 #include <stdexcept>
 
 namespace StarryEngine::RHI {
-
-    // ANSI 颜色代码定义
-    namespace ANSIColor {
-        const std::string RESET = "\033[0m";
-        const std::string BLACK = "\033[30m";
-        const std::string RED = "\033[31m";
-        const std::string GREEN = "\033[32m";
-        const std::string YELLOW = "\033[33m";
-        const std::string BLUE = "\033[34m";
-        const std::string MAGENTA = "\033[35m";
-        const std::string CYAN = "\033[36m";
-        const std::string WHITE = "\033[37m";
-
-        // 背景色
-        const std::string BG_BLACK = "\033[40m";
-        const std::string BG_RED = "\033[41m";
-        const std::string BG_GREEN = "\033[42m";
-        const std::string BG_YELLOW = "\033[43m";
-        const std::string BG_BLUE = "\033[44m";
-        const std::string BG_MAGENTA = "\033[45m";
-        const std::string BG_CYAN = "\033[46m";
-        const std::string BG_WHITE = "\033[47m";
-
-        // 样式
-        const std::string BOLD = "\033[1m";
-        const std::string UNDERLINE = "\033[4m";
-        const std::string INVERSE = "\033[7m";
-    };
 
     class RHI_VK_ShaderModule : public RHIShaderModule {
     public:

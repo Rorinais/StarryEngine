@@ -15,7 +15,7 @@ namespace StarryEngine::RenderGraph {
 
         // 实现 IRenderPass 接口
            // 可选：每帧更新
-        virtual void setup(RenderGraph& renderGraph, TextureId output, TextureId input,
+        virtual void setup(RenderGraph& renderGraph, TextureId input, TextureId output,
             RHI::ImageLayout depthInitial,
             RHI::ImageLayout depthFinal,
             RHI::ImageLayout colorInitial,

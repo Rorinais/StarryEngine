@@ -1,8 +1,8 @@
 #pragma once
 #include"ISubpassRecorder.hpp"
 #include "../graph/PassNode.hpp"
-#include "../backend/VulkanRHI.hpp"
-#include "../../base.hpp"
+#include "../backend/vulkan/VulkanRHI.hpp"
+#include "../../core/base.hpp"
 
 
 namespace StarryEngine::RenderGraph {
@@ -146,11 +146,11 @@ namespace StarryEngine::RenderGraph {
                 ImGui::DestroyContext();
             }
             if (m_rhi && m_sampler != VK_NULL_HANDLE) {
-                vkDestroySampler(m_rhi->getDevice(), m_sampler, nullptr);
+                vkDestroySampler(static_cast<VkDevice>(m_rhi->getDevice()), m_sampler, nullptr);
             }
         }
 
-        inline void init(std::shared_ptr<VulkanRHI> rhi, VkDescriptorPool descriptorPool, GLFWwindow* window, VkRenderPass renderPass) {
+        inline void init(std::shared_ptr<RHI::IRHI> rhi, VkDescriptorPool descriptorPool, GLFWwindow* window, VkRenderPass renderPass) {
             m_rhi = rhi;
             if (m_initialized) {
                 ImGui_ImplVulkan_Shutdown();
@@ -164,19 +164,20 @@ namespace StarryEngine::RenderGraph {
             ImGui::CreateContext();
             ImGuiIO& io = ImGui::GetIO(); (void)io;
             io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-
+            io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+            
             // 初始化 GLFW 后端
             ImGui_ImplGlfw_InitForVulkan(window, true);
 
             // 获取 Vulkan 必要信息
-            VkInstance instance = rhi->getInstance();
-            VkPhysicalDevice physicalDevice = rhi->getPhysicalDevice();
-            VkDevice device = rhi->getDevice();
+            VkInstance instance = static_cast<VkInstance>(rhi->getInstance());
+            VkPhysicalDevice physicalDevice = static_cast<VkPhysicalDevice>(rhi->getPhysicalDevice());
+            VkDevice device = static_cast<VkDevice>(rhi->getDevice());
             uint32_t queueFamily = rhi->getGraphicsQueueFamilyIndex();
-            VkQueue queue = rhi->getGraphicsQueue();
+            VkQueue queue = static_cast<VkQueue>(rhi->getGraphicsQueue());
             uint32_t imageCount = rhi->getSwapChainImageCount();
 
-            // 初始化 Vulkan 后端
+            // 初始化 Vulkan 后端（新版结构体）
             ImGui_ImplVulkan_InitInfo init_info = {};
             init_info.Instance = instance;
             init_info.PhysicalDevice = physicalDevice;
@@ -184,18 +185,22 @@ namespace StarryEngine::RenderGraph {
             init_info.QueueFamily = queueFamily;
             init_info.Queue = queue;
             init_info.DescriptorPool = descriptorPool;
-            init_info.RenderPass = renderPass;  // 使用传入的 RenderPass
             init_info.MinImageCount = imageCount;
             init_info.ImageCount = imageCount;
-            init_info.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+            init_info.UseDynamicRendering = false;
             init_info.CheckVkResultFn = [](VkResult err) {
                 if (err != VK_SUCCESS) {
                     std::cerr << "[ImGui] Vulkan error: " << err << std::endl;
                 }
                 };
 
+            // 将 RenderPass 等信息放入 PipelineInfoMain
+            init_info.PipelineInfoMain.RenderPass = renderPass;
+            init_info.PipelineInfoMain.Subpass = 0;
+            init_info.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
+
+            // 初始化 ImGui Vulkan 后端
             ImGui_ImplVulkan_Init(&init_info);
-            ImGui_ImplVulkan_CreateFontsTexture();
 
             m_initialized = true;
         }
@@ -213,6 +218,25 @@ namespace StarryEngine::RenderGraph {
             if (!m_initialized) return;
             ImGui::Render();
             ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), static_cast<VkCommandBuffer>(encoder->getCommandBuffer()));
+        }
+
+        inline void drawTextureWindow(const char* title) {
+            if (!m_initialized) return;
+
+            // 设置窗口初始大小（仅在首次使用时生效）
+            ImGui::SetNextWindowSize(ImVec2(400, 300), ImGuiCond_FirstUseEver);
+            // 可选：设置窗口位置
+            ImGui::SetNextWindowPos(ImVec2(50, 50), ImGuiCond_FirstUseEver);
+
+            ImGui::Begin(title);
+            if (m_sceneTextureID) {
+                ImVec2 viewportSize = ImGui::GetContentRegionAvail();
+                ImGui::Image(m_sceneTextureID, viewportSize);
+            }
+            else {
+                ImGui::Text("Texture not available (ID=%llu)", (unsigned long long)m_sceneTextureID);
+            }
+            ImGui::End();
         }
 
         inline void setDisplayTexture(RHI::TextureHandle textureHandle) {
@@ -240,8 +264,7 @@ namespace StarryEngine::RenderGraph {
                 samplerInfo.minLod = 0.0f;
                 samplerInfo.maxLod = 0.0f;
 
-                VkDevice device = m_rhi->getDevice();
-                if (vkCreateSampler(device, &samplerInfo, nullptr, &m_sampler) != VK_SUCCESS) {
+                if (vkCreateSampler(static_cast<VkDevice>(m_rhi->getDevice()), &samplerInfo, nullptr, &m_sampler) != VK_SUCCESS) {
                     std::cerr << "[ImGuiRecorder] Failed to create sampler" << std::endl;
                     return;
                 }
@@ -281,28 +304,9 @@ namespace StarryEngine::RenderGraph {
             std::cout << "[ImGuiRecorder] Texture ID set to: " << m_sceneTextureID << std::endl;
         }
 
-        inline void drawTextureWindow(const char* title) {
-            if (!m_initialized) return;
-
-            // 设置窗口初始大小（仅在首次使用时生效）
-            ImGui::SetNextWindowSize(ImVec2(400, 300), ImGuiCond_FirstUseEver);
-            // 可选：设置窗口位置
-            ImGui::SetNextWindowPos(ImVec2(50, 50), ImGuiCond_FirstUseEver);
-
-            ImGui::Begin(title);
-            if (m_sceneTextureID) {
-                ImVec2 viewportSize = ImGui::GetContentRegionAvail();
-                ImGui::Image(m_sceneTextureID, viewportSize);
-            }
-            else {
-                ImGui::Text("Texture not available (ID=%llu)", (unsigned long long)m_sceneTextureID);
-            }
-            ImGui::End();
-        }
-
     private:
         bool m_initialized = false;
-        std::shared_ptr<VulkanRHI> m_rhi;
+        std::shared_ptr<RHI::IRHI> m_rhi;
         VkSampler        m_sampler = VK_NULL_HANDLE;
         ImTextureID      m_sceneTextureID = 0;
     };

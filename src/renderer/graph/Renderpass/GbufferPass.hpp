@@ -19,7 +19,7 @@ namespace StarryEngine::RenderGraph {
         }
 
         // 实现 IRenderPass 接口
-        void setup(RenderGraph& renderGraph, TextureId output, TextureId input,
+        void setup(RenderGraph& renderGraph, TextureId input, TextureId output,
             RHI::ImageLayout depthInitial,
             RHI::ImageLayout depthFinal,
             RHI::ImageLayout colorInitial,

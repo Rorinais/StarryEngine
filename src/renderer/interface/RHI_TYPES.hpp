@@ -4,6 +4,7 @@
 #include"RHI_HANDLES_SYSTEM.hpp"
 #include"RHI_STRUCTS_CONFIG.hpp"
 #include"RHI_STRUCTS_RESOURCE.hpp"
+#include"RHI_RESOURCE_MANAGER.hpp"
 #include <memory>
 #include <vector>
 #include <functional>
@@ -421,5 +422,71 @@ namespace StarryEngine::RHI {
         static float randomFloat(float min = 0.0f, float max = 1.0f);
         static uint32_t randomUint(uint32_t min = 0, uint32_t max = UINT32_MAX);
     };
+
+    class IRHI {
+    public:
+        virtual ~IRHI() = default;
+
+        // 初始化
+        virtual bool initialize(const RHI::RHIInitConfig& config) = 0;
+
+        // 每帧渲染
+        virtual bool renderFrame(const std::function<void(RHI::RHICommandEncoder*, uint32_t imageIndex)>& drawFunc) = 0;
+
+        // 重建交换链（窗口大小改变时）
+        virtual bool recreateSwapChain(uint32_t width, uint32_t height) = 0;
+
+        // 获取资源管理器（用于创建缓冲、纹理等）
+        virtual std::shared_ptr<RHI::ResourceManager> getResourceManager() = 0;
+
+        // 获取帧上下文（用于同步、统计）
+        virtual std::shared_ptr<FrameContext> getFrameContext() = 0;
+
+        // 获取深度纹理句柄（如果需要）
+        virtual RHI::TextureHandle getDepthTexture() const = 0;
+
+        // 获取帧缓冲句柄列表（如果需要）
+        virtual const std::vector<RHI::FramebufferHandle>& getFramebuffers() const = 0;
+
+        virtual std::unique_ptr<RHI::RHICommandEncoder> getCommandEncoder(VkCommandBuffer cmdBuf) const = 0;
+
+        virtual uint32_t getWidth() const = 0;
+        virtual uint32_t getHeight() const = 0;
+
+        // 等待设备空闲
+        virtual void waitIdle() = 0;
+
+        virtual void printDeviceInfo() = 0;
+        virtual void printResourceStatistics() = 0;
+
+        virtual RHI::Format getDepthFormat() const = 0;
+        virtual void* getInstance()  const = 0;
+        virtual void* getPhysicalDevice()  const = 0;
+        virtual void* getDevice() const = 0;
+        virtual uint32_t getGraphicsQueueFamilyIndex() const = 0;
+        virtual void* getGraphicsQueue() const = 0;
+        virtual RHI::Format getSwapChainImageFormat()  const = 0;
+        virtual uint32_t getSwapChainImageCount()  const = 0;
+        virtual void* getSwapChainImageView(uint32_t index) const = 0;
+
+        // 模板方法：通过 HandleTraits 获取资源对象（需要 ResourceManager 支持）
+        template<typename Handle>
+        auto getResource(Handle handle) -> typename RHI::HandleTraits<Handle>::ResourceType* {
+            return RHI::HandleTraits<Handle>::get(getResourceManager().get(), handle);
+        }
+
+        // 模板方法：创建资源（转发给 ResourceManager）
+        template<typename Handle, typename Desc>
+        Handle createResource(const Desc& desc, const std::string& name = "", const std::string& debugTag = "") {
+            return RHI::HandleTraits<Handle>::create(getResourceManager().get(), desc, name, debugTag);
+        }
+
+        // 模板方法：销毁资源
+        template<typename Handle>
+        bool destroyResource(Handle handle) {
+            return RHI::HandleTraits<Handle>::destroy(getResourceManager().get(), handle);
+        }
+    };
+
 
 } // namespace StarryEngine::RHI

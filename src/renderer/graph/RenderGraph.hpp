@@ -9,7 +9,7 @@
 #include "../interface/RHI_ENUMS.hpp"
 #include "../interface/RHI_STRUCTS_DESC.hpp"
 #include "../interface/RHI_HANDLES_SYSTEM.hpp"
-#include "../backend/VulkanRHI.hpp"
+#include "../backend/vulkan/VulkanRHI.hpp"
 #include "PassNode.hpp"
 
 namespace StarryEngine::RenderGraph {
@@ -24,7 +24,7 @@ namespace StarryEngine::RenderGraph {
 
     class RenderGraph {
     public:
-        explicit RenderGraph(std::shared_ptr<VulkanRHI> rhi);
+        explicit RenderGraph(std::shared_ptr<RHI::IRHI> rhi);
         ~RenderGraph();
 
         RenderGraph(const RenderGraph&) = delete;
@@ -109,7 +109,7 @@ namespace StarryEngine::RenderGraph {
 
         std::vector<uint32_t> topologicalSort(const std::vector<std::vector<uint32_t>>& adj) const;
 
-        std::shared_ptr<VulkanRHI> m_rhi;
+        std::shared_ptr<RHI::IRHI> m_rhi;
         std::shared_ptr<RHI::ResourceManager> m_resMgr;
 
         // 交换链图像数量

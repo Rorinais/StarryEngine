@@ -8,7 +8,7 @@ namespace StarryEngine::RenderGraph {
     public:
         virtual ~IRenderPass() = default;
 
-        virtual void setup(RenderGraph& renderGraph, TextureId output, TextureId input,
+        virtual void setup(RenderGraph& renderGraph, TextureId input, TextureId output,
             RHI::ImageLayout depthInitial = RHI::ImageLayout::Undefined,
             RHI::ImageLayout depthFinal = RHI::ImageLayout::DepthStencilAttachment,
             RHI::ImageLayout colorInitial = RHI::ImageLayout::Undefined,

@@ -1,7 +1,7 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 #include "Window.hpp"
-
+#include"../event/Events.hpp"
 
 namespace StarryEngine {
         static void glfwErrorCallback(int error, const char* description) {
@@ -66,18 +66,15 @@ namespace StarryEngine {
 
             glfwSetWindowUserPointer(mWindow, this);
             glfwSetWindowSizeCallback(mWindow, [](GLFWwindow* window, int width, int height) {
-                auto* manager = static_cast<Window*>(glfwGetWindowUserPointer(window));
-                if (manager && manager->mResizeCallback) {
-                    manager->mResizeCallback(width, height);
-                    glfwPostEmptyEvent();
-                }
+                GetEventDispatcher().dispatch<WindowResizeEvent>(width, height);
                 });
 
             glfwSetKeyCallback(mWindow, [](GLFWwindow* window, int key, int scancode, int action, int mods) {
-                auto* manager = static_cast<Window*>(glfwGetWindowUserPointer(window));
-                if (manager && manager->mKeyCallback) {
-                    manager->mKeyCallback(key, action);
-                }
+                GetEventDispatcher().dispatch<KeyEvent>(key, scancode, action, mods);
+                });
+
+            glfwSetMouseButtonCallback(mWindow, [](GLFWwindow* window, int button, int action, int mods) {
+                GetEventDispatcher().dispatch<MouseButtonEvent>(button, action, mods);
                 });
         }
 
@@ -165,14 +162,6 @@ namespace StarryEngine {
 
             glfwSetWindowIcon(mWindow, 1, &image);
             return true;
-        }
-
-        void Window::setResizeCallback(ResizeCallback callback) {
-            mResizeCallback = callback;
-        }
-
-        void Window::setKeyCallback(KeyCallback callback) {
-            mKeyCallback = callback;
         }
 
         bool Window::shouldClose() const {

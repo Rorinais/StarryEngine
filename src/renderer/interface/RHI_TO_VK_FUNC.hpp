@@ -82,6 +82,10 @@ namespace StarryEngine::RHI::FUNC {
         case VK_FORMAT_D16_UNORM:          return RHI::Format::D16_UNorm;
         case VK_FORMAT_D32_SFLOAT:         return RHI::Format::D32_Float;
         case VK_FORMAT_D24_UNORM_S8_UINT:  return RHI::Format::D24_UNorm_S8_UInt;
+        case VK_FORMAT_R8G8B8A8_UNORM:     return RHI::Format::RGBA8_UNorm;
+        case VK_FORMAT_R8G8B8A8_SRGB:      return RHI::Format::RGBA8_sRGB;
+        case VK_FORMAT_B8G8R8A8_UNORM:     return RHI::Format::BGRA8_UNorm;
+        case VK_FORMAT_B8G8R8A8_SRGB:      return RHI::Format::BGRA8_sRGB;
         default: return RHI::Format::Undefined;
         }
     }
