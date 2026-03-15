@@ -1115,14 +1115,14 @@ namespace StarryEngine::RHI {
      */
     struct ShaderModuleDesc {
         ShaderStage stage = ShaderStage::Vertex; ///< 着色器阶段
-        std::string sourcecode;                 ///< SPIR-V/HLSL/Metal Shader字节码
+        std::vector<uint32_t> code;                 ///< SPIR-V/HLSL/Metal Shader字节码
         std::string entryPoint = "main";        ///< 入口函数名
         std::vector<std::pair<std::string, std::string>> defines;       ///< 预处理器定义
         std::vector<std::string> includePaths;  ///< 包含路径
         std::string debugName;                  ///< 调试名称
 
         bool operator==(const ShaderModuleDesc& other) const {
-            return stage == other.stage && sourcecode == other.sourcecode &&
+            return stage == other.stage && code == other.code &&
                 entryPoint == other.entryPoint && defines == other.defines &&
                 includePaths == other.includePaths;
         }
@@ -1163,7 +1163,8 @@ namespace StarryEngine::RHI {
      */
     struct DescriptorSetDesc {
         DescriptorPoolHandle descriptorPool;       ///< 描述符池句柄
-        PipelineLayoutHandle pipelineLayout;       ///< 管线布局句柄
+        PipelineLayoutHandle pipelineLayout;       ///< 管线布局句
+        DescriptorSetLayoutHandle descriptorSetLayout;
         uint32_t setIndex = 0;                     ///< 描述符集索引（在管线布局中）
         std::string debugName;                     ///< 调试名称
 

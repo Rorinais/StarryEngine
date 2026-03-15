@@ -1,0 +1,24 @@
+# Blender 5.0.1 MTL File: 'Untitled.blend'
+# www.blender.org
+
+newmtl Material
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+illum 2
+map_Kd E:/Imgae/Pad/illust_103795586_20230604_151657.jpg
+map_Ns E:/Imgae/Pad/illust_103795586_20230604_151657.jpg
+map_refl E:/Imgae/Pad/illust_103795586_20230604_151657.jpg
+map_d E:/Imgae/Pad/illust_103795586_20230604_151657.jpg
+
+newmtl Material.001
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+illum 2
+map_Kd E:/Imgae/Android/377117404877882.png
+map_Ns E:/Imgae/Android/377117404877882.png
+map_refl E:/Imgae/Android/377117404877882.png
+map_d E:/Imgae/Android/377117404877882.png

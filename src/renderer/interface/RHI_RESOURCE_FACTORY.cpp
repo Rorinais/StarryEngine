@@ -89,37 +89,43 @@ namespace StarryEngine::RHI {
             throw std::runtime_error("ResourceManager not set in VKResourceFactory");
         }
 
-        // 1. 获取描述符池对象（Vulkan 实现）
+        // 1. 获取描述符池
         auto* pool = dynamic_cast<RHI_VK_DescriptorPool*>(mResourceManager->getDescriptorPool(desc.descriptorPool));
         if (!pool) {
             throw std::runtime_error("Invalid descriptor pool handle");
         }
 
-        // 2. 获取管线布局对象
-        auto* pipelineLayout = dynamic_cast<RHI_VK_PipelineLayout*>(mResourceManager->getPipelineLayout(desc.pipelineLayout));
-        if (!pipelineLayout) {
-            throw std::runtime_error("Invalid pipeline layout handle");
+        RHI_VK_DescriptorSetLayout* layout = nullptr;
+
+        // 2. 优先使用显式传入的 descriptorSetLayout
+        if (desc.descriptorSetLayout.isValid()) {
+            layout = dynamic_cast<RHI_VK_DescriptorSetLayout*>(mResourceManager->getDescriptorSetLayout(desc.descriptorSetLayout));
+            if (!layout) {
+                throw std::runtime_error("Invalid descriptor set layout handle");
+            }
+        }
+        else {
+            // 回退到通过 pipelineLayout 获取
+            auto* pipelineLayout = dynamic_cast<RHI_VK_PipelineLayout*>(mResourceManager->getPipelineLayout(desc.pipelineLayout));
+            if (!pipelineLayout) {
+                throw std::runtime_error("Invalid pipeline layout handle");
+            }
+            auto layoutHandle = pipelineLayout->getLayoutHandle(desc.setIndex);
+            if (!layoutHandle.isValid()) {
+                throw std::runtime_error("No descriptor set layout at set index " + std::to_string(desc.setIndex));
+            }
+            layout = dynamic_cast<RHI_VK_DescriptorSetLayout*>(mResourceManager->getDescriptorSetLayout(layoutHandle));
+            if (!layout) {
+                throw std::runtime_error("Invalid descriptor set layout handle");
+            }
         }
 
-        // 3. 通过管线布局获取指定 set 索引的布局句柄
-        auto layoutHandle = pipelineLayout->getLayoutHandle(desc.setIndex);
-        if (!layoutHandle.isValid()) {
-            throw std::runtime_error("No descriptor set layout at set index " + std::to_string(desc.setIndex));
-        }
-
-        // 4. 获取布局对象
-        auto* layout = dynamic_cast<RHI_VK_DescriptorSetLayout*>(mResourceManager->getDescriptorSetLayout(layoutHandle));
-        if (!layout) {
-            throw std::runtime_error("Invalid descriptor set layout handle");
-        }
-
-        // 5. 通过描述符池分配描述符集（返回 vector）
+        // 3. 分配描述符集
         auto sets = pool->allocateDescriptorSets({ layout });
         if (sets.empty()) {
             throw std::runtime_error("Failed to allocate descriptor set");
         }
 
-        // 6. 返回分配的第一个（也是唯一一个）描述符集
         return std::move(sets[0]);
     }
 

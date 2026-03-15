@@ -318,15 +318,19 @@ namespace StarryEngine::RenderGraph {
                 encoder->nextSubpass(RHI::SubpassContents::Inline);
             }
 
-            RHI::Viewport viewport{
-                0.0f, 0.0f,
-                static_cast<float>(m_width), static_cast<float>(m_height),
-                0.0f, 1.0f
-            };
+            RHI::Viewport viewport{ 0.0f, 0.0f, (float)m_width, (float)m_height, 0.0f, 1.0f };
             encoder->setViewport(viewport);
-
             RHI::Rect2D scissor{ {0, 0}, {m_width, m_height} };
             encoder->setScissor(scissor);
+
+            // 绑定当前子通道的管线
+            if (i < m_pipelines.size() && m_pipelines[i].isValid()) {
+                encoder->bindPipeline(m_resMgr->getPipeline(m_pipelines[i]));
+            }
+            else {
+                LOG_ERROR("Subpass {} has no valid pipeline bound!", i);
+                continue;
+            }
 
             PassContext ctx(m_resMgr, m_pipelines, frameIndex, framebuffer);
             if (m_subpassRecorders[i]) {

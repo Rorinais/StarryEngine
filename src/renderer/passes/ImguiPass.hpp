@@ -1,8 +1,8 @@
 #pragma once
 #include "IRenderpass.hpp"
-#include "../../subpassRecorder/GBufferRecorder.hpp"
-#include "../../../core/Window.hpp"
-#include "../../../logging/Logger.hpp"  
+#include "../subpassRecorder/GBufferRecorder.hpp"
+#include "../../core/Window.hpp"
+#include "../../logging/Logger.hpp"  
 
 namespace StarryEngine::RenderGraph {
     class ImguiPass : public IRenderPass {
@@ -56,7 +56,7 @@ namespace StarryEngine::RenderGraph {
             m_imguiRecorder->setDisplayTexture(texHandle);
         }
 
-        void update(const Uniforms& /*data*/) override {
+        void update(const Assets::Uniforms& /*data*/) override {
             m_imguiRecorder->newFrame();
 
             // 创建主 DockSpace 宿主窗口（与您原有代码相同）

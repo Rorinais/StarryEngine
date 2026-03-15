@@ -91,6 +91,8 @@ namespace StarryEngine::RHI {
 
         static TypedHandle Null() noexcept { return TypedHandle(ResourceHandle::Null()); }
 
+        void reset() { handle = ResourceHandle::Null(); }
+
         static TypedHandle Create(uint8_t api, uint32_t index, uint32_t generation) {
             return TypedHandle(ResourceHandle::Create(
                 api,

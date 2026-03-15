@@ -12,10 +12,15 @@ target_link_libraries(BaseInterface INTERFACE
     spdlog
     vulkan 
     shaderc
+    spirv-cross-glsl
+    spirv-cross-core
 )
 
 add_subdirectory(core)
+add_subdirectory(assets)
+add_subdirectory(scene)
 add_subdirectory(event)
+add_subdirectory(utils)
 add_subdirectory(logging)
 add_subdirectory(application)
 add_subdirectory(renderer)
@@ -49,9 +54,12 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
 
 target_link_libraries(${PROJECT_NAME} PRIVATE 
     BaseInterface
+    utils
     core
     application
     renderer
+    assets
+    scene
 )
 
 function(copy_target_resources TARGET_NAME RESOURCES_OUTPUT_DIR)
@@ -156,6 +164,7 @@ function(copy_target_resources TARGET_NAME RESOURCES_OUTPUT_DIR)
             "${ARG_MODELS}/*.dae"
             "${ARG_MODELS}/*.gltf"
             "${ARG_MODELS}/*.glb"
+            "${ARG_MODELS}/*.mtl"
         )
         
         foreach(model_file IN LISTS MODEL_FILES)
@@ -254,11 +263,13 @@ if(WIN32)
         copy_target_dll(${PROJECT_NAME} "${CMAKE_SOURCE_DIR}/external/vulkan/lib/vulkan-1.dll")
         copy_target_dll(${PROJECT_NAME} "${CMAKE_SOURCE_DIR}/external/assimp/assimp/lib/assimp-vc143-mt.dll")
         copy_target_dll(${PROJECT_NAME} "${CMAKE_SOURCE_DIR}/external/vulkan/lib/shaderc/shaderc_sharedd.dll")
+        #copy_target_dll(${PROJECT_NAME} "${CMAKE_SOURCE_DIR}/external/vulkan/lib/spirv_cross/spirv-cross-c-sharedd.dll")
     elseif(MINGW)
         copy_target_dll(${PROJECT_NAME} "${CMAKE_SOURCE_DIR}/external/glfw/libglfw3.a")
         copy_target_dll(${PROJECT_NAME} "${CMAKE_SOURCE_DIR}/external/vulkan/lib/vulkan-1.dll")
         copy_target_dll(${PROJECT_NAME} "${CMAKE_SOURCE_DIR}/external/assimp/assimp/lib/libassimp-6.dll")
         copy_target_dll(${PROJECT_NAME} "${CMAKE_SOURCE_DIR}/external/vulkan/lib/shaderc/shaderc_sharedd.dll")
+        #copy_target_dll(${PROJECT_NAME} "${CMAKE_SOURCE_DIR}/external/vulkan/lib/spirv_cross/spirv-cross-c-sharedd.dll")
     endif()
 elseif(UNIX)
         copy_target_dll(${PROJECT_NAME} "${CMAKE_SOURCE_DIR}/external/glfw/libglfw.so.3.3")

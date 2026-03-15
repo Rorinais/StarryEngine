@@ -1,7 +1,7 @@
 #pragma once
-#include "../RenderGraph.hpp"
-#include "../../subpassRecorder/ISubpassRecorder.hpp"
-#include "../../VertexLayout.hpp"
+#include "../graph/RenderGraph.hpp"
+#include "../subpassRecorder/ISubpassRecorder.hpp"
+#include "../../assets/geometry/VertexLayout.hpp"
 
 namespace StarryEngine::RenderGraph {
     class IRenderPass {
@@ -21,7 +21,7 @@ namespace StarryEngine::RenderGraph {
         // 可选：每帧更新
         virtual void updateInputAttachment(TextureId texture, RHI::ImageLayout layout) {}
 
-        virtual void update(const Uniforms& data){}
+        virtual void update(const Assets::Uniforms& data){}
     protected:
         uint32_t width = 0, height = 0;
     };

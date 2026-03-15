@@ -1,5 +1,4 @@
 #include "Application.hpp"
-#include <stb_image.h>
 
 namespace StarryEngine {
     Application::Application() {
@@ -13,45 +12,33 @@ namespace StarryEngine {
         config.fullScreen = false;
         m_window = Window::create(config);
 
-        GetEventDispatcher().subscribe(EventType::KeyPressed,
-            [this](IEvent& e) {
+        GetEventDispatcher().subscribe(EventType::KeyPressed,[this](IEvent& e) {
                 auto& ev = static_cast<KeyEvent&>(e);
                 if (ev.getKey() == GLFW_KEY_ESCAPE && ev.getAction() == GLFW_PRESS) {
                     glfwSetWindowShouldClose(m_window->getHandle(), GLFW_TRUE);
                 }
-            }
-        );
+        });
         
-        GetEventDispatcher().subscribe(EventType::MouseButtonPressed,
-            [this](IEvent& e) {
+        GetEventDispatcher().subscribe(EventType::MouseButtonPressed,[this](IEvent& e) {
                 auto& ev = static_cast<MouseButtonEvent&>(e);
                 int button = ev.getButton();
                 int action = ev.getAction();
                 int mods = ev.getMods();
-            }
-        );
+        });
 
-        GetEventDispatcher().subscribe(EventType::WindowResize,
-            [this](IEvent& e) {
+        GetEventDispatcher().subscribe(EventType::WindowResize,[this](IEvent& e) {
                 auto& ev = static_cast<WindowResizeEvent&>(e);
                 m_width = ev.getWidth();
                 m_height = ev.getHeight();
-                mFramebufferResized = true;
+                m_framebufferResized = true;
                 LOG_INFO("Window resized to {}x{}", m_width, m_height);
-            }
-        );
+        });
 
-        VulkanRHIFactory factory;
-        m_rhi = factory.createDefault(RHI::API::Vulkan, m_window, m_width, m_height, m_FlightFrame);
-        if (!m_rhi) {
-            std::cerr << "Failed to create RHI!" << std::endl;
-            return;
-        }
+        m_rhi = VulkanRHIFactory::createDefault(RHI::API::Vulkan, m_window, m_width, m_height, m_flightFrame);
+        if (!m_rhi) LOG_ERROR("Failed to create RHI!");
 
         createDescriptorPool();
-        buildRenderGraph();
-
-        m_rhi->printResourceStatistics();
+        createRenderer();
     }
 
     void Application::createDescriptorPool() {
@@ -66,136 +53,115 @@ namespace StarryEngine {
         };
         poolDesc.freeDescriptorSet = true;
         poolDesc.debugName = "GlobalDescriptorPool";
-        mDescriptorPoolHandle = m_rhi->getResourceManager()->createDescriptorPool(poolDesc);
+        m_descriptorPool = m_resMgr->createDescriptorPool(poolDesc);
     }
 
-    void Application::buildRenderGraph() {
-        m_renderGraph = std::make_unique<RenderGraph::RenderGraph>(m_rhi);
-        m_renderGraph->setSwapchainImageCount(m_rhi->getSwapChainImageCount());
+    void Application::createRenderer() {
+        m_scene = std::make_shared<Scene::Scene>();
 
-        auto intermediateDesc = m_renderGraph->createBaseTextureDesc(m_width, m_height, RHI::Format::RGBA8_UNorm,false);
-        auto intermediateTexId = m_renderGraph->createVirtualTexture(intermediateDesc, "Intermediate");
-
-        auto depthDesc = m_renderGraph->createBaseTextureDesc(m_width, m_height, m_rhi->getDepthFormat(), true, false, false);
-        auto depthTexId = m_renderGraph->createVirtualTexture(depthDesc, "Depth");
-
-        // 导入交换链纹理
-        std::vector<void*> swapchainViews;
-        for (uint32_t i = 0; i < m_rhi->getSwapChainImageCount(); ++i) {
-            swapchainViews.push_back(m_rhi->getSwapChainImageView(i));
+        // 1. 加载模型并获取顶点布局
+        auto geometry = std::make_shared<Assets::Geometry>(m_resMgr);
+        std::vector<Assets::MaterialParams> params;
+        if (!Assets::ModelLoader::loadFromFile("assets/models/geo.obj", *geometry, params)) {
+            LOG_ERROR("Failed to load model");
+            return;
         }
-        auto swapchainDesc = m_renderGraph->createBaseTextureDesc(m_width, m_height, RHI::Format::BGRA8_sRGB, false, true, false);
-        auto swapchainTexId = m_renderGraph->importExternalTexture(
-            RHI::TextureHandle::Null(), 
-            swapchainViews,
-            swapchainDesc, 
-            RHI::ImageLayout::Undefined, 
-            "Swapchain");
+        geometry->uploadToGPU();
+        Assets::VertexLayout vertexLayout = geometry->getVertexLayout();
 
-        // GbufferPass: 输出颜色到 intermediate，深度到 depth
-        renderpasses.push_back({
-            std::make_unique<RenderGraph::GbufferPass>(m_resMgr, mDescriptorPoolHandle),
-            depthTexId,                        // inputTexture
-            intermediateTexId,                 // outputTexture
-            RHI::ImageLayout::Undefined,       // inputInitial (深度)
-            RHI::ImageLayout::DepthStencilAttachment, // inputFinal (深度)
-            RHI::ImageLayout::Undefined,       // outputInitial
-            RHI::ImageLayout::ShaderReadOnly  // outputFinal (供后处理读取)
-
-            });
-
-        //// PostProcessPass: 输出到交换链，输入来自 intermediate
-        //renderpasses.push_back({
-        //    std::make_unique<RenderGraph::PostProcessPass>(m_resMgr, mDescriptorPoolHandle),
-        //    intermediateTexId,                  // inputTexture
-        //    swapchainTexId,                    // outputTexture
-        //    RHI::ImageLayout::ShaderReadOnly,  // inputInitial
-        //    RHI::ImageLayout::ShaderReadOnly,   // inputFinal
-        //    RHI::ImageLayout::Undefined,       // outputInitial
-        //    RHI::ImageLayout::PresentSrc      // outputFinal (呈现)
-        //    });
-
-        renderpasses.push_back({
-            std::make_unique<RenderGraph::ImguiPass>(m_rhi, m_window, mDescriptorPoolHandle),
-            intermediateTexId, swapchainTexId,
-            RHI::ImageLayout::ShaderReadOnly, RHI::ImageLayout::ShaderReadOnly,
-            RHI::ImageLayout::Undefined, RHI::ImageLayout::PresentSrc
-            });
-
-        for (auto& info : renderpasses) {
-            info.renderpass->setViewport(m_width, m_height);
-            info.renderpass->setup(
-                *m_renderGraph,
-                info.inputTexture,
-                info.outputTexture,  
-                info.inputInitial,
-                info.inputFinal,
-                info.outputInitial,
-                info.outputFinal
-            );
+        // 2. 创建 DeferredPipeline，传入顶点布局
+        auto pipeline = std::make_unique<DeferredPipeline>();
+        if (!pipeline->initialize(m_rhi, m_descriptorPool, m_width, m_height, vertexLayout)) {
+            LOG_ERROR("Failed to initialize pipeline");
+            return;
         }
 
-        if (!m_renderGraph->compile()) {
-            throw std::runtime_error("Failed to compile RenderGraph");
+        // 3. 从管线获取描述符集布局
+        auto dsLayout = pipeline->getDescriptorSetLayout();
+        if (!dsLayout.isValid()) {
+            LOG_ERROR("Pipeline descriptor set layout is invalid");
+            return;
         }
 
-        for (auto& renderpass : renderpasses) {
-            renderpass.renderpass->updateInputAttachment(renderpass.inputTexture, renderpass.inputFinal);
-            if (auto* imguiPass = dynamic_cast<RenderGraph::ImguiPass*>(renderpass.renderpass.get())) {
-                imguiPass->postCompile();
+        // 4. 为每个材质创建对象并初始化
+        std::vector<std::shared_ptr<Assets::Material>> materials;
+        for (size_t i = 0; i < params.size(); ++i) {
+            auto material = std::make_shared<Assets::Material>(m_resMgr);
+            material->loadShaders("assets/shaders/core/shader.vert", "assets/shaders/core/shader.frag");
+
+            // 创建 uniform 缓冲区（binding 0），管线着色器将使用它
+            auto buffer = material->createAndAddUniformBuffer(sizeof(Assets::Uniforms), 0, "UBO");
+            if (!buffer.isValid()) {
+                LOG_ERROR("Failed to create uniform buffer for material {}", i);
+                continue;
             }
+
+            // 设置外部布局并分配描述符集（set 0）
+            material->setExternalDescriptorSetLayout(dsLayout);
+            if (!material->allocateDescriptorSet(m_descriptorPool, 0)) {
+                LOG_ERROR("Failed to allocate descriptor set for material {}", i);
+                continue;
+            }
+            material->updateDescriptorSet();
+
+            materials.push_back(material);
         }
 
+        // 5. 创建 RenderObject 并添加到场景
+        auto obj = std::make_shared<Scene::RenderObject>();
+        obj->geometry = geometry;
+        obj->materials = materials;
+        // 缩放并平移物体以适应视锥（根据你的模型大小调整）
+        obj->transform = glm::scale(glm::mat4(1.0f), glm::vec3(1.0f)) *
+            glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, -5.0f));
+        m_scene->addObject(obj);
+
+        // 6. 创建相机
+        auto camera = std::make_shared<Scene::PerspectiveCamera>();
+        camera->setPerspective(45.0f, (float)m_width / m_height, 0.1f, 100.0f);
+        camera->lookAt(glm::vec3(5.0f, 5.0f, 5.0f), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        m_scene->addCamera(camera);
+        m_scene->setActiveCamera(camera);
+
+        // 7. 创建渲染器并设置已初始化的管线
+        m_renderer = std::make_unique<Renderer>(m_rhi, m_descriptorPool, m_scene);
+        m_renderer->setPipeline(std::move(pipeline));
     }
 
     void Application::run() {
         auto frameContext = m_rhi->getFrameContext();
-        FrameMonitor monitor(m_window, frameContext, m_FlightFrame);
+        FrameMonitor monitor(m_window, frameContext, m_flightFrame);
 
         while (!glfwWindowShouldClose(m_window->getHandle())) {
             glfwPollEvents();
             monitor.tick();
 
-            if (mFramebufferResized) {
+            if (m_framebufferResized) {
                 m_rhi->waitIdle();
-                mFramebufferResized = false;
+                m_framebufferResized = false;
                 if (m_width == 0 || m_height == 0) continue;
-
-                for (auto& renderpass : renderpasses) {
-                    renderpass.renderpass.reset();
-                }
-                renderpasses.clear();
-                m_renderGraph.reset();
 
                 if (!m_rhi->recreateSwapChain(m_width, m_height)) {
                     std::cerr << "Failed to recreate swap chain!" << std::endl;
                     continue;
                 }
-                buildRenderGraph();
+                m_renderer->onResize(m_width,m_height);
 
                 continue;
             }
             if (m_width == 0 || m_height == 0) continue;
 
-            bool success = m_rhi->renderFrame([&](RHI::RHICommandEncoder* encoder, uint32_t imageIndex) {
-                float time = monitor.getTime();
-                glm::mat4 model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-                glm::mat4 view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-                glm::mat4 proj = glm::perspective(glm::radians(60.0f), static_cast<float>(m_width) / m_height, 0.1f, 100.0f);
-                proj[1][1] *= -1;
+            m_deltaTime = monitor.getDeltaTime();
 
-                for (auto& renderpass : renderpasses) {
-                    renderpass.renderpass->update({ model, view, proj });
-                }
-                m_renderGraph->execute(imageIndex, encoder);
-            });
+            bool success = m_rhi->renderFrame([this](RHI::RHICommandEncoder* encoder, uint32_t imageIndex) {
+                    m_renderer->renderFrame(encoder, imageIndex, m_deltaTime);
+             });
             monitor.updateTitle();
         }
     }
 
     Application::~Application() {
         if (m_rhi) m_rhi->waitIdle();
-        m_renderGraph.reset();
         m_rhi.reset();
         m_window.reset();
     }
@@ -222,7 +188,6 @@ int main() {
 #endif
     StarryEngine::Logger::init();
     StarryEngine::Logger::setShowSourceLoc(false);
-
     StarryEngine::Application app;
     app.run();
     StarryEngine::Logger::shutdown();

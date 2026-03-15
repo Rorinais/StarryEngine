@@ -3,7 +3,8 @@ get_filename_component(VULKAN_INC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/include" ABSO
 
 add_library(vulkan SHARED IMPORTED GLOBAL)
 add_library(shaderc SHARED IMPORTED GLOBAL)    
-
+add_library(spirv-cross-core STATIC IMPORTED GLOBAL)
+add_library(spirv-cross-glsl STATIC IMPORTED GLOBAL)
 
 if(WIN32)
     set_target_properties(vulkan PROPERTIES
@@ -17,6 +18,17 @@ if(WIN32)
         IMPORTED_LOCATION "${VULKAN_LIB_DIR}/shaderc/shaderc_sharedd.dll"
         INTERFACE_INCLUDE_DIRECTORIES "${VULKAN_INC_DIR}"
     )
+
+set_target_properties(spirv-cross-core PROPERTIES
+    IMPORTED_LOCATION     "${VULKAN_LIB_DIR}/spirv_cross/spirv-cross-cored.lib"
+    INTERFACE_INCLUDE_DIRECTORIES "${VULKAN_INC_DIR}"
+)
+
+set_target_properties(spirv-cross-glsl PROPERTIES
+    IMPORTED_LOCATION    "${VULKAN_LIB_DIR}/spirv_cross/spirv-cross-glsld.lib"
+    INTERFACE_INCLUDE_DIRECTORIES "${VULKAN_INC_DIR}"
+)
+
 elseif(UNIX AND NOT APPLE)
     set_target_properties(vulkan PROPERTIES
         #IMPORTED_IMPLIB "${VULKAN_LIB_DIR}/libvulkan.so" 

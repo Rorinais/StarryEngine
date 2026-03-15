@@ -5,8 +5,8 @@ namespace StarryEngine::RHI {
         : mDevice(device), mDesc(desc), mShaderModule(VK_NULL_HANDLE) {
 
         try {
-            auto spirv = compileGLSL(mDesc.sourcecode, FUNC::RHI_TO_Shaderc_ShaderKind(mDesc.stage), mDesc.defines, mDesc.debugName);
-            mShaderModule = mDevice->createShaderModule(spirv, mDesc.debugName);
+            //auto spirv = compileGLSL(mDesc.code, FUNC::RHI_TO_Shaderc_ShaderKind(mDesc.stage), mDesc.defines, mDesc.debugName);
+            mShaderModule = mDevice->createShaderModule(mDesc.code, mDesc.debugName);
         }
         catch (const std::exception& e) {
             std::cerr << "[RHI_VK_ShaderModule] ERROR: Failed to create shader: "<< mDesc.debugName << " - " << e.what() << std::endl;
@@ -145,28 +145,33 @@ namespace StarryEngine::RHI {
     }
 
     // ==================== 数据更新优化 ====================
-    void RHI_VK_Buffer::update(const void* data, uint64_t size, uint64_t offset) {
-        if (!data || size == 0) return;
-        
+    bool RHI_VK_Buffer::update(const void* data, uint64_t size, uint64_t offset) {
+        if (!data || size == 0) {
+            //LOG_WARN("Buffer update called with null data or zero size");
+            return false;
+        }
+
         // 检查边界
         if (offset + size > mDesc.size) {
-            throw std::runtime_error("Buffer update exceeds buffer size");
+            //LOG_ERROR("Buffer update exceeds buffer size: offset={}, size={}, total={}", offset, size, mDesc.size);
+            return false;
         }
-        
+
         // 根据内存类型选择合适的更新方式
         if (isCPUVisible()) {
-            updateDataViaDirectMapping(data, size, offset);
-        } else {
-            updateDataViaStagingBuffer(data, size, offset);
+            return updateDataViaDirectMapping(data, size, offset);
+        }
+        else {
+            return updateDataViaStagingBuffer(data, size, offset);
         }
     }
 
-    void RHI_VK_Buffer::updateDataViaDirectMapping(const void* data, uint64_t size, uint64_t offset) {
+    bool  RHI_VK_Buffer::updateDataViaDirectMapping(const void* data, uint64_t size, uint64_t offset) {
         // 如果已经持久映射，直接使用现有指针
         if (mPersistentlyMapped && mIsMapped) {
             memcpy(static_cast<uint8_t*>(mMappedPointer) + offset, data, size);
             flush(offset, size);
-            return;
+            return false;
         }
         
         // 否则使用RAII包装器进行临时映射
@@ -181,15 +186,22 @@ namespace StarryEngine::RHI {
             // 使用Device的统一上传函数
             mDevice->uploadDataToTraditionalMemory(mTraditionalMemory, data, size, offset, hostCoherent);
         }
+
+        return true;
     }
 
-    void RHI_VK_Buffer::updateDataViaStagingBuffer(const void* data, uint64_t size, uint64_t offset) {
+    bool RHI_VK_Buffer::updateDataViaStagingBuffer(const void* data, uint64_t size, uint64_t offset) {
         // 创建暂存缓冲区
         VMATraditionalBuffer stagingBuffer = mDevice->createBufferTraditional(
             size,
             VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
         );
+
+        if (stagingBuffer.buffer == VK_NULL_HANDLE || stagingBuffer.memory == VK_NULL_HANDLE) {
+            //LOG_ERROR("Failed to create staging buffer for update");
+            return false;
+        }
         
         // 上传数据到暂存缓冲区
         mDevice->uploadDataToTraditionalMemory(
@@ -201,6 +213,8 @@ namespace StarryEngine::RHI {
         
         // 清理
         mDevice->destroyBufferTraditional(stagingBuffer);
+
+        return true;
     }
 
     // ==================== 内存映射优化 ====================
@@ -264,7 +278,10 @@ namespace StarryEngine::RHI {
         if (auto it = typeFlags.find(mDesc.type); it != typeFlags.end()) {
             usage |= it->second;
         }
-        
+        if (mDesc.memoryType == MemoryType::GPU_Only) {
+            usage |= VK_BUFFER_USAGE_TRANSFER_DST_BIT;
+        }
+
         // 根据描述符添加额外标志
         if (mDesc.allowRawViews) {
             usage |= VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT | 

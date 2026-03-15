@@ -59,8 +59,6 @@ namespace StarryEngine {
             }
 
             if (mConfig.iconPath) {
-
-                //td::cout << "Setting window icon from file: " << config.iconPath << std::endl;
                 setIcon(mConfig.iconPath);
             }
 

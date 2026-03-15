@@ -35,7 +35,7 @@ namespace StarryEngine::RHI {
         virtual void unmap() = 0;
 
         // 数据更新
-        virtual void update(const void* data, uint64_t size, uint64_t offset = 0) = 0;
+        virtual bool update(const void* data, uint64_t size, uint64_t offset = 0) = 0;
         virtual void flush(uint64_t offset = 0, uint64_t size = 0) = 0;
         virtual void invalidate(uint64_t offset = 0, uint64_t size = 0) = 0;
 

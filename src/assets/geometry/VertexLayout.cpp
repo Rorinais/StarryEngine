@@ -1,6 +1,8 @@
-#include"Geometry.hpp"
+#include "../../logging/Logger.hpp"
+#include"VertexLayout.hpp"
 
-namespace StarryEngine::RenderGraph {
+namespace StarryEngine::Assets {
+
     VertexLayout& VertexLayout::addBinding(uint32_t binding, uint32_t stride, RHI::VertexInputRate inputRate) {
         mBindings[binding] = { stride, inputRate };
         return *this;
@@ -147,90 +149,18 @@ namespace StarryEngine::RenderGraph {
         return (index < formatSizes.size()) ? formatSizes[index] : 0;
     }
 
-    Geometry::Geometry(std::shared_ptr<RHI::ResourceManager> resMgr) : mResMgr(resMgr) {}
-
-    void Geometry::setVertexBuffer(uint32_t binding, const std::vector<float>& vertices,
-        const VertexLayout& layout, const std::string& debugName) {
-        mLayout = layout;
-
-        uint32_t stride = layout.getBindingStride(binding);
-        if (stride == 0) {
-            std::cerr << "[Geometry] Binding " << binding << " not found in vertex layout for "
-                << debugName << std::endl;
-            return;
+    void VertexLayout::print() const {
+        for (const auto& [binding, info] : mBindings) {
+            LOG_INFO("    Binding {}: stride={}, inputRate={}",
+                binding, info.stride,
+                info.inputRate == RHI::VertexInputRate::PerVertex ? "PerVertex" : "PerInstance");
         }
-
-        // 计算顶点数
-        uint32_t vertexCount = static_cast<uint32_t>(vertices.size() * sizeof(float) / stride);
-        if (mVertexCount == 0) {
-            mVertexCount = vertexCount;  // 第一个缓冲区，记录顶点数
+        LOG_INFO("  Attributes:");
+        for (const auto& attr : mAttributes) {
+            LOG_INFO("    Location {}: binding={}, format={}, offset={}",
+                attr.location, attr.binding,
+                static_cast<int>(attr.format), attr.offset);
         }
-        else if (mVertexCount != vertexCount) {
-            // 可选：如果后续缓冲区的顶点数不一致，可以抛出警告或错误
-            std::cerr << "[Geometry] Warning: Vertex count mismatch for binding " << binding
-                << " (" << vertexCount << " vs " << mVertexCount << ")" << std::endl;
-            // 为了安全，可以选择继续使用原有 mVertexCount，或者更新为最小值
-            // 这里我们选择不更新，但输出警告
-        }
-
-        RHI::BufferDesc bufferDesc;
-        bufferDesc.size = vertices.size() * sizeof(float);
-        bufferDesc.stride = stride;
-        bufferDesc.type = RHI::BufferType::Vertex;
-        bufferDesc.memoryType = RHI::MemoryType::CPU_To_GPU;
-        bufferDesc.allowUpdate = true;
-        bufferDesc.debugName = debugName;
-
-        RHI::BufferHandle handle = mResMgr->createBuffer(bufferDesc);
-        if (!handle.isValid()) {
-            std::cerr << "[Geometry] Failed to create vertex buffer for binding " << binding
-                << ": " << debugName << std::endl;
-            return;
-        }
-
-        auto* buffer = mResMgr->getBuffer(handle);
-        buffer->update(vertices.data(), vertices.size() * sizeof(float));
-
-        mVertexBufferHandles[binding] = handle;
-    }
-
-    void Geometry::setVertexBuffer(const std::vector<float>& vertices,
-        const VertexLayout& layout, const std::string& debugName) {
-        setVertexBuffer(0, vertices, layout, debugName);  // 默认 binding 0
-    }
-
-    void Geometry::setIndexBuffer(const std::vector<uint32_t>& indices, const std::string& debugName) {
-        RHI::BufferDesc bufferDesc;
-        bufferDesc.size = indices.size() * sizeof(uint32_t);
-        bufferDesc.stride = sizeof(uint32_t);
-        bufferDesc.type = RHI::BufferType::Index;
-        bufferDesc.memoryType = RHI::MemoryType::CPU_To_GPU;
-        bufferDesc.allowUpdate = true;
-        bufferDesc.debugName = debugName;
-
-        mIndexBufferHandle = mResMgr->createBuffer(bufferDesc);
-        if (!mIndexBufferHandle.isValid()) {
-            std::cerr << "[Geometry] Failed to create index buffer: " << debugName << std::endl;
-            return;
-        }
-        auto* buffer = mResMgr->getBuffer(mIndexBufferHandle);
-        buffer->update(indices.data(), indices.size() * sizeof(uint32_t));
-        mIndexCount = static_cast<uint32_t>(indices.size());
-    }
-
-    RHI::BufferHandle Geometry::getVertexBufferHandle(uint32_t binding) const {
-        auto it = mVertexBufferHandles.find(binding);
-        if (it != mVertexBufferHandles.end()) {
-            return it->second;
-        }
-        return RHI::BufferHandle::Null();
-    }
-
-    std::vector<uint32_t> Geometry::getBindings() const {
-        return mLayout.getBindings();
-    }
-
-    RHI::VertexInputState Geometry::getVertexInputState() const {
-        return mLayout.build();
     }
 }
+

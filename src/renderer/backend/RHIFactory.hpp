@@ -1,7 +1,7 @@
 #pragma once
 #include "vulkan/VulkanRHI.hpp"      // 包含 ConfigConverter 和 VulkanRHI
 #include "../../core/Window.hpp"
-#include "../logging/Logger.hpp"     // 包含日志宏
+#include "../../logging/Logger.hpp"     // 包含日志宏
 
 namespace StarryEngine {
 
@@ -18,7 +18,7 @@ namespace StarryEngine {
             return rhi->initialize(config) ? rhi : nullptr;
         }
 
-        std::shared_ptr<RHI::IRHI> createDefault(RHI::API api, Window::Ptr window,
+        static std::shared_ptr<RHI::IRHI> createDefault(RHI::API api, Window::Ptr window,
             uint32_t width, uint32_t height,
             uint32_t flightFrame = 2) {
             RHI::RHIInitConfig rhiConfig;
@@ -67,11 +67,12 @@ namespace StarryEngine {
                         LOG_INFO("[{}] {}", sourceStr, message);
                         break;
                     }
-                };
+            };
 
+            VulkanRHIFactory factory;
             switch (api) {
             case RHI::API::Vulkan:
-                return create(rhiConfig);
+                return factory.create(rhiConfig);
             case RHI::API::DirectX11:
             case RHI::API::DirectX12:
             case RHI::API::OpenGL:

@@ -60,7 +60,7 @@ namespace StarryEngine::RHI {
         void unmap() override;
 
         // 数据更新
-        void update(const void* data, uint64_t size, uint64_t offset = 0) override;
+        bool update(const void* data, uint64_t size, uint64_t offset = 0) override;
         void flush(uint64_t offset = 0, uint64_t size = 0) override;
         void invalidate(uint64_t offset = 0, uint64_t size = 0) override;
 
@@ -93,8 +93,8 @@ namespace StarryEngine::RHI {
         // 辅助函数
         VkBufferUsageFlags getBufferUsageFlags() const;
         void uploadInitialData();
-        void updateDataViaStagingBuffer(const void* data, uint64_t size, uint64_t offset);
-        void updateDataViaDirectMapping(const void* data, uint64_t size, uint64_t offset);
+        bool updateDataViaStagingBuffer(const void* data, uint64_t size, uint64_t offset);
+        bool updateDataViaDirectMapping(const void* data, uint64_t size, uint64_t offset);
         
         // 内存映射管理
         void ensureMapped();

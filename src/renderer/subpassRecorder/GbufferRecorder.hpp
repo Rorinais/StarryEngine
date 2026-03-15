@@ -6,133 +6,45 @@
 
 
 namespace StarryEngine::RenderGraph {
-    class GBufferRecorder : public ISubpassRecorder {
+    class MeshDrawRecorder : public ISubpassRecorder {
     public:
         using ISubpassRecorder::ISubpassRecorder;
+
+        void setDrawItems(const std::vector<Scene::DrawItem>& items) { m_drawItems = items; }
+        void setPipelineLayout(RHI::PipelineLayoutHandle layout) { m_pipelineLayout = layout; }
+
         void recordCommands(RHI::RHICommandEncoder* encoder,
             const PassContext& pctx,
             uint32_t subpassIndex,
-            uint32_t frameIndex) {
+            uint32_t frameIndex) override {
+            auto* pipelineLayoutPtr = mResMgr->getPipelineLayout(m_pipelineLayout);
 
-            // 1. 获取当前 Subpass 的 Pipeline
-            auto pipeline = pctx.getPipeline(subpassIndex);
-            if (!pipeline.isValid()) return;
-            encoder->bindPipeline(mResMgr->getPipeline(pipeline));
+            for (const auto& item : m_drawItems) {
+                auto geometry = item.geometry;
+                auto material = item.material;
+                if (!geometry || !material) continue;
 
-            // 2. 绑定材质的描述符集
-            auto descSet = mMaterial->getDescriptorSet();
-            auto pipelineLayoutHandle = mMaterial->getPipelineLayout();
-            auto* pipelineLayout = mResMgr->getPipelineLayout(pipelineLayoutHandle);
-            uint32_t setIndex = mMaterial->getSetIndex();
+                auto vb = geometry->getVertexBuffer();
+                auto ib = geometry->getIndexBuffer();
+                if (!vb.isValid() || !ib.isValid()) continue;
 
-            encoder->bindDescriptorSets(RHI::PipelineBindPoint::Graphics,
-                pipelineLayout,
-                setIndex,
-                { descSet },
-                {});
+                encoder->bindVertexBuffers(0, { mResMgr->getBuffer(vb) }, { 0 });
+                encoder->bindIndexBuffer(mResMgr->getBuffer(ib), 0, RHI::IndexType::UInt32);
 
-            // 3. 绑定所有顶点缓冲区（每个 binding 单独绑定）
-            auto bindings = mGeometry->getBindings();
-            for (uint32_t binding : bindings) {
-                auto vbHandle = mGeometry->getVertexBufferHandle(binding);
-                if (!vbHandle.isValid()) {
-                    std::cerr << "[GBufferRecorder] Missing vertex buffer for binding " << binding << std::endl;
-                    continue;
+                auto descSet = material->getDescriptorSet();
+                if (descSet.isValid()) {
+                    encoder->bindDescriptorSets(RHI::PipelineBindPoint::Graphics,
+                        mResMgr->getPipelineLayout(m_pipelineLayout),
+                        0, { descSet }, {});
                 }
-                encoder->bindVertexBuffers(binding,
-                    { mResMgr->getBuffer(vbHandle) },
-                    { 0 });
-            }
 
-            // 4. 绑定索引缓冲区
-            auto ibHandle = mGeometry->getIndexBufferHandle();
-            if (!ibHandle.isValid()) {
-                std::cerr << "[GBufferRecorder] Missing index buffer" << std::endl;
-                return;
-            }
-            encoder->bindIndexBuffer(mResMgr->getBuffer(ibHandle),
-                0,
-                RHI::IndexType::UInt32);
-
-            // 5. 绘制
-            encoder->drawIndexed(mGeometry->getIndexCount(), 1, 0, 0, 0);
-        }
-        
-    };
-
-    class PostProcessRecorder : public ISubpassRecorder {
-    public:
-        using ISubpassRecorder::ISubpassRecorder;
-
-        void recordCommands(RHI::RHICommandEncoder* encoder,
-            const PassContext& pctx,
-            uint32_t subpassIndex,
-            uint32_t frameIndex) override {
-            // 绘制全屏三角形
-            auto pipeline = pctx.getPipeline(subpassIndex);
-            if (!pipeline.isValid()) return;
-            encoder->bindPipeline(mResMgr->getPipeline(pipeline));
-
-            auto descSet = mMaterial->getDescriptorSet();
-            auto pipelineLayoutHandle = mMaterial->getPipelineLayout();
-            auto* pipelineLayout = mResMgr->getPipelineLayout(pipelineLayoutHandle);
-            encoder->bindDescriptorSets(RHI::PipelineBindPoint::Graphics,
-                pipelineLayout,
-                mMaterial->getSetIndex(),
-                { descSet }, {});
-
-            encoder->draw(3, 1, 0, 0);
-        }
-
-        void updateInputAttachment(uint32_t binding, RHI::TextureHandle texture, RHI::ImageLayout layout = RHI::ImageLayout::ShaderReadOnly) {
-            mMaterial->updateInputAttachment(binding, texture, layout);
-        }
-    };
-
-    class GridRecorder : public ISubpassRecorder {
-    public:
-        using ISubpassRecorder::ISubpassRecorder;
-
-        void recordCommands(RHI::RHICommandEncoder* encoder,
-            const PassContext& pctx,
-            uint32_t subpassIndex,
-            uint32_t frameIndex) override {
-            auto pipeline = pctx.getPipeline(subpassIndex);
-            if (!pipeline.isValid()) return;
-            encoder->bindPipeline(mResMgr->getPipeline(pipeline));
-
-            // 绑定描述符集（如果有 UniformBuffer）
-            auto descSet = mMaterial->getDescriptorSet();
-            auto pipelineLayoutHandle = mMaterial->getPipelineLayout();
-            auto* pipelineLayout = mResMgr->getPipelineLayout(pipelineLayoutHandle);
-            encoder->bindDescriptorSets(RHI::PipelineBindPoint::Graphics,
-                pipelineLayout,
-                mMaterial->getSetIndex(),
-                { descSet }, {});
-
-            // 绑定顶点缓冲区
-            auto bindings = mGeometry->getBindings();
-            for (uint32_t binding : bindings) {
-                auto vbHandle = mGeometry->getVertexBufferHandle(binding);
-                if (!vbHandle.isValid()) continue;
-                encoder->bindVertexBuffers(binding,
-                    { mResMgr->getBuffer(vbHandle) },
-                    { 0 });
-            }
-
-            // 绑定索引缓冲区
-            auto ibHandle = mGeometry->getIndexBufferHandle();
-            if (ibHandle.isValid()) {
-                encoder->bindIndexBuffer(mResMgr->getBuffer(ibHandle),
-                    0,
-                    RHI::IndexType::UInt32);
-                encoder->drawIndexed(mGeometry->getIndexCount(), 1, 0, 0, 0);
-            }
-            else {
-                // 如果没有索引缓冲区，直接绘制顶点数量（假设顶点数据为线列表）
-                encoder->draw(mGeometry->getVertexCount(), 1, 0, 0);
+                encoder->drawIndexed(item.indexCount, 1, item.indexOffset, 0, 0);
             }
         }
+
+    private:
+        std::vector<Scene::DrawItem> m_drawItems;
+        RHI::PipelineLayoutHandle m_pipelineLayout;
     };
 
     class ImGuiRecorder : public ISubpassRecorder {
@@ -162,6 +74,9 @@ namespace StarryEngine::RenderGraph {
             // 重新创建 ImGui 上下文
             IMGUI_CHECKVERSION();
             ImGui::CreateContext();
+
+            SetupImGuiDarkStyle_Final();
+
             ImGuiIO& io = ImGui::GetIO(); (void)io;
             io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
             io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
@@ -237,6 +152,123 @@ namespace StarryEngine::RenderGraph {
                 ImGui::Text("Texture not available (ID=%llu)", (unsigned long long)m_sceneTextureID);
             }
             ImGui::End();
+        }
+
+        void SetupImGuiDarkStyle_Final()
+        {
+            ImGuiStyle& style = ImGui::GetStyle();
+            ImVec4* colors = style.Colors;
+
+            // ----- 使用推荐的暗色系配色 -----
+            // 背景色 #01072c
+            const ImVec4 bg_main = ImVec4(0.004f, 0.027f, 0.073f, 1.00f);
+            // 卡片/面板背景 #1c2b60
+            const ImVec4 bg_card = ImVec4(0.110f, 0.169f, 0.376f, 1.00f);
+            // 边框/次要文字 #a4adc2
+            const ImVec4 border = ImVec4(0.643f, 0.678f, 0.761f, 1.00f);
+            // 主色 #39599b
+            const ImVec4 primary = ImVec4(0.224f, 0.349f, 0.608f, 1.00f);
+            // 主色悬停状态（稍亮） #6880b8
+            const ImVec4 primary_hover = ImVec4(0.408f, 0.502f, 0.722f, 1.00f);
+            // 主色激活状态（稍暗） #2a4070（从列表选取接近色 #2a3f6e? 但这里用 #354475 作为替代）
+            const ImVec4 primary_active = ImVec4(0.208f, 0.267f, 0.459f, 1.00f);
+            // 辅助色/强调色 #a160a5
+            const ImVec4 accent = ImVec4(0.631f, 0.376f, 0.647f, 1.00f);
+            // 主要文字 #ebf2fa
+            const ImVec4 text_main = ImVec4(0.922f, 0.949f, 0.980f, 1.00f);
+            // 标题文字（纯白） #ffffff
+            const ImVec4 text_title = ImVec4(1.000f, 1.000f, 1.000f, 1.00f);
+            // 次要文字/提示 #a4adc2（与边框相同，但可独立定义）
+            const ImVec4 text_secondary = ImVec4(0.643f, 0.678f, 0.761f, 1.00f);
+
+            // ----- ImGui 颜色映射 -----
+            colors[ImGuiCol_WindowBg] = bg_main;
+            colors[ImGuiCol_ChildBg] = bg_card;
+            colors[ImGuiCol_PopupBg] = bg_card;
+            colors[ImGuiCol_MenuBarBg] = bg_card;
+
+            colors[ImGuiCol_TitleBg] = bg_card;
+            colors[ImGuiCol_TitleBgActive] = primary;
+            colors[ImGuiCol_TitleBgCollapsed] = bg_card;
+
+            colors[ImGuiCol_Border] = border;
+            colors[ImGuiCol_BorderShadow] = ImVec4(0, 0, 0, 0);
+            colors[ImGuiCol_Separator] = border;
+            colors[ImGuiCol_SeparatorHovered] = primary_hover;
+            colors[ImGuiCol_SeparatorActive] = primary_active;
+
+            colors[ImGuiCol_Text] = text_main;
+            colors[ImGuiCol_TextDisabled] = text_secondary;
+            colors[ImGuiCol_TextSelectedBg] = primary;
+
+            colors[ImGuiCol_FrameBg] = bg_card;
+            colors[ImGuiCol_FrameBgHovered] = primary;
+            colors[ImGuiCol_FrameBgActive] = primary_hover;
+
+            colors[ImGuiCol_Button] = primary;
+            colors[ImGuiCol_ButtonHovered] = primary_hover;
+            colors[ImGuiCol_ButtonActive] = primary_active;
+
+            colors[ImGuiCol_Header] = primary;
+            colors[ImGuiCol_HeaderHovered] = primary_hover;
+            colors[ImGuiCol_HeaderActive] = primary_active;
+
+            colors[ImGuiCol_ScrollbarBg] = bg_card;
+            colors[ImGuiCol_ScrollbarGrab] = primary;
+            colors[ImGuiCol_ScrollbarGrabHovered] = primary_hover;
+            colors[ImGuiCol_ScrollbarGrabActive] = primary_active;
+
+            colors[ImGuiCol_SliderGrab] = primary;
+            colors[ImGuiCol_SliderGrabActive] = primary_hover;
+            colors[ImGuiCol_CheckMark] = text_title;
+
+            colors[ImGuiCol_Tab] = bg_card;
+            colors[ImGuiCol_TabHovered] = primary_hover;
+            colors[ImGuiCol_TabActive] = primary;
+            colors[ImGuiCol_TabUnfocused] = bg_card;
+            colors[ImGuiCol_TabUnfocusedActive] = primary;
+
+            colors[ImGuiCol_DockingPreview] = accent;
+            colors[ImGuiCol_DockingEmptyBg] = bg_card;
+
+            colors[ImGuiCol_TableHeaderBg] = bg_card;
+            colors[ImGuiCol_TableBorderStrong] = border;
+            colors[ImGuiCol_TableBorderLight] = border;
+            colors[ImGuiCol_TableRowBg] = bg_main;
+            colors[ImGuiCol_TableRowBgAlt] = bg_card;
+
+            colors[ImGuiCol_PlotLines] = text_secondary;
+            colors[ImGuiCol_PlotLinesHovered] = primary_hover;
+            colors[ImGuiCol_PlotHistogram] = accent;
+            colors[ImGuiCol_PlotHistogramHovered] = primary_hover;
+
+            colors[ImGuiCol_NavHighlight] = accent;
+            colors[ImGuiCol_NavWindowingHighlight] = accent;
+            colors[ImGuiCol_NavWindowingDimBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.6f);
+
+            colors[ImGuiCol_DragDropTarget] = accent;
+            colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.0f, 0.0f, 0.0f, 0.7f);
+
+            // ----- 样式微调（保持原样）-----
+            style.FrameRounding = 4.0f;
+            style.WindowRounding = 8.0f;
+            style.ChildRounding = 4.0f;
+            style.PopupRounding = 4.0f;
+            style.GrabRounding = 4.0f;
+            style.ScrollbarRounding = 4.0f;
+            style.TabRounding = 4.0f;
+
+            style.FrameBorderSize = 1.0f;
+            style.WindowBorderSize = 1.0f;
+            style.PopupBorderSize = 1.0f;
+            style.ChildBorderSize = 1.0f;
+
+            style.WindowPadding = ImVec2(8, 8);
+            style.FramePadding = ImVec2(4, 3);
+            style.ItemSpacing = ImVec2(8, 4);
+            style.ItemInnerSpacing = ImVec2(4, 4);
+            style.ScrollbarSize = 14.0f;
+            style.GrabMinSize = 10.0f;
         }
 
         inline void setDisplayTexture(RHI::TextureHandle textureHandle) {
