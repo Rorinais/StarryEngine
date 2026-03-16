@@ -45,31 +45,26 @@ namespace StarryEngine::Assets {
     public:
         explicit Material(std::shared_ptr<RHI::ResourceManager> resMgr);
 
-        // --- 着色器设置（接收已编译的模块句柄）---
         void setVertexShader(RHI::ShaderHandle shader);
         void setFragmentShader(RHI::ShaderHandle shader);
 
         void loadShaders(const std::string& vsPath, const std::string& fsPath);
 
-        // --- Uniform Buffer 添加 ---
         void addUniformBuffer(RHI::BufferHandle buffer, size_t size, uint32_t binding,
             RHI::ShaderStage stageFlags = RHI::ShaderStage::Vertex | RHI::ShaderStage::Fragment);
         RHI::BufferHandle createAndAddUniformBuffer(size_t size, uint32_t binding,
             const std::string& debugName = "MaterialUBO",
             RHI::ShaderStage stageFlags = RHI::ShaderStage::Vertex | RHI::ShaderStage::Fragment);
 
-        // --- 纹理添加（使用 TextureLoader）---
         RHI::TextureHandle addTexture(const std::string& filename,
             RHI::Format format,
             const std::string& debugName,
             uint32_t binding,
             RHI::ShaderStage stageFlags = RHI::ShaderStage::Fragment);
 
-        // --- 手动添加绑定信息（替代反射）---
         void addBinding(uint32_t binding, RHI::DescriptorType type, uint32_t count,
             RHI::ShaderStage stageFlags);
 
-        // --- 获取数据供外部使用 ---
         RHI::ShaderHandle getVertexShader() const { return m_vertexShader; }
         RHI::ShaderHandle getFragmentShader() const { return m_fragmentShader; }
         const auto& getResources() const { return m_resources; }
@@ -87,7 +82,6 @@ namespace StarryEngine::Assets {
 
         void updateDescriptorSet();
 
-        // Getter
         RHI::DescriptorSetLayoutHandle getDescriptorSetLayout() const { return m_descriptorSetLayout; }
         RHI::DescriptorSetHandle getDescriptorSet() const { return m_descriptorSet; } 
         void setExternalDescriptorSetLayout(RHI::DescriptorSetLayoutHandle layout) { m_externalDescriptorSetLayout = layout; }
@@ -99,7 +93,6 @@ namespace StarryEngine::Assets {
         // 资源映射（binding -> DescriptorResourceInfo）
         std::unordered_map<uint32_t, DescriptorResourceInfo> m_resources;
 
-        // 手动指定的绑定信息（用于 getBindings）
         struct BindingInfo {
             RHI::DescriptorType type;
             uint32_t count;

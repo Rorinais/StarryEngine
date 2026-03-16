@@ -21,7 +21,6 @@ namespace StarryEngine::RenderGraph {
         }
     }
 
-    // ----- 原有 API 实现 -----
     SubpassBuilder& PassNode::addSubpass(const std::string& subpassName) {
         return m_builder.addSubpass(SubpassBuilder(subpassName));
     }
@@ -51,14 +50,13 @@ namespace StarryEngine::RenderGraph {
         return it->second;
     }
 
-    // ----- 新增 API 实现 -----
     AttachmentConfig& PassNode::addColorOutput(TextureId texId) {
         if (m_texToRequestIndex.find(texId) != m_texToRequestIndex.end())
             throw std::runtime_error("Texture already added to this pass");
         AttachmentRequest req;
         req.texId = texId;
         req.type = AttachmentRequestType::ColorOutput;
-        req.key = "auto_color_" + std::to_string(texId.id());  // 立即生成键
+        req.key = "auto_color_" + std::to_string(texId.id()); 
         m_texToRequestIndex[texId] = m_attachmentRequests.size();
         m_attachmentRequests.push_back(req);
         return m_attachmentRequests.back().config;
@@ -132,7 +130,6 @@ namespace StarryEngine::RenderGraph {
         m_readBuffers.clear();
         m_writeBuffers.clear();
 
-        // 从原有的子通道收集（基于键）
         for (const auto& subpass : subpassBuilders) {
             for (const auto& key : subpass.getColorAttachmentNames()) {
                 auto it = m_attachmentBindings.find(key);
@@ -156,7 +153,6 @@ namespace StarryEngine::RenderGraph {
             }
         }
 
-        // 从附件请求收集（用于依赖分析）
         for (const auto& req : m_attachmentRequests) {
             if (req.type == AttachmentRequestType::ColorOutput ||
                 req.type == AttachmentRequestType::DepthOutput ||
@@ -167,7 +163,7 @@ namespace StarryEngine::RenderGraph {
                 m_readTextures.insert(req.texId);
             }
             if (req.type == AttachmentRequestType::DepthOutput) {
-                m_readTextures.insert(req.texId); // 深度也可能被后续读取
+                m_readTextures.insert(req.texId);
             }
         }
     }
@@ -178,17 +174,14 @@ namespace StarryEngine::RenderGraph {
         const std::unordered_map<BufferId, RHI::BufferHandle>& /*bufMap*/) {
         m_resMgr = resMgr;
 
-        // 处理附件请求：调用 register 和 bind
         for (auto& req : m_attachmentRequests) {
-            const auto& key = req.key;  // 键已在创建时生成
-            // 获取纹理描述
+            const auto& key = req.key;  
             auto descIt = texDescMap.find(req.texId);
             if (descIt == texDescMap.end()) {
                 throw std::runtime_error("Texture description not found for texId");
             }
             const auto& texDesc = descIt->second;
 
-            // 根据类型调用相应的 register 函数
             const auto& config = req.config;
             switch (req.type) {
             case AttachmentRequestType::ColorOutput:
@@ -221,10 +214,8 @@ namespace StarryEngine::RenderGraph {
                 break;
             }
 
-            // 绑定附件键到纹理 ID
             bindAttachment(key, req.texId);
 
-            // 如果有清除值设置，记录到 m_clearValueMap
             if (config.getClearColor().has_value()) {
                 setClearColor(key, *config.getClearColor());
             }
@@ -233,7 +224,6 @@ namespace StarryEngine::RenderGraph {
             }
         }
 
-        // 原有的构建流程
         if (!m_cachedBuildResult) {
             m_cachedBuildResult = m_builder.build(true);
         }
@@ -252,7 +242,7 @@ namespace StarryEngine::RenderGraph {
         for (size_t i = 0; i < buildResult.pipelineDescriptions.size(); ++i) {
             const auto& pipelineDesc = buildResult.pipelineDescriptions[i];
             auto recorder = buildResult.subpassRecorders[i];
-            bool hasPipeline = buildResult.subpassHasPipeline[i];  // 获取标记
+            bool hasPipeline = buildResult.subpassHasPipeline[i];  
 
             if (hasPipeline) {
                 RHI::GraphicsPipelineDesc gpDesc = pipelineDesc;
@@ -268,13 +258,11 @@ namespace StarryEngine::RenderGraph {
                 m_pipelines.push_back(pipelineHandle);
             }
             else {
-                // 无管线的子通道，放入无效句柄
                 m_pipelines.push_back(RHI::PipelineHandle::Null());
             }
             m_subpassRecorders.push_back(recorder);
         }
 
-        // 构建清除值列表（按附件顺序）
         m_clearValues.clear();
         for (const auto& key : buildResult.attachmentNames) {
             auto it = m_clearValueMap.find(key);
@@ -323,7 +311,6 @@ namespace StarryEngine::RenderGraph {
             RHI::Rect2D scissor{ {0, 0}, {m_width, m_height} };
             encoder->setScissor(scissor);
 
-            // 如果存在有效管线则绑定，否则不绑定（录制器自己负责）
             if (i < m_pipelines.size() && m_pipelines[i].isValid()) {
                 encoder->bindPipeline(m_resMgr->getPipeline(m_pipelines[i]));
             }

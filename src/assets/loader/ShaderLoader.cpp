@@ -21,23 +21,18 @@ namespace StarryEngine::Assets {
     std::optional<ShaderCreateInfo> ShaderLoader::loadFromSource(const std::string& source,
         RHI::ShaderStage stage,
         const std::string& name) {
-        // 1. 编译
         auto spirv = compileToSpirv(source, stage, name);
         if (spirv.empty()) {
             return std::nullopt;
         }
 
-        // 2. 准备创建信息
         ShaderCreateInfo info;
-        info.spirv = spirv; // 可选保留
+        info.spirv = spirv;
 
-        // 3. 反射并创建描述符集布局
         if (!reflectAndCreateLayouts(spirv, info)) {
-            // 反射失败但仍可继续（仅无布局）
             LOG_WARN("Reflection failed for shader: {}", name);
         }
 
-        // 4. 创建模块句柄
         RHI::ShaderModuleDesc desc;
         desc.code = spirv;
         desc.debugName = name.empty() ? "shader" : name;
@@ -81,22 +76,19 @@ namespace StarryEngine::Assets {
             spirv_cross::CompilerGLSL compiler(spirv);
             auto resources = compiler.get_shader_resources();
 
-            // 收集每个 set 中绑定的资源，用于创建设置布局
             std::unordered_map<uint32_t, std::vector<RHI::DescriptorSetLayoutBinding>> setBindings;
 
-            // 处理 uniform 缓冲区
             for (auto& res : resources.uniform_buffers) {
                 uint32_t set = compiler.get_decoration(res.id, spv::DecorationDescriptorSet);
                 uint32_t binding = compiler.get_decoration(res.id, spv::DecorationBinding);
                 RHI::DescriptorSetLayoutBinding b;
                 b.binding = binding;
                 b.type = RHI::DescriptorType::UniformBuffer;
-                b.stageFlags = static_cast<RHI::ShaderStage>(getShaderStageFromSpirv(compiler)); // 需实现
+                b.stageFlags = static_cast<RHI::ShaderStage>(getShaderStageFromSpirv(compiler));
                 b.count = 1;
                 setBindings[set].push_back(b);
             }
 
-            // 处理采样器/图像
             for (auto& res : resources.sampled_images) {
                 uint32_t set = compiler.get_decoration(res.id, spv::DecorationDescriptorSet);
                 uint32_t binding = compiler.get_decoration(res.id, spv::DecorationBinding);
@@ -108,9 +100,6 @@ namespace StarryEngine::Assets {
                 setBindings[set].push_back(b);
             }
 
-            // 类似处理其他资源（存储缓冲、单独采样器等）
-
-            // 为每个 set 创建布局句柄
             for (auto& [setIndex, bindings] : setBindings) {
                 RHI::DescriptorSetLayoutDesc desc;
                 desc.bindings = bindings;
@@ -124,16 +113,15 @@ namespace StarryEngine::Assets {
                 }
             }
 
-            // 处理顶点输入（如果是顶点着色器）
             if (!resources.stage_inputs.empty()) {
                 for (auto& res : resources.stage_inputs) {
                     uint32_t location = compiler.get_decoration(res.id, spv::DecorationLocation);
                     auto type = compiler.get_type(res.type_id);
                     RHI::VertexAttribute attr;
                     attr.location = location;
-                    attr.binding = 0; // 假设默认绑定0，实际应根据布局决定
-                    attr.format = spirvTypeToFormat(type); // 需要实现映射
-                    attr.offset = 0; // 此处仅示例，真实偏移需从顶点布局计算
+                    attr.binding = 0; 
+                    attr.format = spirvTypeToFormat(type); 
+                    attr.offset = 0;
                     outInfo.vertexAttributes.push_back(attr);
                 }
             }
@@ -161,12 +149,10 @@ namespace StarryEngine::Assets {
             return RHI::ShaderStage::TessellationControl;
         case spv::ExecutionModelTessellationEvaluation:
             return RHI::ShaderStage::TessellationEvaluation;
-            // 可选：Task/Mesh 扩展（如果你使用它们）
         case spv::ExecutionModelTaskNV:
-            return RHI::ShaderStage::Amplification;  // 假设你使用 Amplification 对应 Task
+            return RHI::ShaderStage::Amplification;  
         case spv::ExecutionModelMeshNV:
             return RHI::ShaderStage::Mesh;
-            // 光线追踪阶段
         case spv::ExecutionModelRayGenerationKHR:
             return RHI::ShaderStage::RayGen;
         case spv::ExecutionModelIntersectionKHR:

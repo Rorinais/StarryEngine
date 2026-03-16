@@ -123,7 +123,7 @@ namespace StarryEngine::Assets {
         }
 
         // 上传数据
-        size_t dataSize = width * height * 4; // RGBA8
+        size_t dataSize = width * height * 4; 
         if (!uploadPixels(result.texture, pixels, dataSize, width, height, 0)) {
             m_resMgr->destroy(result.texture);
             result.texture = RHI::TextureHandle::Null();

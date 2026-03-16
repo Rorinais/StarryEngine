@@ -8,7 +8,7 @@ namespace StarryEngine {
 
     std::shared_ptr<spdlog::logger> Logger::s_logger = nullptr;
     std::shared_ptr<ImGuiLogSink> Logger::s_imguiSink = nullptr;
-    bool Logger::s_showSourceLoc = true; // 默认开启
+    bool Logger::s_showSourceLoc = true; 
 
     void Logger::init(const std::string& logFile, bool flushOnInfo) {
         if (s_logger) {
@@ -18,11 +18,11 @@ namespace StarryEngine {
         try {
             std::vector<spdlog::sink_ptr> sinks;
 
-            // 创建控制台 sink（不设固定 pattern，稍后统一更新）
+            // 创建控制台 sink
             auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
             sinks.push_back(console_sink);
 
-            // 文件 sink（如果启用）
+            // 文件 sink
             if (!logFile.empty()) {
                 auto file_sink = std::make_shared<spdlog::sinks::basic_file_sink_mt>(logFile, true);
                 sinks.push_back(file_sink);
@@ -49,7 +49,7 @@ namespace StarryEngine {
                 s_logger->flush_on(spdlog::level::info);
             }
 
-            // 统一更新所有 sink 的格式（根据 s_showSourceLoc）
+            // 统一更新所有 sink 的格式
             updatePatterns();
 
             s_logger->log(spdlog::source_loc{ __FILE__, __LINE__, __FUNCTION__ },
@@ -112,7 +112,7 @@ namespace StarryEngine {
         if (s_logger) {
             s_logger->log(spdlog::source_loc{ __FILE__, __LINE__, __FUNCTION__ },
                 spdlog::level::info, "Logger shutting down.");
-            spdlog::drop_all(); // 释放所有 logger
+            spdlog::drop_all(); 
             s_logger.reset();
         }
     }

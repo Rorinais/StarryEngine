@@ -45,7 +45,7 @@ namespace StarryEngine::Assets {
         if (it != mBindings.end()) {
             return it->second.stride;
         }
-        return 0;  // 未找到返回 0，调用者应检查
+        return 0;  
     }
 
     std::vector<uint32_t> VertexLayout::getBindings() const {

@@ -19,10 +19,9 @@
 
 namespace StarryEngine::Assets {
     struct Submesh {
-        uint32_t indexOffset;      // 在全局索引缓冲区中的起始索引（以索引数计）
+        uint32_t indexOffset;      // 在全局索引缓冲区中的起始索引
         uint32_t indexCount;       // 该子网格的索引数
-        uint32_t materialIndex;    // 指向材质列表的索引（或句柄）
-        // 可选：AABB 包围盒等
+        uint32_t materialIndex;    // 指向材质列表的索引
     };
 
     class Geometry {

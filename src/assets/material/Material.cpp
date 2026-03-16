@@ -1,5 +1,5 @@
 #include "Material.hpp"
-#include "../loader/ShaderLoader.hpp"   // 如果 setVertexShader 需要编译源码，这里不再需要，因为接收句柄
+#include "../loader/ShaderLoader.hpp"  
 #include "../loader/TextureLoader.hpp"
 #include "../../logging/Logger.hpp"
 
@@ -81,7 +81,7 @@ namespace StarryEngine::Assets {
             b.type = info.type;
             b.count = info.count;
             b.stageFlags = info.stageFlags;
-            b.immutableSamplers = false; // 可根据需要调整
+            b.immutableSamplers = false; 
             result.push_back(b);
         }
         return result;

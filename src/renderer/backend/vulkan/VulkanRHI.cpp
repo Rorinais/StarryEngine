@@ -18,31 +18,25 @@ namespace StarryEngine {
             config.validationLayers.push_back(layer.c_str());
         }
 
-        // 设置调试过滤器
         config.debugSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
             VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
         config.debugType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
             VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
             VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
 
-        // 转换调试回调
         if (rhiConfig.debugCallback) {
             config.debugCallback = [rhiConfig](
                 VkDebugUtilsMessageSeverityFlagBitsEXT severity,
                 VkDebugUtilsMessageTypeFlagsEXT type, 
                 const VkDebugUtilsMessengerCallbackDataEXT* data
                 ){
-                // 转换严重程度
                 RHI::MessageSeverity rhiSeverity = convertToRHISeverity(severity);
 
-                // 转换消息来源
                 RHI::MessageSource rhiSource = convertToRHISource(type);
 
-                // 构建消息字符串
                 std::string message = data->pMessage;
                 if (data->pMessageIdName) message = std::string("[") + data->pMessageIdName + "] " + message;
 
-                // 调用RHI回调
                 rhiConfig.debugCallback(rhiSeverity, rhiSource, message);
             };
         }
@@ -72,7 +66,6 @@ namespace StarryEngine {
         config.width = rhiConfig.windowWidth;
         config.height = rhiConfig.windowHeight;
 
-        // 转换PresentMode
         switch (rhiConfig.presentMode) {
         case RHI::RHIInitConfig::PresentMode::FIFO:
             config.presentMode = VK_PRESENT_MODE_FIFO_KHR;
@@ -198,7 +191,6 @@ namespace StarryEngine {
 
         GLFWwindow* window = static_cast<GLFWwindow*>(config.windowHandle);
 
-        // 检查窗口是否有效
         if (!glfwGetWindowAttrib(window, GLFW_VISIBLE)) {
             std::cerr << "[WARNING] Window is not visible when creating surface" << std::endl;
         }

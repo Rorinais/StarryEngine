@@ -15,7 +15,7 @@ namespace StarryEngine {
     public:
         std::vector<std::string> getLogs() {
             std::lock_guard<std::mutex> lock(m_mutex);
-            return m_logs;  // 返回副本
+            return m_logs; 
         }
 
         void clear() {
@@ -57,16 +57,15 @@ namespace StarryEngine {
 
     private:
         Logger() = delete;
-        static void updatePatterns(); // 更新所有 sink 的格式
+        static void updatePatterns();
 
         static std::shared_ptr<spdlog::logger> s_logger;
         static std::shared_ptr<ImGuiLogSink> s_imguiSink;
-        static bool s_showSourceLoc; // 新增静态成员
+        static bool s_showSourceLoc;
     };
 
 } // namespace StarryEngine
 
-// 带源文件位置的新日志宏
 #define LOG_TRACE(...)    do { \
     if (auto logger = StarryEngine::Logger::get()) \
         logger->log(spdlog::source_loc{__FILE__, __LINE__, __FUNCTION__}, \

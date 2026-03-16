@@ -8,7 +8,6 @@
 namespace StarryEngine {
 
     namespace {
-        // 调试工具函数
         VkResult createDebugUtilsMessengerEXT(
             VkInstance instance,
             const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo,
@@ -39,15 +38,12 @@ namespace StarryEngine {
     }
 
     Instance::Instance(const Config& config) : mConfig(config) {
-        // 检查验证层支持
         if (mConfig.enableValidation && !checkValidationLayerSupport()) {
             throw std::runtime_error("Validation layers requested but not available!");
         }
 
-        // 创建实例
         createInstance();
 
-        // 设置调试消息器
         if (mConfig.enableValidation) {
             setupDebugMessenger();
         }
@@ -99,7 +95,6 @@ namespace StarryEngine {
         appInfo.engineVersion = mConfig.engineVersion;
         appInfo.apiVersion = mConfig.apiVersion;
 
-        // 获取所需扩展
         auto extensions = getRequiredExtensions();
 
         VkInstanceCreateInfo createInfo{};
@@ -108,13 +103,10 @@ namespace StarryEngine {
         createInfo.enabledExtensionCount = static_cast<uint32_t>(extensions.size());
         createInfo.ppEnabledExtensionNames = extensions.data();
 
-        // 调试消息器创建信息（链接到pNext）
         VkDebugUtilsMessengerCreateInfoEXT debugCreateInfo{};
         if (mConfig.enableValidation) {
             createInfo.enabledLayerCount = static_cast<uint32_t>(mConfig.validationLayers.size());
             createInfo.ppEnabledLayerNames = mConfig.validationLayers.data();
-
-            // 填充调试信息
             debugCreateInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
             debugCreateInfo.messageSeverity = mConfig.debugSeverity;
             debugCreateInfo.messageType = mConfig.debugType;
@@ -206,13 +198,11 @@ namespace StarryEngine {
 
         auto instance = static_cast<Instance*>(pUserData);
 
-        // 使用自定义回调（如果提供）
         if (instance->mConfig.debugCallback) {
             instance->mConfig.debugCallback(messageSeverity, messageType, pCallbackData);
             return VK_FALSE;
         }
 
-        // 默认处理
         const char* prefix = "";
         switch (messageSeverity) {
         case VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT:

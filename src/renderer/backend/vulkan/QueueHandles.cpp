@@ -3,13 +3,11 @@
 #include <stdexcept>
 
 namespace StarryEngine {
-    // 添加队列
     void QueueHandles::addQueue(QueueType type, VkQueue handle,
         uint32_t familyIndex, uint32_t indexInFamily,
         float priority) {
         std::lock_guard<std::mutex> lock(mQueueMutex);
 
-        // 检查是否已存在同类型队列
         auto existing = findQueueInfoMutable(type);
         if (existing) {
             std::cerr << "[WARNING] Queue of type " << static_cast<int>(type)
@@ -21,7 +19,6 @@ namespace StarryEngine {
             return;
         }
 
-        // 添加新队列
         QueueInfo info;
         info.type = type;
         info.handle = handle;
@@ -29,7 +26,6 @@ namespace StarryEngine {
         info.indexInFamily = indexInFamily;
         info.priority = priority;
 
-        // 设置队列名称
         switch (type) {
         case QueueType::Graphics:
             info.name = "Graphics";
@@ -54,7 +50,6 @@ namespace StarryEngine {
         mQueues.push_back(info);
     }
 
-    // 获取队列句柄
     VkQueue QueueHandles::getGraphicsQueue() const {
         auto info = findQueueInfo(QueueType::Graphics);
         return info ? info->handle : VK_NULL_HANDLE;
@@ -80,12 +75,10 @@ namespace StarryEngine {
         return info ? info->handle : VK_NULL_HANDLE;
     }
 
-    // 获取队列信息
     const QueueHandles::QueueInfo* QueueHandles::getQueueInfo(QueueType type) const {
         return findQueueInfo(type);
     }
 
-    // 检查队列是否存在
     bool QueueHandles::hasGraphicsQueue() const {
         return findQueueInfo(QueueType::Graphics) != nullptr;
     }
@@ -106,7 +99,6 @@ namespace StarryEngine {
         return findQueueInfo(type) != nullptr;
     }
 
-    // 队列等待操作
     void QueueHandles::waitIdle(VkQueue queue) const {
         validateQueue(queue, "waitIdle");
         vkQueueWaitIdle(queue);
@@ -127,7 +119,6 @@ namespace StarryEngine {
         }
     }
 
-    // 提交命令缓冲区
     VkResult QueueHandles::submit(VkQueue queue,
         const std::vector<VkSubmitInfo>& submits,
         VkFence fence) const {
@@ -151,7 +142,6 @@ namespace StarryEngine {
         return VK_ERROR_INITIALIZATION_FAILED;
     }
 
-    // 呈现操作 - 现在需要传入呈现队列
     VkResult QueueHandles::present(VkQueue presentQueue, VkPresentInfoKHR& presentInfo) const {
         if (presentQueue) {
             return vkQueuePresentKHR(presentQueue, &presentInfo);
@@ -159,34 +149,23 @@ namespace StarryEngine {
         return VK_ERROR_INITIALIZATION_FAILED;
     }
 
-    // 时间戳查询
     VkResult QueueHandles::getQueueTimestamp(VkQueue queue,
         uint64_t* timestamp) const {
         validateQueue(queue, "getQueueTimestamp");
 
-        // 注意：这个方法需要设备支持时间戳查询
-        // 在实际实现中，需要使用vkGetDeviceQueueTimestamp
-        // 但这是一个设备级别的函数，需要设备支持
         std::cerr << "[WARNING] Queue timestamp query not fully implemented." << std::endl;
         return VK_ERROR_FEATURE_NOT_PRESENT;
     }
 
-    // 性能查询 - 简化版本
     uint64_t QueueHandles::getQueueCounterValue(QueueType type,
         VkPerformanceCounterScopeKHR scope) const {
-        // 这是一个简化版本，实际实现需要：
-        // 1. 检查设备是否支持性能计数器扩展
-        // 2. 查询具体的性能计数器
-        // 3. 返回相应的值
 
         std::cerr << "[WARNING] Performance counter query not implemented. "
             << "Requires VK_EXT_performance_query extension." << std::endl;
 
-        // 返回一个占位值
         return 0;
     }
 
-    // 内部查找函数
     const QueueHandles::QueueInfo* QueueHandles::findQueueInfo(QueueType type) const {
         std::lock_guard<std::mutex> lock(mQueueMutex);
         for (const auto& queue : mQueues) {
@@ -206,7 +185,6 @@ namespace StarryEngine {
         return nullptr;
     }
 
-    // 验证队列有效性
     void QueueHandles::validateQueue(VkQueue queue, const char* operation) const {
         if (!queue) {
             throw std::runtime_error(std::string("Attempted to perform ") +
@@ -214,7 +192,6 @@ namespace StarryEngine {
         }
     }
 
-    // 打印队列信息
     void QueueHandles::printQueueInfo() const {
         std::lock_guard<std::mutex> lock(mQueueMutex);
 
@@ -241,13 +218,11 @@ namespace StarryEngine {
         std::cout << std::endl;
     }
 
-    // 有效性检查
     bool QueueHandles::isValid() const {
         std::lock_guard<std::mutex> lock(mQueueMutex);
         return !mQueues.empty() && hasGraphicsQueue() && hasPresentQueue();
     }
 
-    // 流输出操作符实现
     std::ostream& operator<<(std::ostream& os, const QueueHandles::QueueType& type) {
         switch (type) {
         case QueueHandles::QueueType::Graphics:
@@ -272,7 +247,6 @@ namespace StarryEngine {
         return os;
     }
 
-    // SubmissionBatch 方法实现
     void QueueHandles::SubmissionBatch::addGraphicsSubmission(VkCommandBuffer cmdBuffer) {
         VkSubmitInfo submitInfo{};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -295,7 +269,6 @@ namespace StarryEngine {
         submitInfo.commandBufferCount = 1;
         submitInfo.pCommandBuffers = &cmdBuffer;
 
-        // 查找或创建该队列的提交列表
         auto it = std::find_if(mCustomSubmits.begin(), mCustomSubmits.end(),
             [queue](const auto& pair) { return pair.first == queue; });
 
@@ -310,7 +283,6 @@ namespace StarryEngine {
     VkResult QueueHandles::SubmissionBatch::submitAll(VkFence fence) {
         VkResult result = VK_SUCCESS;
 
-        // 提交图形队列命令
         if (!mGraphicsSubmits.empty()) {
             if (auto graphicsQueue = mQueues.getGraphicsQueue()) {
                 result = vkQueueSubmit(graphicsQueue,
@@ -321,7 +293,6 @@ namespace StarryEngine {
             }
         }
 
-        // 提交计算队列命令
         if (!mComputeSubmits.empty()) {
             if (auto computeQueue = mQueues.getComputeQueue()) {
                 result = vkQueueSubmit(computeQueue,
@@ -332,7 +303,6 @@ namespace StarryEngine {
             }
         }
 
-        // 提交自定义队列命令
         for (const auto& [queue, submits] : mCustomSubmits) {
             if (!submits.empty()) {
                 result = vkQueueSubmit(queue,

@@ -14,14 +14,12 @@ namespace StarryEngine {
         VkCompositeAlphaFlagBitsKHR compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
         VkBool32 clipped = VK_TRUE;
 
-        // 窗口尺寸（0表示使用表面当前尺寸）
         uint32_t width = 0;
         uint32_t height = 0;
 
-        // 高级选项
         bool enableMailboxMode = false;
         bool enableImmediateMode = false;
-        uint32_t minImageCount = 2;  // 最小图像数量
+        uint32_t minImageCount = 2;  
     };
 
     class SwapChain {
@@ -35,11 +33,9 @@ namespace StarryEngine {
         SwapChain(std::shared_ptr<Device> device, VkSurfaceKHR surface, const SwapChainConfig& config);
         ~SwapChain();
 
-        // 禁用拷贝
         SwapChain(const SwapChain&) = delete;
         SwapChain& operator=(const SwapChain&) = delete;
 
-        // === 核心功能 ===
         VkResult acquireNextImage(VkSemaphore imageAvailableSemaphore,
             VkFence fence,
             uint64_t timeout,
@@ -49,10 +45,8 @@ namespace StarryEngine {
             uint32_t imageIndex,
             VkSemaphore renderFinishedSemaphore = VK_NULL_HANDLE);
 
-        // === 重建 ===
         bool recreate(uint32_t newWidth = 0, uint32_t newHeight = 0);
 
-        // === 资源访问 ===
         VkSwapchainKHR getHandle() const { return mSwapChain; }
         VkExtent2D getExtent() const { return mExtent; }
         VkFormat getFormat() const { return mFormat; }
@@ -71,12 +65,10 @@ namespace StarryEngine {
 
         uint32_t getImageCount() const { return static_cast<uint32_t>(mImages.size()); }
 
-        // === 状态查询 ===
         bool isValid() const { return mSwapChain != VK_NULL_HANDLE; }
         bool isOutOfDate() const { return mOutOfDate; }
         bool isSuboptimal() const { return mSuboptimal; }
 
-        // === 调试 ===
         void printInfo() const;
 
     private:
@@ -93,18 +85,15 @@ namespace StarryEngine {
         VkSurfaceKHR mSurface;
         SwapChainConfig mConfig;
 
-        // 交换链句柄和属性
         VkSwapchainKHR mSwapChain = VK_NULL_HANDLE;
         VkExtent2D mExtent = {0,0};
         VkFormat mFormat = VK_FORMAT_UNDEFINED;
         VkSurfaceFormatKHR mSurfaceFormat = {};
         VkPresentModeKHR mPresentMode = VK_PRESENT_MODE_FIFO_KHR;
 
-        // 交换链图像
         std::vector<VkImage> mImages;
         std::vector<VkImageView> mImageViews;
 
-        // 状态
         bool mOutOfDate = false;
         bool mSuboptimal = false;
     };

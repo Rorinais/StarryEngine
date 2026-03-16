@@ -41,22 +41,20 @@ namespace StarryEngine {
             &imageIndex
         );
 
-        // 处理特殊结果
         switch (result) {
         case VK_SUCCESS:
             mOutOfDate = false;
             mSuboptimal = false;
-            outImageIndex = imageIndex;  // 将索引返回给调用者
+            outImageIndex = imageIndex;  
             break;
 
         case VK_SUBOPTIMAL_KHR:
             mSuboptimal = true;
-            outImageIndex = imageIndex;  // 子优情况下索引仍然有效
+            outImageIndex = imageIndex;  
             break;
 
         case VK_ERROR_OUT_OF_DATE_KHR:
             mOutOfDate = true;
-            // 不设置 outImageIndex
             break;
 
         case VK_ERROR_SURFACE_LOST_KHR:
@@ -95,7 +93,6 @@ namespace StarryEngine {
 
         VkResult presentResult = vkQueuePresentKHR(presentQueue, &presentInfo);
 
-        // 处理呈现结果
         switch (presentResult) {
         case VK_SUCCESS:
             break;
@@ -139,12 +136,10 @@ namespace StarryEngine {
             return false;
         }
 
-        // 销毁旧的图像视图
         for (auto imageView : oldImageViews) {
             mDevice->destroyImageView(imageView);
         }
 
-        // 销毁旧的交换链（新交换链已创建成功）
         if (oldSwapchain != VK_NULL_HANDLE) {
             mDevice->destroySwapChain(oldSwapchain);
         }
@@ -197,7 +192,7 @@ namespace StarryEngine {
         createInfo.compositeAlpha = mConfig.compositeAlpha;
         createInfo.presentMode = mPresentMode;
         createInfo.clipped = mConfig.clipped;
-        createInfo.oldSwapchain = oldSwapchain;  // 关键：传入旧的交换链句柄
+        createInfo.oldSwapchain = oldSwapchain;  
 
         VkResult result = vkCreateSwapchainKHR(mDevice->getLogicalDevice(), &createInfo, nullptr, &mSwapChain);
         if (result != VK_SUCCESS) return false;
@@ -249,7 +244,6 @@ namespace StarryEngine {
     }
 
     VkSurfaceFormatKHR SwapChain::chooseSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& formats) const {
-        // 首先尝试精确匹配配置
         for (const auto& format : formats) {
             if (format.format == mConfig.surfaceFormat.format &&
                 format.colorSpace == mConfig.surfaceFormat.colorSpace) {
@@ -257,7 +251,6 @@ namespace StarryEngine {
             }
         }
 
-        // 回退到 SRGB 格式
         for (const auto& format : formats) {
             if (format.format == VK_FORMAT_B8G8R8A8_SRGB &&
                 format.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
@@ -265,12 +258,10 @@ namespace StarryEngine {
             }
         }
 
-        // 返回第一个可用格式
         return formats[0];
     }
 
     VkPresentModeKHR SwapChain::choosePresentMode(const std::vector<VkPresentModeKHR>& presentModes) const {
-        // 根据配置选择呈现模式
         if (mConfig.enableMailboxMode) {
             for (const auto& mode : presentModes) {
                 if (mode == VK_PRESENT_MODE_MAILBOX_KHR) {
@@ -287,7 +278,6 @@ namespace StarryEngine {
             }
         }
 
-        // 默认使用 FIFO（保证垂直同步）
         return mConfig.presentMode;
     }
 

@@ -35,13 +35,11 @@ namespace StarryEngine {
 
             createLogicalDevice();
 
-            // 获取调试函数指针
             if (mConfig.enableValidation) {
                 mSetDebugUtilsObjectNameEXT = (PFN_vkSetDebugUtilsObjectNameEXT)
                     vkGetDeviceProcAddr(mLogicalDevice, "vkSetDebugUtilsObjectNameEXT");
             }
 
-            // 性能计数器也可以稍后初始化
             if (mConfig.enablePerformanceCounters) {
                 std::cout << "[DEBUG] Performance counters will be initialized later" << std::endl;
             }
@@ -50,7 +48,6 @@ namespace StarryEngine {
         catch (const std::exception& e) {
             std::cerr << "[ERROR] Device construction failed: " << e.what() << std::endl;
 
-            // 清理部分初始化的资源
             if (mLogicalDevice != VK_NULL_HANDLE) {
                 vkDestroyDevice(mLogicalDevice, nullptr);
                 mLogicalDevice = VK_NULL_HANDLE;
@@ -61,15 +58,12 @@ namespace StarryEngine {
     }
 
     Device::~Device() {
-        // 等待设备空闲
         waitIdle();
 
-        // 清理性能计数器
         if (mConfig.enablePerformanceCounters) {
             cleanupPerformanceCounters();
         }
 
-        // 清理内存分配器
         cleanupVMA();
 
         if (mTransferCommandPool != VK_NULL_HANDLE) {
@@ -77,7 +71,6 @@ namespace StarryEngine {
             mTransferCommandPool = VK_NULL_HANDLE;
         }
 
-        // 销毁逻辑设备
         if (mLogicalDevice != VK_NULL_HANDLE) {
             vkDestroyDevice(mLogicalDevice, nullptr);
             mLogicalDevice = VK_NULL_HANDLE;
@@ -166,7 +159,6 @@ namespace StarryEngine {
         void* mapped = nullptr;
         VkResult result = vmaMapMemory(mVmaAllocator, allocation, &mapped);
         if (result == VK_SUCCESS && mapped) {
-            // 添加offset支持
             void* target = reinterpret_cast<uint8_t*>(mapped) + offset;
             memcpy(target, data, dataSize);
 
@@ -231,19 +223,16 @@ namespace StarryEngine {
         }
 
         try {
-            // 1. 创建暂存缓冲区
             VMATraditionalBuffer stagingBuffer = createBufferTraditional(
                 dataSize,
                 VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
                 VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-                data,      // 直接上传数据
-                dataSize   // 数据大小
+                data,      
+                dataSize  
             );
 
-            // 2. 复制缓冲区（从暂存缓冲区复制到目标缓冲区）
             copyBuffer(commandPool, stagingBuffer.buffer, dstBuffer.buffer, dataSize);
 
-            // 3. 销毁暂存缓冲区
             destroyBufferTraditional(stagingBuffer);
 
         }
@@ -269,7 +258,6 @@ namespace StarryEngine {
             throw std::runtime_error("Failed to create buffer!");
         }
 
-        // 分配内存
         VkMemoryRequirements memRequirements;
         vkGetBufferMemoryRequirements(mLogicalDevice, buffer, &memRequirements);
 
@@ -286,18 +274,14 @@ namespace StarryEngine {
 
         vkBindBufferMemory(mLogicalDevice, buffer, bufferMemory, 0);
 
-        // 处理初始数据
         if (initialData && initialDataSize > 0) {
-            // 如果是主机可见内存，直接映射上传
             if (properties & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
                 bool hostCoherent = (properties & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != 0;
                 uploadDataToTraditionalMemory(bufferMemory, initialData, initialDataSize, 0, hostCoherent);
             }
-            // 如果是设备本地内存，需要暂存缓冲区
             else if (commandPool != VK_NULL_HANDLE) {
                 uploadDataViaStagingBuffer(commandPool, { buffer, bufferMemory }, initialData, initialDataSize);
             }
-            // 如果是设备本地内存但没有提供命令池，抛出异常
             else {
                 vkFreeMemory(mLogicalDevice, bufferMemory, nullptr);
                 vkDestroyBuffer(mLogicalDevice, buffer, nullptr);
@@ -313,10 +297,8 @@ namespace StarryEngine {
         VkDeviceSize size, VkBufferUsageFlags usage,
         VkMemoryPropertyFlags properties, const void* initialData) {
 
-        // 创建缓冲区
         auto buffer = createBufferTraditional(size, usage, properties);
 
-        // 上传数据
         if (initialData) {
             if (properties & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) {
                 bool hostCoherent = (properties & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != 0;
@@ -532,7 +514,6 @@ namespace StarryEngine {
         viewInfo.viewType = viewType;
         viewInfo.format = format;
 
-        // 组件映射
         viewInfo.components = {
             VK_COMPONENT_SWIZZLE_IDENTITY,
             VK_COMPONENT_SWIZZLE_IDENTITY,
@@ -540,9 +521,8 @@ namespace StarryEngine {
             VK_COMPONENT_SWIZZLE_IDENTITY
         };
 
-        // 子资源范围
         viewInfo.subresourceRange.aspectMask = aspectFlags;
-        viewInfo.subresourceRange.baseMipLevel = 0;  // 固定为 0，让调用者通过参数控制
+        viewInfo.subresourceRange.baseMipLevel = 0;  
         viewInfo.subresourceRange.levelCount = mipLevels;
         viewInfo.subresourceRange.baseArrayLayer = baseArrayLayer;
         viewInfo.subresourceRange.layerCount = layerCount;
@@ -559,7 +539,6 @@ namespace StarryEngine {
             throw std::runtime_error(errorMsg);
         }
 
-        // 设置调试名称
         if (debugName && mSetDebugUtilsObjectNameEXT) {
             setObjectName(reinterpret_cast<uint64_t>(imageView),
                 VK_OBJECT_TYPE_IMAGE_VIEW, debugName);
@@ -1210,7 +1189,6 @@ namespace StarryEngine {
         int32_t height, 
         uint32_t mipLevels) {
         
-        // 检查图像格式是否支持线性过滤
         VkFormatProperties formatProperties;
         vkGetPhysicalDeviceFormatProperties(mPhysicalDevice, imageFormat, &formatProperties);
         
@@ -1218,7 +1196,6 @@ namespace StarryEngine {
             throw std::runtime_error("Texture image format does not support linear filtering!");
         }
         
-        // 使用统一执行器
         executeSingleTimeCommands(commandPool, [&](VkCommandBuffer commandBuffer) {
             VkImageMemoryBarrier barrier = {};
             barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -1234,7 +1211,6 @@ namespace StarryEngine {
             int32_t mipHeight = height;
             
             for (uint32_t i = 1; i < mipLevels; i++) {
-                // 将当前mip级别从TRANSFER_DST转换为TRANSFER_SRC
                 barrier.subresourceRange.baseMipLevel = i - 1;
                 barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
                 barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
@@ -1247,7 +1223,6 @@ namespace StarryEngine {
                     0, nullptr,
                     1, &barrier);
                 
-                // 从当前mip级别blit到下一级
                 VkImageBlit blit = {};
                 blit.srcOffsets[0] = { 0, 0, 0 };
                 blit.srcOffsets[1] = { mipWidth, mipHeight, 1 };
@@ -1272,7 +1247,6 @@ namespace StarryEngine {
                     1, &blit,
                     VK_FILTER_LINEAR);
                 
-                // 将当前mip级别从TRANSFER_SRC转换为SHADER_READ_ONLY
                 barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
                 barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
                 barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
@@ -1284,12 +1258,10 @@ namespace StarryEngine {
                     0, nullptr,
                     1, &barrier);
                 
-                // 更新下一级mip尺寸
                 if (mipWidth > 1) mipWidth /= 2;
                 if (mipHeight > 1) mipHeight /= 2;
             }
             
-            // 将最后一个mip级别从TRANSFER_DST转换为SHADER_READ_ONLY
             barrier.subresourceRange.baseMipLevel = mipLevels - 1;
             barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
             barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -1343,7 +1315,6 @@ namespace StarryEngine {
         std::vector<VkPhysicalDevice> physicalDevices(deviceCount);
         vkEnumeratePhysicalDevices(mInstance->getHandle(), &deviceCount, physicalDevices.data());
 
-        // 使用评分系统选择最佳设备
         std::vector<std::pair<int32_t, VkPhysicalDevice>> ratedDevices;
 
         for (const auto& device : physicalDevices) {
@@ -1357,7 +1328,6 @@ namespace StarryEngine {
             throw std::runtime_error("Failed to find a suitable GPU!");
         }
 
-        // 按评分排序，选择最高分的设备
         std::sort(ratedDevices.begin(), ratedDevices.end(),
             [](const auto& a, const auto& b) { return a.first > b.first; });
 
@@ -1365,7 +1335,6 @@ namespace StarryEngine {
     }
 
     int32_t Device::ratePhysicalDevice(VkPhysicalDevice device, VkSurfaceKHR surface) {
-        // 基本检查
         if (!isPhysicalDeviceSuitable(device, surface)) {
             return 0;
         }
@@ -1377,7 +1346,6 @@ namespace StarryEngine {
 
         int32_t score = 0;
 
-        // 设备类型评分
         if (properties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
             score += 1000; // 独显优先
         }
@@ -1406,29 +1374,23 @@ namespace StarryEngine {
     }
 
     bool Device::isPhysicalDeviceSuitable(VkPhysicalDevice device, VkSurfaceKHR surface) {
-        // 检查队列族支持
         QueueFamilyIndices indices = findQueueFamilies(device, surface);
         if (!indices.isComplete()) {
             return false;
         }
 
-        // 检查扩展支持
         bool extensionsSupported = checkDeviceExtensionSupport(device);
         if (!extensionsSupported) {
             return false;
         }
 
-        // 检查交换链支持
         SwapChainSupportDetails swapChainSupport = querySwapChainSupport(device, surface);
         if (swapChainSupport.formats.empty() || swapChainSupport.presentModes.empty()) {
             return false;
         }
 
-        // 检查设备特性
         VkPhysicalDeviceFeatures supportedFeatures;
         vkGetPhysicalDeviceFeatures(device, &supportedFeatures);
-
-        // 如果配置要求特定特性但设备不支持，则不合适
         if (mConfig.samplerAnisotropy && !supportedFeatures.samplerAnisotropy) {
             return false;
         }
@@ -1467,19 +1429,16 @@ namespace StarryEngine {
         vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
 
         for (uint32_t i = 0; i < queueFamilies.size(); i++) {
-            // 图形队列
             if (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
                 indices.graphicsFamily = i;
             }
 
-            // 呈现队列
             VkBool32 presentSupport = false;
             vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSupport);
             if (presentSupport) {
                 indices.presentFamily = i;
             }
 
-            // 计算队列（可选，优先选择独立的计算队列）
             if (queueFamilies[i].queueFlags & VK_QUEUE_COMPUTE_BIT) {
                 if (!indices.computeFamily.has_value() ||
                     (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) == 0) {
@@ -1487,7 +1446,6 @@ namespace StarryEngine {
                 }
             }
 
-            // 传输队列（可选，优先选择独立的传输队列）
             if (queueFamilies[i].queueFlags & VK_QUEUE_TRANSFER_BIT) {
                 if (!indices.transferFamily.has_value() ||
                     ((queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) == 0 &&
@@ -1509,11 +1467,9 @@ namespace StarryEngine {
     }
 
     void Device::createLogicalDevice() {
-        // 创建队列创建信息
         std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
         std::set<uint32_t> uniqueQueueFamilies = mQueueFamilyIndices.getUniqueFamilies();
 
-        // 为每个唯一的队列族创建队列信息
         std::vector<float> queuePriorities;
 
         for (uint32_t queueFamily : uniqueQueueFamilies) {
@@ -1522,17 +1478,14 @@ namespace StarryEngine {
             queueCreateInfo.queueFamilyIndex = queueFamily;
             queueCreateInfo.queueCount = 1;
 
-            // 为每个队列族创建一个优先级数组
             queuePriorities.push_back(mConfig.queuePriority);
             queueCreateInfo.pQueuePriorities = &queuePriorities.back();
 
             queueCreateInfos.push_back(queueCreateInfo);
         }
 
-        // 配置设备特性 - 只启用设备实际支持的特性
         VkPhysicalDeviceFeatures deviceFeatures{};
 
-        // 检查并启用实际支持的特性
         if (mConfig.samplerAnisotropy && mPhysicalDeviceFeatures.samplerAnisotropy) {
             deviceFeatures.samplerAnisotropy = VK_TRUE;
         }
@@ -1556,14 +1509,12 @@ namespace StarryEngine {
         // ==================== 扩展处理 - 修复重复问题 ====================
         std::set<std::string> uniqueExtensionSet;
 
-        // 先去重
         for (const char* extension : mConfig.extensions) {
             if (extension != nullptr && extension[0] != '\0') {
                 uniqueExtensionSet.insert(extension);
             }
         }
 
-        // 获取所有可用的扩展
         uint32_t availableExtensionCount = 0;
         vkEnumerateDeviceExtensionProperties(mPhysicalDevice, nullptr, &availableExtensionCount, nullptr);
 
@@ -1574,7 +1525,6 @@ namespace StarryEngine {
 
         m_enabledExtensionStrings.clear();
 
-        // 检查每个扩展是否支持
         for (const std::string& extension : uniqueExtensionSet) {
             bool supported = false;
             for (const auto& availableExt : availableExtensions) {
@@ -1603,20 +1553,15 @@ namespace StarryEngine {
             throw std::runtime_error("No extensions enabled for device!");
         }
 
-        // 构建临时指针数组（指向 m_enabledExtensionStrings 的内部数据）
         std::vector<const char*> enabledExtensionPtrs;
         enabledExtensionPtrs.reserve(m_enabledExtensionStrings.size());
         for (const auto& extStr : m_enabledExtensionStrings) {
             enabledExtensionPtrs.push_back(extStr.c_str());
         }
 
-        // ==================== 验证层处理 ====================
-        // 设备级别的验证层在现代Vulkan中通常不需要
-        // 为了安全，我们只在配置要求时启用
         std::vector<const char*> enabledLayers;
 
         if (mConfig.enableValidation && !mInstance->getConfig().validationLayers.empty()) {
-            // 检查设备是否支持这些验证层
             uint32_t layerCount = 0;
             vkEnumerateDeviceLayerProperties(mPhysicalDevice, &layerCount, nullptr);
 
@@ -1626,7 +1571,6 @@ namespace StarryEngine {
                 vkEnumerateDeviceLayerProperties(mPhysicalDevice, &layerCount, availableLayers.data());
             }
 
-            // 检查每个验证层是否可用
             for (const char* layerName : mInstance->getConfig().validationLayers) {
                 bool layerAvailable = false;
 
@@ -1655,14 +1599,12 @@ namespace StarryEngine {
         createInfo.enabledExtensionCount = static_cast<uint32_t>(enabledExtensionPtrs.size());
         createInfo.ppEnabledExtensionNames = enabledExtensionPtrs.data();
 
-        // 设置验证层
         if (!enabledLayers.empty()) {
             createInfo.enabledLayerCount = static_cast<uint32_t>(enabledLayers.size());
             createInfo.ppEnabledLayerNames = enabledLayers.data();
         }
         else {
             createInfo.enabledLayerCount = 0;
-            // 重要：设置为nullptr，而不是空数组
             createInfo.ppEnabledLayerNames = nullptr;
         }
 
@@ -1671,7 +1613,6 @@ namespace StarryEngine {
             std::string errorMsg = "Failed to create logical device! Error code: ";
             errorMsg += std::to_string(result);
 
-            // 详细的错误信息
             switch (result) {
             case VK_ERROR_OUT_OF_HOST_MEMORY:
                 errorMsg += " (VK_ERROR_OUT_OF_HOST_MEMORY)";
@@ -1703,12 +1644,10 @@ namespace StarryEngine {
         }
 
         // ==================== 获取队列句柄 ====================
-        // 确保 mQueueHandles 已经初始化
         if (!mQueueHandles) {
             throw std::runtime_error("QueueHandles not initialized in createLogicalDevice!");
         }
 
-        // 获取图形队列
         if (mQueueFamilyIndices.graphicsFamily.has_value()) {
             VkQueue graphicsQueue = VK_NULL_HANDLE;
             vkGetDeviceQueue(mLogicalDevice, mQueueFamilyIndices.graphicsFamily.value(), 0, &graphicsQueue);
@@ -1724,7 +1663,6 @@ namespace StarryEngine {
             }
         }
 
-        // 获取呈现队列（可能与图形队列相同）
         if (mQueueFamilyIndices.presentFamily.has_value()) {
             VkQueue presentQueue = VK_NULL_HANDLE;
             vkGetDeviceQueue(mLogicalDevice, mQueueFamilyIndices.presentFamily.value(), 0, &presentQueue);
@@ -1740,7 +1678,6 @@ namespace StarryEngine {
             }
         }
 
-        // 如果有独立的计算队列，获取它
         if (mQueueFamilyIndices.computeFamily.has_value() &&
             mQueueFamilyIndices.computeFamily.value() != mQueueFamilyIndices.graphicsFamily.value()) {
             VkQueue computeQueue = VK_NULL_HANDLE;
@@ -1755,7 +1692,6 @@ namespace StarryEngine {
             }
         }
 
-        // 如果有独立的传输队列，获取它
         if (mQueueFamilyIndices.transferFamily.has_value() &&
             mQueueFamilyIndices.transferFamily.value() != mQueueFamilyIndices.graphicsFamily.value() &&
             mQueueFamilyIndices.transferFamily.value() != mQueueFamilyIndices.computeFamily.value()) {
@@ -1880,7 +1816,6 @@ namespace StarryEngine {
     }
 
     void Device::cleanupPerformanceCounters() {
-        // 清理性能计数器相关资源
         mPerformanceCounterSupported = false;
     }
 

@@ -18,7 +18,7 @@ namespace StarryEngine {
             return instance;
         }
 
-        // 订阅事件，返回监听器ID（可用于取消订阅）
+        // 订阅事件
         size_t subscribe(EventType type, EventHandler handler);
 
         // 取消订阅
@@ -27,7 +27,6 @@ namespace StarryEngine {
         // 分发事件
         void dispatch(IEvent& event);
 
-        // 便捷模板方法：直接构造并分发事件
         template<typename T, typename... Args>
         void dispatch(Args&&... args) {
             T event(std::forward<Args>(args)...);

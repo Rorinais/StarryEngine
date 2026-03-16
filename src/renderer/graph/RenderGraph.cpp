@@ -16,19 +16,16 @@ namespace StarryEngine::RenderGraph {
             m_rhi->waitIdle();
         }
 
-        // 销毁所有帧缓冲
         for (auto& passFbs : m_perPassFramebuffers) {
             for (auto fb : passFbs) {
                 if (fb.isValid()) m_resMgr->destroy(fb);
             }
         }
 
-        // 销毁物理纹理
         for (auto& [id, info] : m_textureMap) {
             if (info.handle.isValid()) m_resMgr->destroy(info.handle);
         }
 
-        // 销毁物理缓冲区
         for (auto& [id, handle] : m_bufferMap) {
             if (handle.isValid()) m_resMgr->destroy(handle);
         }

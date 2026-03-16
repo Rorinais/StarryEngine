@@ -95,7 +95,7 @@ namespace StarryEngine {
         }
 
         FrameInfo frameInfo;
-        frameInfo.frameIndex = mCurrentFrameIndex; // 当前要录制的帧索引
+        frameInfo.frameIndex = mCurrentFrameIndex; 
         FrameData& frameData = mFrameData[mCurrentFrameIndex];
 
         // 重置栅栏
@@ -166,13 +166,10 @@ namespace StarryEngine {
         // 记录 CPU 结束时间
         frameInfo.cpuEndTime = getCurrentTimeNanoseconds();
 
-        // === 新增：将 CPU 时间存入对应的 FrameData ===
         if (frameInfo.frameIndex < mFrameData.size()) {
             FrameData& frameData = mFrameData[frameInfo.frameIndex];
-            // 计算 CPU 耗时（毫秒）
             float cpuTime = nanosecondsToMilliseconds(frameInfo.cpuEndTime - frameInfo.cpuBeginTime);
             frameData.cpuTime = cpuTime;
-            // 也可保存原始时间戳便于调试
             frameData.cpuBeginTime = frameInfo.cpuBeginTime;
             frameData.cpuEndTime = frameInfo.cpuEndTime;
         }
@@ -188,7 +185,6 @@ namespace StarryEngine {
             throw std::runtime_error("Invalid graphics queue");
         }
 
-        // 如果不需要重建，检查是否应该跳过提交
         if (frameInfo.needsRecreate) {
             return VK_ERROR_OUT_OF_DATE_KHR;
         }
@@ -298,7 +294,7 @@ namespace StarryEngine {
             mRecreateAttempts = 0;
         }
         else {
-            mNeedsRecreate = true;  // 标记为需要继续重建
+            mNeedsRecreate = true; 
         }
     }
 
@@ -308,11 +304,10 @@ namespace StarryEngine {
         // 确保所有 GPU 工作完成
         mDevice->waitIdle();
 
-        // 等待所有栅栏完成，但不要重置它们（保持已信号状态）
+        // 等待所有栅栏完成，但不要重置它们
         for (auto& frameData : mFrameData) {
             if (frameData.inFlightFence != VK_NULL_HANDLE) {
                 vkWaitForFences(mDevice->getLogicalDevice(), 1, &frameData.inFlightFence, VK_TRUE, UINT64_MAX);
-                // 注意：不调用 vkResetFences
             }
         }
 
@@ -333,7 +328,7 @@ namespace StarryEngine {
             std::cout << "[INFO] Swap chain is suboptimal (acquire)" << std::endl;
             frameInfo.needsRecreate = true;
             mNeedsRecreate = true;
-            return true;  // 继续使用，但标记需要重建
+            return true;
 
         case VK_ERROR_OUT_OF_DATE_KHR:
             notifyRecreateNeeded(frameInfo, "Swap chain out of date (acquire)");
@@ -366,7 +361,7 @@ namespace StarryEngine {
             std::cout << "[INFO] Swap chain is suboptimal (present)" << std::endl;
             frameInfo.needsRecreate = true;
             mNeedsRecreate = true;
-            return true;  // 继续运行，但标记需要重建
+            return true;  
 
         case VK_ERROR_OUT_OF_DATE_KHR:
             notifyRecreateNeeded(frameInfo, "Swap chain out of date (present)");
@@ -391,7 +386,7 @@ namespace StarryEngine {
     void FrameContext::notifyRecreateNeeded(FrameInfo& frameInfo, const std::string& reason) {
         std::cout << "[INFO] " << reason << std::endl;
         frameInfo.needsRecreate = true;
-        frameInfo.imageIndex = UINT32_MAX;  // 标记无效图像索引
+        frameInfo.imageIndex = UINT32_MAX; 
         mNeedsRecreate = true;
     }
 
@@ -460,7 +455,7 @@ namespace StarryEngine {
 
         FrameData& frameData = mFrameData[threadIndex];
 
-        // 创建线程命令池（如果不存在）
+        // 创建线程命令池
         if (frameData.threadCommandPool == VK_NULL_HANDLE) {
             createThreadCommandPool(frameData);
         }
@@ -481,7 +476,6 @@ namespace StarryEngine {
 
         FrameData& frameData = mFrameData[threadIndex];
         if (frameData.threadCommandPool != VK_NULL_HANDLE) {
-            // 注意：这里应该重置命令池而不是销毁，以便重用
             vkResetCommandPool(mDevice->getLogicalDevice(),
                 frameData.threadCommandPool,
                 VK_COMMAND_POOL_RESET_RELEASE_RESOURCES_BIT);
@@ -560,7 +554,7 @@ namespace StarryEngine {
                 frameData.imageAvailableSemaphore = mDevice->createSemaphore();
                 frameData.renderFinishedSemaphore = mDevice->createSemaphore();
 
-                // 创建栅栏（初始为已信号状态，这样第一帧不会等待）
+                // 创建栅栏
                 frameData.inFlightFence = mDevice->createFence(VK_FENCE_CREATE_SIGNALED_BIT);
 
                 // 设置调试名称
@@ -621,7 +615,7 @@ namespace StarryEngine {
         VkQueryPoolCreateInfo queryPoolInfo = {};
         queryPoolInfo.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
         queryPoolInfo.queryType = VK_QUERY_TYPE_TIMESTAMP;
-        queryPoolInfo.queryCount = 2;  // 开始和结束时间戳
+        queryPoolInfo.queryCount = 2;
 
         for (size_t i = 0; i < mFrameData.size(); i++) {
             FrameData& frameData = mFrameData[i];
@@ -681,7 +675,7 @@ namespace StarryEngine {
         vkCmdWriteTimestamp(frameInfo.commandBuffer,
             VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
             frameData.timestampQueryPool,
-            0);  // 查询索引0
+            0);  
     }
 
     void FrameContext::endTimestampQuery(FrameInfo& frameInfo) {
@@ -698,7 +692,7 @@ namespace StarryEngine {
         vkCmdWriteTimestamp(frameInfo.commandBuffer,
             VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
             frameData.timestampQueryPool,
-            1);  // 查询索引1
+            1);  
     }
 
     void FrameContext::updateStatistics(uint32_t completedFrameIndex) {
@@ -708,9 +702,9 @@ namespace StarryEngine {
 
         // 1. 递增总帧数并保存当前计数值
         mStatistics.totalFrames++;
-        uint64_t total = mStatistics.totalFrames;  // 当前总帧数，用于计算
+        uint64_t total = mStatistics.totalFrames;  
 
-        // 记录该帧的序号（可选）
+        // 记录该帧的序号
         frameData.frameNumber = total;
 
         // 2. CPU 时间统计

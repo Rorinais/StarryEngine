@@ -7,7 +7,6 @@ namespace StarryEngine {
         return m_nextId;
     }
 
-    // 取消订阅
     void EventDispatcher::unsubscribe(EventType type, size_t listenerId) {
         std::lock_guard<std::mutex> lock(m_mutex);
         auto& listeners = m_listeners[type];
@@ -18,12 +17,11 @@ namespace StarryEngine {
         );
     }
 
-    // 分发事件
     void EventDispatcher::dispatch(IEvent& event) {
         std::lock_guard<std::mutex> lock(m_mutex);
         auto it = m_listeners.find(event.getType());
         if (it != m_listeners.end()) {
-            // 复制一份监听器列表，避免在遍历过程中修改
+
             auto listenersCopy = it->second;
             for (auto& listener : listenersCopy) {
                 listener.handler(event);
