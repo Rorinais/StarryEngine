@@ -136,16 +136,16 @@ namespace StarryEngine::RHI {
         // 获取最老资源（用于LRU缓存）
         std::optional<Handle> getOldestResource() const;
 
+        // 获取内部entry指针
+        Entry* getEntry(Handle handle);
+        const Entry* getEntry(Handle handle) const;
+        ResourceType* getEntryData(Handle handle);
+
     private:
         static constexpr size_t CHUNK_SIZE = 256;
         struct Chunk {
             std::array<Entry, CHUNK_SIZE> entries;
         };
-
-        // 获取内部entry指针
-        Entry* getEntry(Handle handle);
-        const Entry* getEntry(Handle handle) const;
-        ResourceType* getEntryData(Handle handle);
 
         // 根据索引获取句柄
         Handle getHandleFromIndex(uint32_t globalIdx) const;

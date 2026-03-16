@@ -51,8 +51,8 @@ namespace StarryEngine::RenderGraph {
             float lineWidth = 1.0f,
             RHI::PrimitiveTopology topology = RHI::PrimitiveTopology::TriangleList,
             RHI::CullMode cullMode = RHI::CullMode::None,
-            bool depthTestEnable = false,
-            bool depthWriteEnable = false,
+            bool depthTestEnable = true,
+            bool depthWriteEnable = true,
             RHI::CompareOp depthCompareOp = RHI::CompareOp::Less,
             std::vector<RHI::BlendAttachmentState> attachments = { RHI::BlendAttachmentState{} },
             std::vector<RHI::DynamicState> dynamicStates = { RHI::DynamicState::Viewport, RHI::DynamicState::Scissor }

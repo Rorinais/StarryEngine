@@ -1,16 +1,18 @@
 #include "ModelLoader.hpp"
 #include "../../logging/Logger.hpp"
-#include <assimp/Importer.hpp>
-#include <assimp/scene.h>
-#include <assimp/postprocess.h>
 #include <glm/glm.hpp>
+#include <stb_image.h>
+#include <assimp/scene.h>
+#include <assimp/Importer.hpp>
+#include <assimp/postprocess.h>
 #include <functional>
 #include <unordered_map>
 
 namespace StarryEngine::Assets {
 
-    bool ModelLoader::loadFromFile(const std::string& path,
-        Geometry& outGeometry,
+    bool ModelLoader::loadFromFile(
+        std::shared_ptr<RHI::ResourceManager> resMgr,
+        const std::string& path,Geometry& outGeometry,
         std::vector<MaterialParams>& outMaterials) {
         Assimp::Importer importer;
         const aiScene* scene = importer.ReadFile(path,
@@ -91,11 +93,10 @@ namespace StarryEngine::Assets {
         processNode(scene->mRootNode, glm::mat4(1.0f));
 
         // 提取原始材质参数
-        extractMaterials(scene, outMaterials);
+        extractMaterials(scene, outMaterials, resMgr);
 
-        // --- 新增：过滤掉默认材质，并调整子网格的材质索引 ---
         std::vector<MaterialParams> filteredMaterials;
-        std::unordered_map<uint32_t, uint32_t> oldToNewIndex; // 原索引 -> 新索引
+        std::unordered_map<uint32_t, uint32_t> oldToNewIndex;
 
         for (uint32_t i = 0; i < outMaterials.size(); ++i) {
             if (outMaterials[i].name != "DefaultMaterial") {
@@ -123,7 +124,9 @@ namespace StarryEngine::Assets {
             }
         }
 
-        // 用过滤后的材质替换 outMaterials
+        for (uint32_t newIdx = 0; newIdx < filteredMaterials.size(); ++newIdx) {
+            filteredMaterials[newIdx].index = newIdx;
+        }
         outMaterials = std::move(filteredMaterials);
 
         // --- 一次性将最终数据设置到 outGeometry ---
@@ -209,14 +212,17 @@ namespace StarryEngine::Assets {
 
     // 辅助函数：提取材质参数
     void ModelLoader::extractMaterials(const aiScene* scene,
-        std::vector<MaterialParams>& outMaterials) {
+        std::vector<MaterialParams>& outMaterials, 
+        std::shared_ptr<RHI::ResourceManager> resMgr) {
         outMaterials.clear();
         outMaterials.reserve(scene->mNumMaterials);
+
+        TextureLoader texLoader(resMgr);
 
         for (unsigned int i = 0; i < scene->mNumMaterials; ++i) {
             aiMaterial* aiMat = scene->mMaterials[i];
             MaterialParams mat;
-
+            mat.index = i;
             // 材质名称
             aiString name;
             if (aiMat->Get(AI_MATKEY_NAME, name) == AI_SUCCESS) {
@@ -262,44 +268,41 @@ namespace StarryEngine::Assets {
                 }
             }
 
-            // 调试：打印所有纹理类型
-            for (int tt = 0; tt <= aiTextureType_UNKNOWN; ++tt) {
-                aiString path;
-                if (aiMat->GetTexture(static_cast<aiTextureType>(tt), 0, &path) == AI_SUCCESS) {
-                    LOG_INFO("Material '{}' has texture type {}: {}", mat.name, tt, path.C_Str());
-                }
-            }
+            auto processTexture = [&](aiTextureType type, const std::string& debugName,
+                std::string& outPath, RHI::TextureHandle& outHandle) {
+                    aiString texPath;
+                    if (aiMat->GetTexture(type, 0, &texPath) == AI_SUCCESS) {
+                        std::string path = texPath.C_Str();
+                        if (!path.empty() && path[0] == '*') {
+                            int index = std::stoi(path.substr(1));
+                            if (index >= 0 && index < scene->mNumTextures) {
+                                aiTexture* embeddedTex = scene->mTextures[index];
+                                auto result = loadEmbeddedTexture(texLoader, embeddedTex, debugName);
+                                if (result.texture.isValid()) {
+                                    outHandle = result.texture;
+                                    outPath = ""; // 标记为已处理
+                                }
+                                else {
+                                    LOG_ERROR("Failed to load embedded texture for material {}", mat.name);
+                                }
+                            }
+                            else {
+                                LOG_ERROR("Invalid embedded texture index {} for material {}", index, mat.name);
+                            }
+                        }
+                        else {
+                            outPath = path;
+                        }
+                    }
+                };
 
-            // 获取常用纹理路径
-            aiString texPath;
-            if (aiMat->GetTexture(aiTextureType_DIFFUSE, 0, &texPath) == AI_SUCCESS) {
-                LOG_INFO("Raw albedoTexture path from Assimp: {}", texPath.C_Str());
-                mat.albedoTexture = texPath.C_Str();
-            }
-            if (aiMat->GetTexture(aiTextureType_NORMALS, 0, &texPath) == AI_SUCCESS) {
-                LOG_INFO("Raw normalTexture path from Assimp: {}", texPath.C_Str());
-                mat.normalTexture = texPath.C_Str();
-            }
-            if (aiMat->GetTexture(aiTextureType_METALNESS, 0, &texPath) == AI_SUCCESS) {
-                LOG_INFO("Raw metallicTexture path from Assimp: {}", texPath.C_Str());
-                mat.metallicTexture = texPath.C_Str();
-            }
-            if (aiMat->GetTexture(aiTextureType_DIFFUSE_ROUGHNESS, 0, &texPath) == AI_SUCCESS) {
-                LOG_INFO("Raw roughnessTexture path from Assimp: {}", texPath.C_Str());
-                mat.roughnessTexture = texPath.C_Str();
-            }
-            if (aiMat->GetTexture(aiTextureType_AMBIENT_OCCLUSION, 0, &texPath) == AI_SUCCESS) {
-                LOG_INFO("Raw occlusionTexture path from Assimp: {}", texPath.C_Str());
-                mat.occlusionTexture = texPath.C_Str();
-            }
-            if (aiMat->GetTexture(aiTextureType_EMISSION_COLOR, 0, &texPath) == AI_SUCCESS) {
-                LOG_INFO("Raw emissiveTexture path from Assimp: {}", texPath.C_Str());
-                mat.emissiveTexture = texPath.C_Str();
-            }
-            if (aiMat->GetTexture(aiTextureType_OPACITY, 0, &texPath) == AI_SUCCESS) {
-                LOG_INFO("Raw opacityTexture path from Assimp: {}", texPath.C_Str());
-                mat.opacityTexture = texPath.C_Str();
-            }
+            processTexture(aiTextureType_DIFFUSE, "albedo", mat.albedoTexture, mat.albedoTextureHandle);
+            processTexture(aiTextureType_NORMALS, "normal", mat.normalTexture, mat.normalTextureHandle);
+            processTexture(aiTextureType_METALNESS, "metallic", mat.metallicTexture, mat.metallicTextureHandle);
+            processTexture(aiTextureType_DIFFUSE_ROUGHNESS, "roughness", mat.roughnessTexture, mat.roughnessTextureHandle);
+            processTexture(aiTextureType_AMBIENT_OCCLUSION, "occlusion", mat.occlusionTexture, mat.occlusionTextureHandle);
+            processTexture(aiTextureType_EMISSION_COLOR, "emissive", mat.emissiveTexture, mat.emissiveTextureHandle);
+            processTexture(aiTextureType_OPACITY, "opacity", mat.opacityTexture, mat.opacityTextureHandle);
 
             // 设置标志
             mat.useNormalMap = !mat.normalTexture.empty();
@@ -309,4 +312,30 @@ namespace StarryEngine::Assets {
         }
     }
 
+    TextureLoadResult ModelLoader::loadEmbeddedTexture(TextureLoader& loader, aiTexture* tex, const std::string& debugName) {
+        if (tex->mHeight == 0) {
+            // 压缩格式（如 PNG、JPG）
+            int width, height, channels;
+            stbi_uc* pixels = stbi_load_from_memory(
+                reinterpret_cast<stbi_uc*>(tex->pcData),
+                tex->mWidth,
+                &width, &height, &channels,
+                STBI_rgb_alpha);
+            if (!pixels) {
+                LOG_ERROR("Failed to decode embedded compressed texture");
+                return { RHI::TextureHandle::Null(), RHI::SamplerHandle::Null() };
+            }
+            auto result = loader.loadTextureFromMemory(pixels, width, height,
+                RHI::Format::RGBA8_UNorm,
+                debugName);
+            stbi_image_free(pixels);
+            return result;
+        }
+        else {
+            // 原始 RGBA 格式
+            return loader.loadTextureFromMemory(tex->pcData, tex->mWidth, tex->mHeight,
+                RHI::Format::RGBA8_UNorm,
+                debugName);
+        }
+    }
 } // namespace StarryEngine::Assets

@@ -171,7 +171,7 @@ namespace StarryEngine::RHI {
         if (mPersistentlyMapped && mIsMapped) {
             memcpy(static_cast<uint8_t*>(mMappedPointer) + offset, data, size);
             flush(offset, size);
-            return false;
+            return true;
         }
         
         // 否则使用RAII包装器进行临时映射

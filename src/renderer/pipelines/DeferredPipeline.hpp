@@ -10,16 +10,20 @@ namespace StarryEngine {
 
     class DeferredPipeline : public IPipeline {
     public:
-        DeferredPipeline() = default;
+        DeferredPipeline(std::shared_ptr<RHI::IRHI> rhi,
+            RHI::DescriptorPoolHandle globalPool,
+            uint32_t width, uint32_t height)
+            :m_rhi(rhi),m_globalPool(globalPool),
+            m_resMgr(rhi->getResourceManager()),
+            m_width(width),m_height(height){ }
 
         //bool initialize(std::shared_ptr<RHI::IRHI> rhi,
         //    RHI::DescriptorPoolHandle globalPool,
         //    uint32_t width, uint32_t height) override;
 
-        bool initialize(std::shared_ptr<RHI::IRHI> rhi,
-            RHI::DescriptorPoolHandle globalPool,
-            uint32_t width, uint32_t height,
-            const Assets::VertexLayout& vertexLayout) override;
+        bool initialize(const Assets::VertexLayout& vertexLayout);
+
+        bool createRenderGraph();
 
         void update(const Scene::Scene& scene, float deltaTime) override;
 
@@ -27,11 +31,11 @@ namespace StarryEngine {
 
         void onResize(uint32_t width, uint32_t height) override;
 
-        void setPipelineDesc() {
-
-        }
-
         RHI::DescriptorSetLayoutHandle getDescriptorSetLayout() const { return m_descriptorSetLayout; }
+
+        bool createGridResources();
+
+        RHI::PipelineHandle getOrCreatePipeline(RHI::ShaderHandle vertShader, RHI::ShaderHandle fragShader, uint32_t subpassIndex);
 
     private:
         std::shared_ptr<RHI::IRHI> m_rhi;
@@ -41,11 +45,18 @@ namespace StarryEngine {
 
         std::shared_ptr<RenderGraph::RenderGraph> m_renderGraph;
         std::shared_ptr<RenderGraph::MeshDrawRecorder> m_recorder;
+
         RenderGraph::TextureId m_swapchainTex;
+
         RHI::PipelineLayoutHandle m_pipelineLayout;
         RHI::DescriptorSetLayoutHandle m_descriptorSetLayout;
         Assets::VertexLayout m_vertexLayout;
+        RHI::RenderPassHandle m_renderPassHandle;
+        std::unordered_map<size_t, RHI::PipelineHandle> m_pipelineCache;
 
+        std::shared_ptr<RenderGraph::MeshDrawRecorder> m_gridRecorder;
+        std::shared_ptr<Assets::Geometry> m_gridGeometry;
+        std::shared_ptr<Assets::Material> m_gridMaterial;
     };
 
 } // namespace StarryEngine

@@ -19,14 +19,12 @@ namespace StarryEngine::Scene {
     }
 
     void PerspectiveCamera::update() {
-        if (m_dirty) {
-            glm::mat4 view = glm::lookAt(m_eye, m_center, m_up);
-            glm::mat4 proj = glm::perspective(m_fov, m_aspect, m_near, m_far);
-            // Vulkan 需要翻转 Y
-            proj[1][1] *= -1;
-            ICamera::update(view, proj); // 调用基类存储矩阵
-            m_dirty = false;
-        }
+        glm::mat4 view = glm::lookAt(m_eye, m_center, m_up);
+        glm::mat4 proj = glm::perspective(m_fov, m_aspect, m_near, m_far);
+        proj[1][1] *= -1;
+        ICamera::update(view, proj); // 调用基类存储矩阵
+        m_dirty = false;
+
     }
 
 }

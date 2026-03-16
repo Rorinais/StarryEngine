@@ -38,6 +38,14 @@ namespace StarryEngine::Assets {
         std::string emissiveTexture;
         std::string opacityTexture;
 
+        RHI::TextureHandle albedoTextureHandle;
+        RHI::TextureHandle normalTextureHandle;
+        RHI::TextureHandle metallicTextureHandle;
+        RHI::TextureHandle roughnessTextureHandle;
+        RHI::TextureHandle occlusionTextureHandle;
+        RHI::TextureHandle emissiveTextureHandle;
+        RHI::TextureHandle opacityTextureHandle;
+
         // --- 着色器变体标志 ---
         bool useNormalMap = false;
         bool useEmissiveMap = false;

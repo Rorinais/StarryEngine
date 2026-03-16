@@ -59,71 +59,82 @@ namespace StarryEngine {
     void Application::createRenderer() {
         m_scene = std::make_shared<Scene::Scene>();
 
-        // 1. 加载模型并获取顶点布局
         auto geometry = std::make_shared<Assets::Geometry>(m_resMgr);
         std::vector<Assets::MaterialParams> params;
-        if (!Assets::ModelLoader::loadFromFile("assets/models/geo.obj", *geometry, params)) {
-            LOG_ERROR("Failed to load model");
+        if (!Assets::ModelLoader::loadFromFile(m_resMgr,"assets/models/Griseo.obj", *geometry, params)) {
             return;
         }
         geometry->uploadToGPU();
         Assets::VertexLayout vertexLayout = geometry->getVertexLayout();
 
-        // 2. 创建 DeferredPipeline，传入顶点布局
-        auto pipeline = std::make_unique<DeferredPipeline>();
-        if (!pipeline->initialize(m_rhi, m_descriptorPool, m_width, m_height, vertexLayout)) {
+        std::vector<std::shared_ptr<Assets::Material>> materials;
+        for (auto& param : params) {
+            auto material = std::make_shared<Assets::Material>(m_resMgr);
+            if (param.name== "body"){
+                material->loadShaders("assets/shaders/core/shader.vert", "assets/shaders/core/shader.frag");
+            }
+            else if (param.name == "brow") {
+                material->loadShaders("assets/shaders/core/shader.vert", "assets/shaders/core/shader.frag");
+            }
+            else if (param.name == "eyes") {
+                material->loadShaders("assets/shaders/core/shader.vert", "assets/shaders/core/shader.frag");
+            }
+            else if (param.name == "face") {
+                material->loadShaders("assets/shaders/core/shader.vert", "assets/shaders/core/shader.frag");
+            }
+            else{
+                material->loadShaders("assets/shaders/core/shader.vert", "assets/shaders/core/shader.frag");
+            }
+
+            material->createAndAddUniformBuffer(sizeof(Assets::Uniforms), 0, "UBO");
+
+            if (!param.albedoTexture.empty()) {
+                material->addTexture(param.albedoTexture, RHI::Format::RGBA8_UNorm, "Albedo", 1);
+            }
+            else {
+                LOG_WARN("Material {} has no albedo texture", param.name);
+            }
+
+            materials.push_back(material);
+        }
+
+        auto pipeline = std::make_unique<DeferredPipeline>(m_rhi, m_descriptorPool, m_width, m_height);
+        if (!pipeline->initialize(vertexLayout)) {
             LOG_ERROR("Failed to initialize pipeline");
             return;
         }
 
-        // 3. 从管线获取描述符集布局
         auto dsLayout = pipeline->getDescriptorSetLayout();
         if (!dsLayout.isValid()) {
             LOG_ERROR("Pipeline descriptor set layout is invalid");
             return;
         }
 
-        // 4. 为每个材质创建对象并初始化
-        std::vector<std::shared_ptr<Assets::Material>> materials;
-        for (size_t i = 0; i < params.size(); ++i) {
-            auto material = std::make_shared<Assets::Material>(m_resMgr);
-            material->loadShaders("assets/shaders/core/shader.vert", "assets/shaders/core/shader.frag");
-
-            // 创建 uniform 缓冲区（binding 0），管线着色器将使用它
-            auto buffer = material->createAndAddUniformBuffer(sizeof(Assets::Uniforms), 0, "UBO");
-            if (!buffer.isValid()) {
-                LOG_ERROR("Failed to create uniform buffer for material {}", i);
-                continue;
-            }
-
-            // 设置外部布局并分配描述符集（set 0）
+        for (auto& material : materials) {
             material->setExternalDescriptorSetLayout(dsLayout);
             if (!material->allocateDescriptorSet(m_descriptorPool, 0)) {
-                LOG_ERROR("Failed to allocate descriptor set for material {}", i);
+                LOG_ERROR("Failed to allocate descriptor set for material");
                 continue;
             }
             material->updateDescriptorSet();
-
-            materials.push_back(material);
         }
 
-        // 5. 创建 RenderObject 并添加到场景
         auto obj = std::make_shared<Scene::RenderObject>();
         obj->geometry = geometry;
         obj->materials = materials;
-        // 缩放并平移物体以适应视锥（根据你的模型大小调整）
-        obj->transform = glm::scale(glm::mat4(1.0f), glm::vec3(1.0f)) *
-            glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, -5.0f));
+        glm::mat4 translation = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 2.5f));
+        glm::mat4 rotation = glm::rotate(glm::mat4(1.0f), 0.0f, glm::vec3(0.0f, 1.0f, 0.0f));
+        glm::mat4 scale = glm::scale(glm::mat4(1.0f), glm::vec3(1.0f));
+        obj->transform = translation * rotation * scale;
+        m_rotatingObject = obj;
         m_scene->addObject(obj);
 
-        // 6. 创建相机
         auto camera = std::make_shared<Scene::PerspectiveCamera>();
-        camera->setPerspective(45.0f, (float)m_width / m_height, 0.1f, 100.0f);
-        camera->lookAt(glm::vec3(5.0f, 5.0f, 5.0f), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        camera->setPerspective(glm::radians(45.0f), (float)m_width / m_height, 0.1f, 100.0f);
+        camera->lookAt(glm::vec3(0.0f, 2.0f, 5.0f), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
         m_scene->addCamera(camera);
         m_scene->setActiveCamera(camera);
 
-        // 7. 创建渲染器并设置已初始化的管线
         m_renderer = std::make_unique<Renderer>(m_rhi, m_descriptorPool, m_scene);
         m_renderer->setPipeline(std::move(pipeline));
     }
@@ -151,10 +162,18 @@ namespace StarryEngine {
             }
             if (m_width == 0 || m_height == 0) continue;
 
-            m_deltaTime = monitor.getDeltaTime();
+            float deltaTime = monitor.getDeltaTime();
+            //m_rotationAngle += deltaTime * glm::radians(90.0f); 
 
-            bool success = m_rhi->renderFrame([this](RHI::RHICommandEncoder* encoder, uint32_t imageIndex) {
-                    m_renderer->renderFrame(encoder, imageIndex, m_deltaTime);
+            //if (m_rotatingObject) {
+            //    glm::mat4 transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, .0f, 0.0f)) *
+            //        glm::rotate(glm::mat4(1.0f), glm::radians(0.f), glm::vec3(0.0f, 1.0f, 0.0f)) *
+            //        glm::scale(glm::mat4(1.0f), glm::vec3(1.0f));
+            //    m_rotatingObject->transform = transform;
+            //}
+
+            bool success = m_rhi->renderFrame([this, deltaTime](RHI::RHICommandEncoder* encoder, uint32_t imageIndex) {
+                    m_renderer->renderFrame(encoder, imageIndex, deltaTime);
              });
             monitor.updateTitle();
         }

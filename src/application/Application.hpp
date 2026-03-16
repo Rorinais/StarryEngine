@@ -33,8 +33,6 @@ namespace StarryEngine {
         bool m_framebufferResized = false;
         uint32_t m_flightFrame = 2;
 
-        float m_deltaTime = 0.0f;
-
         std::shared_ptr<Scene::Scene> m_scene;
         std::unique_ptr<Renderer> m_renderer;
 
@@ -42,5 +40,7 @@ namespace StarryEngine {
         std::shared_ptr<RHI::ResourceManager> m_resMgr;
         RHI::DescriptorPoolHandle m_descriptorPool;
 
+        std::shared_ptr<Scene::RenderObject> m_rotatingObject; // 指向需要旋转的物体
+        float m_rotationAngle = 0.0f;
     };
 } // namespace StarryEngine

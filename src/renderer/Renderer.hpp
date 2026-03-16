@@ -22,9 +22,6 @@ namespace StarryEngine {
 
 		void setPipeline(std::unique_ptr<IPipeline> newPipeline);
 
-		std::unique_ptr<IPipeline> CreateDefaultPipeline(
-			std::shared_ptr<RHI::IRHI> rhi,
-			RHI::DescriptorPoolHandle globalPool, const Assets::VertexLayout& vertexLayout);
 	private:
 		std::shared_ptr<RHI::IRHI> m_rhi;
 		std::shared_ptr<RHI::ResourceManager> m_resMgr;

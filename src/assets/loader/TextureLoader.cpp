@@ -138,6 +138,52 @@ namespace StarryEngine::Assets {
         return result;
     }
 
+    TextureLoadResult TextureLoader::loadTextureFromMemory(
+        const void* data,
+        uint32_t width,
+        uint32_t height,
+        RHI::Format format,
+        const std::string& debugName)
+    {
+        TextureLoadResult result{ RHI::TextureHandle::Null(), RHI::SamplerHandle::Null() };
+
+        if (!data || width == 0 || height == 0) {
+            LOG_ERROR("Invalid parameters for loadTextureFromMemory");
+            return result;
+        }
+
+        // 创建纹理描述
+        RHI::TextureDesc texDesc;
+        texDesc.extent = { width, height, 1 };
+        texDesc.format = format;
+        texDesc.type = RHI::TextureType::Texture2D;
+        texDesc.mipLevels = 1;
+        texDesc.arrayLayers = 1;
+        texDesc.sampleCount = 1;
+        texDesc.allowRenderTarget = false;
+        texDesc.allowDepthStencil = false;
+        texDesc.allowUnorderedAccess = false;
+        texDesc.debugName = debugName.empty() ? "MemoryTexture" : debugName;
+
+        result.texture = m_resMgr->createTexture(texDesc);
+        if (!result.texture.isValid()) {
+            LOG_ERROR("Failed to create texture from memory");
+            return result;
+        }
+
+        // 上传数据（假设像素为 RGBA8，dataSize = width * height * 4）
+        size_t dataSize = width * height * 4;
+        if (!uploadPixels(result.texture, data, dataSize, width, height, 0)) {
+            m_resMgr->destroy(result.texture);
+            result.texture = RHI::TextureHandle::Null();
+            return result;
+        }
+
+        // 创建默认采样器
+        result.sampler = createDefaultSampler(debugName + "_Sampler");
+        return result;
+    }
+
     // ===== 加载立方体贴图 =====
     TextureLoadResult TextureLoader::loadTextureCube(
         const std::vector<std::string>& faceFilepaths,

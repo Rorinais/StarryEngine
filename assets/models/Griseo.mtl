@@ -1,0 +1,53 @@
+# Blender 5.0.1 MTL File: '未命名.blend'
+# www.blender.org
+
+newmtl body
+Ns 250.000000
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+illum 2
+map_Kd E:/Notes/计算机图形学/StarryEngine/assets/models/textures/clothes.png
+map_refl E:/Notes/计算机图形学/StarryEngine/assets/models/textures/mactout.png
+map_d E:/Notes/计算机图形学/StarryEngine/assets/models/textures/clothes.png
+
+newmtl brow
+Ns 250.000000
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 2
+map_Kd E:/Notes/计算机图形学/StarryEngine/assets/models/textures/brow.png
+
+newmtl eyes
+Ns 250.000000
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 2
+map_Kd E:/Notes/计算机图形学/StarryEngine/assets/models/textures/eyes.png
+
+newmtl face
+Ns 250.000000
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 2
+map_Kd E:/Notes/计算机图形学/StarryEngine/assets/models/textures/face.png
+
+newmtl hair
+Ns 250.000000
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.500000
+d 1.000000
+illum 2
+map_Kd E:/Notes/计算机图形学/StarryEngine/assets/models/textures/hair.png

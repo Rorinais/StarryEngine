@@ -18,6 +18,13 @@ namespace StarryEngine::Assets {
             RHI::Format format,
             const std::string& debugName = "");
 
+        TextureLoadResult loadTextureFromMemory(
+            const void* data,
+            uint32_t width,
+            uint32_t height,
+            RHI::Format format,
+            const std::string& debugName = "");
+
         // 加载立方体贴图（需要 6 个文件，顺序：+X, -X, +Y, -Y, +Z, -Z 或根据约定）
         TextureLoadResult loadTextureCube(
             const std::vector<std::string>& faceFilepaths,

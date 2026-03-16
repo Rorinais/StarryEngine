@@ -10,6 +10,9 @@ namespace StarryEngine::RenderGraph {
     public:
         using ISubpassRecorder::ISubpassRecorder;
 
+        using PipelineGetter = std::function<RHI::PipelineHandle(RHI::ShaderHandle, RHI::ShaderHandle, uint32_t)>;
+
+        void setPipelineGetter(PipelineGetter getter) { m_pipelineGetter = getter; }
         void setDrawItems(const std::vector<Scene::DrawItem>& items) { m_drawItems = items; }
         void setPipelineLayout(RHI::PipelineLayoutHandle layout) { m_pipelineLayout = layout; }
 
@@ -17,12 +20,21 @@ namespace StarryEngine::RenderGraph {
             const PassContext& pctx,
             uint32_t subpassIndex,
             uint32_t frameIndex) override {
-            auto* pipelineLayoutPtr = mResMgr->getPipelineLayout(m_pipelineLayout);
-
             for (const auto& item : m_drawItems) {
                 auto geometry = item.geometry;
                 auto material = item.material;
                 if (!geometry || !material) continue;
+
+                if (m_pipelineGetter){
+                    auto vert = material->getVertexShader();
+                    auto frag = material->getFragmentShader();
+                    auto pipeline = m_pipelineGetter(vert, frag, subpassIndex);
+                    if (!pipeline.isValid()) {
+                        LOG_ERROR("Failed to get pipeline for material");
+                        continue;
+                    }
+                    encoder->bindPipeline(mResMgr->getPipeline(pipeline));
+                }
 
                 auto vb = geometry->getVertexBuffer();
                 auto ib = geometry->getIndexBuffer();
@@ -45,6 +57,7 @@ namespace StarryEngine::RenderGraph {
     private:
         std::vector<Scene::DrawItem> m_drawItems;
         RHI::PipelineLayoutHandle m_pipelineLayout;
+        PipelineGetter m_pipelineGetter;
     };
 
     class ImGuiRecorder : public ISubpassRecorder {

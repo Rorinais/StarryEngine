@@ -323,13 +323,9 @@ namespace StarryEngine::RenderGraph {
             RHI::Rect2D scissor{ {0, 0}, {m_width, m_height} };
             encoder->setScissor(scissor);
 
-            // 绑定当前子通道的管线
+            // 如果存在有效管线则绑定，否则不绑定（录制器自己负责）
             if (i < m_pipelines.size() && m_pipelines[i].isValid()) {
                 encoder->bindPipeline(m_resMgr->getPipeline(m_pipelines[i]));
-            }
-            else {
-                LOG_ERROR("Subpass {} has no valid pipeline bound!", i);
-                continue;
             }
 
             PassContext ctx(m_resMgr, m_pipelines, frameIndex, framebuffer);

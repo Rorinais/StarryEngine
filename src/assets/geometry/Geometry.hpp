@@ -38,42 +38,23 @@ namespace StarryEngine::Assets {
         void setSubmeshes(const std::vector<Submesh>& submeshes) { m_submeshes = submeshes; }
         void setVertexLayout(const VertexLayout& layout) { mVertexLayout = layout; }
 
-        std::vector<uint32_t> getBindings() const {return mVertexLayout.getBindings();}
-        RHI::VertexInputState getVertexInputState() const {return mVertexLayout.build();}
+        std::vector<uint32_t> getBindings() const { return mVertexLayout.getBindings(); }
+        RHI::VertexInputState getVertexInputState() const { return mVertexLayout.build(); }
         RHI::BufferHandle getVertexBuffer() const { return m_vertexBuffer; }
         RHI::BufferHandle getIndexBuffer() const { return m_indexBuffer; }
         const std::vector<Submesh>& getSubmeshes() const { return m_submeshes; }
         const std::vector<float>& getVertices() const { return m_vertices; }
         const std::vector<uint32_t>& getIndices() const { return m_indices; }
-
-        //旧函数
-        void setVertexBuffer(uint32_t binding, const std::vector<float>& vertices,
-            const Assets::VertexLayout& layout, const std::string& debugName);
-        void setVertexBuffer(const std::vector<float>& vertices,
-            const Assets::VertexLayout& layout, const std::string& debugName);
-        void setIndexBuffer(const std::vector<uint32_t>& indices, const std::string& debugName);
-        RHI::BufferHandle getVertexBufferHandle(uint32_t binding) const;
-        RHI::BufferHandle getIndexBufferHandle() const { return mIndexBufferHandle; }
-        uint32_t getIndexCount() const { return mIndexCount; }
-        uint32_t getVertexCount() const { return mVertexCount; }
         const VertexLayout& getVertexLayout() const { return mVertexLayout; }
-    private:
 
+    private:
         std::shared_ptr<RHI::ResourceManager> m_resMgr;
         std::vector<float> m_vertices;
         std::vector<uint32_t> m_indices;
         std::vector<Submesh> m_submeshes;
-
         RHI::BufferHandle m_vertexBuffer;
         RHI::BufferHandle m_indexBuffer;
         VertexLayout mVertexLayout;
-
-        //旧
-        std::unordered_map<uint32_t, RHI::BufferHandle> mVertexBufferHandles;
-        RHI::BufferHandle mIndexBufferHandle = RHI::BufferHandle::Null();
-
-        uint32_t mIndexCount = 0;
-        uint32_t mVertexCount = 0;
     };
 
 } // namespace StarryEngine::Assets

@@ -27,8 +27,17 @@ namespace StarryEngine::RHI {
             }
             return BufferHandle::Null();
         }
-        logResourceCreation(ResourceCategory::Buffer, name);
-        return buffers_.create(std::move(resource), name, debugTag);
+
+        auto handle = buffers_.create(std::move(resource), name, debugTag);
+        if (handle.isValid()) {
+            logResourceCreation(ResourceCategory::Buffer, desc.debugName);
+        }
+        else {
+            if (debugMode_) {
+                std::cerr << "[ResourceManager] Failed to register buffer (name conflict?): " << name << std::endl;
+            }
+        }
+        return handle;
     }
 
     //TextureHandle ResourceManager::createTexture(const TextureDesc& desc,
@@ -56,8 +65,16 @@ namespace StarryEngine::RHI {
             return TextureHandle::Null();
         }
 
-        logResourceCreation(ResourceCategory::Texture, name);
-        return textures_.create(std::move(resource), name, debugTag);
+        auto handle = textures_.create(std::move(resource), name, debugTag);
+        if (handle.isValid()) {
+            logResourceCreation(ResourceCategory::Texture, desc.debugName);
+        }
+        else {
+            if (debugMode_) {
+                std::cerr << "[ResourceManager] Failed to register texture (name conflict?): " << name << std::endl;
+            }
+        }
+        return handle;
     }
 
     PipelineHandle ResourceManager::createGraphicsPipeline(const GraphicsPipelineDesc& desc,
@@ -70,8 +87,17 @@ namespace StarryEngine::RHI {
             }
             return PipelineHandle::Null();
         }
-        logResourceCreation(ResourceCategory::Pipeline, name);
-        return pipelines_.create(std::move(resource), name, debugTag);
+
+        auto handle = pipelines_.create(std::move(resource), name, debugTag);
+        if (handle.isValid()) {
+            logResourceCreation(ResourceCategory::Pipeline, desc.debugName);
+        }
+        else {
+            if (debugMode_) {
+                std::cerr << "[ResourceManager] Failed to register  graphics pipeline (name conflict?): " << name << std::endl;
+            }
+        }
+        return handle;
     }
 
     PipelineHandle ResourceManager::createComputePipeline(const ComputePipelineDesc& desc,
@@ -84,8 +110,17 @@ namespace StarryEngine::RHI {
             }
             return PipelineHandle::Null();
         }
-        logResourceCreation(ResourceCategory::Pipeline, name);
-        return pipelines_.create(std::move(resource), name, debugTag);
+
+        auto handle = pipelines_.create(std::move(resource), name, debugTag);
+        if (handle.isValid()) {
+            logResourceCreation(ResourceCategory::Pipeline, desc.debugName);
+        }
+        else {
+            if (debugMode_) {
+                std::cerr << "[ResourceManager] Failed to register compute pipeline (name conflict?): " << name << std::endl;
+            }
+        }
+        return handle;
     }
 
     PipelineLayoutHandle ResourceManager::createPipelineLayout(const PipelineLayoutDesc& desc,
@@ -98,8 +133,16 @@ namespace StarryEngine::RHI {
             }
             return PipelineLayoutHandle::Null();
         }
-        logResourceCreation(ResourceCategory::PipelineLayout, name);
-        return pipelineLayouts_.create(std::move(resource), name, debugTag);
+        auto handle = pipelineLayouts_.create(std::move(resource), name, debugTag);
+        if (handle.isValid()) {
+            logResourceCreation(ResourceCategory::PipelineLayout, desc.debugName);
+        }
+        else {
+            if (debugMode_) {
+                std::cerr << "[ResourceManager] Failed to register pipeline layout (name conflict?): " << name << std::endl;
+            }
+        }
+        return handle;
     }
 
 
@@ -111,19 +154,22 @@ namespace StarryEngine::RHI {
         auto resource = factory_->createShader(desc);
 
         if (!resource) {
-            std::cerr << "[ResourceManager] ERROR: Factory returned null resource for shader: "
-                << desc.debugName << std::endl;
+            if (debugMode_) {
+                std::cerr << "[ResourceManager] Failed to create shader: "<< name << std::endl;
+            }
             return ShaderHandle::Null();
         }
 
-        // 检查资源是否有效
-        if (!resource->isValid()) {
-            std::cerr << "[ResourceManager] WARNING: Created shader is not valid: "
-                << desc.debugName << std::endl;
+        auto handle = shaders_.create(std::move(resource), name, debugTag);
+        if (handle.isValid()) {
+            logResourceCreation(ResourceCategory::Shader, desc.debugName);
         }
-
-        logResourceCreation(ResourceCategory::Shader, name);
-        return shaders_.create(std::move(resource), name, debugTag);
+        else {
+            if (debugMode_) {
+                std::cerr << "[ResourceManager] Failed to register shader (name conflict?): " << name << std::endl;
+            }
+        }
+        return handle;
     }
 
     SamplerHandle ResourceManager::createSampler(const SamplerDesc& desc,
@@ -136,8 +182,16 @@ namespace StarryEngine::RHI {
             }
             return SamplerHandle::Null();
         }
-        logResourceCreation(ResourceCategory::Sampler, name);
-        return samplers_.create(std::move(resource), name, debugTag);
+        auto handle = samplers_.create(std::move(resource), name, debugTag);
+        if (handle.isValid()) {
+            logResourceCreation(ResourceCategory::Sampler, desc.debugName);
+        }
+        else {
+            if (debugMode_) {
+                std::cerr << "[ResourceManager] Failed to register sampler (name conflict?): " << name << std::endl;
+            }
+        }
+        return handle;
     }
 
     RenderPassHandle ResourceManager::createRenderPass(const RenderPassDesc& desc,
@@ -150,8 +204,16 @@ namespace StarryEngine::RHI {
             }
             return RenderPassHandle::Null();
         }
-        logResourceCreation(ResourceCategory::RenderPass, name);
-        return renderPasses_.create(std::move(resource), name, debugTag);
+        auto handle = renderPasses_.create(std::move(resource), name, debugTag);
+        if (handle.isValid()) {
+            logResourceCreation(ResourceCategory::RenderPass, desc.debugName);
+        }
+        else {
+            if (debugMode_) {
+                std::cerr << "[ResourceManager] Failed to register render pass (name conflict?): " << name << std::endl;
+            }
+        }
+        return handle;
     }
 
     FramebufferHandle ResourceManager::createFramebuffer(const FramebufferDesc& desc,
@@ -164,8 +226,16 @@ namespace StarryEngine::RHI {
             }
             return FramebufferHandle::Null();
         }
-        logResourceCreation(ResourceCategory::Framebuffer, name);
-        return framebuffers_.create(std::move(resource), name, debugTag);
+        auto handle = framebuffers_.create(std::move(resource), name, debugTag);
+        if (handle.isValid()) {
+            logResourceCreation(ResourceCategory::Framebuffer, desc.debugName);
+        }
+        else {
+            if (debugMode_) {
+                std::cerr << "[ResourceManager] Failed to register framebuffer (name conflict?): " << name << std::endl;
+            }
+        }
+        return handle;
     }
 
     // ==================== 其他资源创建方法 ====================
@@ -179,8 +249,16 @@ namespace StarryEngine::RHI {
             }
             return DescriptorSetHandle::Null();
         }
-        logResourceCreation(ResourceCategory::DescriptorSet, name);
-        return descriptorSets_.create(std::move(resource), name, debugTag);
+        auto handle = descriptorSets_.create(std::move(resource), name, debugTag);
+        if (handle.isValid()) {
+            logResourceCreation(ResourceCategory::DescriptorSet, desc.debugName);
+        }
+        else {
+            if (debugMode_) {
+                std::cerr << "[ResourceManager] Failed to register buffer (name conflict?): " << name << std::endl;
+            }
+        }
+        return handle;
     }
 
     DescriptorPoolHandle ResourceManager::createDescriptorPool(const DescriptorPoolDesc& desc,
@@ -193,8 +271,16 @@ namespace StarryEngine::RHI {
             }
             return DescriptorPoolHandle::Null();
         }
-        logResourceCreation(ResourceCategory::DescriptorPool, name);
-        return descriptorPools_.create(std::move(resource), name, debugTag);
+        auto handle = descriptorPools_.create(std::move(resource), name, debugTag);
+        if (handle.isValid()) {
+            logResourceCreation(ResourceCategory::DescriptorPool, desc.debugName);
+        }
+        else {
+            if (debugMode_) {
+                std::cerr << "[ResourceManager] Failed to register buffer (name conflict?): " << name << std::endl;
+            }
+        }
+        return handle;
     }
 
     DescriptorSetLayoutHandle ResourceManager::createDescriptorSetLayout(const DescriptorSetLayoutDesc& desc,
@@ -207,8 +293,16 @@ namespace StarryEngine::RHI {
             }
             return DescriptorSetLayoutHandle::Null();
         }
-        logResourceCreation(ResourceCategory::DescriptorSetLayout, name);
-        return descriptorSetLayouts_.create(std::move(resource), name, debugTag);
+        auto handle = descriptorSetLayouts_.create(std::move(resource), name, debugTag);
+        if (handle.isValid()) {
+            logResourceCreation(ResourceCategory::DescriptorSetLayout, desc.debugName);
+        }
+        else {
+            if (debugMode_) {
+                std::cerr << "[ResourceManager] Failed to register buffer (name conflict?): " << name << std::endl;
+            }
+        }
+        return handle;
     }
 
     //CommandBufferHandle ResourceManager::createCommandBuffer(const CommandBufferDesc& desc,
@@ -388,7 +482,13 @@ namespace StarryEngine::RHI {
 
     // ==================== 资源获取方法 ====================
     RHIBuffer* ResourceManager::getBuffer(BufferHandle handle) {
-        return buffers_.getData(handle);
+        auto* entry = buffers_.getEntry(handle);
+        if (!entry || !entry->isValid()) {
+            LOG_ERROR("Attempt to get invalid buffer handle: index={}, gen={}",
+                handle.getIndex(), handle.getGeneration());
+            return nullptr;
+        }
+        return entry->data.get();
     }
 
     const RHIBuffer* ResourceManager::getBuffer(BufferHandle handle) const {
@@ -1279,7 +1379,7 @@ namespace StarryEngine::RHI {
 
     void ResourceManager::logResourceCreation(ResourceCategory category, const std::string& name) {
         if (!debugMode_) return;
-        LOG_DEBUG("Created resource: Category={}, ResourceType={}{}",
+        LOG_INFO("Created resource: Category={}, ResourceType={}{}",
             static_cast<int>(category),
             ResourceCategoryToString(category),
             name.empty() ? "" : (", Name='" + name + "'"));
@@ -1289,7 +1389,7 @@ namespace StarryEngine::RHI {
         if (!debugMode_) return;
 
         //std::lock_guard<std::mutex> lock(statsMutex_);
-        LOG_DEBUG("Created resource: Category={}, ResourceType={}{}",
+        LOG_INFO("Created resource: Category={}, ResourceType={}{}",
             static_cast<int>(category),
             ResourceCategoryToString(category),
             name.empty() ? "" : (", Name='" + name + "'"));
