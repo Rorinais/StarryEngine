@@ -29,7 +29,7 @@ namespace StarryEngine::Assets {
             return false;
         }
 
-        // 临时存储：所有顶点数据（最终会拼接到一个vector中）
+        // 临时存储：所有顶点数据
         std::vector<float> vertices;
         std::vector<uint32_t> indices;
         std::vector<Submesh> submeshes;

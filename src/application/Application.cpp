@@ -98,15 +98,15 @@ namespace StarryEngine {
             materials.push_back(material);
         }
 
-        auto pipeline = std::make_unique<DeferredPipeline>(m_rhi, m_descriptorPool, m_width, m_height);
-        if (!pipeline->initialize(vertexLayout)) {
-            LOG_ERROR("Failed to initialize pipeline");
+        auto renderPath = std::make_unique<DeferredRenderPath>(m_rhi, m_descriptorPool, m_width, m_height);
+        if (!renderPath->initialize(vertexLayout)) {
+            LOG_ERROR("Failed to initialize renderPath");
             return;
         }
 
-        auto dsLayout = pipeline->getDescriptorSetLayout();
+        auto dsLayout = renderPath->getDescriptorSetLayout();
         if (!dsLayout.isValid()) {
-            LOG_ERROR("Pipeline descriptor set layout is invalid");
+            LOG_ERROR("renderPath descriptor set layout is invalid");
             return;
         }
 
@@ -136,7 +136,7 @@ namespace StarryEngine {
         m_scene->setActiveCamera(camera);
 
         m_renderer = std::make_unique<Renderer>(m_rhi, m_descriptorPool, m_scene);
-        m_renderer->setPipeline(std::move(pipeline));
+        m_renderer->setRenderPath(std::move(renderPath));
     }
 
     void Application::run() {

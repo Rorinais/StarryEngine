@@ -56,7 +56,6 @@ namespace StarryEngine::RHI {
     };
 
     // ==================== 纹理接口 ====================
-// ==================== 纹理接口 ====================
     class RHITexture : public IResource {
     public:
         virtual ~RHITexture() = default;

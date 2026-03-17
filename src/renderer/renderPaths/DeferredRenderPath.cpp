@@ -1,8 +1,8 @@
-#include"DeferredPipeline.hpp"
+#include"DeferredRenderPath.hpp"
 #include "../../logging/Logger.hpp"
 
 namespace StarryEngine {
-    bool DeferredPipeline::initialize(const Assets::VertexLayout& vertexLayout) {
+    bool DeferredRenderPath::initialize(const Assets::VertexLayout& vertexLayout) {
         m_vertexLayout = vertexLayout;
 
         m_recorder = std::make_shared<RenderGraph::MeshDrawRecorder>(m_resMgr);
@@ -46,7 +46,7 @@ namespace StarryEngine {
         return true;
     }
 
-    bool DeferredPipeline::createRenderGraph() {
+    bool DeferredRenderPath::createRenderGraph() {
         // 创建 RenderGraph
         m_renderGraph = std::make_shared<RenderGraph::RenderGraph>(m_rhi);
         m_renderGraph->setSwapchainImageCount(m_rhi->getSwapChainImageCount());
@@ -116,7 +116,7 @@ namespace StarryEngine {
         return true;
     }
 
-    bool DeferredPipeline::createGridResources() {
+    bool DeferredRenderPath::createGridResources() {
         // ---------- 1. 生成网格顶点和索引数据（与之前相同）----------
         struct GridVertex {
             glm::vec3 position;
@@ -213,7 +213,7 @@ namespace StarryEngine {
         return true;
     }
 
-    RHI::PipelineHandle DeferredPipeline::getOrCreatePipeline(RHI::ShaderHandle vertShader, RHI::ShaderHandle fragShader, uint32_t subpassIndex) {
+    RHI::PipelineHandle DeferredRenderPath::getOrCreatePipeline(RHI::ShaderHandle vertShader, RHI::ShaderHandle fragShader, uint32_t subpassIndex) {
         // 计算哈希（简单组合）
         size_t hash = 0;
         hash ^= std::hash<RHI::ShaderHandle>{}(vertShader) << 1;
@@ -235,8 +235,8 @@ namespace StarryEngine {
         desc.depthStencil.depthWriteEnable = true;
         desc.depthStencil.depthCompareOp = RHI::CompareOp::Less;
         // 视口和裁剪设为动态，但需要提供默认值（会被动态状态覆盖）
-        desc.viewport.viewports = { {0.0f, 0.0f, (float)m_width, (float)m_height, 0.0f, 1.0f} };
-        desc.viewport.scissors = { {{0, 0}, {m_width, m_height}} };
+        desc.viewport.viewports = { RHI::Viewport() };
+        desc.viewport.scissors = { RHI::Rect2D() };
         desc.colorBlend.attachments = { RHI::BlendAttachmentState{} };
         desc.dynamicStates = { RHI::DynamicState::Viewport, RHI::DynamicState::Scissor };
 
@@ -247,7 +247,7 @@ namespace StarryEngine {
         return handle;
     }
 
-    void DeferredPipeline::update(const Scene::Scene& scene, float deltaTime) {
+    void DeferredRenderPath::update(const Scene::Scene& scene, float deltaTime) {
         auto camera = scene.getActiveCamera();
         if (!camera) return;
         camera->update();
@@ -269,11 +269,12 @@ namespace StarryEngine {
 
                 // 创建绘制项
                 drawItems.push_back({
+                    obj->transform,
                     obj->geometry,
                     material,
                     submesh.indexOffset,
                     submesh.indexCount,
-                    obj->transform
+                    0
                     });
 
                 // 更新该材质的 uniform 缓冲区（假设 binding 0 是 uniform）
@@ -320,11 +321,11 @@ namespace StarryEngine {
         m_gridRecorder->setDrawItems(gridDrawItems);
     }
 
-    void DeferredPipeline::render(RHI::RHICommandEncoder* encoder, uint32_t frameIndex) {
+    void DeferredRenderPath::render(RHI::RHICommandEncoder* encoder, uint32_t frameIndex) {
         m_renderGraph->execute(frameIndex, encoder);
     }
 
-    void DeferredPipeline::onResize(uint32_t width, uint32_t height) {
+    void DeferredRenderPath::onResize(uint32_t width, uint32_t height) {
         m_width = width;
         m_height = height;
     }

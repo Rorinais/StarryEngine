@@ -29,7 +29,6 @@ namespace StarryEngine::RHI {
         ShaderStage getStage() const override { return mDesc.stage; }
         const std::string& getEntryPoint() const override { return mDesc.entryPoint; }
 
-        // TODO
         bool hasReflectionData() const override { return false; }
         const void* getReflectionData() const override { return nullptr; }
         void setDefines(const std::vector<std::string>& defines) override{}

@@ -1,5 +1,5 @@
 #pragma once
-#include "IPipeline.hpp"
+#include "IRenderPath.hpp"
 #include "../graph/RenderGraph.hpp"
 #include "../subpassRecorder/GbufferRecorder.hpp"
 #include "../../scene/Scene.hpp"
@@ -8,9 +8,9 @@
 
 namespace StarryEngine {
 
-    class DeferredPipeline : public IPipeline {
+    class DeferredRenderPath : public IRenderPath {
     public:
-        DeferredPipeline(std::shared_ptr<RHI::IRHI> rhi,
+        DeferredRenderPath(std::shared_ptr<RHI::IRHI> rhi,
             RHI::DescriptorPoolHandle globalPool,
             uint32_t width, uint32_t height)
             :m_rhi(rhi),m_globalPool(globalPool),

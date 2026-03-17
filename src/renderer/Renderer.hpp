@@ -5,7 +5,7 @@
 #include "../scene/Scene.hpp"
 #include "graph/RenderGraph.hpp"
 #include "backend/RHIFactory.hpp"
-#include "pipelines/DeferredPipeline.hpp"
+#include "renderPaths/DeferredRenderPath.hpp"
 
 namespace StarryEngine {
 	class Renderer {
@@ -20,14 +20,22 @@ namespace StarryEngine {
 
 		void onResize(uint32_t width, uint32_t height);
 
-		void setPipeline(std::unique_ptr<IPipeline> newPipeline);
+		void setRenderPath(std::unique_ptr<IRenderPath> newRenderPath);
+
+		//解析场景，将数据拆分为管线描述和实时更新的数据
+		void analysisSecne();
+
+		//全局的描述符布局，MVP矩阵，
+		void createGlobalSetLayout();
 
 	private:
 		std::shared_ptr<RHI::IRHI> m_rhi;
 		std::shared_ptr<RHI::ResourceManager> m_resMgr;
 		RHI::DescriptorPoolHandle m_globalPool;
 		std::shared_ptr<Scene::Scene> m_scene;
-		std::unique_ptr<IPipeline> m_pipeline;
+		std::unique_ptr<IRenderPath> m_renderPath;
+
+		RHI::DescriptorSetLayoutHandle m_globalSetLayout;
 	};
 
 }

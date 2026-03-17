@@ -34,7 +34,7 @@ namespace StarryEngine::Scene {
     void Scene::updateObjectClassification(std::shared_ptr<RenderObject> object) {
         bool hasTransparent = false;
         for (auto& mat : object->materials) {
-            if (mat->isTransparent()) { // 需要在 Material 类中定义 isTransparent()
+            if (mat->isTransparent()) { 
                 hasTransparent = true;
                 break;
             }

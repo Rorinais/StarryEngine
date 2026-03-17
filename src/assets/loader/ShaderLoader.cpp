@@ -73,29 +73,29 @@ namespace StarryEngine::Assets {
     bool ShaderLoader::reflectAndCreateLayouts(const std::vector<uint32_t>& spirv,
         ShaderCreateInfo& outInfo) {
         try {
-            spirv_cross::CompilerGLSL compiler(spirv);
-            auto resources = compiler.get_shader_resources();
+            auto compiler = std::make_unique<spirv_cross::CompilerGLSL>(spirv);
+            auto resources = std::move(compiler->get_shader_resources());
 
             std::unordered_map<uint32_t, std::vector<RHI::DescriptorSetLayoutBinding>> setBindings;
 
             for (auto& res : resources.uniform_buffers) {
-                uint32_t set = compiler.get_decoration(res.id, spv::DecorationDescriptorSet);
-                uint32_t binding = compiler.get_decoration(res.id, spv::DecorationBinding);
+                uint32_t set = compiler->get_decoration(res.id, spv::DecorationDescriptorSet);
+                uint32_t binding = compiler->get_decoration(res.id, spv::DecorationBinding);
                 RHI::DescriptorSetLayoutBinding b;
                 b.binding = binding;
                 b.type = RHI::DescriptorType::UniformBuffer;
-                b.stageFlags = static_cast<RHI::ShaderStage>(getShaderStageFromSpirv(compiler));
+                b.stageFlags = static_cast<RHI::ShaderStage>(getShaderStageFromSpirv(*compiler));
                 b.count = 1;
                 setBindings[set].push_back(b);
             }
 
             for (auto& res : resources.sampled_images) {
-                uint32_t set = compiler.get_decoration(res.id, spv::DecorationDescriptorSet);
-                uint32_t binding = compiler.get_decoration(res.id, spv::DecorationBinding);
+                uint32_t set = compiler->get_decoration(res.id, spv::DecorationDescriptorSet);
+                uint32_t binding = compiler->get_decoration(res.id, spv::DecorationBinding);
                 RHI::DescriptorSetLayoutBinding b;
                 b.binding = binding;
                 b.type = RHI::DescriptorType::CombinedImageSampler;
-                b.stageFlags = static_cast<RHI::ShaderStage>(getShaderStageFromSpirv(compiler));
+                b.stageFlags = static_cast<RHI::ShaderStage>(getShaderStageFromSpirv(*compiler));
                 b.count = 1;
                 setBindings[set].push_back(b);
             }
@@ -115,8 +115,8 @@ namespace StarryEngine::Assets {
 
             if (!resources.stage_inputs.empty()) {
                 for (auto& res : resources.stage_inputs) {
-                    uint32_t location = compiler.get_decoration(res.id, spv::DecorationLocation);
-                    auto type = compiler.get_type(res.type_id);
+                    uint32_t location = compiler->get_decoration(res.id, spv::DecorationLocation);
+                    auto type = compiler->get_type(res.type_id);
                     RHI::VertexAttribute attr;
                     attr.location = location;
                     attr.binding = 0; 

@@ -4,7 +4,6 @@
 #include"loader/TextureLoader.hpp"
 #include"geometry/Geometry.hpp"
 #include"material/Material.hpp"
-#include"material/shader/Shader.hpp"
 
 namespace StarryEngine::Assets {
 

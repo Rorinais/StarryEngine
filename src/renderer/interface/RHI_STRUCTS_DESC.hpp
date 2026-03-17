@@ -1550,10 +1550,6 @@ namespace StarryEngine::RHI {
         // 动态状态
         std::vector<DynamicState> dynamicStates;  
 
-        // 渲染目标
-        std::vector<Format> renderTargetFormats;
-        Format depthStencilFormat = Format::Undefined;
-
         // 管线布局
         PipelineLayoutHandle pipelineLayoutHandle;
 
@@ -1571,8 +1567,6 @@ namespace StarryEngine::RHI {
                 colorBlend == other.colorBlend &&
                 multisample == other.multisample &&
                 dynamicStates == other.dynamicStates &&
-                renderTargetFormats == other.renderTargetFormats &&
-                depthStencilFormat == other.depthStencilFormat &&
                 viewport == other.viewport &&
                 pipelineLayoutHandle == other.pipelineLayoutHandle;
         }

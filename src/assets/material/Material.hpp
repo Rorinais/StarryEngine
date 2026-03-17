@@ -22,8 +22,6 @@ namespace std {
 }
 
 namespace StarryEngine::Assets {
-
-    // 描述符资源信息（与之前相同）
     struct DescriptorResourceInfo {
         std::variant<
             std::monostate,

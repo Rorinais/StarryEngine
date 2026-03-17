@@ -5,6 +5,7 @@
 namespace StarryEngine::Scene {
 	class ICamera {
 	public:
+		ICamera() : m_viewMatrix(glm::mat4(1.0f)), m_projMatrix(glm::mat4(1.0f)) {}
 		virtual void update(glm::mat4 viewMat,glm::mat4 projMat){
 			m_viewMatrix = viewMat;
 			m_projMatrix = projMat;

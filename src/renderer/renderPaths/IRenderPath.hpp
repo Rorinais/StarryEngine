@@ -7,9 +7,9 @@
 #include "../backend/RHIFactory.hpp"
 
 namespace StarryEngine {
-    class IPipeline {
+    class IRenderPath {
     public:
-        virtual ~IPipeline() = default;
+        virtual ~IRenderPath() = default;
 
         //virtual bool initialize(std::shared_ptr<RHI::IRHI> rhi,
         //    RHI::DescriptorPoolHandle globalPool,
