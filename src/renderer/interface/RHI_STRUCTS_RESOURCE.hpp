@@ -163,7 +163,7 @@ namespace StarryEngine::RHI {
         virtual ~RHIPipeline() = default;
 
         virtual PipelineType getType() const = 0;
-        virtual RHIPipelineLayout* getLayout() const = 0;
+        virtual PipelineLayoutHandle getLayout() const = 0;
 
         // 状态查询
         virtual bool isComputePipeline() const = 0;

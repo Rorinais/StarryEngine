@@ -2,15 +2,16 @@
 #include "../../logging/Logger.hpp"
 
 namespace StarryEngine {
-    bool DeferredRenderPath::initialize(const Assets::VertexLayout& vertexLayout) {
-        m_vertexLayout = vertexLayout;
+    bool DeferredRenderPath::initialize(RHI::DescriptorSetLayoutHandle globalSetLayout) {
+        m_globalSetLayout = globalSetLayout;
 
         m_recorder = std::make_shared<RenderGraph::MeshDrawRecorder>(m_resMgr);
         m_gridRecorder = std::make_shared<RenderGraph::MeshDrawRecorder>(m_resMgr);
 
+        // 创建材质私有布局（set 1）
         RHI::DescriptorSetLayoutDesc layoutDesc;
         layoutDesc.bindings = {
-            {0, RHI::DescriptorType::UniformBuffer, 1, RHI::ShaderStage::Vertex | RHI::ShaderStage::Fragment},
+            {0, RHI::DescriptorType::UniformBuffer, 1, RHI::ShaderStage::Vertex | RHI::ShaderStage::Fragment}, // 材质参数 UBO
             {1, RHI::DescriptorType::CombinedImageSampler, 1, RHI::ShaderStage::Fragment}
         };
         m_descriptorSetLayout = m_resMgr->createDescriptorSetLayout(layoutDesc);
@@ -19,16 +20,36 @@ namespace StarryEngine {
             return false;
         }
 
+        // 创建普通物体的管线布局：set 0 全局 + set 1 材质布局
         RHI::PipelineLayoutDesc pipelineLayoutDesc;
-        pipelineLayoutDesc.descriptorSetLayouts = { m_descriptorSetLayout };
+        pipelineLayoutDesc.descriptorSetLayouts = { m_globalSetLayout, m_descriptorSetLayout };
+
+        RHI::PushConstantRange pcRange;
+        pcRange.stage = RHI::ShaderStage::Vertex;   // 只在顶点着色器使用
+        pcRange.offset = 0;
+        pcRange.size = sizeof(glm::mat4);                 // 模型矩阵大小
+        pipelineLayoutDesc.pushConstants = { pcRange };
+
         m_pipelineLayout = m_resMgr->createPipelineLayout(pipelineLayoutDesc);
         if (!m_pipelineLayout.isValid()) {
             LOG_ERROR("Failed to create pipeline layout");
             return false;
         }
 
-        m_recorder->setPipelineLayout(m_pipelineLayout);
-        m_gridRecorder->setPipelineLayout(m_pipelineLayout);
+        // 创建网格专用的管线布局：set 0 全局 + set 1 为空（使用空布局）
+        RHI::DescriptorSetLayoutDesc emptyLayoutDesc; // 默认无 bindings
+        RHI::DescriptorSetLayoutHandle emptyLayout = m_resMgr->createDescriptorSetLayout(emptyLayoutDesc);
+        if (!emptyLayout.isValid()) {
+            LOG_ERROR("Failed to create empty descriptor set layout");
+            return false;
+        }
+
+        pipelineLayoutDesc.descriptorSetLayouts = { m_globalSetLayout, emptyLayout };
+        m_pipelineLayoutGrid = m_resMgr->createPipelineLayout(pipelineLayoutDesc);
+        if (!m_pipelineLayoutGrid.isValid()) {
+            LOG_ERROR("Failed to create pipeline layout for grid");
+            return false;
+        }
 
         if (!createGridResources()) {
             LOG_ERROR("Failed to create grid resources");
@@ -38,10 +59,6 @@ namespace StarryEngine {
         if (!createRenderGraph()) {
             return false;
         }
-
-        m_recorder->setPipelineGetter([this](RHI::ShaderHandle vert, RHI::ShaderHandle frag, uint32_t subpassIndex) {
-            return this->getOrCreatePipeline(vert, frag,subpassIndex);
-            });
 
         return true;
     }
@@ -202,43 +219,43 @@ namespace StarryEngine {
         // ---------- 3. 创建网格材质（与之前相同）----------
         m_gridMaterial = std::make_shared<Assets::Material>(m_resMgr);
         m_gridMaterial->loadShaders("assets/shaders/core/gridShader.vert", "assets/shaders/core/gridShader.frag");
-        m_gridMaterial->setExternalDescriptorSetLayout(m_descriptorSetLayout);
-        m_gridMaterial->createAndAddUniformBuffer(sizeof(Assets::Uniforms), 0, "GridUBO");
-        if (!m_gridMaterial->allocateDescriptorSet(m_globalPool, 0)) {
+        RHI::DescriptorSetLayoutDesc emptyLayoutDesc;
+        RHI::DescriptorSetLayoutHandle emptyLayout = m_resMgr->createDescriptorSetLayout(emptyLayoutDesc);
+        m_gridMaterial->setExternalDescriptorSetLayout(emptyLayout);
+
+        if (!m_gridMaterial->allocateDescriptorSet(m_globalPool, 1)) {
             LOG_ERROR("Failed to allocate descriptor set for grid material");
             return false;
         }
-        m_gridMaterial->updateDescriptorSet();
 
         return true;
     }
 
-    RHI::PipelineHandle DeferredRenderPath::getOrCreatePipeline(RHI::ShaderHandle vertShader, RHI::ShaderHandle fragShader, uint32_t subpassIndex) {
-        // 计算哈希（简单组合）
-        size_t hash = 0;
-        hash ^= std::hash<RHI::ShaderHandle>{}(vertShader) << 1;
-        hash ^= std::hash<RHI::ShaderHandle>{}(fragShader);
+    RHI::PipelineHandle DeferredRenderPath::getOrCreatePipeline(const Scene::GraphicsPipelineState& state,
+        RHI::PipelineLayoutHandle layout) {
+        size_t hash = std::hash<Scene::GraphicsPipelineState>{}(state);
+        hash ^= std::hash<RHI::PipelineLayoutHandle>{}(layout);
         auto it = m_pipelineCache.find(hash);
         if (it != m_pipelineCache.end()) return it->second;
 
-        // 创建新管线
         RHI::GraphicsPipelineDesc desc;
-        desc.vertexShader = vertShader;
-        desc.fragmentShader = fragShader;
-        desc.vertexInput = m_vertexLayout.build();
-        desc.pipelineLayoutHandle = m_pipelineLayout;
-        desc.renderPass = m_renderPassHandle;
-        desc.subpass = subpassIndex;
-        // 设置默认渲染状态
-        desc.rasterizer.cullMode = RHI::CullMode::None;
-        desc.depthStencil.depthTestEnable = true;
-        desc.depthStencil.depthWriteEnable = true;
-        desc.depthStencil.depthCompareOp = RHI::CompareOp::Less;
-        // 视口和裁剪设为动态，但需要提供默认值（会被动态状态覆盖）
-        desc.viewport.viewports = { RHI::Viewport() };
-        desc.viewport.scissors = { RHI::Rect2D() };
-        desc.colorBlend.attachments = { RHI::BlendAttachmentState{} };
-        desc.dynamicStates = { RHI::DynamicState::Viewport, RHI::DynamicState::Scissor };
+        desc.vertexShader = state.vertexShader;
+        desc.fragmentShader = state.fragmentShader;
+        desc.vertexInput = state.vertexInput;
+        desc.pipelineLayoutHandle = layout;
+        desc.renderPass = state.renderPass;
+        desc.subpass = state.subpassIndex;
+        desc.rasterizer.cullMode = state.cullMode;
+        desc.rasterizer.frontFace = state.frontFace;
+        desc.rasterizer.lineWidth = state.lineWidth;
+        desc.depthStencil.depthTestEnable = state.depthTestEnable;
+        desc.depthStencil.depthWriteEnable = state.depthWriteEnable;
+        desc.depthStencil.depthCompareOp = state.depthCompareOp;
+        desc.topology = state.topology;
+        desc.viewport.viewports = state.viewports;
+        desc.viewport.scissors = state.scissors;
+        desc.colorBlend.attachments = state.attachments;
+        desc.dynamicStates = state.dynamicStates;
 
         auto handle = m_resMgr->createGraphicsPipeline(desc);
         if (handle.isValid()) {
@@ -247,78 +264,51 @@ namespace StarryEngine {
         return handle;
     }
 
-    void DeferredRenderPath::update(const Scene::Scene& scene, float deltaTime) {
-        auto camera = scene.getActiveCamera();
-        if (!camera) return;
-        camera->update();
+    void DeferredRenderPath::setDrawItems(const Scene::AnalysisSceneResult& secneData) {
+        m_cachedDrawItems = secneData.drawItems;
+        m_cachedPipelines = secneData.PSO;
+    }
 
-        glm::mat4 view = camera->getViewMatrix();
-        glm::mat4 proj = camera->getProjMatrix();
+    void DeferredRenderPath::update(const glm::mat4& view, const glm::mat4& proj, float deltaTime) {
+        // 普通物体使用 m_pipelineLayout
+        std::vector<RHI::PipelineHandle> geomPipelines;
+        geomPipelines.reserve(m_cachedPipelines.size());
+        for (auto& pso : m_cachedPipelines) {
+            pso->renderPass = m_renderPassHandle;
+            pso->subpassIndex = 1;
+            geomPipelines.push_back(getOrCreatePipeline(*pso, m_pipelineLayout));  // 传入普通布局
+        }
+        m_recorder->setPipelines(geomPipelines);
+        m_recorder->setDrawItems(m_cachedDrawItems);
 
-        std::vector<Scene::DrawItem> drawItems;
-        auto objects = scene.getOpaqueObjects();
+        // 网格子通道（索引 0）使用 m_pipelineLayoutGrid
+        if (m_gridGeometry && m_gridMaterial) {
+            Scene::GraphicsPipelineState gridPso = m_gridMaterial->generatePipelineState(m_gridGeometry->getVertexInputState());
+            gridPso.renderPass = m_renderPassHandle;
+            gridPso.subpassIndex = 0;
+            gridPso.topology = RHI::PrimitiveTopology::LineList;
+            RHI::PipelineHandle gridPipeline = getOrCreatePipeline(gridPso, m_pipelineLayoutGrid);  // 传入网格布局
 
-        for (auto& obj : objects) {
-            if (!obj->geometry) continue;
-            const auto& submeshes = obj->geometry->getSubmeshes();
-            for (size_t i = 0; i < submeshes.size(); ++i) {
-                const auto& submesh = submeshes[i];
-                if (submesh.materialIndex >= obj->materials.size()) continue;
-                auto material = obj->materials[submesh.materialIndex];
-                if (!material) continue;
+            std::vector<RHI::PipelineHandle> gridPipelines = { gridPipeline };
+            m_gridRecorder->setPipelines(gridPipelines);
 
-                // 创建绘制项
-                drawItems.push_back({
-                    obj->transform,
-                    obj->geometry,
-                    material,
-                    submesh.indexOffset,
-                    submesh.indexCount,
-                    0
-                    });
-
-                // 更新该材质的 uniform 缓冲区（假设 binding 0 是 uniform）
-                Assets::Uniforms ubo = { obj->transform, view, proj };
-                auto buffer = material->getUniformBuffer(0);
-                if (buffer.isValid()) {
-                    auto* bufObj = m_resMgr->getBuffer(buffer);
-                    bufObj->update(&ubo, sizeof(ubo), 0);
-                }
+            // 生成网格绘制项
+            std::vector<std::shared_ptr<Scene::DrawItem>> gridItems;
+            const auto& submeshes = m_gridGeometry->getSubmeshes();
+            if (!submeshes.empty()) {
+                auto item = std::make_shared<Scene::DrawItem>();
+                item->transform = glm::mat4(1.0f);
+                item->vertexBuffer = m_gridGeometry->getVertexBuffer();
+                item->indexBuffer = m_gridGeometry->getIndexBuffer();
+                // 网格的描述符集只包含全局 set 0（空 set 1 由布局处理，但实际不绑定任何集）
+                item->descriptorSet = { m_globalDescriptorSet };  
+                item->indexOffset = submeshes[0].indexOffset;
+                item->indexCount = submeshes[0].indexCount;
+                item->pipelineIndex = 0;
+                gridItems.push_back(item);
             }
+            m_gridRecorder->setDrawItems(gridItems);
         }
-
-        // 按材质排序以减少状态切换
-        std::sort(drawItems.begin(), drawItems.end(),
-            [](const Scene::DrawItem& a, const Scene::DrawItem& b) {
-                return a.material->getSortKey() < b.material->getSortKey();
-            });
-
-
-        m_recorder->setDrawItems(drawItems);
-
-        std::vector<Scene::DrawItem> gridDrawItems;
-        const auto& submeshes = m_gridGeometry->getSubmeshes();
-        if (!submeshes.empty()) {
-            const auto& submesh = submeshes[0];  
-            Scene::DrawItem item;
-            item.geometry = m_gridGeometry;
-            item.material = m_gridMaterial;
-            item.indexOffset = submesh.indexOffset;
-            item.indexCount = submesh.indexCount; 
-            item.transform = glm::mat4(1.0f);
-            gridDrawItems.push_back(item);
-        }
-
-        if (m_gridMaterial) {
-            Assets::Uniforms ubo = { glm::mat4(1.0f), view, proj };
-            auto buffer = m_gridMaterial->getUniformBuffer(0);
-            if (buffer.isValid()) {
-                auto* bufObj = m_resMgr->getBuffer(buffer);
-                bufObj->update(&ubo, sizeof(ubo), 0);
-            }
-        }
-
-        m_gridRecorder->setDrawItems(gridDrawItems);
     }
 
     void DeferredRenderPath::render(RHI::RHICommandEncoder* encoder, uint32_t frameIndex) {
@@ -328,5 +318,7 @@ namespace StarryEngine {
     void DeferredRenderPath::onResize(uint32_t width, uint32_t height) {
         m_width = width;
         m_height = height;
+
+        initialize(m_globalSetLayout);
     }
 }

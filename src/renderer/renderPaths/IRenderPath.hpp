@@ -15,7 +15,9 @@ namespace StarryEngine {
         //    RHI::DescriptorPoolHandle globalPool,
         //    uint32_t width, uint32_t height) = 0;
 
-        virtual void update(const Scene::Scene& scene, float deltaTime) = 0;
+        virtual void setDrawItems(const Scene::AnalysisSceneResult& secneData) = 0;
+
+        virtual void update(const glm::mat4& view, const glm::mat4& proj, float deltaTime) = 0;
         virtual void render(RHI::RHICommandEncoder* encoder, uint32_t frameIndex) = 0;
         virtual void onResize(uint32_t width, uint32_t height) = 0;
     };

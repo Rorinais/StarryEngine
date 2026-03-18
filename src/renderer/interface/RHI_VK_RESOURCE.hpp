@@ -240,7 +240,7 @@ namespace StarryEngine::RHI {
 
         PipelineType getType() const override { return mDesc.type; }
 
-        RHIPipelineLayout* getLayout() const override { return nullptr; }
+        PipelineLayoutHandle getLayout() const override { return mDesc.pipelineLayoutHandle; }
 
         void setLayout(RHI_VK_PipelineLayout* layout) {
 			

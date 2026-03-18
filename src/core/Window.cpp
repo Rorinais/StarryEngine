@@ -74,6 +74,15 @@ namespace StarryEngine {
             glfwSetMouseButtonCallback(mWindow, [](GLFWwindow* window, int button, int action, int mods) {
                 GetEventDispatcher().dispatch<MouseButtonEvent>(button, action, mods);
                 });
+
+            glfwSetCursorPosCallback(mWindow, [](GLFWwindow* window, double x, double y) {
+                GetEventDispatcher().dispatch<MouseMoveEvent>(x, y);
+                });
+
+            glfwSetScrollCallback(mWindow, [](GLFWwindow* window, double xOffset, double yOffset) {
+                GetEventDispatcher().dispatch<MouseScrollEvent>(xOffset, yOffset);
+                });
+
         }
 
         Window::~Window() {

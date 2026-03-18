@@ -62,6 +62,11 @@ namespace StarryEngine::Assets {
             return RHI::TextureHandle::Null();
         }
 
+        if (!result.texture.isValid()) {
+            LOG_ERROR("Failed to load texture: {}", filename);
+            return RHI::TextureHandle::Null();
+        }
+
         RHI::DescriptorImageInfo info{ result.texture, result.sampler, RHI::ImageLayout::ShaderReadOnly };
         addBinding(binding, RHI::DescriptorType::CombinedImageSampler, 1, stageFlags);
         m_resources[binding] = DescriptorResourceInfo(info);
@@ -129,6 +134,7 @@ namespace StarryEngine::Assets {
         auto* set = m_resMgr->getDescriptorSet(m_descriptorSet);
         if (!set) return;
 
+        LOG_DEBUG("Updating descriptor set with {} resources", m_resources.size());
         for (const auto& [binding, resource] : m_resources) {
             if (std::holds_alternative<RHI::DescriptorBufferInfo>(resource.data)) {
                 const auto& bufInfo = std::get<RHI::DescriptorBufferInfo>(resource.data);
@@ -140,9 +146,28 @@ namespace StarryEngine::Assets {
                 auto* texture = m_resMgr->getTexture(imgInfo.texture);
                 if (!texture) continue;
                 auto* sampler = m_resMgr->getSampler(imgInfo.sampler);
+                if (!texture || !sampler) {
+                    LOG_ERROR("Texture or sampler is null for binding {}", binding);
+                    continue;
+                }
                 set->writeTexture(binding, 0, texture, sampler, imgInfo.imageLayout);
             }
         }
         set->update();
     }
+
+    Scene::GraphicsPipelineState Material::generatePipelineState(const RHI::VertexInputState& vertexInput) const {
+        Scene::GraphicsPipelineState state;
+        state.vertexShader = m_vertexShader;
+        state.fragmentShader = m_fragmentShader;
+        state.vertexInput = vertexInput;
+        state.cullMode = m_cullMode;           
+        state.frontFace = m_frontFace;
+        state.depthTestEnable = m_depthTestEnable;
+        state.depthWriteEnable = m_depthWriteEnable;
+        state.depthCompareOp = m_depthCompareOp;
+        state.attachments = { m_blendState };
+        return state;
+    }
+
 } // namespace StarryEngine::Assets

@@ -12,6 +12,7 @@
 #include "../renderer/backend/RHIFactory.hpp"
 #include "../renderer/interface/RHI_TYPES.hpp"
 #include "../renderer/graph/RenderGraph.hpp"
+#include "../scene/camera/CameraController.hpp"
 #include "../renderer/Renderer.hpp"
 
 namespace StarryEngine {
@@ -23,6 +24,7 @@ namespace StarryEngine {
         void run();
         void createDescriptorPool();
         void createRenderer();
+        void initEventDispatcher();
         
     private:
         Window::Ptr m_window;
@@ -40,7 +42,8 @@ namespace StarryEngine {
         std::shared_ptr<RHI::ResourceManager> m_resMgr;
         RHI::DescriptorPoolHandle m_descriptorPool;
 
+        std::unique_ptr<CameraController> m_cameraController;
         std::shared_ptr<Scene::RenderObject> m_rotatingObject; // 指向需要旋转的物体
-        float m_rotationAngle = 0.0f;
+        bool m_controlActive = false;
     };
 } // namespace StarryEngine

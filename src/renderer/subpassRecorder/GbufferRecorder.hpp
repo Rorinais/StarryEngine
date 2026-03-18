@@ -10,54 +10,37 @@ namespace StarryEngine::RenderGraph {
     public:
         using ISubpassRecorder::ISubpassRecorder;
 
-        using PipelineGetter = std::function<RHI::PipelineHandle(RHI::ShaderHandle, RHI::ShaderHandle, uint32_t)>;
-
-        void setPipelineGetter(PipelineGetter getter) { m_pipelineGetter = getter; }
-        void setDrawItems(const std::vector<Scene::DrawItem>& items) { m_drawItems = items; }
-        void setPipelineLayout(RHI::PipelineLayoutHandle layout) { m_pipelineLayout = layout; }
+        void setPipelines(const std::vector<RHI::PipelineHandle>& pipelines) { m_pipelines = pipelines; }
+        void setDrawItems(const std::vector<std::shared_ptr<Scene::DrawItem>>& items) { m_drawItems = items; }
 
         void recordCommands(RHI::RHICommandEncoder* encoder,
             const PassContext& pctx,
             uint32_t subpassIndex,
             uint32_t frameIndex) override {
             for (const auto& item : m_drawItems) {
-                auto geometry = item.geometry;
-                auto material = item.material;
-                if (!geometry || !material) continue;
+                if (item->pipelineIndex >= m_pipelines.size()) continue;
+                auto pipeline = pctx.getResourceManager()->getPipeline(m_pipelines[item->pipelineIndex]);
+                encoder->bindPipeline(pipeline);
 
-                if (m_pipelineGetter){
-                    auto vert = material->getVertexShader();
-                    auto frag = material->getFragmentShader();
-                    auto pipeline = m_pipelineGetter(vert, frag, subpassIndex);
-                    if (!pipeline.isValid()) {
-                        LOG_ERROR("Failed to get pipeline for material");
-                        continue;
-                    }
-                    encoder->bindPipeline(mResMgr->getPipeline(pipeline));
-                }
-
-                auto vb = geometry->getVertexBuffer();
-                auto ib = geometry->getIndexBuffer();
-                if (!vb.isValid() || !ib.isValid()) continue;
-
-                encoder->bindVertexBuffers(0, { mResMgr->getBuffer(vb) }, { 0 });
-                encoder->bindIndexBuffer(mResMgr->getBuffer(ib), 0, RHI::IndexType::UInt32);
-
-                auto descSet = material->getDescriptorSet();
-                if (descSet.isValid()) {
+                auto pipelineLayout = pctx.getResourceManager()->getPipelineLayout(pipeline->getLayout());
+                for (uint32_t i = 0; i < item->descriptorSet.size(); ++i) {
                     encoder->bindDescriptorSets(RHI::PipelineBindPoint::Graphics,
-                        mResMgr->getPipelineLayout(m_pipelineLayout),
-                        0, { descSet }, {});
+                        pipelineLayout, i, { item->descriptorSet[i] }, {});
                 }
 
-                encoder->drawIndexed(item.indexCount, 1, item.indexOffset, 0, 0);
+                encoder->pushConstants(pipelineLayout, RHI::ShaderStage::Vertex,
+                    0, sizeof(glm::mat4), &item->transform);
+
+                encoder->bindVertexBuffers(0, { pctx.getResourceManager()->getBuffer(item->vertexBuffer) }, { 0 });
+                encoder->bindIndexBuffer(pctx.getResourceManager()->getBuffer(item->indexBuffer), 0, RHI::IndexType::UInt32);
+                encoder->drawIndexed(item->indexCount, 1, item->indexOffset, 0, 0);
             }
         }
 
     private:
-        std::vector<Scene::DrawItem> m_drawItems;
+        std::vector<std::shared_ptr<Scene::DrawItem>> m_drawItems;
+        std::vector<RHI::PipelineHandle> m_pipelines;  
         RHI::PipelineLayoutHandle m_pipelineLayout;
-        PipelineGetter m_pipelineGetter;
     };
 
     class ImGuiRecorder : public ISubpassRecorder {

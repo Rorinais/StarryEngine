@@ -19,6 +19,7 @@ namespace StarryEngine {
         MouseButtonPressed,
         MouseButtonReleased,
         MouseScrolled,
+        CameraSwitch,
 
         // 渲染
         FrameStart,

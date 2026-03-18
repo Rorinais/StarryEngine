@@ -21,42 +21,53 @@ namespace StarryEngine {
         //    RHI::DescriptorPoolHandle globalPool,
         //    uint32_t width, uint32_t height) override;
 
-        bool initialize(const Assets::VertexLayout& vertexLayout);
+        bool initialize(RHI::DescriptorSetLayoutHandle globalSetLayout);
 
         bool createRenderGraph();
 
-        void update(const Scene::Scene& scene, float deltaTime) override;
+        void setDrawItems(const Scene::AnalysisSceneResult& secneData) override;
+
+        void update(const glm::mat4& view, const glm::mat4& proj, float deltaTime) override;
 
         void render(RHI::RHICommandEncoder* encoder, uint32_t frameIndex) override;
 
         void onResize(uint32_t width, uint32_t height) override;
 
-        RHI::DescriptorSetLayoutHandle getDescriptorSetLayout() const { return m_descriptorSetLayout; }
-
         bool createGridResources();
 
-        RHI::PipelineHandle getOrCreatePipeline(RHI::ShaderHandle vertShader, RHI::ShaderHandle fragShader, uint32_t subpassIndex);
+        void setGlobalDescriptorSet(RHI::DescriptorSetHandle globalSet) { m_globalDescriptorSet = globalSet; }
+        RHI::DescriptorSetLayoutHandle getDescriptorSetLayout() { return m_descriptorSetLayout; }
 
     private:
+        RHI::PipelineHandle getOrCreatePipeline(const Scene::GraphicsPipelineState& state,
+            RHI::PipelineLayoutHandle layout);
+
         std::shared_ptr<RHI::IRHI> m_rhi;
         std::shared_ptr<RHI::ResourceManager> m_resMgr;
-        RHI::DescriptorPoolHandle m_globalPool;
         uint32_t m_width = 0, m_height = 0;
 
         std::shared_ptr<RenderGraph::RenderGraph> m_renderGraph;
-        std::shared_ptr<RenderGraph::MeshDrawRecorder> m_recorder;
-
         RenderGraph::TextureId m_swapchainTex;
-
-        RHI::PipelineLayoutHandle m_pipelineLayout;
-        RHI::DescriptorSetLayoutHandle m_descriptorSetLayout;
-        Assets::VertexLayout m_vertexLayout;
         RHI::RenderPassHandle m_renderPassHandle;
-        std::unordered_map<size_t, RHI::PipelineHandle> m_pipelineCache;
+
+        RHI::DescriptorPoolHandle m_globalPool;
+        RHI::DescriptorSetLayoutHandle m_globalSetLayout;
+        RHI::DescriptorSetHandle m_globalDescriptorSet;
+
+        RHI::DescriptorSetLayoutHandle m_descriptorSetLayout;
+        RHI::PipelineLayoutHandle m_pipelineLayout;        // 用于普通物体（set 0 + set 1 非空）
+        RHI::PipelineLayoutHandle m_pipelineLayoutGrid;    // 用于网格（set 0 + set 1 为空）
+
+        std::shared_ptr<RenderGraph::MeshDrawRecorder> m_recorder;
+        std::vector<std::shared_ptr<Scene::DrawItem>> m_cachedDrawItems;
+        std::vector<std::shared_ptr<Scene::GraphicsPipelineState>> m_cachedPipelines;
+
+        std::unordered_map<size_t, RHI::PipelineHandle> m_pipelineCache; // 管线缓存
 
         std::shared_ptr<RenderGraph::MeshDrawRecorder> m_gridRecorder;
         std::shared_ptr<Assets::Geometry> m_gridGeometry;
         std::shared_ptr<Assets::Material> m_gridMaterial;
+
     };
 
 } // namespace StarryEngine

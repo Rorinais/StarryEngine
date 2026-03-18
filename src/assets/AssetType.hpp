@@ -51,12 +51,6 @@ namespace StarryEngine::Assets {
         bool useEmissiveMap = false;
         bool useAlphaTest = false;
         bool doubleSided = false;
-
-        // --- 渲染状态覆盖 ---
-        RHI::CullMode cullMode = RHI::CullMode::Back;
-        RHI::LogicOp blendMode = RHI::LogicOp::Copy;
-        RHI::CompareOp depthCompare = RHI::CompareOp::Less;
-        bool depthWrite = true;
     };
 
     struct ShaderCreateInfo {

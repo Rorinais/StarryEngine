@@ -4,6 +4,9 @@
 #include "events/KeyEvent.hpp"
 #include "events/MouseButtonEvent.hpp"
 #include "events/WindowResizeEvent.hpp"
+#include "events/MouseScrollEvent.hpp"
+#include "events/MouseMoveEvent.hpp"
+#include "events/CameraSwitchEvent.hpp"
 
 namespace StarryEngine {
     inline EventDispatcher& GetEventDispatcher() {

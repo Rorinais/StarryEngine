@@ -23,19 +23,29 @@ namespace StarryEngine {
 		void setRenderPath(std::unique_ptr<IRenderPath> newRenderPath);
 
 		//解析场景，将数据拆分为管线描述和实时更新的数据
-		void analysisSecne();
+		void analysisScene();
 
 		//全局的描述符布局，MVP矩阵，
 		void createGlobalSetLayout();
+		void createGlobalUniformBuffer();
+
+		RHI::DescriptorSetLayoutHandle getGlobalSetLayout() { return m_globalSetLayout; }
+		RHI::DescriptorSetHandle getGlobalDescriptorSet() { return m_globalDescriptorSet; }
 
 	private:
 		std::shared_ptr<RHI::IRHI> m_rhi;
 		std::shared_ptr<RHI::ResourceManager> m_resMgr;
-		RHI::DescriptorPoolHandle m_globalPool;
-		std::shared_ptr<Scene::Scene> m_scene;
 		std::unique_ptr<IRenderPath> m_renderPath;
 
+		RHI::DescriptorPoolHandle m_globalPool;
 		RHI::DescriptorSetLayoutHandle m_globalSetLayout;
+		RHI::DescriptorSetHandle m_globalDescriptorSet;
+		RHI::BufferHandle m_globalUniformBuffer;
+
+		std::shared_ptr<Scene::Scene> m_scene;
+		std::shared_ptr<Scene::AnalysisSceneResult> m_analysisSceneResult;
+		std::unordered_map<size_t, RHI::PipelineHandle> m_pipelineCache;
+		
 	};
 
 }

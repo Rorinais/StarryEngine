@@ -126,8 +126,6 @@ struct fmt::formatter<StarryEngine::Assets::MaterialParams> {
             "    opacity: {}\n"
             "  flags:\n"
             "    useNormalMap: {}, useEmissiveMap: {}, useAlphaTest: {}, doubleSided: {}\n"
-            "  renderState:\n"
-            "    cullMode: {}, blendMode: {}, depthCompare: {}, depthWrite: {}\n"
             "}}",
             p.name, p.index,
             p.vertexShaderPath, p.fragmentShaderPath,
@@ -137,11 +135,7 @@ struct fmt::formatter<StarryEngine::Assets::MaterialParams> {
             p.alphaThreshold, p.alphaBlend,
             p.albedoTexture, p.normalTexture, p.metallicTexture,
             p.roughnessTexture, p.occlusionTexture, p.emissiveTexture, p.opacityTexture,
-            p.useNormalMap, p.useEmissiveMap, p.useAlphaTest, p.doubleSided,
-            p.cullMode,
-            p.blendMode,
-            p.depthCompare,
-            p.depthWrite ? "true" : "false"
+            p.useNormalMap, p.useEmissiveMap, p.useAlphaTest, p.doubleSided
         );
     }
 };

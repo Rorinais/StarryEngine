@@ -15,18 +15,7 @@ layout(set = 1, binding = 0) uniform MaterialUniforms {
 
 layout(set = 1, binding = 1) uniform sampler2D texSampler;
 
-float halfLambert(vec3 Nomal,vec3 L){
-    float NOL=dot(Nomal,L);
-    float halfLambert=NOL*0.5+0.5;
-    return halfLambert;
-}
-
 void main() {
-    vec3 L=vec3(1.0,0.5,0.0);
-    float halfLambert= halfLambert(fragNormal,L);
 
-    vec3 shadowColor=vec3(texture(texSampler, fragTexCoord).xyz)*0.5;
-
-
-    outColor = mix(vec4(shadowColor,1.0f),texture(texSampler, fragTexCoord),smoothstep(0.35,0.4,halfLambert));
+    outColor = texture(texSampler, fragTexCoord);
 }
