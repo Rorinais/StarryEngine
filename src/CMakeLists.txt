@@ -22,8 +22,8 @@ add_subdirectory(scene)
 add_subdirectory(event)
 add_subdirectory(utils)
 add_subdirectory(logging)
-add_subdirectory(application)
 add_subdirectory(renderer)
+add_subdirectory(application)
 
 set(ICON_FILE "${CMAKE_CURRENT_SOURCE_DIR}/../assets/icons/app_icon.ico")
 
