@@ -1,5 +1,6 @@
 #include "../../logging/Logger.hpp"
 #include "../../utils/FileUtils.hpp"
+#include "../../utils/Hash.hpp"
 #include "ShaderLoader.hpp"
 
 
@@ -18,30 +19,49 @@ namespace StarryEngine::Assets {
         return loadFromSource(content, stage, path);
     }
 
-    std::optional<ShaderCreateInfo> ShaderLoader::loadFromSource(const std::string& source,
+    std::optional<ShaderCreateInfo> ShaderLoader::loadFromSource(
+        const std::string& source,
         RHI::ShaderStage stage,
         const std::string& name) {
+
+        // 1. 计算哈希
+        size_t hash = computeHash(source, stage);
+        {
+            std::lock_guard<std::mutex> lock(m_cacheMutex);
+            auto it = m_cache.find(hash);
+            if (it != m_cache.end()) {
+                return it->second;   // 返回缓存的副本（ShaderCreateInfo 应可复制）
+            }
+        }
+
+        // 2. 编译
         auto spirv = compileToSpirv(source, stage, name);
         if (spirv.empty()) {
             return std::nullopt;
         }
 
+        // 3. 反射（照旧）
         ShaderCreateInfo info;
         info.spirv = spirv;
-
         if (!reflectAndCreateLayouts(spirv, info)) {
             LOG_WARN("Reflection failed for shader: {}", name);
         }
 
+        // 4. 创建 ShaderModule
         RHI::ShaderModuleDesc desc;
         desc.code = spirv;
         desc.debugName = name.empty() ? "shader" : name;
         desc.stage = stage;
-
         info.module = m_resMgr->createShader(desc);
         if (!info.module.isValid()) {
             LOG_ERROR("Failed to create shader module from SPIR-V");
             return std::nullopt;
+        }
+
+        // 5. 存入缓存
+        {
+            std::lock_guard<std::mutex> lock(m_cacheMutex);
+            m_cache[hash] = info;
         }
 
         return info;
@@ -239,4 +259,15 @@ namespace StarryEngine::Assets {
         throw std::runtime_error("Unsupported SPIR-V type for vertex attribute");
     }
 
+    size_t ShaderLoader::computeHash(const std::string& source, RHI::ShaderStage stage) const {
+        size_t seed = 0;
+        Utils::hash_combine(seed, source);
+        Utils::hash_combine(seed, stage);
+        return seed;
+    }
+
+    void ShaderLoader::clearCache() {
+        std::lock_guard<std::mutex> lock(m_cacheMutex);
+        m_cache.clear();
+    }
 } // namespace StarryEngine::Assets

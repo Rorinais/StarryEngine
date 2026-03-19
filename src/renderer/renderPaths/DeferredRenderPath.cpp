@@ -36,15 +36,7 @@ namespace StarryEngine {
             return false;
         }
 
-        // 创建网格专用的管线布局：set 0 全局 + set 1 为空（使用空布局）
-        RHI::DescriptorSetLayoutDesc emptyLayoutDesc; // 默认无 bindings
-        RHI::DescriptorSetLayoutHandle emptyLayout = m_resMgr->createDescriptorSetLayout(emptyLayoutDesc);
-        if (!emptyLayout.isValid()) {
-            LOG_ERROR("Failed to create empty descriptor set layout");
-            return false;
-        }
-
-        pipelineLayoutDesc.descriptorSetLayouts = { m_globalSetLayout, emptyLayout };
+        pipelineLayoutDesc.descriptorSetLayouts = { m_globalSetLayout };
         m_pipelineLayoutGrid = m_resMgr->createPipelineLayout(pipelineLayoutDesc);
         if (!m_pipelineLayoutGrid.isValid()) {
             LOG_ERROR("Failed to create pipeline layout for grid");
@@ -219,15 +211,6 @@ namespace StarryEngine {
         // ---------- 3. 创建网格材质（与之前相同）----------
         m_gridMaterial = std::make_shared<Assets::Material>(m_resMgr);
         m_gridMaterial->loadShaders("assets/shaders/core/gridShader.vert", "assets/shaders/core/gridShader.frag");
-        RHI::DescriptorSetLayoutDesc emptyLayoutDesc;
-        RHI::DescriptorSetLayoutHandle emptyLayout = m_resMgr->createDescriptorSetLayout(emptyLayoutDesc);
-        m_gridMaterial->setExternalDescriptorSetLayout(emptyLayout);
-
-        if (!m_gridMaterial->allocateDescriptorSet(m_globalPool, 1)) {
-            LOG_ERROR("Failed to allocate descriptor set for grid material");
-            return false;
-        }
-
         return true;
     }
 

@@ -39,7 +39,11 @@ namespace StarryEngine {
             rhiConfig.frameBuffering = flightFrame;
             rhiConfig.usePersistentCommandBuffers = true;
             rhiConfig.enableTimestamps = true;
+#ifdef NDEBUG
+            rhiConfig.enableDebug = false;
+#else
             rhiConfig.enableDebug = true;
+#endif
 
             // 将 Vulkan 验证层消息通过日志系统输出
             rhiConfig.debugCallback = [](RHI::MessageSeverity severity,

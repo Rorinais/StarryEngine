@@ -2,6 +2,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <mutex> 
 #include <unordered_map>
 #include "../../renderer/interface/RHI_RESOURCE_MANAGER.hpp"
 #include "../AssetType.hpp"
@@ -23,6 +24,8 @@ namespace StarryEngine::Assets {
             RHI::ShaderStage stage,
             const std::string& name = "");
 
+        void clearCache();
+
     private:
         std::shared_ptr<RHI::ResourceManager> m_resMgr;
 
@@ -37,6 +40,10 @@ namespace StarryEngine::Assets {
 
         RHI::ShaderStage getShaderStageFromSpirv(const spirv_cross::Compiler& compiler) const;
         RHI::Format spirvTypeToFormat(const spirv_cross::SPIRType& type) const;
+
+        size_t computeHash(const std::string& source, RHI::ShaderStage stage) const;
+        mutable std::mutex m_cacheMutex;                         
+        std::unordered_map<size_t, ShaderCreateInfo> m_cache;
     };
 
 } // namespace StarryEngine::Assets
