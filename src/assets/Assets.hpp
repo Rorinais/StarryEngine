@@ -3,8 +3,8 @@
 #include"loader/ShaderLoader.hpp"
 #include"loader/TextureLoader.hpp"
 #include"geometry/Geometry.hpp"
-#include"material/Material.hpp"
-
+#include"material/MaterialInstance.hpp"
+#include"material/DefaultMaterialTemplate.hpp"
 namespace StarryEngine::Assets {
 
 }

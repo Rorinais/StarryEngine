@@ -6,46 +6,43 @@
 #include "graph/RenderGraph.hpp"
 #include "backend/RHIFactory.hpp"
 #include "renderPaths/DeferredRenderPath.hpp"
+#include "renderPaths/ForwardRenderPath.hpp"
 
 namespace StarryEngine {
-	class Renderer {
-	public:
-		Renderer(std::shared_ptr<RHI::IRHI> rhi,RHI::DescriptorPoolHandle globalPool,std::shared_ptr<Scene::Scene> scene);
+    class Renderer {
+    public:
+        Renderer(std::shared_ptr<RHI::IRHI> rhi,
+            RHI::DescriptorPoolHandle globalPool,
+            std::shared_ptr<Scene::Scene> scene);
+        ~Renderer();
 
-		~Renderer();
+        void destroy();
+        void renderFrame(RHI::RHICommandEncoder* encoder, uint32_t frameIndex, float deltaTime);
+        void onResize(uint32_t width, uint32_t height);
+        void setRenderPath(std::unique_ptr<IRenderPath> newRenderPath);
 
-		void destroy();
+        // 解析场景，将数据拆分为管线描述和实时更新的数据
+        void analysisScene();
 
-		void renderFrame(RHI::RHICommandEncoder* encoder, uint32_t frameIndex, float deltaTime);
+        // 全局的描述符布局，MVP矩阵
+        void createGlobalSetLayout();
+        void createGlobalUniformBuffer();
 
-		void onResize(uint32_t width, uint32_t height);
+        RHI::DescriptorSetLayoutHandle getGlobalSetLayout() { return m_globalSetLayout; }
+        RHI::DescriptorSetHandle getGlobalDescriptorSet() { return m_globalDescriptorSet; }
 
-		void setRenderPath(std::unique_ptr<IRenderPath> newRenderPath);
+    private:
+        std::shared_ptr<RHI::IRHI> m_rhi;
+        std::shared_ptr<RHI::ResourceManager> m_resMgr;
+        std::unique_ptr<IRenderPath> m_renderPath;
 
-		//解析场景，将数据拆分为管线描述和实时更新的数据
-		void analysisScene();
+        RHI::DescriptorPoolHandle m_globalPool;
+        RHI::DescriptorSetLayoutHandle m_globalSetLayout;
+        RHI::DescriptorSetHandle m_globalDescriptorSet;
+        RHI::BufferHandle m_globalUniformBuffer;
 
-		//全局的描述符布局，MVP矩阵，
-		void createGlobalSetLayout();
-		void createGlobalUniformBuffer();
-
-		RHI::DescriptorSetLayoutHandle getGlobalSetLayout() { return m_globalSetLayout; }
-		RHI::DescriptorSetHandle getGlobalDescriptorSet() { return m_globalDescriptorSet; }
-
-	private:
-		std::shared_ptr<RHI::IRHI> m_rhi;
-		std::shared_ptr<RHI::ResourceManager> m_resMgr;
-		std::unique_ptr<IRenderPath> m_renderPath;
-
-		RHI::DescriptorPoolHandle m_globalPool;
-		RHI::DescriptorSetLayoutHandle m_globalSetLayout;
-		RHI::DescriptorSetHandle m_globalDescriptorSet;
-		RHI::BufferHandle m_globalUniformBuffer;
-
-		std::shared_ptr<Scene::Scene> m_scene;
-		std::shared_ptr<Scene::AnalysisSceneResult> m_analysisSceneResult;
-		std::unordered_map<size_t, RHI::PipelineHandle> m_pipelineCache;
-		
-	};
-
+        std::shared_ptr<Scene::Scene> m_scene;
+        std::shared_ptr<Scene::AnalysisSceneResult> m_analysisSceneResult;
+        uint32_t m_lastAnalyzedVersion = UINT32_MAX;
+    };
 }

@@ -6,11 +6,14 @@
 #include "../utils/Hash.hpp"
 
 namespace StarryEngine::Scene {
+    struct RenderObject;
+
     struct DrawItem {
-        glm::mat4 transform = glm::mat4(1.0f);
+        std::weak_ptr<RenderObject> object;          // 关联的物体
+        uint32_t submeshIndex;                        // 子网格索引
         RHI::BufferHandle vertexBuffer;
         RHI::BufferHandle indexBuffer;
-        std::vector<RHI::DescriptorSetHandle> descriptorSet;
+        std::unordered_map<uint32_t, RHI::DescriptorSetHandle> descriptorSets;
         uint32_t indexOffset = 0;
         uint32_t indexCount = 0;
         uint32_t pipelineIndex = 0;

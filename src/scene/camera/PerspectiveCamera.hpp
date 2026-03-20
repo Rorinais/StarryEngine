@@ -17,6 +17,7 @@ namespace StarryEngine::Scene {
         float getFov() const { return m_fov; }
         float getNear() const { return m_near; }
         float getFar() const { return m_far; }
+        float getAspect() const { return m_aspect; }
 
         void markProjectionDirty() { m_projDirty = true; }
 

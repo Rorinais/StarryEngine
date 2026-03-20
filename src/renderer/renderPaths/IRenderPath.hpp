@@ -11,9 +11,7 @@ namespace StarryEngine {
     public:
         virtual ~IRenderPath() = default;
 
-        //virtual bool initialize(std::shared_ptr<RHI::IRHI> rhi,
-        //    RHI::DescriptorPoolHandle globalPool,
-        //    uint32_t width, uint32_t height) = 0;
+        virtual bool initialize(RHI::DescriptorSetLayoutHandle globalSetLayout) = 0;
 
         virtual void setDrawItems(const Scene::AnalysisSceneResult& secneData) = 0;
 

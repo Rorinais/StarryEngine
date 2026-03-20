@@ -7,6 +7,7 @@ namespace StarryEngine::Scene {
     void Scene::addObject(std::shared_ptr<RenderObject> object) {
         m_allObjects.push_back(object);
         updateObjectClassification(object);
+        markContentDirty();
     }
 
     bool Scene::removeObject(std::shared_ptr<RenderObject> object) {
@@ -18,6 +19,8 @@ namespace StarryEngine::Scene {
         if (opaqueIt != m_opaqueObjects.end()) m_opaqueObjects.erase(opaqueIt);
         auto transIt = std::find(m_transparentObjects.begin(), m_transparentObjects.end(), object);
         if (transIt != m_transparentObjects.end()) m_transparentObjects.erase(transIt);
+
+        markContentDirty();
         return true;
     }
 
@@ -25,6 +28,7 @@ namespace StarryEngine::Scene {
         m_allObjects.clear();
         m_opaqueObjects.clear();
         m_transparentObjects.clear();
+        markContentDirty();
     }
 
     void Scene::update(float deltaTime) {

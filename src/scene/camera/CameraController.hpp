@@ -16,6 +16,7 @@ namespace StarryEngine {
         void onKeyPressed(int key, int action);
         void onMouseMoved(double x, double y);
         void onMouseScrolled(double xOffset, double yOffset);
+        void setFov(float delta);  
         void setEnabled(bool enabled) { m_enabled = enabled; }
         void setCamera(std::shared_ptr<Scene::ICamera> newCamera,
             const glm::mat4& currentView,

@@ -19,17 +19,24 @@ namespace StarryEngine::RenderGraph {
             uint32_t frameIndex) override {
             for (const auto& item : m_drawItems) {
                 if (item->pipelineIndex >= m_pipelines.size()) continue;
+
+                glm::mat4 transform;
+                auto obj = item->object.lock();
+                if (!obj) continue; // 物体已销毁，跳过绘制
+                transform = obj->transform;
+
                 auto pipeline = pctx.getResourceManager()->getPipeline(m_pipelines[item->pipelineIndex]);
                 encoder->bindPipeline(pipeline);
 
                 auto pipelineLayout = pctx.getResourceManager()->getPipelineLayout(pipeline->getLayout());
-                for (uint32_t i = 0; i < item->descriptorSet.size(); ++i) {
+                // 绑定所有存在的描述符集
+                for (const auto& [setIndex, setHandle] : item->descriptorSets) {
                     encoder->bindDescriptorSets(RHI::PipelineBindPoint::Graphics,
-                        pipelineLayout, i, { item->descriptorSet[i] }, {});
+                        pipelineLayout, setIndex, { setHandle }, {});
                 }
 
                 encoder->pushConstants(pipelineLayout, RHI::ShaderStage::Vertex,
-                    0, sizeof(glm::mat4), &item->transform);
+                    0, sizeof(glm::mat4), &transform);
 
                 encoder->bindVertexBuffers(0, { pctx.getResourceManager()->getBuffer(item->vertexBuffer) }, { 0 });
                 encoder->bindIndexBuffer(pctx.getResourceManager()->getBuffer(item->indexBuffer), 0, RHI::IndexType::UInt32);

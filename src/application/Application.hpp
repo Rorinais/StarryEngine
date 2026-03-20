@@ -24,6 +24,7 @@ namespace StarryEngine {
         void run();
         void createDescriptorPool();
         void createRenderer();
+        bool createGridResources();
         void initEventDispatcher();
         
     private:
@@ -45,5 +46,7 @@ namespace StarryEngine {
         std::unique_ptr<CameraController> m_cameraController;
         std::shared_ptr<Scene::RenderObject> m_rotatingObject; // 指向需要旋转的物体
         bool m_controlActive = false;
+
+        std::shared_ptr<Assets::Geometry> m_gridGeometry;
     };
 } // namespace StarryEngine

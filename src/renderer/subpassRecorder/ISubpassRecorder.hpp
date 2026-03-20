@@ -1,7 +1,6 @@
 #pragma once
 #include <variant>
 #include "../../assets/geometry/Geometry.hpp"
-#include "../../assets/material/Material.hpp"
 #include "../interface/RHI_RESOURCE_FACTORY.hpp"
 #include "../../logging/Logger.hpp"
 

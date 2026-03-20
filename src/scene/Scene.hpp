@@ -13,7 +13,7 @@ namespace StarryEngine::Scene {
     struct RenderObject {
         glm::mat4 transform = glm::mat4(1.0f);
         std::shared_ptr<StarryEngine::Assets::Geometry> geometry;
-        std::vector<std::shared_ptr<StarryEngine::Assets::Material>> materials;
+        std::vector<std::shared_ptr<Assets::MaterialInstance>> materials;
     };
 
     class Scene {
@@ -37,8 +37,14 @@ namespace StarryEngine::Scene {
         void setActiveCamera(std::shared_ptr<ICamera> camera) { m_activeCamera = camera; }
         std::shared_ptr<ICamera> getActiveCamera() const { return m_activeCamera; }
 
+        void markContentDirty() { ++m_contentVersion; }
+        uint32_t getContentVersion() const { return m_contentVersion; }
+
     private:
         void updateObjectClassification(std::shared_ptr<RenderObject> object);
+
+    private:
+        uint32_t m_contentVersion = 0;
 
         std::vector<std::shared_ptr<RenderObject>> m_allObjects;
         std::vector<std::shared_ptr<RenderObject>> m_opaqueObjects;

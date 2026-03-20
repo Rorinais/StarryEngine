@@ -1,7 +1,11 @@
 #include "CameraController.hpp"
-#include <GLFW/glfw3.h> // 需要包含 GLFW 键码定义
+#include "PerspectiveCamera.hpp"
+#include <memory>
+#include <algorithm>
+#include <GLFW/glfw3.h> 
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/constants.hpp>
+
 
 namespace StarryEngine {
 
@@ -75,6 +79,23 @@ namespace StarryEngine {
         if (!m_enabled) return;
         m_moveSpeed += static_cast<float>(yOffset) * m_scrollSensitivity;
         if (m_moveSpeed < 0.1f) m_moveSpeed = 0.1f;
+    }
+
+    void CameraController::setFov(float delta) {
+        if (!m_camera) return;
+        auto perspCam = std::dynamic_pointer_cast<Scene::PerspectiveCamera>(m_camera);
+        if (!perspCam) return;
+
+        // 当前 FOV（弧度）转为度数
+        float currentFovDeg = glm::degrees(perspCam->getFov());
+        // 调整度数，限制在合理范围
+        float newFovDeg = glm::clamp(currentFovDeg + delta, 30.0f, 120.0f);
+        // 转回弧度并设置
+        perspCam->setPerspective(glm::radians(newFovDeg),
+            perspCam->getAspect(),
+            perspCam->getNear(),
+            perspCam->getFar());
+        perspCam->updateProjection();
     }
 
     glm::vec3 CameraController::getForward() const {

@@ -35,41 +35,156 @@ namespace StarryEngine {
         m_descriptorPool = m_resMgr->createDescriptorPool(poolDesc);
     }
 
+    bool Application::createGridResources() {
+        // ---------- 1. 生成网格顶点和索引数据（与之前相同）----------
+        struct GridVertex {
+            glm::vec3 position;
+            glm::vec3 color;
+        };
+        std::vector<GridVertex> vertices;
+        std::vector<uint32_t> indices;
+
+        const float size = 50.0f;
+        const int divisions = 50;
+        const float step = size / divisions;
+        const float half = size * 0.5f;
+        const glm::vec3 colorXAxis(1.0f, 0.0f, 0.0f);
+        const glm::vec3 colorYAxis(0.0f, 1.0f, 0.0f);
+        const glm::vec3 colorZAxis(0.0f, 0.0f, 1.0f);
+        const glm::vec3 colorLine(0.4f, 0.4f, 0.4f);
+
+        // X 方向线条
+        for (int i = 0; i <= divisions; ++i) {
+            float z = -half + i * step;
+            bool isXAxis = (std::abs(z) < 0.001f);
+            glm::vec3 col = isXAxis ? colorXAxis : colorLine;
+            vertices.push_back({ {-half, 0.0f, z}, col });
+            vertices.push_back({ { half, 0.0f, z}, col });
+        }
+
+        // Z 方向线条
+        for (int i = 0; i <= divisions; ++i) {
+            float x = -half + i * step;
+            bool isZAxis = (std::abs(x) < 0.001f);
+            glm::vec3 col = isZAxis ? colorZAxis : colorLine;
+            vertices.push_back({ { x, 0.0f, -half}, col });
+            vertices.push_back({ { x, 0.0f,  half}, col });
+        }
+
+        // Y 轴线
+        vertices.push_back({ {0.0f, -half, 0.0f}, colorYAxis });
+        vertices.push_back({ {0.0f,  half, 0.0f}, colorYAxis });
+
+        // 生成索引：每两个连续顶点构成一条线段
+        for (uint32_t i = 0; i < vertices.size(); i += 2) {
+            indices.push_back(i);
+            indices.push_back(i + 1);
+        }
+
+        // 将顶点转换为 float 数组（用于 setVertices）
+        std::vector<float> vertexData;
+        vertexData.reserve(vertices.size() * 6);
+        for (const auto& v : vertices) {
+            vertexData.push_back(v.position.x);
+            vertexData.push_back(v.position.y);
+            vertexData.push_back(v.position.z);
+            vertexData.push_back(v.color.r);
+            vertexData.push_back(v.color.g);
+            vertexData.push_back(v.color.b);
+        }
+
+        // ---------- 2. 创建网格 Geometry ----------
+        m_gridGeometry = std::make_shared<Assets::Geometry>(m_resMgr);
+        m_gridGeometry->setVertices(vertexData);
+        m_gridGeometry->setIndices(indices);
+        m_gridGeometry->setPrimitiveTopology(RHI::PrimitiveTopology::LineList);
+        // 设置顶点布局（位置 + 颜色）
+        Assets::VertexLayout gridLayout;
+        gridLayout.addAttribute(0, 0, RHI::Format::RGB32_Float, 0);                // 位置
+        gridLayout.addAttribute(1, 0, RHI::Format::RGB32_Float, 3 * sizeof(float)); // 颜色
+        gridLayout.addBinding(0, 6 * sizeof(float), RHI::VertexInputRate::PerVertex); // stride = 6个float
+        m_gridGeometry->setVertexLayout(gridLayout);
+
+        // 设置单个子网格
+        Assets::Submesh submesh;
+        submesh.indexOffset = 0;
+        submesh.indexCount = static_cast<uint32_t>(indices.size());
+        submesh.materialIndex = 0;
+        m_gridGeometry->setSubmeshes({ submesh });
+
+        // 上传到 GPU（新接口）
+        if (!m_gridGeometry->uploadToGPU()) {
+            LOG_ERROR("Failed to upload grid geometry to GPU");
+            return false;
+        }
+        return true;
+    }
+
     void Application::createRenderer() {
         m_scene = std::make_shared<Scene::Scene>();
 
         auto geometry = std::make_shared<Assets::Geometry>(m_resMgr);
         std::vector<Assets::MaterialParams> params;
-        if (!Assets::ModelLoader::loadFromFile(m_resMgr,"assets/models/Griseo.obj", *geometry, params)) {
+        if (!Assets::ModelLoader::loadFromFile(m_resMgr, "assets/models/Griseo.obj", *geometry, params)) {
+            LOG_ERROR("Failed to load model");
             return;
         }
         geometry->uploadToGPU();
 
-        std::vector<std::shared_ptr<Assets::Material>> materials;
-        for (auto& param : params) {
-            auto material = std::make_shared<Assets::Material>(m_resMgr);
-            if (param.name== "body"){
-                material->loadShaders("assets/shaders/core/shader.vert", "assets/shaders/core/shader.frag");
-            }
-            else if (param.name == "brow") {
-                material->loadShaders("assets/shaders/core/shader.vert", "assets/shaders/core/shader.frag");
-            }
-            else if (param.name == "eyes") {
-                material->loadShaders("assets/shaders/core/shader.vert", "assets/shaders/core/shader.frag");
-            }
-            else if (param.name == "face") {
-                material->loadShaders("assets/shaders/core/shader.vert", "assets/shaders/core/face.frag");
-            }
-            else{
-                material->loadShaders("assets/shaders/core/shader.vert", "assets/shaders/core/hair.frag");
-            }
-            material->enableDepthTest();
-            material->enableDepthWrite();
-            material->createAndAddUniformBuffer(sizeof(Assets::MaterialUniforms), 0, "MaterialUBO");
+        m_renderer = std::make_unique<Renderer>(m_rhi, m_descriptorPool, m_scene);
+        m_renderer->createGlobalSetLayout();
+        m_renderer->createGlobalUniformBuffer();
 
+        // 推送常量范围（模型矩阵）
+        std::vector<RHI::PushConstantRange> pushConstants = {
+            {RHI::ShaderStage::Vertex, 0, sizeof(glm::mat4)}
+        };
+
+        std::vector<std::shared_ptr<Assets::MaterialInstance>> materialInstances;
+
+        for (auto& param : params) {
+            std::unordered_map<uint32_t, RHI::DescriptorSetLayoutHandle> layoutMap;
+            layoutMap[0] = m_renderer->getGlobalSetLayout(); // 添加全局 set0 布局
+
+            // 1. 定义描述符集布局（set=1，包含 UBO binding 0 和纹理 binding 1）
+            RHI::DescriptorSetLayoutDesc layoutDesc;
+            layoutDesc.bindings = {
+                {0, RHI::DescriptorType::UniformBuffer, 1, RHI::ShaderStage::Vertex | RHI::ShaderStage::Fragment},
+                {1, RHI::DescriptorType::CombinedImageSampler, 1, RHI::ShaderStage::Fragment}
+            };
+            auto layout = Assets::DescriptorSetLayoutCache::getOrCreateLayout(m_resMgr.get(), layoutDesc);
+            layoutMap[1] = layout; // 材质私有 set1 布局
+
+            std::string fsPath;
+            if (param.name == "body") fsPath = "assets/shaders/core/shader.frag";
+            else if (param.name == "brow") fsPath = "assets/shaders/core/shader.frag";
+            else if (param.name == "eyes") fsPath = "assets/shaders/core/shader.frag";
+            else if (param.name == "face") fsPath = "assets/shaders/core/face.frag";
+            else fsPath = "assets/shaders/core/hair.frag";
+
+            // 3. 创建材质模板
+            auto tmpl = std::make_shared<Assets::DefaultMaterialTemplate>(m_resMgr, layoutMap, pushConstants);
+            if (!tmpl->loadShaders("assets/shaders/core/shader.vert", fsPath)) {
+                LOG_ERROR("Failed to load shaders for material: {}", param.name);
+                continue;
+            }
+
+            // 4. 创建材质实例（传入全局 set0）
+            auto instance = std::make_shared<Assets::MaterialInstance>(
+                tmpl, m_descriptorPool, m_resMgr.get(), m_renderer->getGlobalDescriptorSet());
+
+            // 5. 设置 UBO 初始数据
+            Assets::MaterialUniforms uniforms{}; 
+            instance->setUniform(1, 0, &uniforms, sizeof(Assets::MaterialUniforms));
+
+            // 6. 设置纹理（如果存在）
             if (!param.albedoTexture.empty()) {
-                RHI::TextureHandle texHandle = material->addTexture(param.albedoTexture, RHI::Format::RGBA8_UNorm, "Albedo", 1);
-                if (!texHandle.isValid()) {
+                Assets::TextureLoader loader(m_resMgr);
+                auto texResult = loader.loadTexture2D(param.albedoTexture, RHI::Format::RGBA8_UNorm, "Albedo");
+                if (texResult.texture.isValid()) {
+                    instance->setTexture(1, 1, texResult.texture, texResult.sampler);
+                }
+                else {
                     LOG_ERROR("Failed to load texture: {}", param.albedoTexture);
                 }
             }
@@ -77,40 +192,49 @@ namespace StarryEngine {
                 LOG_WARN("Material {} has no albedo texture", param.name);
             }
 
-            materials.push_back(material);
+            materialInstances.push_back(instance);
         }
 
-        m_renderer = std::make_unique<Renderer>(m_rhi, m_descriptorPool, m_scene);
-        m_renderer->createGlobalSetLayout();
-        m_renderer->createGlobalUniformBuffer();
-
-        auto renderPath = std::make_unique<DeferredRenderPath>(m_rhi, m_descriptorPool, m_width, m_height);
-        if (!renderPath->initialize(m_renderer->getGlobalSetLayout())) {
-            LOG_ERROR("Failed to initialize renderPath");
-            return;
+        if (!createGridResources()) {
+            LOG_ERROR("Failed to create grid geometry");
         }
+        else {
+            // 创建网格材质模板（布局包含 set0，使用全局 set0 布局）
+            std::unordered_map<uint32_t, RHI::DescriptorSetLayoutHandle> gridLayoutMap;
+            gridLayoutMap[0] = m_renderer->getGlobalSetLayout(); // 重要：使用全局 set0 布局
 
-        renderPath->setGlobalDescriptorSet(m_renderer->getGlobalDescriptorSet());
+            std::vector<RHI::PushConstantRange> gridPushConstants = {
+                {RHI::ShaderStage::Vertex, 0, sizeof(glm::mat4)}
+            };
 
-        for (auto& material : materials) {
-            material->setExternalDescriptorSetLayout(renderPath->getDescriptorSetLayout());
-            if (!material->allocateDescriptorSet(m_descriptorPool, 1)) { 
-                LOG_ERROR("Failed to allocate descriptor set for material");
-                continue;
+            auto gridTmpl = std::make_shared<Assets::DefaultMaterialTemplate>(
+                m_resMgr, gridLayoutMap, gridPushConstants);
+            if (!gridTmpl->loadShaders("assets/shaders/core/gridShader.vert", "assets/shaders/core/gridShader.frag")) {
+                LOG_ERROR("Failed to load grid shaders");
             }
-            material->updateDescriptorSet();  
+            else {
+                // 创建网格材质实例，传入全局 set0 描述符集
+                auto gridMaterialInst = std::make_shared<Assets::MaterialInstance>(
+                    gridTmpl, m_descriptorPool, m_resMgr.get(), m_renderer->getGlobalDescriptorSet());
+
+                // 创建网格 RenderObject
+                auto gridObj = std::make_shared<Scene::RenderObject>();
+                gridObj->geometry = m_gridGeometry;
+                gridObj->materials = { gridMaterialInst };
+                gridObj->transform = glm::mat4(1.0f);
+                m_scene->addObject(gridObj);
+            }
         }
 
+        // 7. 创建渲染对象
         auto obj = std::make_shared<Scene::RenderObject>();
         obj->geometry = geometry;
-        obj->materials = materials;
-        glm::mat4 translation = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 2.5f));
-        glm::mat4 rotation = glm::rotate(glm::mat4(1.0f), 0.0f, glm::vec3(0.0f, 1.0f, 0.0f));
-        glm::mat4 scale = glm::scale(glm::mat4(1.0f), glm::vec3(1.0f));
-        obj->transform = translation * rotation * scale;
+        obj->materials = materialInstances; // 注意：RenderObject::materials 类型需为 vector<MaterialInstancePtr>
+        obj->transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 2.5f));
         m_rotatingObject = obj;
         m_scene->addObject(obj);
 
+        // 8. 相机设置
         auto perspectiveCamera = std::make_shared<Scene::PerspectiveCamera>();
         perspectiveCamera->setPerspective(glm::radians(45.0f), (float)m_width / m_height, 0.1f, 100.0f);
         perspectiveCamera->lookAt(glm::vec3(0.0f, 2.0f, 5.0f), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
@@ -122,6 +246,14 @@ namespace StarryEngine {
         m_scene->addCamera(orthographicCamera);
 
         m_scene->setActiveCamera(perspectiveCamera);
+
+        // 9. 创建渲染路径
+        auto renderPath = std::make_unique<ForwardRenderPath>(m_rhi, m_descriptorPool, m_width, m_height);
+        if (!renderPath->initialize(m_renderer->getGlobalSetLayout())) {
+            LOG_ERROR("Failed to initialize renderPath");
+            return;
+        }
+        renderPath->setGlobalDescriptorSet(m_renderer->getGlobalDescriptorSet());
 
         m_renderer->setRenderPath(std::move(renderPath));
     }
@@ -251,9 +383,22 @@ namespace StarryEngine {
 
             // 鼠标滚轮事件
             GetEventDispatcher().subscribe(EventType::MouseScrolled, [this](IEvent& e) {
-                if (!m_controlActive) return;
                 auto& ev = static_cast<MouseScrollEvent&>(e);
-                m_cameraController->onMouseScrolled(ev.getXOffset(), ev.getYOffset());
+                if (!m_controlActive) return;  // 仅在控制模式下生效
+
+                // 检查 Ctrl 键是否按下
+                bool ctrlPressed = glfwGetKey(m_window->getHandle(), GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS ||
+                    glfwGetKey(m_window->getHandle(), GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS;
+
+                float delta = static_cast<float>(ev.getYOffset()) * 1.0f; 
+                if (ctrlPressed) {
+                    // Ctrl+滚轮：调整视野（FOV）
+                    m_cameraController->setFov(delta);
+                }
+                else {
+                    // 普通滚轮：调整移动速度（沿用原有逻辑）
+                    m_cameraController->onMouseScrolled(ev.getXOffset(), ev.getYOffset());
+                }
                 });
         }
     }
