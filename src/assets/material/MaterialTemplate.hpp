@@ -82,6 +82,8 @@ namespace StarryEngine::Assets {
         void setDepthWrite(bool enable) { m_depthWriteEnable = enable; }
         void setDepthCompareOp(RHI::CompareOp op) { m_depthCompareOp = op; }
         void setBlendState(const RHI::BlendAttachmentState& state) { m_blendState = state; }
+        void setRenderQueue(Scene::RenderQueue queue) { m_queue = queue; }
+        void setRenderStage(Scene::RenderStage stage) { m_stage = stage; }
         void enableTransparent(bool enable = true) { m_alphaBlend = enable; }
         void enableDepthTest(bool enable = true) { m_depthTestEnable = enable; }
         void enableDepthWrite(bool enable = true) { m_depthWriteEnable = enable; }
@@ -90,6 +92,8 @@ namespace StarryEngine::Assets {
         RHI::FrontFace getFrontFace() { return m_frontFace; }
         RHI::CompareOp getDethCompareOp() { return m_depthCompareOp; }
         RHI::BlendAttachmentState getBlendAttachmentState() { return m_blendState; }
+        Scene::RenderQueue getRenderQueue() const { return m_queue; }
+        Scene::RenderStage getRenderStage() const { return m_stage; }
         bool isTransparent() const { return m_alphaBlend; }
         bool isDepthTestEnable() const { return m_depthTestEnable; }
         bool isDepthWriteEnable() const { return m_depthWriteEnable; }
@@ -107,5 +111,8 @@ namespace StarryEngine::Assets {
         bool m_alphaBlend = false;
         bool m_depthTestEnable = true;
         bool m_depthWriteEnable = true;
+
+        Scene::RenderQueue m_queue = Scene::RenderQueue::Opaque;
+        Scene::RenderStage m_stage = Scene::RenderStage::GBuffer;
     };
 }

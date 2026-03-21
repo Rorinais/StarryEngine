@@ -21,7 +21,6 @@ namespace StarryEngine::RenderGraph {
         explicit SubpassBuilder(std::string name);
         ~SubpassBuilder() = default;
 
-        // 使用键添加附件
         SubpassBuilder& addColorAttachmentRef(const std::string& key,
             RHI::ImageLayout layout = RHI::ImageLayout::ColorAttachment);
         SubpassBuilder& addInputAttachmentRef(const std::string& key,
@@ -32,29 +31,20 @@ namespace StarryEngine::RenderGraph {
             RHI::ImageLayout layout = RHI::ImageLayout::DepthStencilAttachment);
         SubpassBuilder& addPreserveAttachmentRef(const std::string& key);
 
-        SubpassBuilder& setPipelineName(const std::string& pipelineName);
-        SubpassBuilder& setPipelineDescription(const RHI::GraphicsPipelineDesc& desc);
-        SubpassBuilder& setRecorder(ISubpassRecorder* recorder);
-        SubpassBuilder& setNoPipeline();
+        SubpassBuilder& setRecorder(std::shared_ptr<ISubpassRecorder> recorder);
+        std::shared_ptr<ISubpassRecorder> getRecorder() const { return m_recorder; }
 
-        ISubpassRecorder* getRecorder() const { return m_recorder; }
-        const RHI::GraphicsPipelineDesc& getPipelineDescription() const { return m_pipelineDesc; }
-        bool hasPipeline() const { return m_hasPipeline; }
-        // 构建子流程描述
         RHI::SubpassDesc buildSubpassDesc(const std::unordered_map<std::string, uint32_t>& keyToIndexMap) const;
 
-        // 获取附件键列表
         const std::vector<std::string>& getColorAttachmentNames() const { return m_colorAttachmentKeys; }
         const std::vector<std::string>& getInputAttachmentNames() const { return m_inputAttachmentKeys; }
         const std::vector<std::string>& getResolveAttachmentNames() const { return m_resolveAttachmentKeys; }
         const std::optional<std::string>& getDepthStencilAttachmentName() const { return m_depthStencilAttachmentKey; }
         const std::vector<std::string>& getPreserveAttachmentNames() const { return m_preserveAttachmentKeys; }
-        const std::string& getPipelineName() const { return m_pipelineName; }
         const std::string& getSubpassName() const { return m_subpassName; }
 
     private:
         std::string m_subpassName;
-        std::string m_pipelineName;
 
         std::vector<std::string> m_colorAttachmentKeys;
         std::vector<std::string> m_inputAttachmentKeys;
@@ -62,10 +52,7 @@ namespace StarryEngine::RenderGraph {
         std::vector<std::string> m_preserveAttachmentKeys;
         std::optional<std::string> m_depthStencilAttachmentKey;
 
-        RHI::GraphicsPipelineDesc m_pipelineDesc;
-        ISubpassRecorder* m_recorder = nullptr;
-        bool m_hasPipeline = false;
-
+        std::shared_ptr<ISubpassRecorder> m_recorder;
         std::unordered_map<std::string, RHI::ImageLayout> m_attachmentLayouts;
     };
 

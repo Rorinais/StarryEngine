@@ -15,7 +15,6 @@ namespace StarryEngine::Assets {
         size_t stateHash = std::hash<Scene::GraphicsPipelineState>{}(state);
         Key key{ stateHash, renderPass, subpassIndex };
 
-        // 线程安全加锁
         std::lock_guard<std::mutex> lock(s_mutex);
 
         auto it = s_cache.find(key);
@@ -74,29 +73,25 @@ namespace StarryEngine::Assets {
     }
 
     RHI::PipelineLayoutHandle MaterialTemplate::getPipelineLayout(RHI::ResourceManager* resMgr) {
-        // 1. 获取布局映射
         auto layoutMap = getLayouts();
-        // 2. 将 map 转换为按 set 索引升序的 vector
+        // 将 map 转换为按 set 索引升序的 vector
         std::vector<RHI::DescriptorSetLayoutHandle> orderedLayouts;
         orderedLayouts.reserve(layoutMap.size());
-        // 按键排序
         std::map<uint32_t, RHI::DescriptorSetLayoutHandle> sortedMap(layoutMap.begin(), layoutMap.end());
         for (const auto& [setIdx, layout] : sortedMap) {
             orderedLayouts.push_back(layout);
         }
 
-        // 3. 计算组合哈希：先以布局向量初始化种子，再混合推送常量向量
+        // 计算组合哈希：先以布局向量初始化种子，再混合推送常量向量
         size_t hash = 0;
         Utils::hash_combine(hash, orderedLayouts);
         Utils::hash_combine(hash, getPushConstants());
 
-        // 4. 查找缓存
         auto it = s_layoutCache.find(hash);
         if (it != s_layoutCache.end()) {
             return it->second;
         }
 
-        // 5. 创建新的 PipelineLayout
         RHI::PipelineLayoutDesc desc;
         desc.descriptorSetLayouts = orderedLayouts;
         desc.pushConstants = getPushConstants();

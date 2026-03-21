@@ -100,6 +100,15 @@ namespace StarryEngine::RenderGraph {
         return addAttachment(key, attachment);
     }
 
+    void RenderPassBuilder::updateAttachmentFormat(uint32_t index, RHI::Format newFormat) {
+        if (index < m_attachments.size()) {
+            m_attachments[index].format = newFormat;
+        }
+        else {
+            throw std::runtime_error("Invalid attachment index");
+        }
+    }
+
     std::unique_ptr<RenderPassBuildResult> RenderPassBuilder::build(bool autoDependencies) {
         analyzeAttachmentUsage();
 
@@ -116,7 +125,6 @@ namespace StarryEngine::RenderGraph {
         for (uint32_t subpassIndex = 0; subpassIndex < m_subpassBuilders.size(); ++subpassIndex) {
             auto& subpassBuilder = m_subpassBuilders[subpassIndex];
 
-            // 验证附件存在
             for (const auto& key : subpassBuilder.getColorAttachmentNames()) {
                 if (m_attachmentIndices.find(key) == m_attachmentIndices.end()) {
                     throw std::runtime_error("Color attachment key '" + key + "' not found");
@@ -135,15 +143,12 @@ namespace StarryEngine::RenderGraph {
             }
 
             result->renderPassDesc.subpasses.push_back(subpassBuilder.buildSubpassDesc(m_attachmentIndices));
-            result->pipelineNameToSubpassIndexMap[subpassBuilder.getPipelineName()] = subpassIndex;
         }
 
         result->renderPassDesc.dependencies = mergeDependencies();
 
         for (const auto& subpassBuilder : m_subpassBuilders) {
-            result->pipelineDescriptions.push_back(subpassBuilder.getPipelineDescription());
             result->subpassRecorders.push_back(subpassBuilder.getRecorder());
-            result->subpassHasPipeline.push_back(subpassBuilder.hasPipeline()); 
         }
 
         return result;
@@ -222,7 +227,7 @@ namespace StarryEngine::RenderGraph {
             }
         }
         generateExternalDependencies(usage, isDepthStencil);
-    }  
+    }
 
     void RenderPassBuilder::addColorReadAfterWriteDependency(uint32_t src, uint32_t dst) {
         RHI::SubpassDependency dep{};

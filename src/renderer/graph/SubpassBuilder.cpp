@@ -35,24 +35,7 @@ namespace StarryEngine::RenderGraph {
         return *this;
     }
 
-    SubpassBuilder& SubpassBuilder::setPipelineName(const std::string& pipelineName) {
-        m_pipelineName = pipelineName;
-        return *this;
-    }
-
-    SubpassBuilder& SubpassBuilder::setPipelineDescription(const RHI::GraphicsPipelineDesc& desc) {
-        m_pipelineDesc = desc;
-        m_hasPipeline = true;
-        return *this;
-    }
-
-    SubpassBuilder& SubpassBuilder::setNoPipeline() {
-        m_hasPipeline = false;
-        m_pipelineDesc = RHI::GraphicsPipelineDesc{}; // 重置为默认
-        return *this;
-    }
-
-    SubpassBuilder& SubpassBuilder::setRecorder(ISubpassRecorder* recorder) {
+    SubpassBuilder& SubpassBuilder::setRecorder(std::shared_ptr<ISubpassRecorder> recorder) {
         m_recorder = recorder;
         return *this;
     }

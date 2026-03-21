@@ -5,13 +5,16 @@
 #include "../../scene/Scene.hpp"
 #include "../graph/RenderGraph.hpp"
 #include "../backend/RHIFactory.hpp"
+#include "RenderPathConfig.hpp" 
 
 namespace StarryEngine {
     class IRenderPath {
     public:
         virtual ~IRenderPath() = default;
 
-        virtual bool initialize(RHI::DescriptorSetLayoutHandle globalSetLayout) = 0;
+        virtual void setConfig(const RenderPathConfig& config) = 0;
+
+        virtual bool initialize() = 0;
 
         virtual void setDrawItems(const Scene::AnalysisSceneResult& secneData) = 0;
 

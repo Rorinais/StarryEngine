@@ -21,10 +21,8 @@ namespace StarryEngine {
         void onResize(uint32_t width, uint32_t height);
         void setRenderPath(std::unique_ptr<IRenderPath> newRenderPath);
 
-        // 解析场景，将数据拆分为管线描述和实时更新的数据
         void analysisScene();
 
-        // 全局的描述符布局，MVP矩阵
         void createGlobalSetLayout();
         void createGlobalUniformBuffer();
 

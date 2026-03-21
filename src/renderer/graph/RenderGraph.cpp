@@ -53,41 +53,6 @@ namespace StarryEngine::RenderGraph {
         return desc;
     }
 
-    RHI::GraphicsPipelineDesc RenderGraph::createBasePipelineDesc(
-        RHI::ShaderHandle vertexShaderHandle,
-        RHI::ShaderHandle fragmentShaderHandle,
-        RHI::VertexInputState vertexInput,
-        RHI::PipelineLayoutHandle pipelineLayoutHandle,
-        uint32_t width, uint32_t height,
-        uint32_t rasterizationSamples,
-        float lineWidth,
-        RHI::PrimitiveTopology topology,
-        RHI::CullMode cullMode,
-        bool depthTestEnable,
-        bool depthWriteEnable,
-        RHI::CompareOp depthCompareOp,
-        std::vector<RHI::BlendAttachmentState> attachments,
-        std::vector<RHI::DynamicState> dynamicStates
-    ) {
-        RHI::GraphicsPipelineDesc desc;
-        desc.topology = topology;
-        desc.vertexShader = vertexShaderHandle;
-        desc.fragmentShader = fragmentShaderHandle;
-        desc.vertexInput = vertexInput;
-        desc.pipelineLayoutHandle = pipelineLayoutHandle;
-        desc.depthStencil.depthTestEnable = depthTestEnable;
-        desc.depthStencil.depthWriteEnable = depthWriteEnable;
-        desc.depthStencil.depthCompareOp = depthCompareOp;
-        desc.rasterizer.lineWidth = lineWidth;
-        desc.rasterizer.cullMode = cullMode;
-        desc.multisample.rasterizationSamples = rasterizationSamples;
-        desc.colorBlend.attachments = attachments;
-        desc.dynamicStates = dynamicStates;
-        desc.viewport.viewports = { {0, 0, (float)width, (float)height, 0, 1} };
-        desc.viewport.scissors = { {{0, 0}, {width, height}} };
-        return desc;
-    }
-
     TextureId RenderGraph::createVirtualTexture(const RHI::TextureDesc& desc, const std::string& name) {
         if (!name.empty() && m_nameToTextureId.find(name) != m_nameToTextureId.end()) {
             throw std::runtime_error("Texture name already exists: " + name);
@@ -170,15 +135,10 @@ namespace StarryEngine::RenderGraph {
         return order;
     }
 
-    // 编译渲染图：分析依赖、排序、创建物理资源、生成帧缓冲
-    bool RenderGraph::compile() {
+
+    void RenderGraph::dependencyAnalysis() {
         if (m_passes.empty()) {
             throw std::runtime_error("No passes to compile.");
-        }
-
-        // 1. 收集每个 Pass 的资源使用信息（读取/写入的纹理和缓冲区）
-        for (auto& pass : m_passes) {
-            pass->collectResourceUsage();
         }
 
         size_t passCount = m_passes.size();
@@ -200,7 +160,7 @@ namespace StarryEngine::RenderGraph {
             adj[src].push_back(dst);
             };
 
-        // 2. 根据纹理的读写关系建立依赖
+        //根据纹理的读写关系建立依赖
         for (const auto& [tex, writers] : texWriters) {
             auto& readers = texReaders[tex];
             // 写后读：写 Pass 必须在读 Pass 之前
@@ -219,7 +179,7 @@ namespace StarryEngine::RenderGraph {
             }
         }
 
-        // 3. 根据缓冲区的读写关系建立依赖（逻辑同上）
+        //根据缓冲区的读写关系建立依赖（逻辑同上）
         for (const auto& [buf, writers] : bufWriters) {
             auto& readers = bufReaders[buf];
             for (uint32_t w : writers) {
@@ -236,19 +196,16 @@ namespace StarryEngine::RenderGraph {
             }
         }
 
-        // 4. 添加用户手动指定的依赖关系
-        for (const auto& [src, dst] : m_manualDependencies) {
-            adj[src].push_back(dst);
-        }
-
-        // 5. 拓扑排序得到 Pass 的执行顺序
+        // 拓扑排序得到 Pass 的执行顺序
         auto order = topologicalSort(adj);
         m_sortedPasses.clear();
         for (uint32_t idx : order) {
             m_sortedPasses.push_back(m_passes[idx].get());
         }
+    }
 
-        // 6. 分析纹理的读写 Pass 索引，用于自动插入子通道依赖（例如从上次写到第一次读）
+    bool RenderGraph::compile() {
+        // 分析纹理的读写 Pass 索引，用于自动插入子通道依赖（例如从上次写到第一次读）
         struct TexturePassInfo {
             int32_t lastWriterIndex = -1;               // 最后一个写入该纹理的 Pass 索引
             int32_t firstReaderIndex = -1;              // 第一个读取该纹理的 Pass 索引
@@ -279,7 +236,7 @@ namespace StarryEngine::RenderGraph {
             }
         }
 
-        // 7. 如果存在从写入到读取的跨 Pass 依赖，添加一个子通道依赖（从外部到第一个读 Pass 的子通道）
+        // 如果存在从写入到读取的跨 Pass 依赖，添加一个子通道依赖（从外部到第一个读 Pass 的子通道）
         for (const auto& [tex, info] : texPassInfo) {
             if (info.lastWriterIndex != -1 && info.firstReaderIndex != -1 && info.firstReaderIndex > info.lastWriterIndex) {
                 RHI::SubpassDependency dep{};
@@ -290,11 +247,11 @@ namespace StarryEngine::RenderGraph {
                 dep.srcAccessMask = static_cast<RHI::AccessFlags>(RHI::AccessFlag::MemoryWrite);
                 dep.dstAccessMask = static_cast<RHI::AccessFlags>(RHI::AccessFlag::InputAttachmentRead);
                 dep.byRegion = true;                               // 按区域依赖
-                m_sortedPasses[info.firstReaderIndex]->getBuilder().addDependency(dep);
+                m_sortedPasses[info.firstReaderIndex]->addDependency(dep);
             }
         }
 
-        // 8. 为每个虚拟纹理创建/获取物理纹理，建立 ID 到物理信息的映射
+        // 为每个虚拟纹理创建/获取物理纹理，建立 ID 到物理信息的映射
         for (auto& vt : m_virtualTextures) {
             if (vt.imported) {                                     // 外部导入的纹理（如交换链）
                 PhysicalTextureInfo info;
@@ -315,7 +272,7 @@ namespace StarryEngine::RenderGraph {
             }
         }
 
-        // 9. 为每个虚拟缓冲区创建/获取物理缓冲区
+        //为每个虚拟缓冲区创建/获取物理缓冲区
         for (auto& vb : m_virtualBuffers) {
             if (vb.imported) {
                 m_bufferMap[vb.id] = vb.externalHandle;
@@ -329,25 +286,26 @@ namespace StarryEngine::RenderGraph {
             }
         }
 
-        // 10. 构建纹理描述映射（可能供 Pass 编译时使用）
+        // 构建纹理描述映射（可能供 Pass 编译时使用）
         std::unordered_map<TextureId, RHI::TextureDesc> texDescMap;
         for (const auto& vt : m_virtualTextures) {
             texDescMap[vt.id] = vt.desc;
         }
 
-        // 11. 编译每个 Pass（例如创建 RenderPass 对象、管线等）
+        // 编译每个 Pass（例如创建 RenderPass 对象、管线等）
         for (auto* pass : m_sortedPasses) {
             if (!pass->compile(m_resMgr, m_textureMap, texDescMap, m_bufferMap)) {
                 throw std::runtime_error("Failed to compile pass: " + pass->getName());
             }
         }
+        return true;
+    }
 
-        // 12. 检查交换链图像数量是否已设置
+    void RenderGraph::createFrameBuffer() {
         if (m_swapchainImageCount == 0) {
             throw std::runtime_error("Swapchain image count not set before compile!");
         }
 
-        // 13. 为每个 Pass 的每个交换链图像创建帧缓冲
         m_perPassFramebuffers.clear();
         m_perPassFramebuffers.reserve(m_sortedPasses.size());
 
@@ -355,7 +313,7 @@ namespace StarryEngine::RenderGraph {
             std::vector<RHI::FramebufferHandle> framebuffersForPass;
             framebuffersForPass.reserve(m_swapchainImageCount);
 
-            const auto& attachmentKeys = pass->getAttachmentNames(); // 该 Pass 声明的附件名称列表
+            const auto& attachmentKeys = pass->getAttachmentNames();
             auto rpHandle = pass->getRenderPassHandle();
             auto* rpObj = m_resMgr->getRenderPass(rpHandle);
             if (!rpObj) {
@@ -366,7 +324,7 @@ namespace StarryEngine::RenderGraph {
             for (uint32_t imgIdx = 0; imgIdx < m_swapchainImageCount; ++imgIdx) {
                 std::vector<void*> attachments;                       // 附件视图列表
                 for (const auto& key : attachmentKeys) {
-                    TextureId texId = pass->getBoundTextureId(key);  // 根据附件名称获取纹理 ID
+                    TextureId texId = pass->getTextureIdForAttachmentKey(key);
                     auto it = m_textureMap.find(texId);
                     if (it == m_textureMap.end()) {
                         throw std::runtime_error("Texture not found for key: " + key);
@@ -389,16 +347,15 @@ namespace StarryEngine::RenderGraph {
                 }
 
                 RHI::FramebufferDesc fbDesc;
-                fbDesc.renderPass = rpObj->getNativeHandle();        // 原生 RenderPass 句柄
-                fbDesc.attachments = attachments;                     // 附件视图列表
-                fbDesc.extent = { pass->getWidth(), pass->getHeight() }; // 帧缓冲尺寸
-                fbDesc.layers = 1;                                     // 层数（通常为1）
+                fbDesc.renderPass = rpObj->getNativeHandle();        
+                fbDesc.attachments = attachments;                     
+                fbDesc.extent = { pass->getWidth(), pass->getHeight() }; 
+                fbDesc.layers = 1;                                     
                 auto fb = m_resMgr->createFramebuffer(fbDesc);
                 framebuffersForPass.push_back(fb);
             }
             m_perPassFramebuffers.push_back(std::move(framebuffersForPass));
         }
-        return true;
     }
 
     void RenderGraph::execute(uint32_t frameIndex, RHI::RHICommandEncoder* encoder) {
@@ -421,17 +378,6 @@ namespace StarryEngine::RenderGraph {
     RHI::BufferHandle RenderGraph::getPhysicalBuffer(BufferId id) const {
         auto it = m_bufferMap.find(id);
         return it != m_bufferMap.end() ? it->second : RHI::BufferHandle::Null();
-    }
-
-    void RenderGraph::addDependency(PassNode* from, PassNode* to) {
-        uint32_t srcIdx = UINT32_MAX, dstIdx = UINT32_MAX;
-        for (uint32_t i = 0; i < m_passes.size(); ++i) {
-            if (m_passes[i].get() == from) srcIdx = i;
-            if (m_passes[i].get() == to) dstIdx = i;
-        }
-        if (srcIdx != UINT32_MAX && dstIdx != UINT32_MAX) {
-            m_manualDependencies.push_back({ srcIdx, dstIdx });
-        }
     }
 
 } // namespace StarryEngine::RenderGraph

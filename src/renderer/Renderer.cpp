@@ -15,18 +15,16 @@ namespace StarryEngine {
 
     void Renderer::destroy() {
         m_rhi->waitIdle();
-        if (m_renderPath){
+        if (m_renderPath) {
             m_renderPath.reset();
         }
     }
 
     void Renderer::renderFrame(RHI::RHICommandEncoder* encoder, uint32_t frameIndex, float deltaTime) {
-        // 检查场景版本，必要时重新分析
         uint32_t currentVersion = m_scene->getContentVersion();
         if (!m_analysisSceneResult || currentVersion != m_lastAnalyzedVersion) {
-            analysisScene();   // 内部更新 m_analysisSceneResult
+            analysisScene();
             m_lastAnalyzedVersion = currentVersion;
-            // 将新的绘制项传递给渲染路径（只需在变化时更新）
             if (m_renderPath && m_analysisSceneResult) {
                 m_renderPath->setDrawItems(*m_analysisSceneResult);
             }
@@ -114,7 +112,7 @@ namespace StarryEngine {
         Scene::AnalysisSceneResult result;
         std::unordered_map<Scene::GraphicsPipelineState, uint32_t, std::hash<Scene::GraphicsPipelineState>> pipelineIndexMap;
 
-        // 合并处理 opaque 和 transparent 物体（或者分开存储，但绘制项列表统一）
+        // 合并处理 opaque 和 transparent 物体
         auto processObjects = [&](const std::vector<std::shared_ptr<Scene::RenderObject>>& objects) {
             for (auto& obj : objects) {
                 auto geometry = obj->geometry;
@@ -158,14 +156,14 @@ namespace StarryEngine {
 
                     // 2. 收集描述符集句柄（set0 全局，set1 材质私有）
                     std::unordered_map<uint32_t, RHI::DescriptorSetHandle> descSets;
-                    descSets[0] = m_globalDescriptorSet; // 全局 set0
+                    descSets[0] = m_globalDescriptorSet; 
                     for (const auto& [setIdx, setHandle] : materialInst->getAllSets()) {
                         if (setIdx != 0) descSets[setIdx] = setHandle;
                     }
 
-                    // 3. 填充 DrawItem（不含 transform）
+                    // 3. 填充 DrawItem
                     Scene::DrawItem item;
-                    item.object = obj;                          // 弱指针
+                    item.object = obj;                         
                     item.submeshIndex = static_cast<uint32_t>(i);
                     item.vertexBuffer = vb;
                     item.indexBuffer = ib;
@@ -173,17 +171,18 @@ namespace StarryEngine {
                     item.indexOffset = submesh.indexOffset;
                     item.indexCount = submesh.indexCount;
                     item.pipelineIndex = pipelineIdx;
+                    item.queue = materialInst->getRenderQueue();
+                    item.stage = materialInst->getRenderStage();
 
                     result.drawItems.push_back(std::make_shared<Scene::DrawItem>(std::move(item)));
                 }
             }
             };
 
-        // 处理 opaque 和 transparent 物体（可根据需要合并到一个列表中，或保持分类）
+        // 处理 opaque 和 transparent 物体
         processObjects(m_scene->getOpaqueObjects());
         processObjects(m_scene->getTransparentObjects());
 
-        // 存储结果
         m_analysisSceneResult = std::make_shared<Scene::AnalysisSceneResult>(std::move(result));
     }
 

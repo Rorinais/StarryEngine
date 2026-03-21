@@ -8,15 +8,32 @@
 namespace StarryEngine::Scene {
     struct RenderObject;
 
+    enum class RenderQueue {
+        Opaque = 0,
+        Transparent = 1,
+        UI = 2,
+    };
+
+    enum class RenderStage {
+        Shadow,       // 阴影投射
+        GBuffer,      // 延迟渲染几何体 Pass
+        Lighting,     // 延迟渲染光照 Pass
+        Forward,      // 前向渲染 Pass
+        UI            // UI 渲染
+    };
+
     struct DrawItem {
-        std::weak_ptr<RenderObject> object;          // 关联的物体
-        uint32_t submeshIndex;                        // 子网格索引
+        std::weak_ptr<RenderObject> object;          
+        uint32_t submeshIndex;                       
         RHI::BufferHandle vertexBuffer;
         RHI::BufferHandle indexBuffer;
         std::unordered_map<uint32_t, RHI::DescriptorSetHandle> descriptorSets;
         uint32_t indexOffset = 0;
         uint32_t indexCount = 0;
         uint32_t pipelineIndex = 0;
+
+        RenderQueue queue = RenderQueue::Opaque;
+        RenderStage stage = RenderStage::Forward;
     };
 
     struct BasePipelineState {
@@ -24,41 +41,32 @@ namespace StarryEngine::Scene {
         RHI::PipelineLayoutHandle layout;
         std::string debugName;
 
-        //默认开启动态视口
         std::vector<RHI::DynamicState> dynamicStates = { RHI::DynamicState::Viewport, RHI::DynamicState::Scissor };
         virtual ~BasePipelineState() = default;
     };
 
     struct GraphicsPipelineState : BasePipelineState {
-        // 着色器
         RHI::ShaderHandle vertexShader;
         RHI::ShaderHandle fragmentShader;
 
-        // 渲染通道关联
         RHI::RenderPassHandle renderPass;
         uint32_t subpassIndex = -1;   // -1 表示由 RenderGraph 自动绑定
 
-        // 顶点输入
         RHI::VertexInputState vertexInput;
 
-        // 光栅化
         RHI::CullMode cullMode = RHI::CullMode::Back;
         RHI::FrontFace frontFace = RHI::FrontFace::CounterClockwise;
         float lineWidth = 1.0f;
 
-        // 深度模板
         bool depthTestEnable = true;
         bool depthWriteEnable = true;
         RHI::CompareOp depthCompareOp = RHI::CompareOp::Less;
 
-        // 输入装配
         RHI::PrimitiveTopology topology = RHI::PrimitiveTopology::TriangleList;
 
-        // 视口与裁剪（即使开启动态，创建时仍需默认值）
         std::vector<RHI::Viewport> viewports = { RHI::Viewport{} };
         std::vector<RHI::Rect2D> scissors = { RHI::Rect2D{} };
 
-        // 颜色混合（每个颜色附件的默认设置）
         std::vector<RHI::BlendAttachmentState> attachments = { RHI::BlendAttachmentState{} };
 
         bool operator==(const GraphicsPipelineState& other) const {
@@ -79,7 +87,6 @@ namespace StarryEngine::Scene {
                 viewports == other.viewports &&
                 scissors == other.scissors &&
                 attachments == other.attachments;
-            // 注意：不比较 renderPass 和 subpassIndex
         }
     };
 

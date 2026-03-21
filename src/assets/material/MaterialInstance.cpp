@@ -18,19 +18,16 @@ namespace StarryEngine::Assets {
     }
 
     RHI::DescriptorSetHandle MaterialInstance::getOrCreateSet(uint32_t setIndex) {
-        // 如果已经存在，直接返回
         auto it = m_sets.find(setIndex);
         if (it != m_sets.end()) {
             return it->second;
         }
 
-        // 检查该 set 索引是否有布局定义
         auto layoutIt = m_layouts.find(setIndex);
         if (layoutIt == m_layouts.end()) {
-            return RHI::DescriptorSetHandle::Null(); 
+            return RHI::DescriptorSetHandle::Null();
         }
 
-        // 分配新的描述符集
         RHI::DescriptorSetDesc desc;
         desc.descriptorPool = m_pool;
         desc.descriptorSetLayout = layoutIt->second;
@@ -50,7 +47,7 @@ namespace StarryEngine::Assets {
 
     void MaterialInstance::setUniform(uint32_t setIndex, uint32_t binding, const void* data, size_t size) {
         auto set = getOrCreateSet(setIndex);
-        if (!set.isValid()) return; 
+        if (!set.isValid()) return;
 
         uint64_t key = ((uint64_t)setIndex << 32) | binding;
         auto it = m_buffers.find(key);
@@ -72,14 +69,13 @@ namespace StarryEngine::Assets {
 
             m_buffers[key] = { buffer, mapped, size };
 
-            // 更新描述符集
             auto* setObj = m_resMgr->getDescriptorSet(set);
             if (setObj) {
                 setObj->writeBuffer(binding, 0, bufferObj, 0, size);
                 setObj->update();
             }
 
-            it = m_buffers.find(key); 
+            it = m_buffers.find(key);
         }
 
         if (it != m_buffers.end()) {

@@ -1,9 +1,19 @@
 #pragma once
-
+#include"../interface/RHI_STRUCTS_DESC.hpp"
 #include <cstdint>
 #include <functional>
 
 namespace StarryEngine::RenderGraph {
+    struct AttachmentParams {
+        std::optional<RHI::Format> format;
+        std::optional<RHI::Color> clearColor;
+        std::optional<float> clearDepth;
+        std::optional<uint32_t> clearStencil;
+        std::optional<RHI::AttachmentLoadOp> loadOp;
+        std::optional<RHI::AttachmentStoreOp> storeOp;
+        std::optional<RHI::ImageLayout> initialLayout;
+        std::optional<RHI::ImageLayout> finalLayout;
+    };
 
     class ResourceId {
     public:
@@ -17,7 +27,7 @@ namespace StarryEngine::RenderGraph {
         bool operator!=(const ResourceId& other) const { return !(*this == other); }
 
         bool operator<(const ResourceId& other) const {
-            // 按 id 比较即可，generation 作为次要比较（可选）
+            // 按 id 比较即可，generation 作为次要比较
             if (m_id != other.m_id) return m_id < other.m_id;
             return m_generation < other.m_generation;
         }

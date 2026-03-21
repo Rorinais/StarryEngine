@@ -26,11 +26,11 @@ namespace StarryEngine {
         void createRenderer();
         bool createGridResources();
         void initEventDispatcher();
-        
+
     private:
         Window::Ptr m_window;
-        uint32_t m_width = 800*1.5;
-        uint32_t m_height = 600*1.5;
+        uint32_t m_width = 800 * 1.5;
+        uint32_t m_height = 600 * 1.5;
         const char* m_title = "StarryEngine";
         const char* m_icon_path = "assets/icons/window_icon.png";
         bool m_framebufferResized = false;

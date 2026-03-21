@@ -10,13 +10,18 @@ namespace StarryEngine::RenderGraph {
     public:
         using ISubpassRecorder::ISubpassRecorder;
 
-        void setPipelines(const std::vector<RHI::PipelineHandle>& pipelines) { m_pipelines = pipelines; }
-        void setDrawItems(const std::vector<std::shared_ptr<Scene::DrawItem>>& items) { m_drawItems = items; }
+        void clearDrawItems() override { m_drawItems.clear(); }
+
+        const std::vector<std::shared_ptr<Scene::DrawItem>>& getDrawItems() override { return m_drawItems; }
+
+        void setPipelines(const std::vector<RHI::PipelineHandle>& pipelines) override { m_pipelines = pipelines; }
+        void setDrawItems(const std::vector<std::shared_ptr<Scene::DrawItem>>& items) override { m_drawItems = items; }
 
         void recordCommands(RHI::RHICommandEncoder* encoder,
             const PassContext& pctx,
             uint32_t subpassIndex,
             uint32_t frameIndex) override {
+
             for (const auto& item : m_drawItems) {
                 if (item->pipelineIndex >= m_pipelines.size()) continue;
 
@@ -46,8 +51,7 @@ namespace StarryEngine::RenderGraph {
 
     private:
         std::vector<std::shared_ptr<Scene::DrawItem>> m_drawItems;
-        std::vector<RHI::PipelineHandle> m_pipelines;  
-        RHI::PipelineLayoutHandle m_pipelineLayout;
+        std::vector<RHI::PipelineHandle> m_pipelines;
     };
 
     class ImGuiRecorder : public ISubpassRecorder {
@@ -83,7 +87,7 @@ namespace StarryEngine::RenderGraph {
             ImGuiIO& io = ImGui::GetIO(); (void)io;
             io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
             io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-            
+
             // 初始化 GLFW 后端
             ImGui_ImplGlfw_InitForVulkan(window, true);
 
@@ -345,5 +349,5 @@ namespace StarryEngine::RenderGraph {
         VkSampler        m_sampler = VK_NULL_HANDLE;
         ImTextureID      m_sceneTextureID = 0;
     };
- 
+
 }

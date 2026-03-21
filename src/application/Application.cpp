@@ -1,4 +1,5 @@
 #include "Application.hpp"
+#include "../renderer/subpassRecorder/GbufferRecorder.hpp"
 
 namespace StarryEngine {
     Application::Application() {
@@ -152,8 +153,7 @@ namespace StarryEngine {
                 {0, RHI::DescriptorType::UniformBuffer, 1, RHI::ShaderStage::Vertex | RHI::ShaderStage::Fragment},
                 {1, RHI::DescriptorType::CombinedImageSampler, 1, RHI::ShaderStage::Fragment}
             };
-            auto layout = Assets::DescriptorSetLayoutCache::getOrCreateLayout(m_resMgr.get(), layoutDesc);
-            layoutMap[1] = layout; // 材质私有 set1 布局
+            layoutMap[1] = Assets::DescriptorSetLayoutCache::getOrCreateLayout(m_resMgr.get(), layoutDesc); // 材质私有 set1 布局
 
             std::string fsPath;
             if (param.name == "body") fsPath = "assets/shaders/core/shader.frag";
@@ -170,11 +170,10 @@ namespace StarryEngine {
             }
 
             // 4. 创建材质实例（传入全局 set0）
-            auto instance = std::make_shared<Assets::MaterialInstance>(
-                tmpl, m_descriptorPool, m_resMgr.get(), m_renderer->getGlobalDescriptorSet());
+            auto instance = std::make_shared<Assets::MaterialInstance>(tmpl, m_descriptorPool, m_resMgr.get(), m_renderer->getGlobalDescriptorSet());
 
             // 5. 设置 UBO 初始数据
-            Assets::MaterialUniforms uniforms{}; 
+            Assets::MaterialUniforms uniforms{};
             instance->setUniform(1, 0, &uniforms, sizeof(Assets::MaterialUniforms));
 
             // 6. 设置纹理（如果存在）
@@ -191,6 +190,9 @@ namespace StarryEngine {
             else {
                 LOG_WARN("Material {} has no albedo texture", param.name);
             }
+
+            instance->setRenderStage(Scene::RenderStage::Forward);
+            instance->setRenderQueue(Scene::RenderQueue::Opaque);
 
             materialInstances.push_back(instance);
         }
@@ -214,8 +216,9 @@ namespace StarryEngine {
             }
             else {
                 // 创建网格材质实例，传入全局 set0 描述符集
-                auto gridMaterialInst = std::make_shared<Assets::MaterialInstance>(
-                    gridTmpl, m_descriptorPool, m_resMgr.get(), m_renderer->getGlobalDescriptorSet());
+                auto gridMaterialInst = std::make_shared<Assets::MaterialInstance>(gridTmpl, m_descriptorPool, m_resMgr.get(), m_renderer->getGlobalDescriptorSet());
+                gridMaterialInst->setRenderStage(Scene::RenderStage::Forward);
+                gridMaterialInst->setRenderQueue(Scene::RenderQueue::Opaque);
 
                 // 创建网格 RenderObject
                 auto gridObj = std::make_shared<Scene::RenderObject>();
@@ -248,13 +251,61 @@ namespace StarryEngine {
         m_scene->setActiveCamera(perspectiveCamera);
 
         // 9. 创建渲染路径
-        auto renderPath = std::make_unique<ForwardRenderPath>(m_rhi, m_descriptorPool, m_width, m_height);
-        if (!renderPath->initialize(m_renderer->getGlobalSetLayout())) {
+        auto renderPath = std::make_unique<ForwardRenderPath>(m_rhi, m_width, m_height);
+        auto graph = renderPath->getRenderGraph();
+
+        std::unordered_map<std::string, RHI::TextureDesc> textureDescs;
+        RHI::TextureDesc colorDesc;
+        colorDesc.extent = { m_width, m_height, 1 };
+        colorDesc.format = RHI::Format::RGBA8_UNorm;
+        colorDesc.type = RHI::TextureType::Texture2D;
+        colorDesc.allowRenderTarget = true;
+        textureDescs["Color"] = colorDesc;
+
+        // 添加深度纹理描述
+        RHI::TextureDesc depthDesc = colorDesc;
+        depthDesc.format = m_rhi->getDepthFormat();
+        depthDesc.allowDepthStencil = true;
+        depthDesc.allowRenderTarget = false;
+        textureDescs["Depth"] = depthDesc;
+
+        RHI::TextureDesc swapchainDesc = colorDesc;
+        swapchainDesc.format = RHI::Format::BGRA8_sRGB;
+        textureDescs["Swapchain"] = swapchainDesc;
+
+        renderPath->setTextureDescs(textureDescs);
+
+        RenderPathConfig config;
+        SubpassConfig opaqueSubpass;
+        opaqueSubpass.name = "Opaque";
+
+        SubpassAttachment colorAttach;
+        colorAttach.textureName = "Swapchain";
+        colorAttach.params.clearColor = RHI::Color{ 0.05f, 0.05f, 0.05f, 1.0f };
+        colorAttach.params.loadOp = RHI::AttachmentLoadOp::Clear;
+        colorAttach.params.storeOp = RHI::AttachmentStoreOp::Store;
+        colorAttach.params.initialLayout = RHI::ImageLayout::Undefined;
+        colorAttach.params.finalLayout = RHI::ImageLayout::PresentSrc;
+        opaqueSubpass.colorAttachments.push_back(colorAttach);
+
+        SubpassAttachment depthAttach;
+        depthAttach.textureName = "Depth";
+        depthAttach.params.clearDepth = 1.0f;
+        depthAttach.params.loadOp = RHI::AttachmentLoadOp::Clear;
+        depthAttach.params.storeOp = RHI::AttachmentStoreOp::DontCare;
+        depthAttach.params.initialLayout = RHI::ImageLayout::Undefined;
+        depthAttach.params.finalLayout = RHI::ImageLayout::DepthStencilAttachment;
+        opaqueSubpass.depthAttachment = depthAttach;
+
+        opaqueSubpass.recorder = std::make_shared<RenderGraph::MeshDrawRecorder>(m_resMgr);
+
+        config[Scene::RenderStage::Forward][Scene::RenderQueue::Opaque] = opaqueSubpass;
+
+        renderPath->setConfig(config);
+        if (!renderPath->initialize()) {
             LOG_ERROR("Failed to initialize renderPath");
             return;
         }
-        renderPath->setGlobalDescriptorSet(m_renderer->getGlobalDescriptorSet());
-
         m_renderer->setRenderPath(std::move(renderPath));
     }
 
@@ -275,7 +326,7 @@ namespace StarryEngine {
                     std::cerr << "Failed to recreate swap chain!" << std::endl;
                     continue;
                 }
-                m_renderer->onResize(m_width,m_height);
+                m_renderer->onResize(m_width, m_height);
 
                 continue;
             }
@@ -287,8 +338,8 @@ namespace StarryEngine {
             }
 
             bool success = m_rhi->renderFrame([this, deltaTime](RHI::RHICommandEncoder* encoder, uint32_t imageIndex) {
-                    m_renderer->renderFrame(encoder, imageIndex, deltaTime);
-             });
+                m_renderer->renderFrame(encoder, imageIndex, deltaTime);
+                });
             monitor.updateTitle();
         }
     }
@@ -311,7 +362,7 @@ namespace StarryEngine {
                 auto cam = std::dynamic_pointer_cast<Scene::PerspectiveCamera>(m_scene->getActiveCamera());
                 if (cam) {
                     cam->setPerspective(cam->getFov(), (float)m_width / m_height, cam->getNear(), cam->getFar());
-                    cam->updateProjection(); 
+                    cam->updateProjection();
                 }
             }
             });
@@ -348,7 +399,7 @@ namespace StarryEngine {
 
         if (m_scene->getActiveCamera()) {
             m_cameraController = std::make_unique<CameraController>(m_scene->getActiveCamera());
-            m_cameraController->setEnabled(false); 
+            m_cameraController->setEnabled(false);
 
             // 鼠标按钮事件：左键激活控制，右键退出控制
             GetEventDispatcher().subscribe(EventType::MouseButtonPressed, [this](IEvent& e) {
@@ -390,7 +441,7 @@ namespace StarryEngine {
                 bool ctrlPressed = glfwGetKey(m_window->getHandle(), GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS ||
                     glfwGetKey(m_window->getHandle(), GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS;
 
-                float delta = static_cast<float>(ev.getYOffset()) * 1.0f; 
+                float delta = static_cast<float>(ev.getYOffset()) * 1.0f;
                 if (ctrlPressed) {
                     // Ctrl+滚轮：调整视野（FOV）
                     m_cameraController->setFov(delta);
@@ -408,7 +459,7 @@ namespace StarryEngine {
         m_rhi.reset();
         m_window.reset();
     }
-} 
+}
 
 int main() {
 #ifdef __linux__
@@ -430,7 +481,7 @@ int main() {
     _putenv_s("VK_LAYER_PATH", "layers");
 #endif
     StarryEngine::Logger::init();
-    StarryEngine::Logger::setShowSourceLoc(false);
+    StarryEngine::Logger::setShowSourceLoc(true);
     StarryEngine::Application app;
     app.run();
     StarryEngine::Logger::shutdown();
