@@ -15,7 +15,7 @@ namespace StarryEngine::RenderGraph {
         RHI::RenderPassDesc renderPassDesc;
         std::vector<std::string> attachmentNames;
         std::unordered_map<std::string, uint32_t> attachmentNameToIndex;
-        std::vector<std::shared_ptr<ISubpassRecorder>> subpassRecorders;
+        std::vector<std::shared_ptr<StarryEngine::ISubpassRecorder>> subpassRecorders;
     };
 
     class RenderPassBuilder {

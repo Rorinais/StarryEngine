@@ -73,6 +73,8 @@ namespace StarryEngine::RHI::FUNC {
         case Format::D24_UNorm_S8_UInt: return VK_FORMAT_D24_UNORM_S8_UINT;
         case Format::RGB32_Float: return VK_FORMAT_R32G32B32_SFLOAT;
         case Format::RG32_Float: return VK_FORMAT_R32G32_SFLOAT;
+        case Format::RGBA32_Float: return VK_FORMAT_R32G32B32A32_SFLOAT;
+        case Format::RGBA16_Float: return VK_FORMAT_R16G16B16A16_SFLOAT;
         default: return VK_FORMAT_UNDEFINED;
         }
     }
@@ -377,6 +379,57 @@ namespace StarryEngine::RHI::FUNC {
             flags |= VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT;
         }
         return flags;
+    }
+
+    static RHI::PipelineStage layoutToSrcStage(RHI::ImageLayout layout) {
+        switch (layout) {
+        case RHI::ImageLayout::ColorAttachment:
+            return RHI::PipelineStage::ColorAttachmentOutput;
+        case RHI::ImageLayout::DepthStencilAttachment:
+            return RHI::PipelineStage::LateFragmentTests;
+        case RHI::ImageLayout::ShaderReadOnly:
+            return RHI::PipelineStage::FragmentShader;
+        case RHI::ImageLayout::TransferSrc:
+        case RHI::ImageLayout::TransferDst:
+            return RHI::PipelineStage::Transfer;
+        default:
+            return RHI::PipelineStage::AllCommands;
+        }
+    }
+
+    // 将 ImageLayout 转换为目标阶段（通常与源阶段相同，但读操作可能需不同阶段）
+    static RHI::PipelineStage layoutToDstStage(RHI::ImageLayout layout) {
+        switch (layout) {
+        case RHI::ImageLayout::ShaderReadOnly:
+            return RHI::PipelineStage::FragmentShader;
+        case RHI::ImageLayout::ColorAttachment:
+            return RHI::PipelineStage::ColorAttachmentOutput;
+        case RHI::ImageLayout::DepthStencilAttachment:
+            return RHI::PipelineStage::LateFragmentTests;
+        case RHI::ImageLayout::TransferSrc:
+        case RHI::ImageLayout::TransferDst:
+            return RHI::PipelineStage::Transfer;
+        default:
+            return RHI::PipelineStage::AllCommands;
+        }
+    }
+
+    // 将 ImageLayout 转换为访问掩码
+    static RHI::AccessFlag layoutToAccessMask(RHI::ImageLayout layout) {
+        switch (layout) {
+        case RHI::ImageLayout::ColorAttachment:
+            return RHI::AccessFlag::ColorAttachmentWrite;
+        case RHI::ImageLayout::DepthStencilAttachment:
+            return RHI::AccessFlag::DepthStencilAttachmentWrite;
+        case RHI::ImageLayout::ShaderReadOnly:
+            return RHI::AccessFlag::ShaderRead;
+        case RHI::ImageLayout::TransferSrc:
+            return RHI::AccessFlag::TransferRead;
+        case RHI::ImageLayout::TransferDst:
+            return RHI::AccessFlag::TransferWrite;
+        default:
+            return RHI::AccessFlag::None;
+        }
     }
 
 } // namespace StarryEngine::RHI::FUNC

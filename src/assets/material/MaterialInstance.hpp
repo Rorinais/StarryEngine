@@ -21,9 +21,10 @@ namespace StarryEngine::Assets {
         void setDepthTest(bool enable) { m_template->setDepthTest(enable); }
         void setDepthWrite(bool enable) { m_template->setDepthWrite(enable); }
         void setDepthCompareOp(RHI::CompareOp op) { m_template->setDepthCompareOp(op); }
-        void setBlendState(const RHI::BlendAttachmentState& state) { m_template->setBlendState(state); }
+        void setAttachments(std::vector<RHI::BlendAttachmentState> attachments) { m_template->setAttachments(attachments); }
         void setRenderQueue(Scene::RenderQueue queue) { m_template->setRenderQueue(queue); }
         void setRenderStage(Scene::RenderStage stage) { m_template->setRenderStage(stage); }
+        void setDeferred(bool deferred) { m_template->setDeferred(deferred); }
         void enableTransparent(bool enable = true) { m_template->enableTransparent(enable); }
         void enableDepthTest(bool enable = true) { m_template->enableDepthTest(enable); }
         void enableDepthWrite(bool enable = true) { m_template->enableDepthWrite(enable); }
@@ -31,17 +32,18 @@ namespace StarryEngine::Assets {
         RHI::CullMode getCullMode() { return m_template->getCullMode(); }
         RHI::FrontFace getFrontFace() { return m_template->getFrontFace(); }
         RHI::CompareOp getDethCompareOp() { return m_template->getDethCompareOp(); }
-        RHI::BlendAttachmentState getBlendAttachmentState() { return m_template->getBlendAttachmentState(); }
+        std::vector<RHI::BlendAttachmentState> getAttachments() { return m_template->getAttachments(); }
         Scene::RenderQueue getRenderQueue() const { return m_template->getRenderQueue(); }
         Scene::RenderStage getRenderStage() const { return m_template->getRenderStage(); }
         bool isTransparent() const { return m_template->isTransparent(); }
         bool isDepthTestEnable() const { return m_template->isDepthTestEnable(); }
         bool isDepthWriteEnable() const { return m_template->isDepthWriteEnable(); }
+        bool isDeferred() const { return m_template->isDeferred(); }
 
         RHI::DescriptorSetHandle getSet(uint32_t setIndex) const;
         const std::unordered_map<uint32_t, RHI::DescriptorSetHandle>& getAllSets() const { return m_sets; }
         std::shared_ptr<MaterialTemplate> getTemplate() const { return m_template; }
-
+        
     private:
         RHI::DescriptorSetHandle getOrCreateSet(uint32_t setIndex);
 

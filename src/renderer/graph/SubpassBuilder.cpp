@@ -35,7 +35,7 @@ namespace StarryEngine::RenderGraph {
         return *this;
     }
 
-    SubpassBuilder& SubpassBuilder::setRecorder(std::shared_ptr<ISubpassRecorder> recorder) {
+    SubpassBuilder& SubpassBuilder::setRecorder(std::shared_ptr<StarryEngine::ISubpassRecorder> recorder) {
         m_recorder = recorder;
         return *this;
     }

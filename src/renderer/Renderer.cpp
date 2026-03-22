@@ -1,5 +1,6 @@
 #include"Renderer.hpp"
 #include "../logging/Logger.hpp"
+#include "../assets/Assets.hpp"
 
 namespace StarryEngine {
     Renderer::Renderer(std::shared_ptr<RHI::IRHI> rhi,
@@ -21,6 +22,27 @@ namespace StarryEngine {
     }
 
     void Renderer::renderFrame(RHI::RHICommandEncoder* encoder, uint32_t frameIndex, float deltaTime) {
+        // 更新所有实例化物体的实例缓冲区（每帧数据可能变化）
+        auto updateInstanceBuffers = [&](const std::vector<std::shared_ptr<Scene::RenderObject>>& objects) {
+            for (auto& obj : objects) {
+                if (obj->isInstanced && obj->instanceBuffer && obj->instanceBuffer->isValid() && !obj->instanceTransforms.empty()) {
+                    // 获取 Buffer 对象
+                    auto* bufferObj = m_resMgr->getBuffer(*obj->instanceBuffer);
+                    if (bufferObj) {
+                        size_t dataSize = obj->instanceTransforms.size() * sizeof(glm::mat4);
+                        // 调用 Buffer 的 update 方法
+                        bufferObj->update(obj->instanceTransforms.data(), dataSize, 0);
+                    }
+                    else {
+                        LOG_ERROR("Instance buffer handle is valid but no Buffer object found!");
+                    }
+                }
+            }
+            };
+        updateInstanceBuffers(m_scene->getOpaqueObjects());
+        updateInstanceBuffers(m_scene->getTransparentObjects());
+
+        // 场景内容变化时重新分析并更新 DrawItems
         uint32_t currentVersion = m_scene->getContentVersion();
         if (!m_analysisSceneResult || currentVersion != m_lastAnalyzedVersion) {
             analysisScene();
@@ -30,6 +52,7 @@ namespace StarryEngine {
             }
         }
 
+        // 更新相机和全局 Uniform
         auto camera = m_scene->getActiveCamera();
         if (camera) {
             camera->update();
@@ -48,6 +71,7 @@ namespace StarryEngine {
             }
         }
 
+        // 执行渲染路径
         if (m_renderPath) {
             m_renderPath->render(encoder, frameIndex);
         }
@@ -60,7 +84,7 @@ namespace StarryEngine {
         }
     }
 
-    void Renderer::setRenderPath(std::unique_ptr<IRenderPath> newRenderPath) {
+    void Renderer::setRenderPath(std::shared_ptr<IRenderPath> newRenderPath) {
         if (!newRenderPath) return;
         destroy();
         m_renderPath = std::move(newRenderPath);
@@ -108,6 +132,7 @@ namespace StarryEngine {
         descSet->update();
     }
 
+
     void Renderer::analysisScene() {
         Scene::AnalysisSceneResult result;
         std::unordered_map<Scene::GraphicsPipelineState, uint32_t, std::hash<Scene::GraphicsPipelineState>> pipelineIndexMap;
@@ -122,6 +147,23 @@ namespace StarryEngine {
                 auto ib = geometry->getIndexBuffer();
                 if (!vb.isValid() || !ib.isValid()) continue;
 
+                // ---------- 实例化检查 ----------
+                bool instanced = obj->isInstanced && !obj->instanceTransforms.empty();
+                if (instanced) {
+                    // 确保实例缓冲区已创建且大小足够
+                    size_t requiredSize = obj->instanceTransforms.size() * sizeof(glm::mat4);
+                    if (!obj->instanceBuffer || !obj->instanceBuffer->isValid() ||
+                        m_resMgr->getBuffer(*obj->instanceBuffer)->getSize() < requiredSize) {
+                        RHI::BufferDesc bufDesc;
+                        bufDesc.size = requiredSize;
+                        bufDesc.type = RHI::BufferType::Vertex;
+                        bufDesc.memoryType = RHI::MemoryType::CPU_To_GPU;
+                        bufDesc.allowUpdate = true;
+                        auto newHandle = m_resMgr->createBuffer(bufDesc, "InstanceBuffer");
+                        obj->instanceBuffer = std::make_shared<RHI::BufferHandle>(newHandle);
+                    }
+                }
+
                 const auto& submeshes = geometry->getSubmeshes();
                 for (size_t i = 0; i < submeshes.size(); ++i) {
                     const auto& submesh = submeshes[i];
@@ -130,9 +172,9 @@ namespace StarryEngine {
                     auto materialInst = obj->materials[submesh.materialIndex];
                     if (!materialInst) continue;
 
-                    // 1. 构造 PSO（不含 renderPass/subpass，由渲染路径决定）
+                    // 1. 构造 PSO
                     Scene::GraphicsPipelineState pso;
-                    pso.vertexInput = geometry->getVertexInputState();
+                    pso.vertexInput = geometry->getVertexInputState();  // 基础布局
                     pso.topology = geometry->getPrimitiveTopology();
                     pso.vertexShader = materialInst->getTemplate()->getVertexShader();
                     pso.fragmentShader = materialInst->getTemplate()->getFragmentShader();
@@ -141,7 +183,31 @@ namespace StarryEngine {
                     pso.depthTestEnable = materialInst->isDepthTestEnable();
                     pso.depthWriteEnable = materialInst->isDepthWriteEnable();
                     pso.depthCompareOp = materialInst->getDethCompareOp();
-                    pso.attachments = { materialInst->getBlendAttachmentState() };
+                    if (materialInst->isDeferred()) {
+                        pso.attachments = {
+                            RHI::BlendAttachmentState{}, // Albedo
+                            RHI::BlendAttachmentState{}, // Normal
+                            RHI::BlendAttachmentState{}  // Material
+                        };
+                    }
+                    else {
+                        pso.attachments = materialInst->getAttachments();
+                    }
+
+                    // **实例化特殊处理：合并实例布局**
+                    if (instanced) {
+                        // 定义实例布局的 VertexInputState
+                        RHI::VertexInputState instanceState;
+                        // 绑定 1：实例数据，步长 64 字节，每实例
+                        instanceState.bindings.push_back({ 1, 64, RHI::VertexInputRate::PerInstance });
+                        // 属性：矩阵的 4 行，每行一个 vec4
+                        instanceState.attributes.push_back({ 3, 1, 0 , RHI::Format::RGBA32_Float }); // 行0
+                        instanceState.attributes.push_back({ 4, 1, 16, RHI::Format::RGBA32_Float }); // 行1
+                        instanceState.attributes.push_back({ 5, 1, 32 ,RHI::Format::RGBA32_Float }); // 行2
+                        instanceState.attributes.push_back({ 6, 1, 48 , RHI::Format::RGBA32_Float });// 行3
+                        // 合并到 pso.vertexInput
+                        pso.vertexInput = mergeVertexInputStates(pso.vertexInput, instanceState);
+                    }
 
                     uint32_t pipelineIdx;
                     auto it = pipelineIndexMap.find(pso);
@@ -154,16 +220,18 @@ namespace StarryEngine {
                         pipelineIdx = it->second;
                     }
 
-                    // 2. 收集描述符集句柄（set0 全局，set1 材质私有）
+                    LOG_INFO("Processing object: geometry={}, instanced={}, materialSets:",
+                        (void*)geometry.get(), instanced);
+                    // 2. 收集描述符集
                     std::unordered_map<uint32_t, RHI::DescriptorSetHandle> descSets;
-                    descSets[0] = m_globalDescriptorSet; 
+                    descSets[0] = m_globalDescriptorSet;
                     for (const auto& [setIdx, setHandle] : materialInst->getAllSets()) {
                         if (setIdx != 0) descSets[setIdx] = setHandle;
                     }
 
                     // 3. 填充 DrawItem
                     Scene::DrawItem item;
-                    item.object = obj;                         
+                    item.object = obj;
                     item.submeshIndex = static_cast<uint32_t>(i);
                     item.vertexBuffer = vb;
                     item.indexBuffer = ib;
@@ -173,6 +241,20 @@ namespace StarryEngine {
                     item.pipelineIndex = pipelineIdx;
                     item.queue = materialInst->getRenderQueue();
                     item.stage = materialInst->getRenderStage();
+
+                    // ---------- 实例化 ----------
+                    if (instanced) {
+                        item.isInstanced = true;
+                        item.instanceCount = static_cast<uint32_t>(obj->instanceTransforms.size());
+                        item.instanceBuffer = *obj->instanceBuffer;
+                        item.instanceBufferStride = sizeof(glm::mat4);
+                    }
+                    else {
+                        item.isInstanced = false;
+                        item.instanceCount = 1;
+                        item.instanceBuffer = RHI::BufferHandle::Null();
+                        item.instanceBufferStride = 0;
+                    }
 
                     result.drawItems.push_back(std::make_shared<Scene::DrawItem>(std::move(item)));
                 }
@@ -186,4 +268,29 @@ namespace StarryEngine {
         m_analysisSceneResult = std::make_shared<Scene::AnalysisSceneResult>(std::move(result));
     }
 
+    RHI::VertexInputState Renderer::mergeVertexInputStates(
+        const RHI::VertexInputState& base,
+        const RHI::VertexInputState& additional)
+    {
+        RHI::VertexInputState result = base;
+
+        for (const auto& binding : additional.bindings) {
+            bool exists = false;
+            for (const auto& b : result.bindings) {
+                if (b.binding == binding.binding) {
+                    exists = true;
+                    break;
+                }
+            }
+            if (!exists) {
+                result.bindings.push_back(binding);
+            }
+        }
+
+        result.attributes.insert(result.attributes.end(),
+            additional.attributes.begin(),
+            additional.attributes.end());
+
+        return result;
+    }
 }

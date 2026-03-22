@@ -7,8 +7,7 @@ namespace StarryEngine::Assets {
         std::shared_ptr<RHI::ResourceManager> resMgr,
         const std::unordered_map<uint32_t, RHI::DescriptorSetLayoutHandle>& layouts,
         const std::vector<RHI::PushConstantRange>& pushConstants)
-        : m_resMgr(resMgr), m_layouts(layouts), m_pushConstants(pushConstants) {
-    }
+        : m_resMgr(resMgr), m_layouts(layouts), m_pushConstants(pushConstants) {}
 
     bool DefaultMaterialTemplate::loadShaders(const std::string& vsPath, const std::string& fsPath) {
         Assets::ShaderLoader loader(m_resMgr);

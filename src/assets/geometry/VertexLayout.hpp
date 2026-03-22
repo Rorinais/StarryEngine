@@ -32,10 +32,8 @@ namespace StarryEngine::Assets {
         VertexLayout& addAttribute(uint32_t location, uint32_t binding, RHI::Format format);
         RHI::VertexInputState build() const;
 
-        // 获取指定 binding 的 stride，用于创建顶点缓冲区
         uint32_t getBindingStride(uint32_t binding) const;
 
-        // 获取所有已定义的 binding 索引（升序）
         std::vector<uint32_t> getBindings() const;
 
         void print() const;

@@ -81,9 +81,10 @@ namespace StarryEngine::Assets {
         void setDepthTest(bool enable) { m_depthTestEnable = enable; }
         void setDepthWrite(bool enable) { m_depthWriteEnable = enable; }
         void setDepthCompareOp(RHI::CompareOp op) { m_depthCompareOp = op; }
-        void setBlendState(const RHI::BlendAttachmentState& state) { m_blendState = state; }
+        void setAttachments(std::vector<RHI::BlendAttachmentState> attachment) { m_attachments = attachment; }
         void setRenderQueue(Scene::RenderQueue queue) { m_queue = queue; }
         void setRenderStage(Scene::RenderStage stage) { m_stage = stage; }
+        void setDeferred(bool deferred) { m_isDeferred = deferred; }
         void enableTransparent(bool enable = true) { m_alphaBlend = enable; }
         void enableDepthTest(bool enable = true) { m_depthTestEnable = enable; }
         void enableDepthWrite(bool enable = true) { m_depthWriteEnable = enable; }
@@ -91,12 +92,13 @@ namespace StarryEngine::Assets {
         RHI::CullMode getCullMode() { return m_cullMode; }
         RHI::FrontFace getFrontFace() { return m_frontFace; }
         RHI::CompareOp getDethCompareOp() { return m_depthCompareOp; }
-        RHI::BlendAttachmentState getBlendAttachmentState() { return m_blendState; }
+        std::vector<RHI::BlendAttachmentState> getAttachments() { return m_attachments; }
         Scene::RenderQueue getRenderQueue() const { return m_queue; }
         Scene::RenderStage getRenderStage() const { return m_stage; }
         bool isTransparent() const { return m_alphaBlend; }
         bool isDepthTestEnable() const { return m_depthTestEnable; }
         bool isDepthWriteEnable() const { return m_depthWriteEnable; }
+        bool isDeferred() const { return m_isDeferred; }
 
     private:
         //全局渲染管线布局缓存，将管线描述hash，作为键，因为管线描述之和描述符布局与常量推送布局有关系
@@ -106,11 +108,12 @@ namespace StarryEngine::Assets {
         RHI::CullMode m_cullMode = RHI::CullMode::None;
         RHI::FrontFace m_frontFace = RHI::FrontFace::CounterClockwise;
         RHI::CompareOp m_depthCompareOp = RHI::CompareOp::Less;
-        RHI::BlendAttachmentState m_blendState = RHI::BlendAttachmentState{};
+        std::vector<RHI::BlendAttachmentState> m_attachments = { RHI::BlendAttachmentState{} };
 
         bool m_alphaBlend = false;
         bool m_depthTestEnable = true;
         bool m_depthWriteEnable = true;
+        bool m_isDeferred = false;
 
         Scene::RenderQueue m_queue = Scene::RenderQueue::Opaque;
         Scene::RenderStage m_stage = Scene::RenderStage::GBuffer;

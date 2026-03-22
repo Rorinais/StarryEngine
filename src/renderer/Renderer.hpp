@@ -19,7 +19,7 @@ namespace StarryEngine {
         void destroy();
         void renderFrame(RHI::RHICommandEncoder* encoder, uint32_t frameIndex, float deltaTime);
         void onResize(uint32_t width, uint32_t height);
-        void setRenderPath(std::unique_ptr<IRenderPath> newRenderPath);
+        void setRenderPath(std::shared_ptr<IRenderPath> newRenderPath);
 
         void analysisScene();
 
@@ -29,10 +29,14 @@ namespace StarryEngine {
         RHI::DescriptorSetLayoutHandle getGlobalSetLayout() { return m_globalSetLayout; }
         RHI::DescriptorSetHandle getGlobalDescriptorSet() { return m_globalDescriptorSet; }
 
+        RHI::VertexInputState mergeVertexInputStates(
+            const RHI::VertexInputState& base,
+            const RHI::VertexInputState& additional);
+
     private:
         std::shared_ptr<RHI::IRHI> m_rhi;
         std::shared_ptr<RHI::ResourceManager> m_resMgr;
-        std::unique_ptr<IRenderPath> m_renderPath;
+        std::shared_ptr<IRenderPath> m_renderPath;
 
         RHI::DescriptorPoolHandle m_globalPool;
         RHI::DescriptorSetLayoutHandle m_globalSetLayout;

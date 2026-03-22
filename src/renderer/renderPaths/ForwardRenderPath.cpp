@@ -15,9 +15,11 @@ namespace StarryEngine {
 
     void ForwardRenderPath::setTextureDescs(const std::unordered_map<std::string, RHI::TextureDesc>& descs) {
         m_textureDescs = descs;
+        LOG_INFO("ForwardRenderPath::setTextureDescs called, size = {}", m_textureDescs.size());
     }
 
     bool ForwardRenderPath::initialize() {
+        LOG_INFO("ForwardRenderPath::initialize, m_textureDescs size = {}", m_textureDescs.size());
         if (m_config.empty()) {
             LOG_ERROR("ForwardRenderPath: No config set!");
             return false;
@@ -54,7 +56,7 @@ namespace StarryEngine {
                 }
                 auto id = m_renderGraph->importExternalTexture(
                     RHI::TextureHandle::Null(), views, desc,
-                    RHI::ImageLayout::Undefined, name);
+                    RHI::ImageLayout::PresentSrc, name);  
                 texIdMap[name] = id;
             }
             else {
@@ -142,23 +144,76 @@ namespace StarryEngine {
             }
         }
 
-        m_renderGraph->dependencyAnalysis();
+        // 编译 RenderGraph
         if (!m_renderGraph->compile()) {
             LOG_ERROR("Failed to compile RenderGraph");
             return false;
         }
-        m_renderGraph->createFrameBuffer();
 
-        const auto& sortedPasses = m_renderGraph->getSortedPasses();
-        for (auto& [stage, passNode] : m_stagePassNode) {
-            auto it = std::find_if(sortedPasses.begin(), sortedPasses.end(),
-                [passNode](auto* p) { return p == passNode; });
-            if (it != sortedPasses.end()) {
-                m_stagePassInfo[stage].renderPassHandle = (*it)->getRenderPassHandle();
+        // 统一处理所有子通道的固定管线创建和纹理绑定
+        for (auto& [stage, queueMap] : m_config) {
+            for (auto& [queue, subpassCfg] : queueMap) {
+                auto* passNode = m_stagePassNode[stage];
+                uint32_t subpassIdx = m_stagePassInfo[stage].queueToSubpass[queue];
+                RHI::RenderPassHandle rpHandle = passNode->getRenderPassHandle();
+
+                if (subpassCfg.pipelineDesc) {
+                    const auto& state = *subpassCfg.pipelineDesc;
+
+                    RHI::GraphicsPipelineDesc gpDesc;
+                    gpDesc.vertexShader = state.vertexShader;
+                    gpDesc.fragmentShader = state.fragmentShader;
+                    gpDesc.pipelineLayoutHandle = state.layout; 
+                    gpDesc.vertexInput = state.vertexInput;
+                    gpDesc.topology = state.topology;
+                    gpDesc.rasterizer.cullMode = state.cullMode;
+                    gpDesc.rasterizer.frontFace = state.frontFace;
+                    gpDesc.rasterizer.lineWidth = state.lineWidth;
+                    gpDesc.depthStencil.depthTestEnable = state.depthTestEnable;
+                    gpDesc.depthStencil.depthWriteEnable = state.depthWriteEnable;
+                    gpDesc.depthStencil.depthCompareOp = state.depthCompareOp;
+                    gpDesc.colorBlend.attachments = state.attachments;
+                    gpDesc.viewport.viewports = state.viewports;
+                    gpDesc.viewport.scissors = state.scissors;
+                    gpDesc.dynamicStates = state.dynamicStates;
+                    gpDesc.renderPass = rpHandle;
+                    gpDesc.subpass = subpassIdx;
+                    gpDesc.debugName = subpassCfg.name + "_Pipeline";
+
+                    auto pipeline = m_resMgr->createGraphicsPipeline(gpDesc);
+                    if (pipeline.isValid()) {
+                        subpassCfg.recorder->setPipeline(pipeline);
+                    }
+                    else {
+                        LOG_ERROR("Failed to create pipeline for subpass: {}", subpassCfg.name);
+                    }
+                }
+
+                // 纹理绑定
+                auto material = subpassCfg.recorder->getMaterial();
+                if (material) {
+                    for (const auto& binding : subpassCfg.textureBindings) {
+                        auto texIt = texIdMap.find(binding.textureName);
+                        if (texIt == texIdMap.end()) {
+                            LOG_WARN("Texture '{}' not found for subpass '{}'", binding.textureName, subpassCfg.name);
+                            continue;
+                        }
+                        auto phys = m_renderGraph->getPhysicalTextureHandle(texIt->second);
+                        if (!phys.isValid()) {
+                            LOG_WARN("Physical texture handle for '{}' is invalid", binding.textureName);
+                            continue;
+                        }
+                        auto sampler = m_resMgr->createSampler(binding.samplerDesc);
+                        material->setTexture(binding.set, binding.binding, phys, sampler);
+                    }
+                }
             }
-            else {
-                LOG_ERROR("PassNode for stage {} not found in sorted passes", static_cast<int>(stage));
-                return false;
+        }
+
+        // 为所有 stage 设置 RenderPassHandle（用于 update 中的 PSO 创建）
+        for (auto& [stage, passNode] : m_stagePassNode) {
+            if (passNode) {
+                m_stagePassInfo[stage].renderPassHandle = passNode->getRenderPassHandle();
             }
         }
 
@@ -200,6 +255,10 @@ namespace StarryEngine {
     }
 
     void ForwardRenderPath::update(const glm::mat4& view, const glm::mat4& proj, float deltaTime) {
+        m_lastView = view;
+        m_lastProj = proj;
+        m_lastDeltaTime = deltaTime;
+
         if (!m_cachedSceneData) return;
 
         for (auto& [stage, passInfo] : m_stagePassInfo) {
@@ -234,9 +293,10 @@ namespace StarryEngine {
     }
 
     void ForwardRenderPath::render(RHI::RHICommandEncoder* encoder, uint32_t frameIndex) {
-        if (m_renderGraph) {
-            m_renderGraph->execute(frameIndex, encoder);
-        }
+        if (!m_renderGraph) return;
+
+        auto context = buildRenderContext();
+        m_renderGraph->execute(encoder, context, frameIndex);
     }
 
     void ForwardRenderPath::onResize(uint32_t width, uint32_t height) {

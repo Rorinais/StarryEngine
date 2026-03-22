@@ -642,15 +642,15 @@ namespace StarryEngine::RHI {
      * @brief 内存屏障结构体
      * @details 描述内存访问同步屏障
      */
-    struct MemoryBarrier {
+    struct ImageMemoryBarrier {
         AccessFlag srcAccessMask = AccessFlag::None; ///< 源访问掩码
         AccessFlag dstAccessMask = AccessFlag::None; ///< 目标访问掩码
 
-        bool operator==(const MemoryBarrier& other) const {
+        bool operator==(const ImageMemoryBarrier& other) const {
             return srcAccessMask == other.srcAccessMask && dstAccessMask == other.dstAccessMask;
         }
 
-        bool operator!=(const MemoryBarrier& other) const {
+        bool operator!=(const ImageMemoryBarrier& other) const {
             return !(*this == other);
         }
     };

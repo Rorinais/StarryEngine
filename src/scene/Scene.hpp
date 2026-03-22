@@ -14,6 +14,10 @@ namespace StarryEngine::Scene {
         glm::mat4 transform = glm::mat4(1.0f);
         std::shared_ptr<StarryEngine::Assets::Geometry> geometry;
         std::vector<std::shared_ptr<Assets::MaterialInstance>> materials;
+
+        std::vector<glm::mat4> instanceTransforms;  
+        std::shared_ptr<RHI::BufferHandle> instanceBuffer; 
+        bool isInstanced = false;
     };
 
     class Scene {

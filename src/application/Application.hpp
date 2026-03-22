@@ -9,11 +9,14 @@
 #include "../event/Events.hpp"
 #include "../logging/Logger.hpp"
 #include "../core/FrameMonitor.hpp"
+#include "../renderer/Renderer.hpp"
+#include "../renderer/graph/RenderGraph.hpp"
 #include "../renderer/backend/RHIFactory.hpp"
 #include "../renderer/interface/RHI_TYPES.hpp"
-#include "../renderer/graph/RenderGraph.hpp"
 #include "../scene/camera/CameraController.hpp"
-#include "../renderer/Renderer.hpp"
+#include "../assets/geometry/GeomtryCreateFunc.hpp"
+#include "../renderer/subpassRecorder/GbufferRecorder.hpp"
+#include "../renderer/subpassRecorder/DeferredLightingRecorder.hpp"
 
 namespace StarryEngine {
     class Application {
@@ -23,9 +26,15 @@ namespace StarryEngine {
 
         void run();
         void createDescriptorPool();
-        void createRenderer();
-        bool createGridResources();
         void initEventDispatcher();
+        void setRenderer(std::shared_ptr<Renderer> renderer) { m_renderer = renderer; }
+        void setScene(std::shared_ptr<Scene::Scene> scene) { m_scene = scene; }
+
+        std::shared_ptr<RHI::IRHI> getRenderHardwareInterface() { return m_rhi; }
+        std::shared_ptr<RHI::ResourceManager> getResourceManager() { return m_resMgr; }
+        RHI::DescriptorPoolHandle getGlobalDescriptorPool() { return m_descriptorPool; }
+        uint32_t getWidth() { return m_width; }
+        uint32_t getHeight() { return m_height; }
 
     private:
         Window::Ptr m_window;
@@ -37,16 +46,13 @@ namespace StarryEngine {
         uint32_t m_flightFrame = 2;
 
         std::shared_ptr<Scene::Scene> m_scene;
-        std::unique_ptr<Renderer> m_renderer;
+        std::shared_ptr<Renderer> m_renderer;
 
         std::shared_ptr<RHI::IRHI> m_rhi;
         std::shared_ptr<RHI::ResourceManager> m_resMgr;
         RHI::DescriptorPoolHandle m_descriptorPool;
 
         std::unique_ptr<CameraController> m_cameraController;
-        std::shared_ptr<Scene::RenderObject> m_rotatingObject; // 指向需要旋转的物体
         bool m_controlActive = false;
-
-        std::shared_ptr<Assets::Geometry> m_gridGeometry;
     };
 } // namespace StarryEngine

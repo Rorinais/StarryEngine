@@ -9,9 +9,9 @@ namespace StarryEngine::Scene {
     struct RenderObject;
 
     enum class RenderQueue {
-        Opaque = 0,
-        Transparent = 1,
-        UI = 2,
+        Opaque,
+        Transparent ,
+        UI,
     };
 
     enum class RenderStage {
@@ -19,21 +19,28 @@ namespace StarryEngine::Scene {
         GBuffer,      // 延迟渲染几何体 Pass
         Lighting,     // 延迟渲染光照 Pass
         Forward,      // 前向渲染 Pass
+        PostProcess,
         UI            // UI 渲染
     };
 
     struct DrawItem {
         std::weak_ptr<RenderObject> object;          
-        uint32_t submeshIndex;                       
         RHI::BufferHandle vertexBuffer;
         RHI::BufferHandle indexBuffer;
         std::unordered_map<uint32_t, RHI::DescriptorSetHandle> descriptorSets;
+        uint32_t submeshIndex = 0;
         uint32_t indexOffset = 0;
         uint32_t indexCount = 0;
         uint32_t pipelineIndex = 0;
 
         RenderQueue queue = RenderQueue::Opaque;
         RenderStage stage = RenderStage::Forward;
+
+        // ---------- 实例化相关 ----------
+        bool isInstanced = false;
+        uint32_t instanceCount = 1;                     
+        RHI::BufferHandle instanceBuffer;               
+        uint32_t instanceBufferStride = 0;              
     };
 
     struct BasePipelineState {

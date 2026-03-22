@@ -552,7 +552,7 @@ namespace StarryEngine::RHI {
         PipelineStage srcStage,
         PipelineStage dstStage,
         DependencyFlags flags,
-        const std::vector<MemoryBarrier>& memoryBarriers,
+        const std::vector<ImageMemoryBarrier>& memoryBarriers,
         const std::vector<BufferBarrier>& bufferBarriers,
         const std::vector<ImageBarrier>& imageBarriers) {
     }

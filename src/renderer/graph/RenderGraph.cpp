@@ -54,6 +54,7 @@ namespace StarryEngine::RenderGraph {
     }
 
     TextureId RenderGraph::createVirtualTexture(const RHI::TextureDesc& desc, const std::string& name) {
+        LOG_INFO("createVirtualTexture: name='{}', format={}", name, static_cast<int>(desc.format));
         if (!name.empty() && m_nameToTextureId.find(name) != m_nameToTextureId.end()) {
             throw std::runtime_error("Texture name already exists: " + name);
         }
@@ -205,6 +206,8 @@ namespace StarryEngine::RenderGraph {
     }
 
     bool RenderGraph::compile() {
+        dependencyAnalysis();
+
         // 分析纹理的读写 Pass 索引，用于自动插入子通道依赖（例如从上次写到第一次读）
         struct TexturePassInfo {
             int32_t lastWriterIndex = -1;               // 最后一个写入该纹理的 Pass 索引
@@ -260,7 +263,7 @@ namespace StarryEngine::RenderGraph {
                 m_textureMap[vt.id] = info;
             }
             else {                                                // 需要创建新纹理
-                RHI::TextureHandle handle = m_resMgr->createTexture(vt.desc, vt.name);
+                RHI::TextureHandle handle = m_resMgr->createTexture(vt.desc);
                 if (!handle.isValid()) {
                     throw std::runtime_error("Failed to create physical texture: " + vt.name);
                 }
@@ -298,6 +301,82 @@ namespace StarryEngine::RenderGraph {
                 throw std::runtime_error("Failed to compile pass: " + pass->getName());
             }
         }
+
+        createFrameBuffer();
+
+        struct PassLayoutInfo {
+            RHI::ImageLayout initial;
+            RHI::ImageLayout final;
+            bool used = false;
+        };
+        std::unordered_map<TextureId, std::vector<PassLayoutInfo>> texPassLayouts;
+        texPassLayouts.reserve(m_virtualTextures.size());
+
+        // 收集每个 PassNode 中使用的纹理及其布局
+        for (size_t i = 0; i < m_sortedPasses.size(); ++i) {
+            auto* pass = m_sortedPasses[i];
+            // 获取该 Pass 中所有用到的纹理（读+写）
+            std::set<TextureId> allTex = pass->getReadTextures();
+            allTex.insert(pass->getWriteTextures().begin(), pass->getWriteTextures().end());
+            for (auto texId : allTex) {
+                auto [init, fin] = pass->getTextureLayout(texId);
+                if (texPassLayouts[texId].size() <= i) {
+                    texPassLayouts[texId].resize(m_sortedPasses.size());
+                }
+                texPassLayouts[texId][i] = { init, fin, true };
+            }
+        }
+
+        // 生成跨 Pass 转换
+        m_layoutTransitions.clear();
+        for (const auto& [texId, layouts] : texPassLayouts) {
+            int32_t lastWritePass = -1;
+            RHI::ImageLayout lastWriteLayout = RHI::ImageLayout::Undefined;
+            for (size_t i = 0; i < layouts.size(); ++i) {
+                const auto& info = layouts[i];
+                if (!info.used) continue;
+                // 如果当前 Pass 是写入（final 有效），则记录为写入 Pass
+                if (info.final != RHI::ImageLayout::Undefined) {
+                    // 如果有上一个写入 Pass 且与当前写入 Pass 不同，但这里我们更关心写入到下一个读取的转换
+                    // 暂时忽略写-写转换，只处理写后读
+                    lastWritePass = static_cast<int32_t>(i);
+                    lastWriteLayout = info.final;
+                }
+                // 如果是读取（initial 有效），且存在之前的写入 Pass，且写入 Pass 与当前读取 Pass 不同，则添加转换
+                if (info.initial != RHI::ImageLayout::Undefined && lastWritePass != -1 && lastWritePass != static_cast<int32_t>(i)) {
+                    // 如果写入布局与读取初始布局不同，则需要转换
+                    if (lastWriteLayout != info.initial) {
+                        m_layoutTransitions.push_back({
+                            static_cast<uint32_t>(lastWritePass),
+                            static_cast<uint32_t>(i),
+                            texId,
+                            lastWriteLayout,
+                            info.initial
+                            });
+                    }
+                    // 重置，避免同一个写入被多个读取重复使用（可根据需求调整）
+                    lastWritePass = -1;
+                    lastWriteLayout = RHI::ImageLayout::Undefined;
+                }
+            }
+        }
+
+        for (const auto& [texId, layouts] : texPassLayouts) {
+            for (size_t i = 0; i < layouts.size(); ++i) {
+                if (layouts[i].used) {
+                    LOG_INFO("TexId {} in Pass {}: initial={}, final={}", texId.id(), i,
+                        static_cast<int>(layouts[i].initial), static_cast<int>(layouts[i].final));
+                }
+            }
+        }
+
+        // 按目标 Pass 索引排序，便于执行时顺序处理
+        std::sort(m_layoutTransitions.begin(), m_layoutTransitions.end(),
+            [](const LayoutTransition& a, const LayoutTransition& b) {
+                if (a.dstPassIdx != b.dstPassIdx) return a.dstPassIdx < b.dstPassIdx;
+                return a.srcPassIdx < b.srcPassIdx;
+            });
+
         return true;
     }
 
@@ -358,15 +437,93 @@ namespace StarryEngine::RenderGraph {
         }
     }
 
-    void RenderGraph::execute(uint32_t frameIndex, RHI::RHICommandEncoder* encoder) {
+    void RenderGraph::execute(RHI::RHICommandEncoder* encoder, const RenderContext& context, uint32_t frameIndex) {
         if (m_sortedPasses.empty()) return;
         if (m_perPassFramebuffers.size() != m_sortedPasses.size()) {
             throw std::runtime_error("Framebuffer count mismatch in RenderGraph");
         }
+
+        // 维护当前布局状态（可选，用于连续多个 Pass 共享同一纹理的布局）
+        std::unordered_map<TextureId, RHI::ImageLayout> currentLayouts;
+        // 初始化外部导入纹理的布局
+        for (const auto& vt : m_virtualTextures) {
+            if (vt.imported) {
+                currentLayouts[vt.id] = vt.initialLayout;
+            }
+        }
+
+        // 用于遍历转换列表的迭代器
+        auto transIt = m_layoutTransitions.begin();
         for (size_t i = 0; i < m_sortedPasses.size(); ++i) {
             auto* pass = m_sortedPasses[i];
             RHI::FramebufferHandle fb = m_perPassFramebuffers[i][frameIndex];
-            pass->execute(encoder, frameIndex, fb);
+
+            while (transIt != m_layoutTransitions.end() && transIt->dstPassIdx == i) {
+                const auto& trans = *transIt;
+                auto texIt = m_textureMap.find(trans.texId);
+                if (texIt != m_textureMap.end() && texIt->second.handle.isValid()) {
+                    // 确定源布局（可能已被之前的屏障更新）
+                    RHI::ImageLayout srcLayout = trans.srcLayout;
+                    auto curIt = currentLayouts.find(trans.texId);
+                    if (curIt != currentLayouts.end() && curIt->second != RHI::ImageLayout::Undefined) {
+                        srcLayout = curIt->second;
+                    }
+
+                    // 构建图像屏障（不包含阶段掩码）
+                    RHI::ImageBarrier barrier{};
+                    barrier.image = texIt->second.handle;
+                    barrier.oldLayout = srcLayout;
+                    barrier.newLayout = trans.dstLayout;
+                    barrier.srcAccessMask = RHI::FUNC::layoutToAccessMask(srcLayout);
+                    barrier.dstAccessMask = RHI::FUNC::layoutToAccessMask(trans.dstLayout);
+                    barrier.aspectMask = RHI::ImageAspect::Color;
+                    barrier.baseMipLevel = 0;
+                    barrier.levelCount = 1;
+                    barrier.baseArrayLayer = 0;
+                    barrier.layerCount = 1;
+
+                    // 推导阶段掩码（作为 pipelineBarrier 的参数）
+                    RHI::PipelineStage srcStage = RHI::FUNC::layoutToSrcStage(srcLayout);
+                    RHI::PipelineStage dstStage = RHI::FUNC::layoutToSrcStage(trans.dstLayout); // 注意：目标阶段可能不同，可根据新布局调整
+                    // 如果新布局是 ShaderReadOnly，目标阶段应为 FragmentShader
+                    if (trans.dstLayout == RHI::ImageLayout::ShaderReadOnly) {
+                        dstStage = RHI::PipelineStage::FragmentShader;
+                    }
+                    LOG_INFO("Inserting barrier for texId {} before pass {}", trans.texId.id(), i);
+                    // 插入屏障
+                    encoder->pipelineBarrier(
+                        srcStage,                           // 源阶段
+                        dstStage,                           // 目标阶段
+                        RHI::DependencyFlags::None,         // 依赖标志（0）
+                        {},                                 // 内存屏障（无）
+                        {},                                 // 缓冲区屏障（无）
+                        { barrier }                         // 图像屏障列表
+                    );
+
+                    // 更新当前布局
+                    currentLayouts[trans.texId] = trans.dstLayout;
+                }
+                ++transIt;
+            }
+
+            for (const auto& trans : m_layoutTransitions) {
+                LOG_INFO("Transition: srcPass={}, dstPass={}, texId={}, srcLayout={}, dstLayout={}",
+                    trans.srcPassIdx, trans.dstPassIdx, trans.texId.id(),
+                    static_cast<int>(trans.srcLayout), static_cast<int>(trans.dstLayout));
+            }
+
+            // 执行当前 PassNode
+            pass->execute(encoder, context,frameIndex, fb);
+
+            // 执行后，更新当前布局：对于该 Pass 中写入的纹理，布局变为 finalLayout
+            auto allTex = pass->getReadTextures();
+            allTex.insert(pass->getWriteTextures().begin(), pass->getWriteTextures().end());
+            for (auto texId : allTex) {
+                auto [init, fin] = pass->getTextureLayout(texId);
+                if (fin != RHI::ImageLayout::Undefined) {
+                    currentLayouts[texId] = fin;
+                }
+            }
         }
     }
 
@@ -378,6 +535,19 @@ namespace StarryEngine::RenderGraph {
     RHI::BufferHandle RenderGraph::getPhysicalBuffer(BufferId id) const {
         auto it = m_bufferMap.find(id);
         return it != m_bufferMap.end() ? it->second : RHI::BufferHandle::Null();
+    }
+
+    TextureId RenderGraph::getTextureId(const std::string& name) const {
+        auto it = m_nameToTextureId.find(name);
+        if (it == m_nameToTextureId.end())
+            throw std::runtime_error("Texture not found: " + name);
+        return it->second;
+    }
+
+    const std::vector<RHI::FramebufferHandle>& RenderGraph::getFramebuffersForPass(size_t passIndex) const {
+        if (passIndex >= m_perPassFramebuffers.size())
+            throw std::runtime_error("Invalid pass index");
+        return m_perPassFramebuffers[passIndex];
     }
 
 } // namespace StarryEngine::RenderGraph

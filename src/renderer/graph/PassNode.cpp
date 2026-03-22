@@ -17,7 +17,7 @@ namespace StarryEngine::RenderGraph {
     }
 
     std::string PassNode::addColorOutput(TextureId texId, const AttachmentParams& params) {
-        std::string key = "auto_color_" + std::to_string(texId.id());
+        std::string key = "auto_color_" + std::to_string(m_nextAttachmentKey++);
         m_builder.registerColorAttachment(key,
             params.format.value_or(RHI::Format::RGBA8_UNorm),
             params.finalLayout.value_or(RHI::ImageLayout::ColorAttachment),
@@ -34,7 +34,7 @@ namespace StarryEngine::RenderGraph {
     }
 
     std::string PassNode::addDepthOutput(TextureId texId, const AttachmentParams& params) {
-        std::string key = "auto_depth_" + std::to_string(texId.id());
+        std::string key = "auto_depth_" + std::to_string(m_nextAttachmentKey++);
         m_builder.registerDepthAttachment(key,
             params.format.value_or(RHI::Format::D32_Float),
             params.loadOp.value_or(RHI::AttachmentLoadOp::Clear),
@@ -52,7 +52,7 @@ namespace StarryEngine::RenderGraph {
     }
 
     std::string PassNode::addInput(TextureId texId, const AttachmentParams& params) {
-        std::string key = "auto_input_" + std::to_string(texId.id());
+        std::string key = "auto_input_" + std::to_string(m_nextAttachmentKey++);
         m_builder.registerInputAttachment(key,
             params.format.value_or(RHI::Format::RGBA8_UNorm),
             params.finalLayout.value_or(RHI::ImageLayout::ShaderReadOnly),
@@ -66,7 +66,7 @@ namespace StarryEngine::RenderGraph {
     }
 
     std::string PassNode::addResolve(TextureId texId, const AttachmentParams& params) {
-        std::string key = "auto_resolve_" + std::to_string(texId.id());
+        std::string key = "auto_resolve_" + std::to_string(m_nextAttachmentKey++);
         m_builder.registerResolveAttachment(key,
             params.format.value_or(RHI::Format::RGBA8_UNorm),
             params.finalLayout.value_or(RHI::ImageLayout::ColorAttachment));
@@ -77,7 +77,7 @@ namespace StarryEngine::RenderGraph {
     }
 
     std::string PassNode::addPreserve(TextureId texId) {
-        std::string key = "auto_preserve_" + std::to_string(texId.id());
+        std::string key = "auto_preserve_" + std::to_string(m_nextAttachmentKey++);
         m_keyToTexId[key] = texId;
         return key;
     }
@@ -108,6 +108,15 @@ namespace StarryEngine::RenderGraph {
         auto buildResult = m_builder.build(true);
         m_cachedBuildResult = std::move(buildResult);
 
+        // 在 PassNode::compile 中，构建完 m_cachedBuildResult 后
+        for (size_t i = 0; i < m_cachedBuildResult->renderPassDesc.attachments.size(); ++i) {
+            const auto& att = m_cachedBuildResult->renderPassDesc.attachments[i];
+            const std::string& name = m_cachedBuildResult->attachmentNames[i];
+            LOG_INFO("Attachment[{}] name={}, format={}, initialLayout={}, finalLayout={}",
+                i, name, static_cast<int>(att.format),
+                static_cast<int>(att.initialLayout), static_cast<int>(att.finalLayout));
+        }
+
         // 根据 buildResult 中的附件名称，建立 key -> 纹理 ID 映射（用于执行时获取纹理）
         for (const auto& key : m_cachedBuildResult->attachmentNames) {
             auto it = m_keyToTexId.find(key);
@@ -134,6 +143,71 @@ namespace StarryEngine::RenderGraph {
             throw std::runtime_error("Failed to create RenderPass: " + m_name);
         }
 
+        // 计算每个纹理在 PassNode 中的最终布局
+        m_finalLayouts.clear();
+        const auto& subpasses = m_cachedBuildResult->renderPassDesc.subpasses;
+        const auto& attachments = m_cachedBuildResult->renderPassDesc.attachments;
+
+        struct LastUsage {
+            uint32_t subpassIdx;
+            uint32_t attachmentIdx;
+        };
+        std::unordered_map<TextureId, LastUsage> lastUsage;
+
+        // 按子通道顺序遍历，记录每个纹理最后一次出现的附件
+        for (uint32_t subpassIdx = 0; subpassIdx < subpasses.size(); ++subpassIdx) {
+            const auto& subpass = subpasses[subpassIdx];
+
+            // 颜色附件（写入）
+            for (const auto& ref : subpass.colorAttachments) {
+                if (ref.attachment == ATTACHMENT_UNUSED) continue;
+                const auto& key = m_cachedBuildResult->attachmentNames[ref.attachment];
+                auto texIdIt = m_attachmentKeyToTexId.find(key);
+                if (texIdIt != m_attachmentKeyToTexId.end()) {
+                    lastUsage[texIdIt->second] = { subpassIdx, ref.attachment };
+                }
+            }
+
+            // 深度附件（写入）
+            if (subpass.depthStencilAttachment.attachment != ATTACHMENT_UNUSED) {
+                const auto& key = m_cachedBuildResult->attachmentNames[subpass.depthStencilAttachment.attachment];
+                auto texIdIt = m_attachmentKeyToTexId.find(key);
+                if (texIdIt != m_attachmentKeyToTexId.end()) {
+                    lastUsage[texIdIt->second] = { subpassIdx, subpass.depthStencilAttachment.attachment };
+                }
+            }
+
+            // 解析附件（写入）
+            for (const auto& ref : subpass.resolveAttachments) {
+                if (ref.attachment == ATTACHMENT_UNUSED) continue;
+                const auto& key = m_cachedBuildResult->attachmentNames[ref.attachment];
+                auto texIdIt = m_attachmentKeyToTexId.find(key);
+                if (texIdIt != m_attachmentKeyToTexId.end()) {
+                    lastUsage[texIdIt->second] = { subpassIdx, ref.attachment };
+                }
+            }
+
+            // 输入附件（读取）
+            for (const auto& ref : subpass.inputAttachments) {
+                if (ref.attachment == ATTACHMENT_UNUSED) continue;
+                const auto& key = m_cachedBuildResult->attachmentNames[ref.attachment];
+                auto texIdIt = m_attachmentKeyToTexId.find(key);
+                if (texIdIt != m_attachmentKeyToTexId.end()) {
+                    lastUsage[texIdIt->second] = { subpassIdx, ref.attachment };
+                }
+            }
+        }
+
+        // 根据最后一次使用确定最终布局
+        for (const auto& [texId, usage] : lastUsage) {
+            const auto& att = attachments[usage.attachmentIdx];
+            m_finalLayouts[texId] = att.finalLayout;
+        }
+
+        for (const auto& [texId, layout] : m_finalLayouts) {
+            LOG_INFO("Pass '{}' final layout for texId {}: {}", m_name, texId.id(), static_cast<int>(layout));
+        }
+
         m_subpassRecorders = m_cachedBuildResult->subpassRecorders;
 
         m_clearValues.clear();
@@ -155,6 +229,7 @@ namespace StarryEngine::RenderGraph {
     }
 
     void PassNode::execute(RHI::RHICommandEncoder* encoder,
+        const RenderContext& context,
         uint32_t frameIndex,
         RHI::FramebufferHandle framebuffer) {
         if (!m_renderPassHandle.isValid()) {
@@ -184,7 +259,7 @@ namespace StarryEngine::RenderGraph {
         for (uint32_t i = 0; i < subpassCount; ++i) {
             if (i > 0) encoder->nextSubpass(RHI::SubpassContents::Inline);
             if (m_subpassRecorders[i]) {
-                m_subpassRecorders[i]->recordCommands(encoder, ctx, i, frameIndex);
+                m_subpassRecorders[i]->recordCommands(encoder, context, ctx, i);
             }
         }
 
@@ -220,6 +295,28 @@ namespace StarryEngine::RenderGraph {
         default:
             return false;
         }
+    }
+
+    std::pair<RHI::ImageLayout, RHI::ImageLayout> PassNode::getTextureLayout(TextureId texId) const {
+        RHI::ImageLayout initial = RHI::ImageLayout::Undefined;
+        RHI::ImageLayout final = RHI::ImageLayout::Undefined;
+
+        // 初始布局取第一次出现（任意一个附件）
+        for (const auto& [key, params] : m_keyToParams) {
+            auto it = m_keyToTexId.find(key);
+            if (it != m_keyToTexId.end() && it->second == texId) {
+                auto init = params.initialLayout.value_or(RHI::ImageLayout::Undefined);
+                if (initial == RHI::ImageLayout::Undefined) initial = init;
+            }
+        }
+
+        // 最终布局使用计算好的 m_finalLayouts
+        auto finIt = m_finalLayouts.find(texId);
+        if (finIt != m_finalLayouts.end()) {
+            final = finIt->second;
+        }
+
+        return { initial, final };
     }
 
 } // namespace StarryEngine::RenderGraph

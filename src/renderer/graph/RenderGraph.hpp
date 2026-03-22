@@ -60,12 +60,16 @@ namespace StarryEngine::RenderGraph {
 
         void createFrameBuffer();
 
-        void execute(uint32_t frameIndex, RHI::RHICommandEncoder* encoder);
+        void execute(RHI::RHICommandEncoder* encoder, const RenderContext& context,uint32_t frameIndex);
 
         RHI::TextureHandle getPhysicalTextureHandle(TextureId id) const;
         RHI::BufferHandle getPhysicalBuffer(BufferId id) const;
 
         const std::vector<PassNode*>& getSortedPasses() const { return m_sortedPasses; }
+
+        TextureId getTextureId(const std::string& name) const;
+
+        const std::vector<RHI::FramebufferHandle>& getFramebuffersForPass(size_t passIndex) const;
 
     private:
         struct VirtualTexture {
@@ -107,6 +111,7 @@ namespace StarryEngine::RenderGraph {
         std::unordered_map<TextureId, PhysicalTextureInfo> m_textureMap;  // 虚拟 -> 物理信息
         std::unordered_map<BufferId, RHI::BufferHandle> m_bufferMap;
 
+        std::vector<LayoutTransition> m_layoutTransitions;
         // 每个 Pass 的帧缓冲（[passIndex][imageIndex]）
         std::vector<std::vector<RHI::FramebufferHandle>> m_perPassFramebuffers;
     };

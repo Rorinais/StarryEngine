@@ -74,7 +74,7 @@ namespace StarryEngine::Assets {
 
     RHI::PipelineLayoutHandle MaterialTemplate::getPipelineLayout(RHI::ResourceManager* resMgr) {
         auto layoutMap = getLayouts();
-        // 将 map 转换为按 set 索引升序的 vector
+        // 构建按 set 索引排序的向量
         std::vector<RHI::DescriptorSetLayoutHandle> orderedLayouts;
         orderedLayouts.reserve(layoutMap.size());
         std::map<uint32_t, RHI::DescriptorSetLayoutHandle> sortedMap(layoutMap.begin(), layoutMap.end());
@@ -82,9 +82,13 @@ namespace StarryEngine::Assets {
             orderedLayouts.push_back(layout);
         }
 
-        // 计算组合哈希：先以布局向量初始化种子，再混合推送常量向量
+        // 计算组合哈希：包含布局数量、每个 set 索引、布局句柄，以及 pushConstants
         size_t hash = 0;
-        Utils::hash_combine(hash, orderedLayouts);
+        Utils::hash_combine(hash, reinterpret_cast<size_t>(this));
+        for (const auto& [setIdx, layout] : sortedMap) {
+            Utils::hash_combine(hash, setIdx);       
+            Utils::hash_combine(hash, layout);
+        }
         Utils::hash_combine(hash, getPushConstants());
 
         auto it = s_layoutCache.find(hash);
