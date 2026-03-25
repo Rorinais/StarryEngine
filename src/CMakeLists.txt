@@ -39,7 +39,7 @@ add_subdirectory(application)
 # 使用封装函数创建可执行文件
 add_engine_executable(
     TARGET_NAME ForwardRender_demo
-    SOURCES demo/ForwardRender_demo.cpp
+    SOURCES ../demo/ForwardRender_demo.cpp
     OUTPUT_DIR ${CMAKE_BINARY_DIR}/bin
     SHADERS_DIR ${SHADERS_DIR}
     FONTS_DIR ${FONTS_DIR}
@@ -50,7 +50,7 @@ add_engine_executable(
 
 add_engine_executable(
     TARGET_NAME DeferredRender_demo
-    SOURCES demo/DeferredRender_demo.cpp
+    SOURCES ../demo/DeferredRender_demo.cpp
     OUTPUT_DIR ${CMAKE_BINARY_DIR}/bin
     SHADERS_DIR ${SHADERS_DIR}
     FONTS_DIR ${FONTS_DIR}

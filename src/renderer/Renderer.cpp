@@ -26,11 +26,9 @@ namespace StarryEngine {
         auto updateInstanceBuffers = [&](const std::vector<std::shared_ptr<Scene::RenderObject>>& objects) {
             for (auto& obj : objects) {
                 if (obj->isInstanced && obj->instanceBuffer && obj->instanceBuffer->isValid() && !obj->instanceTransforms.empty()) {
-                    // 获取 Buffer 对象
                     auto* bufferObj = m_resMgr->getBuffer(*obj->instanceBuffer);
                     if (bufferObj) {
                         size_t dataSize = obj->instanceTransforms.size() * sizeof(glm::mat4);
-                        // 调用 Buffer 的 update 方法
                         bufferObj->update(obj->instanceTransforms.data(), dataSize, 0);
                     }
                     else {
@@ -171,7 +169,6 @@ namespace StarryEngine {
 
                     auto materialInst = obj->materials[submesh.materialIndex];
                     if (!materialInst) continue;
-                    LOG_INFO("Object material stage: {}", static_cast<int>(materialInst->getRenderStage()));
                     // 1. 构造 PSO
                     Scene::GraphicsPipelineState pso;
                     pso.vertexInput = geometry->getVertexInputState();  // 基础布局
@@ -220,8 +217,6 @@ namespace StarryEngine {
                         pipelineIdx = it->second;
                     }
 
-                    LOG_INFO("Processing object: geometry={}, instanced={}, materialSets:",
-                        (void*)geometry.get(), instanced);
                     // 2. 收集描述符集
                     std::unordered_map<uint32_t, RHI::DescriptorSetHandle> descSets;
                     descSets[0] = m_globalDescriptorSet;

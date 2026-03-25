@@ -54,7 +54,6 @@ namespace StarryEngine::RenderGraph {
     }
 
     TextureId RenderGraph::createVirtualTexture(const RHI::TextureDesc& desc, const std::string& name) {
-        LOG_INFO("createVirtualTexture: name='{}', format={}", name, static_cast<int>(desc.format));
         if (!name.empty() && m_nameToTextureId.find(name) != m_nameToTextureId.end()) {
             throw std::runtime_error("Texture name already exists: " + name);
         }
@@ -357,15 +356,6 @@ namespace StarryEngine::RenderGraph {
                     // 重置，避免同一个写入被多个读取重复使用（可根据需求调整）
                     lastWritePass = -1;
                     lastWriteLayout = RHI::ImageLayout::Undefined;
-                }
-            }
-        }
-
-        for (const auto& [texId, layouts] : texPassLayouts) {
-            for (size_t i = 0; i < layouts.size(); ++i) {
-                if (layouts[i].used) {
-                    LOG_INFO("TexId {} in Pass {}: initial={}, final={}", texId.id(), i,
-                        static_cast<int>(layouts[i].initial), static_cast<int>(layouts[i].final));
                 }
             }
         }

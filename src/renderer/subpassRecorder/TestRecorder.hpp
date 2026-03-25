@@ -27,17 +27,8 @@ namespace StarryEngine {
             const RenderContext& rctx,
             const PassContext& pctx,
             uint32_t subpassIndex) override {
-            LOG_INFO("TestRecorder::recordCommands called, drawItems size = {}", m_drawItems.size());
-
-            // 打印映射信息（调试用）
-            LOG_INFO("TestRecorder: m_globalToLocal size = {}", m_globalToLocal.size());
-            for (auto& [global, local] : m_globalToLocal) {
-                LOG_INFO("  global={} -> local={}", global, local);
-            }
-            LOG_INFO("TestRecorder: m_pipelines size = {}", m_pipelines.size());
 
             for (const auto& item : m_drawItems) {
-                LOG_INFO("  item pipelineIndex = {}", item->pipelineIndex);
 
                 // 通过映射获取局部索引
                 auto it = m_globalToLocal.find(item->pipelineIndex);
@@ -46,7 +37,6 @@ namespace StarryEngine {
                     continue;
                 }
                 uint32_t localIdx = it->second;
-                LOG_INFO("  localIdx = {}", localIdx);
 
                 if (localIdx >= m_pipelines.size()) {
                     LOG_ERROR("localIdx {} out of range (pipelines size={})", localIdx, m_pipelines.size());
@@ -58,7 +48,6 @@ namespace StarryEngine {
                     LOG_ERROR("Failed to get pipeline from handle");
                     continue;
                 }
-                LOG_INFO("Pipeline obtained successfully");
 
                 encoder->bindPipeline(pipeline);
 
@@ -88,18 +77,15 @@ namespace StarryEngine {
 
                 encoder->bindIndexBuffer(pctx.getResourceManager()->getBuffer(item->indexBuffer), 0, RHI::IndexType::UInt32);
 
-                LOG_INFO("About to draw with indexCount={}", item->indexCount);
                 if (item->isInstanced) {
                     encoder->drawIndexed(item->indexCount, item->instanceCount, item->indexOffset, 0, 0);
                 }
                 else {
                     encoder->drawIndexed(item->indexCount, 1, item->indexOffset, 0, 0);
                 }
-                LOG_INFO("Draw issued");
 
                 auto vb = pctx.getResourceManager()->getBuffer(item->vertexBuffer);
                 auto ib = pctx.getResourceManager()->getBuffer(item->indexBuffer);
-                LOG_INFO("TestRecorder:VB size: {}, IB size: {}, IndexCount: {}", vb->getSize(), ib->getSize(), item->indexCount);
             }
         }
 

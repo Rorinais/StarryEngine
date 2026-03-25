@@ -79,7 +79,6 @@ namespace StarryEngine{
 
                 auto vb = pctx.getResourceManager()->getBuffer(item->vertexBuffer);
                 auto ib = pctx.getResourceManager()->getBuffer(item->indexBuffer);
-                LOG_INFO("VB size: {}, IB size: {}, IndexCount: {}", vb->getSize(), ib->getSize(), item->indexCount);
             }
         }
 
