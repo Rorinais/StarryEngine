@@ -19,15 +19,15 @@ if(WIN32)
         INTERFACE_INCLUDE_DIRECTORIES "${VULKAN_INC_DIR}"
     )
 
-set_target_properties(spirv-cross-core PROPERTIES
-    IMPORTED_LOCATION     "${VULKAN_LIB_DIR}/spirv_cross/spirv-cross-cored.lib"
-    INTERFACE_INCLUDE_DIRECTORIES "${VULKAN_INC_DIR}"
-)
+    set_target_properties(spirv-cross-core PROPERTIES
+        IMPORTED_LOCATION     "${VULKAN_LIB_DIR}/spirv_cross/spirv-cross-cored.lib"
+        INTERFACE_INCLUDE_DIRECTORIES "${VULKAN_INC_DIR}"
+    )
 
-set_target_properties(spirv-cross-glsl PROPERTIES
-    IMPORTED_LOCATION    "${VULKAN_LIB_DIR}/spirv_cross/spirv-cross-glsld.lib"
-    INTERFACE_INCLUDE_DIRECTORIES "${VULKAN_INC_DIR}"
-)
+    set_target_properties(spirv-cross-glsl PROPERTIES
+        IMPORTED_LOCATION    "${VULKAN_LIB_DIR}/spirv_cross/spirv-cross-glsld.lib"
+        INTERFACE_INCLUDE_DIRECTORIES "${VULKAN_INC_DIR}"
+    )
 
 elseif(UNIX AND NOT APPLE)
     set_target_properties(vulkan PROPERTIES

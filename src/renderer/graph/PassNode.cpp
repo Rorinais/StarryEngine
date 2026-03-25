@@ -210,6 +210,11 @@ namespace StarryEngine::RenderGraph {
 
         m_subpassRecorders = m_cachedBuildResult->subpassRecorders;
 
+        LOG_INFO("Pass '{}' has {} subpass recorders", m_name, m_subpassRecorders.size());
+        for (size_t i = 0; i < m_subpassRecorders.size(); ++i) {
+            LOG_INFO("  Subpass {} recorder: {}", i, (void*)m_subpassRecorders[i].get());
+        }
+
         m_clearValues.clear();
         for (const auto& key : m_cachedBuildResult->attachmentNames) {
             auto it = m_clearValueMap.find(key);
@@ -258,6 +263,7 @@ namespace StarryEngine::RenderGraph {
         uint32_t subpassCount = static_cast<uint32_t>(m_subpassRecorders.size());
         for (uint32_t i = 0; i < subpassCount; ++i) {
             if (i > 0) encoder->nextSubpass(RHI::SubpassContents::Inline);
+            LOG_INFO("Executing subpass {} of pass '{}', recorder = {}", i, m_name, (void*)m_subpassRecorders[i].get());
             if (m_subpassRecorders[i]) {
                 m_subpassRecorders[i]->recordCommands(encoder, context, ctx, i);
             }

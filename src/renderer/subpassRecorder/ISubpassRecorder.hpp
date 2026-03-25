@@ -62,7 +62,7 @@ namespace StarryEngine{
         virtual const std::vector<std::shared_ptr<Scene::DrawItem>>& getDrawItems() = 0;
         virtual void setPipelines(const std::vector<RHI::PipelineHandle>& pipelines) = 0;
         virtual void setPipeline(RHI::PipelineHandle pipeline) {}
-
+        virtual void setGlobalToLocalMapping(const std::unordered_map<uint32_t, uint32_t>& mapping) = 0; 
         virtual std::shared_ptr<Assets::MaterialInstance> getMaterial() const { return nullptr; }
         virtual void setMaterial(std::shared_ptr<Assets::MaterialInstance> material) {}
 

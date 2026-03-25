@@ -6,4 +6,5 @@ add_library(assets STATIC ${SRC})
 target_link_libraries(assets 
 PRIVATE
     BaseInterface
+    utils
 )

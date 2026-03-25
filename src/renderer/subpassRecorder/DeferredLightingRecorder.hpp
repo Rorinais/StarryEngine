@@ -9,19 +9,21 @@ namespace StarryEngine{
         DeferredLightingRecorder() = default;
 
         void setPipeline(RHI::PipelineHandle pipeline) override { m_pipeline = pipeline; }
-        void setLightingMaterial(std::shared_ptr<Assets::MaterialInstance> material) { m_lightingMaterial = material; }
-        std::shared_ptr<Assets::MaterialInstance> getMaterial() const override { return m_lightingMaterial; }
+        void setMaterial(std::shared_ptr<Assets::MaterialInstance> material) override { m_material = material; }
+        std::shared_ptr<Assets::MaterialInstance> getMaterial() const override { return m_material; }
 
         void clearDrawItems() override {}
         const std::vector<std::shared_ptr<Scene::DrawItem>>& getDrawItems() override { return m_empty; }
         void setPipelines(const std::vector<RHI::PipelineHandle>& pipelines) override {}
         void setDrawItems(const std::vector<std::shared_ptr<Scene::DrawItem>>& items) override {}
-
+        void setGlobalToLocalMapping(const std::unordered_map<uint32_t, uint32_t>& mapping) override {
+            m_globalToLocal = mapping;
+        }
         void recordCommands(RHI::RHICommandEncoder* encoder,
             const RenderContext& rctx,
             const PassContext& pctx,
             uint32_t subpassIndex) override {
-            if (!m_lightingMaterial) return;
+            if (!m_material) return;
 
             if (!m_pipeline.isValid()) {
                 LOG_ERROR("DeferredLightingRecorder: material has no pipeline");
@@ -32,7 +34,7 @@ namespace StarryEngine{
             encoder->bindPipeline(pipeline);
 
             auto pipelineLayout = pctx.getResourceManager()->getPipelineLayout(pipeline->getLayout());
-            for (auto& [set, handle] : m_lightingMaterial->getAllSets()) {
+            for (auto& [set, handle] : m_material->getAllSets()) {
                 encoder->bindDescriptorSets(RHI::PipelineBindPoint::Graphics,
                     pipelineLayout, set, { handle }, {});
             }
@@ -42,8 +44,9 @@ namespace StarryEngine{
 
     private:
         RHI::PipelineHandle m_pipeline;
-        std::shared_ptr<Assets::MaterialInstance> m_lightingMaterial;
+        std::shared_ptr<Assets::MaterialInstance> m_material;
         std::vector<std::shared_ptr<Scene::DrawItem>> m_empty;
+        std::unordered_map<uint32_t, uint32_t> m_globalToLocal;
     };
 
     class CopyToSwapchainRecorder : public ISubpassRecorder {
@@ -51,7 +54,9 @@ namespace StarryEngine{
         void setPipeline(RHI::PipelineHandle pipeline) override { m_pipeline = pipeline; }
         void setMaterial(std::shared_ptr<Assets::MaterialInstance> material) override { m_material = material; }
         std::shared_ptr<Assets::MaterialInstance> getMaterial() const override { return m_material; }
-
+        void setGlobalToLocalMapping(const std::unordered_map<uint32_t, uint32_t>& mapping) override {
+            m_globalToLocal = mapping;
+        }
         void clearDrawItems() override {}
         const std::vector<std::shared_ptr<Scene::DrawItem>>& getDrawItems() override { return m_empty; }
         void setPipelines(const std::vector<RHI::PipelineHandle>&) override {}
@@ -77,5 +82,6 @@ namespace StarryEngine{
         RHI::PipelineHandle m_pipeline;
         std::shared_ptr<Assets::MaterialInstance> m_material;
         std::vector<std::shared_ptr<Scene::DrawItem>> m_empty;
+        std::unordered_map<uint32_t, uint32_t> m_globalToLocal;
     };
 }

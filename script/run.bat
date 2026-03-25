@@ -9,11 +9,13 @@ echo ========================================
 REM 获取脚本所在目录
 set "SCRIPT_DIR=%~dp0"
 if "%SCRIPT_DIR:~-1%"=="\" set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
+REM 根目录为脚本目录的上一级（即 StarryEngine）
+set "ROOT_DIR=%SCRIPT_DIR%\.."
 
 REM 设置默认构建类型
 set BUILD_TYPE=Debug
 set EXECUTABLE_NAME=StarryEngine
-set EXECUTABLE_PATH=%SCRIPT_DIR%\build\bin\StarryEngine
+set EXECUTABLE_PATH=%ROOT_DIR%\build\bin
 set BUILD_NEEDED=0
 set BUILD_CLEAN=0
 
@@ -40,8 +42,8 @@ echo 运行类型: %BUILD_TYPE%
 echo 可执行文件: %EXECUTABLE_NAME%
 echo 路径: %EXECUTABLE_PATH%
 
-REM 检查构建目录是否存在
-if not exist "%SCRIPT_DIR%\build" (
+REM 检查构建目录是否存在（在根目录下）
+if not exist "%ROOT_DIR%\build" (
     echo 构建目录不存在，需要重新构建...
     set BUILD_NEEDED=1
     goto check_build
@@ -62,7 +64,7 @@ for %%F in ("%EXECUTABLE_PATH%\%EXECUTABLE_NAME%.exe") do set LAST_BUILD_TIME=%%
 echo 最后构建时间: !LAST_BUILD_TIME!
 
 REM 检查源代码目录中的文件是否比可执行文件新
-for /r "%SCRIPT_DIR%\src" %%F in (*.cpp *.hpp *.h *.c *.cxx *.cc *.ixx *.m *.mm) do (
+for /r "%ROOT_DIR%\src" %%F in (*.cpp *.hpp *.h *.c *.cxx *.cc *.ixx *.m *.mm) do (
     for %%G in ("%%F") do (
         if "%%~tG" gtr "!LAST_BUILD_TIME!" (
             echo 检测到源代码更改: %%~nxF
@@ -73,10 +75,10 @@ for /r "%SCRIPT_DIR%\src" %%F in (*.cpp *.hpp *.h *.c *.cxx *.cc *.ixx *.m *.mm)
 )
 
 REM 检查资源文件是否更改
-if exist "%SCRIPT_DIR%\assets" (
+if exist "%ROOT_DIR%\assets" (
     echo 检查资源文件修改情况...
     REM 扩展资源文件类型检测列表
-    for /r "%SCRIPT_DIR%\assets" %%F in (
+    for /r "%ROOT_DIR%\assets" %%F in (
         *.glsl *.vert *.frag *.comp *.geom *.tesc *.tese *.rgen *.rmiss *.rchit *.rahit
         *.png *.jpg *.jpeg *.bmp *.tga *.tiff *.gif *.ico *.hdr *.exr *.psd
         *.obj *.fbx *.dae *.gltf *.glb *.blend *.3ds *.max *.ma *.mb
@@ -105,6 +107,7 @@ if !BUILD_NEEDED! equ 1 (
     set BUILD_OPTION=
     if "!BUILD_CLEAN!"=="1" set BUILD_OPTION=clean
     
+    REM 调用 build.bat（与 run.bat 在同一目录）
     call "%SCRIPT_DIR%\build.bat" %BUILD_TYPE% %BUILD_OPTION%
     
     if !errorlevel! neq 0 (
@@ -126,8 +129,8 @@ if not exist "%EXECUTABLE_PATH%\%EXECUTABLE_NAME%.exe" (
 )
 
 REM 运行可执行文件
-rem echo 正在运行: %EXECUTABLE_NAME%.exe
+echo 正在运行: %EXECUTABLE_NAME%.exe
 cd /d "%EXECUTABLE_PATH%"
 "%EXECUTABLE_NAME%.exe"
-cd /d "%SCRIPT_DIR%"
+cd /d "%ROOT_DIR%"
 pause

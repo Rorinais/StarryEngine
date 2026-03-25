@@ -171,7 +171,7 @@ namespace StarryEngine {
 
                     auto materialInst = obj->materials[submesh.materialIndex];
                     if (!materialInst) continue;
-
+                    LOG_INFO("Object material stage: {}", static_cast<int>(materialInst->getRenderStage()));
                     // 1. 构造 PSO
                     Scene::GraphicsPipelineState pso;
                     pso.vertexInput = geometry->getVertexInputState();  // 基础布局

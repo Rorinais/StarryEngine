@@ -470,7 +470,6 @@ namespace StarryEngine::RHI {
         std::vector<std::vector<VkAttachmentReference>> vkResolveRefs;
         std::vector<VkAttachmentReference> vkDepthStencilRefs;
 
-        // 关键修复：预分配容量，避免重新分配导致指针失效
         vkSubpasses.reserve(mDesc.subpasses.size());
         vkInputRefs.reserve(mDesc.subpasses.size());
         vkColorRefs.reserve(mDesc.subpasses.size());
@@ -532,7 +531,6 @@ namespace StarryEngine::RHI {
             vkSubpass.colorAttachmentCount = static_cast<uint32_t>(colorRefs.size());
             vkSubpass.pColorAttachments = colorRefs.empty() ? nullptr : colorRefs.data();
             vkSubpass.pResolveAttachments = resolveRefs.empty() ? nullptr : resolveRefs.data();
-            // 关键：这里使用 vkDepthStencilRefs.back() 的地址，由于已预分配容量，地址稳定
             vkSubpass.pDepthStencilAttachment = &vkDepthStencilRefs.back();
             vkSubpass.preserveAttachmentCount = static_cast<uint32_t>(subpass.preserveAttachments.size());
             vkSubpass.pPreserveAttachments = subpass.preserveAttachments.empty() ? nullptr : subpass.preserveAttachments.data();

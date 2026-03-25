@@ -2,6 +2,7 @@
 #include <glm/glm.hpp>
 #include <fmt/fmt.h>
 #include"../assets/AssetType.hpp"
+#include "../renderer/graph/Types.hpp"
 
 template <>
 struct fmt::formatter<glm::vec3> {
@@ -15,6 +16,23 @@ struct fmt::formatter<glm::vec3> {
         return fmt::format_to(ctx.out(), "({:.2f}, {:.2f}, {:.2f})", v.x, v.y, v.z);
     }
 };
+
+
+template <>
+struct fmt::formatter<StarryEngine::RenderGraph::TextureId> {
+    // 可以定义格式化语法，这里简单使用默认
+    constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+
+    template <typename FormatContext>
+    auto format(const StarryEngine::RenderGraph::TextureId& id, FormatContext& ctx) const {
+        // 假设 TextureId 可以转换为 uint64_t（如通过 getValue()）
+        // 或者你可以输出其内部 id 和 generation
+        return fmt::format_to(ctx.out(), "TextureId({})", id.id());
+        // 如果只有 getId() 和 getGen()，可以：
+        // return fmt::format_to(ctx.out(), "TextureId({},{})", id.getId(), id.getGen());
+    }
+};
+
 
 // 为 glm::vec4 提供格式化器
 template <>

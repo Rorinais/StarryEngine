@@ -25,6 +25,8 @@ namespace StarryEngine {
         std::shared_ptr<RenderGraph::RenderGraph> getRenderGraph() { return m_renderGraph; }
 
         void setTextureDescs(const std::unordered_map<std::string, RHI::TextureDesc>& descs);
+        void setLightingMaterial(std::shared_ptr<Assets::MaterialInstance> material) { m_material = material; }
+        std::shared_ptr<Assets::MaterialInstance> getMaterial() const override { return m_material; }
     private:
         bool buildGraph();
         void distributeDrawItems(const Scene::AnalysisSceneResult& sceneData);
@@ -44,6 +46,7 @@ namespace StarryEngine {
         std::unordered_map<std::string, RenderGraph::TextureId> m_textureIdMap;
 
         std::string m_swapchainTextureName = "Swapchain";
+        std::shared_ptr<Assets::MaterialInstance> m_material;
     };
 
 } // namespace StarryEngine
