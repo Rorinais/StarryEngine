@@ -24,7 +24,7 @@ namespace StarryEngine::Scene {
         return true;
     }
 
-    void Scene::clear() {
+    void Scene::clearObject() {
         m_allObjects.clear();
         m_opaqueObjects.clear();
         m_transparentObjects.clear();
@@ -49,6 +49,30 @@ namespace StarryEngine::Scene {
         else {
             m_opaqueObjects.push_back(object);
         }
+    }
+
+    void Scene::addProceduralEffect(std::shared_ptr<ProceduralEffect> effect) {
+        if (!effect) return;
+        m_proceduralEffects.push_back(effect);
+        markContentDirty();
+    }
+
+    bool Scene::removeProceduralEffect(std::shared_ptr<ProceduralEffect> effect) {
+        auto it = std::find(m_proceduralEffects.begin(), m_proceduralEffects.end(), effect);
+        if (it == m_proceduralEffects.end()) return false;
+        m_proceduralEffects.erase(it);
+        markContentDirty();
+        return true;
+    }
+
+    const std::vector<std::shared_ptr<ProceduralEffect>>& Scene::getProceduralEffects() const {
+        return m_proceduralEffects;
+    }
+
+    void Scene::clearProceduralEffects() {
+        if (m_proceduralEffects.empty()) return;
+        m_proceduralEffects.clear();
+        markContentDirty();
     }
 
 } // namespace StarryEngine::Scene

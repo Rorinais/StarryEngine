@@ -79,4 +79,19 @@ namespace StarryEngine::Assets {
         }
     }
 
+    RHI::VertexInputState Geometry::getVertexInputStateWithInstancing(const InstancingLayout* layout) const {
+        if (!layout || layout->attributes.empty()) {
+            return m_vertexLayout.build();
+        }
+        VertexLayout merged = m_vertexLayout;
+        // 将 InstancingLayout 转换为 VertexLayout 并合并
+        VertexLayout instLayout;
+        instLayout.addBinding(layout->binding, layout->stride, RHI::VertexInputRate::PerInstance);
+        for (const auto& attr : layout->attributes) {
+            instLayout.addAttribute(attr.location, layout->binding, attr.format, attr.offset);
+        }
+        merged.merge(instLayout);
+        return merged.build();
+    }
+
 } // namespace StarryEngine::Assets

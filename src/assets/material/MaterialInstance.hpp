@@ -28,6 +28,7 @@ namespace StarryEngine::Assets {
         void enableTransparent(bool enable = true) { m_template->enableTransparent(enable); }
         void enableDepthTest(bool enable = true) { m_template->enableDepthTest(enable); }
         void enableDepthWrite(bool enable = true) { m_template->enableDepthWrite(enable); }
+        void setDebugName(std::string debugName) { m_template->setDebugName(debugName); }
 
         RHI::CullMode getCullMode() { return m_template->getCullMode(); }
         RHI::FrontFace getFrontFace() { return m_template->getFrontFace(); }
@@ -39,14 +40,26 @@ namespace StarryEngine::Assets {
         bool isDepthTestEnable() const { return m_template->isDepthTestEnable(); }
         bool isDepthWriteEnable() const { return m_template->isDepthWriteEnable(); }
         bool isDeferred() const { return m_template->isDeferred(); }
+        std::string getDebugName() { return m_template->getDebugName(); }
 
         RHI::DescriptorSetHandle getSet(uint32_t setIndex) const;
         const std::unordered_map<uint32_t, RHI::DescriptorSetHandle>& getAllSets() const { return m_sets; }
         std::shared_ptr<MaterialTemplate> getTemplate() const { return m_template; }
+
+        void setInstancingLayout(const InstancingLayout& layout);
+        const InstancingLayout* getInstancingLayout() const;
+
+        void addTextureDependency(const std::string& textureName, uint32_t set, uint32_t binding) {
+            m_textureDependencies[textureName] = { set, binding };
+        }
+
+        const std::unordered_map<std::string, std::pair<uint32_t, uint32_t>>& getTextureDependencies() const {
+            return m_textureDependencies;
+        }
         
-    private:
         RHI::DescriptorSetHandle getOrCreateSet(uint32_t setIndex);
 
+    private:
         std::shared_ptr<MaterialTemplate> m_template;
         RHI::ResourceManager* m_resMgr;
         RHI::DescriptorPoolHandle m_pool;
@@ -62,5 +75,10 @@ namespace StarryEngine::Assets {
             size_t size;
         };
         std::unordered_map<uint64_t, BufferResource> m_buffers; // 键 = ((uint64_t)set << 32) | binding
+
+        std::unordered_map<std::string, std::pair<uint32_t, uint32_t>> m_textureDependencies;
+
+        InstancingLayout m_instancingLayout;
+        bool m_hasCustomInstancingLayout = false;
     };
 }

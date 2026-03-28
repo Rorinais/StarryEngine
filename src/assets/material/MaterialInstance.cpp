@@ -98,4 +98,15 @@ namespace StarryEngine::Assets {
         setObj->update();
     }
 
+
+    void MaterialInstance::setInstancingLayout(const InstancingLayout& layout) {
+        m_instancingLayout = layout;
+        m_hasCustomInstancingLayout = true;
+    }
+
+    // 获取有效的实例化布局（优先使用自定义，否则使用模板的）
+    const InstancingLayout* MaterialInstance::getInstancingLayout() const {
+        if (m_hasCustomInstancingLayout) return &m_instancingLayout;
+        return m_template ? m_template->getInstancingLayout() : nullptr;
+    }
 }

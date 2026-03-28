@@ -6,82 +6,83 @@ namespace StarryEngine{
 
     class DeferredLightingRecorder : public ISubpassRecorder {
     public:
-        DeferredLightingRecorder() = default;
+        void clearDrawItems() override { m_drawItems.clear(); }
+        void setDrawItems(const std::vector<std::shared_ptr<Scene::DrawItem>>& items) override { m_drawItems = items; }
+        const std::vector<std::shared_ptr<Scene::DrawItem>>& getDrawItems() override { return m_drawItems; }
 
-        void setPipeline(RHI::PipelineHandle pipeline) override { m_pipeline = pipeline; }
-        void setMaterial(std::shared_ptr<Assets::MaterialInstance> material) override { m_material = material; }
-        std::shared_ptr<Assets::MaterialInstance> getMaterial() const override { return m_material; }
-
-        void clearDrawItems() override {}
-        const std::vector<std::shared_ptr<Scene::DrawItem>>& getDrawItems() override { return m_empty; }
-        void setPipelines(const std::vector<RHI::PipelineHandle>& pipelines) override {}
-        void setDrawItems(const std::vector<std::shared_ptr<Scene::DrawItem>>& items) override {}
-        void setGlobalToLocalMapping(const std::unordered_map<uint32_t, uint32_t>& mapping) override {
-            m_globalToLocal = mapping;
+        void setPipelineMapping(const std::unordered_map<uint32_t, RHI::PipelineHandle>& mapping) override {
+            m_pipelineMapping = mapping;
         }
+
         void recordCommands(RHI::RHICommandEncoder* encoder,
             const RenderContext& rctx,
             const PassContext& pctx,
             uint32_t subpassIndex) override {
-            if (!m_material) return;
+            for (auto& item : m_drawItems) {
+                // 过程式绘制
+                if (item->type != Scene::DrawItemType::Procedural) continue;
 
-            if (!m_pipeline.isValid()) {
-                LOG_ERROR("DeferredLightingRecorder: material has no pipeline");
-                return;
+                auto it = m_pipelineMapping.find(item->pipelineIndex);
+                if (it == m_pipelineMapping.end()) {
+                    LOG_ERROR("No pipeline found for index {}", item->pipelineIndex);
+                    continue;
+                }
+                auto pipeline = pctx.getResourceManager()->getPipeline(it->second);
+                if (!pipeline) continue;
+                encoder->bindPipeline(pipeline);
+
+                auto pipelineLayout = pctx.getResourceManager()->getPipelineLayout(pipeline->getLayout());
+                for (auto& [set, handle] : item->descriptorSets) {
+                    encoder->bindDescriptorSets(RHI::PipelineBindPoint::Graphics,
+                        pipelineLayout, set, { handle }, {});
+                }
+
+                encoder->draw(item->vertexCount, item->instanceCount, item->firstVertex, item->firstInstance);
             }
-
-            auto pipeline = pctx.getResourceManager()->getPipeline(m_pipeline);
-            encoder->bindPipeline(pipeline);
-
-            auto pipelineLayout = pctx.getResourceManager()->getPipelineLayout(pipeline->getLayout());
-            for (auto& [set, handle] : m_material->getAllSets()) {
-                encoder->bindDescriptorSets(RHI::PipelineBindPoint::Graphics,
-                    pipelineLayout, set, { handle }, {});
-            }
-
-            encoder->draw(3, 1, 0, 0);
         }
 
     private:
-        RHI::PipelineHandle m_pipeline;
-        std::shared_ptr<Assets::MaterialInstance> m_material;
-        std::vector<std::shared_ptr<Scene::DrawItem>> m_empty;
-        std::unordered_map<uint32_t, uint32_t> m_globalToLocal;
+        std::vector<std::shared_ptr<Scene::DrawItem>> m_drawItems;
+        std::unordered_map<uint32_t, RHI::PipelineHandle> m_pipelineMapping;
     };
 
     class CopyToSwapchainRecorder : public ISubpassRecorder {
     public:
-        void setPipeline(RHI::PipelineHandle pipeline) override { m_pipeline = pipeline; }
-        void setMaterial(std::shared_ptr<Assets::MaterialInstance> material) override { m_material = material; }
-        std::shared_ptr<Assets::MaterialInstance> getMaterial() const override { return m_material; }
-        void setGlobalToLocalMapping(const std::unordered_map<uint32_t, uint32_t>& mapping) override {
-            m_globalToLocal = mapping;
+        void clearDrawItems() override { m_drawItems.clear(); }
+        void setDrawItems(const std::vector<std::shared_ptr<Scene::DrawItem>>& items) override { m_drawItems = items; }
+        const std::vector<std::shared_ptr<Scene::DrawItem>>& getDrawItems() override { return m_drawItems; }
+
+        void setPipelineMapping(const std::unordered_map<uint32_t, RHI::PipelineHandle>& mapping) override {
+            m_pipelineMapping = mapping;
         }
-        void clearDrawItems() override {}
-        const std::vector<std::shared_ptr<Scene::DrawItem>>& getDrawItems() override { return m_empty; }
-        void setPipelines(const std::vector<RHI::PipelineHandle>&) override {}
-        void setDrawItems(const std::vector<std::shared_ptr<Scene::DrawItem>>&) override {}
 
         void recordCommands(RHI::RHICommandEncoder* encoder,
             const RenderContext& rctx,
             const PassContext& pctx,
             uint32_t subpassIndex) override {
-            if (!m_pipeline.isValid() || !m_material) return;
-            auto pipeline = pctx.getResourceManager()->getPipeline(m_pipeline);
-            encoder->bindPipeline(pipeline);
+            for (auto& item : m_drawItems) {
+                if (item->type != Scene::DrawItemType::Procedural) continue;
 
-            auto layout = pctx.getResourceManager()->getPipelineLayout(pipeline->getLayout());
-            for (auto& [set, handle] : m_material->getAllSets()) {
-                encoder->bindDescriptorSets(RHI::PipelineBindPoint::Graphics, layout, set, { handle }, {});
+                auto it = m_pipelineMapping.find(item->pipelineIndex);
+                if (it == m_pipelineMapping.end()) {
+                    LOG_ERROR("No pipeline found for index {}", item->pipelineIndex);
+                    continue;
+                }
+                auto pipeline = pctx.getResourceManager()->getPipeline(it->second);
+                if (!pipeline) continue;
+                encoder->bindPipeline(pipeline);
+
+                auto layout = pctx.getResourceManager()->getPipelineLayout(pipeline->getLayout());
+                for (auto& [set, handle] : item->descriptorSets) {
+                    encoder->bindDescriptorSets(RHI::PipelineBindPoint::Graphics, layout, set, { handle }, {});
+                }
+
+                encoder->draw(item->vertexCount, item->instanceCount, item->firstVertex, item->firstInstance);
             }
-
-            encoder->draw(3, 1, 0, 0);
         }
 
     private:
-        RHI::PipelineHandle m_pipeline;
-        std::shared_ptr<Assets::MaterialInstance> m_material;
-        std::vector<std::shared_ptr<Scene::DrawItem>> m_empty;
-        std::unordered_map<uint32_t, uint32_t> m_globalToLocal;
+        std::vector<std::shared_ptr<Scene::DrawItem>> m_drawItems;
+        std::unordered_map<uint32_t, RHI::PipelineHandle> m_pipelineMapping;
     };
 }

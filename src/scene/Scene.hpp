@@ -20,16 +20,37 @@ namespace StarryEngine::Scene {
         bool isInstanced = false;
     };
 
+    struct ProceduralEffect {
+        std::shared_ptr<Assets::MaterialInstance> material;
+        RenderStage stage = RenderStage::PostProcess;
+        RenderQueue queue = RenderQueue::Opaque;
+        uint32_t vertexCount = 3;       
+        uint32_t instanceCount = 1;     
+        int order = 0;                 
+    };
+
+    struct AnalysisSceneResult {
+        std::vector<std::shared_ptr<GraphicsPipelineState>> PSO;//用与实时创建管线
+        std::vector<std::shared_ptr<Assets::MaterialInstance>> materials;//用于更新纹理和uniform
+        std::vector<std::shared_ptr<DrawItem>> drawItems;//真正的渲染数据
+    };
+
     class Scene {
     public:
         void addObject(std::shared_ptr<RenderObject> object);
         bool removeObject(std::shared_ptr<RenderObject> object);
-        void clear();
+        void clearObject();
         void update(float deltaTime);
+
+        void addProceduralEffect(std::shared_ptr<ProceduralEffect> effect);
+        bool removeProceduralEffect(std::shared_ptr<ProceduralEffect> effect);
+        const std::vector<std::shared_ptr<ProceduralEffect>>& getProceduralEffects() const;
+        void clearProceduralEffects();
 
         const std::vector<std::shared_ptr<RenderObject>>& getAllObjects() const { return m_allObjects; }
         const std::vector<std::shared_ptr<RenderObject>>& getOpaqueObjects() const { return m_opaqueObjects; }
         const std::vector<std::shared_ptr<RenderObject>>& getTransparentObjects() const { return m_transparentObjects; }
+        
 
         void addCamera(std::shared_ptr<ICamera> camera) { m_cameras.push_back(camera); }
         const std::vector<std::shared_ptr<ICamera>>& getCameras() const { return m_cameras; }
@@ -53,6 +74,7 @@ namespace StarryEngine::Scene {
         std::vector<std::shared_ptr<RenderObject>> m_allObjects;
         std::vector<std::shared_ptr<RenderObject>> m_opaqueObjects;
         std::vector<std::shared_ptr<RenderObject>> m_transparentObjects;
+        std::vector<std::shared_ptr<ProceduralEffect>> m_proceduralEffects;
 
         std::vector<std::shared_ptr<ICamera>> m_cameras;
         std::shared_ptr<ICamera> m_activeCamera;

@@ -287,7 +287,6 @@ namespace StarryEngine {
                     if (pipeline.isValid())
                         pipelines.push_back(pipeline);
                 }
-                recorder->setPipelines(pipelines);
             }
         }
     }

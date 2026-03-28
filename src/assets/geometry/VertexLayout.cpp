@@ -63,7 +63,7 @@ namespace StarryEngine::Assets {
         return (it == mBindingCurrentOffsets.end()) ? 0 : it->second;
     }
 
-    uint32_t VertexLayout::getFormatSize(RHI::Format format) const {
+    uint32_t VertexLayout::getFormatSize(RHI::Format format) {
         static const std::array<uint32_t, 79> formatSizes = {
             0,    // Undefined [0]
             1,    // R8_UNorm [1]
@@ -161,6 +161,25 @@ namespace StarryEngine::Assets {
                 attr.location, attr.binding,
                 static_cast<int>(attr.format), attr.offset);
         }
+    }
+
+    VertexLayout& VertexLayout::merge(const VertexLayout& other) {
+        for (const auto& [binding, info] : other.mBindings) {
+            mBindings[binding] = info;
+        }
+        mAttributes.insert(mAttributes.end(),other.mAttributes.begin(), other.mAttributes.end());
+        return *this;
+    }
+
+    VertexLayout VertexLayout::makeInstancingLayout(uint32_t binding) {
+        VertexLayout layout;
+        layout.addBinding(binding, sizeof(glm::mat4), RHI::VertexInputRate::PerInstance);
+        // 矩阵的4行，每行一个 vec4，自动计算偏移
+        layout.addAttribute(3, binding, RHI::Format::RGBA32_Float); // 行0
+        layout.addAttribute(4, binding, RHI::Format::RGBA32_Float); // 行1
+        layout.addAttribute(5, binding, RHI::Format::RGBA32_Float); // 行2
+        layout.addAttribute(6, binding, RHI::Format::RGBA32_Float); // 行3
+        return layout;
     }
 }
 

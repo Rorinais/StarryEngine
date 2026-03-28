@@ -29,10 +29,6 @@ namespace StarryEngine {
         RHI::DescriptorSetLayoutHandle getGlobalSetLayout() { return m_globalSetLayout; }
         RHI::DescriptorSetHandle getGlobalDescriptorSet() { return m_globalDescriptorSet; }
 
-        RHI::VertexInputState mergeVertexInputStates(
-            const RHI::VertexInputState& base,
-            const RHI::VertexInputState& additional);
-
     private:
         std::shared_ptr<RHI::IRHI> m_rhi;
         std::shared_ptr<RHI::ResourceManager> m_resMgr;

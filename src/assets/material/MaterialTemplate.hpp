@@ -5,6 +5,7 @@
 #include "../AssetType.hpp"
 #include "../../scene/SceneType.hpp"
 #include "../../assets/loader/ShaderLoader.hpp"
+#include "../../assets/geometry/VertexLayout.hpp"
 
 namespace StarryEngine::Assets {
     struct PipelineCacheKey {
@@ -99,11 +100,16 @@ namespace StarryEngine::Assets {
         bool isDepthTestEnable() const { return m_depthTestEnable; }
         bool isDepthWriteEnable() const { return m_depthWriteEnable; }
         bool isDeferred() const { return m_isDeferred; }
+        virtual void setDebugName(std::string debugName) { m_debugName = debugName; }
+        virtual std::string getDebugName() { return m_debugName; }
 
+        virtual const InstancingLayout* getInstancingLayout() const { return nullptr; }
     private:
         //全局渲染管线布局缓存，将管线描述hash，作为键，因为管线描述之和描述符布局与常量推送布局有关系
         //如果以创建相同的管线布局，则使用缓存中的布局，否则通过描述符布局生成创建新的管线布局
         static std::unordered_map<size_t, RHI::PipelineLayoutHandle> s_layoutCache;
+
+        std::string m_debugName = " ";
 
         RHI::CullMode m_cullMode = RHI::CullMode::None;
         RHI::FrontFace m_frontFace = RHI::FrontFace::CounterClockwise;

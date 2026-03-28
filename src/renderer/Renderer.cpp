@@ -1,8 +1,9 @@
-#include"Renderer.hpp"
+#include "Renderer.hpp"
 #include "../logging/Logger.hpp"
 #include "../assets/Assets.hpp"
 
 namespace StarryEngine {
+
     Renderer::Renderer(std::shared_ptr<RHI::IRHI> rhi,
         RHI::DescriptorPoolHandle globalPool,
         std::shared_ptr<Scene::Scene> scene)
@@ -91,7 +92,7 @@ namespace StarryEngine {
     void Renderer::createGlobalSetLayout() {
         RHI::DescriptorSetLayoutDesc layoutDesc;
         layoutDesc.bindings = {
-            {0, RHI::DescriptorType::UniformBuffer, 1,RHI::ShaderStage::Vertex | RHI::ShaderStage::Fragment}
+            {0, RHI::DescriptorType::UniformBuffer, 1, RHI::ShaderStage::Vertex | RHI::ShaderStage::Fragment}
         };
         m_globalSetLayout = m_resMgr->createDescriptorSetLayout(layoutDesc);
         if (!m_globalSetLayout.isValid()) {
@@ -102,7 +103,7 @@ namespace StarryEngine {
         RHI::DescriptorSetDesc setDesc;
         setDesc.descriptorSetLayout = m_globalSetLayout;
         setDesc.descriptorPool = m_globalPool;
-        m_globalDescriptorSet = m_resMgr->createDescriptorSet(setDesc, "GlobalSet");
+        m_globalDescriptorSet = m_resMgr->createDescriptorSet(setDesc);
         if (!m_globalDescriptorSet.isValid()) {
             LOG_ERROR("Failed to create global descriptor set");
         }
@@ -114,7 +115,7 @@ namespace StarryEngine {
         bufDesc.type = RHI::BufferType::Uniform;
         bufDesc.memoryType = RHI::MemoryType::CPU_To_GPU;
         bufDesc.allowUpdate = true;
-        m_globalUniformBuffer = m_resMgr->createBuffer(bufDesc, "GlobalUBO");
+        m_globalUniformBuffer = m_resMgr->createBuffer(bufDesc);
         if (!m_globalUniformBuffer.isValid()) {
             LOG_ERROR("Failed to create global uniform buffer");
             return;
@@ -130,12 +131,12 @@ namespace StarryEngine {
         descSet->update();
     }
 
-
     void Renderer::analysisScene() {
         Scene::AnalysisSceneResult result;
         std::unordered_map<Scene::GraphicsPipelineState, uint32_t, std::hash<Scene::GraphicsPipelineState>> pipelineIndexMap;
+        std::unordered_set<Assets::MaterialInstance*> uniqueMaterials; 
 
-        // 合并处理 opaque 和 transparent 物体
+        // 处理普通物体（不透明 + 透明）
         auto processObjects = [&](const std::vector<std::shared_ptr<Scene::RenderObject>>& objects) {
             for (auto& obj : objects) {
                 auto geometry = obj->geometry;
@@ -145,10 +146,8 @@ namespace StarryEngine {
                 auto ib = geometry->getIndexBuffer();
                 if (!vb.isValid() || !ib.isValid()) continue;
 
-                // ---------- 实例化检查 ----------
                 bool instanced = obj->isInstanced && !obj->instanceTransforms.empty();
                 if (instanced) {
-                    // 确保实例缓冲区已创建且大小足够
                     size_t requiredSize = obj->instanceTransforms.size() * sizeof(glm::mat4);
                     if (!obj->instanceBuffer || !obj->instanceBuffer->isValid() ||
                         m_resMgr->getBuffer(*obj->instanceBuffer)->getSize() < requiredSize) {
@@ -157,7 +156,7 @@ namespace StarryEngine {
                         bufDesc.type = RHI::BufferType::Vertex;
                         bufDesc.memoryType = RHI::MemoryType::CPU_To_GPU;
                         bufDesc.allowUpdate = true;
-                        auto newHandle = m_resMgr->createBuffer(bufDesc, "InstanceBuffer");
+                        auto newHandle = m_resMgr->createBuffer(bufDesc);
                         obj->instanceBuffer = std::make_shared<RHI::BufferHandle>(newHandle);
                     }
                 }
@@ -169,9 +168,24 @@ namespace StarryEngine {
 
                     auto materialInst = obj->materials[submesh.materialIndex];
                     if (!materialInst) continue;
-                    // 1. 构造 PSO
+
+                    if (uniqueMaterials.insert(materialInst.get()).second) {
+                        result.materials.push_back(materialInst);
+                    }
+
+                    // ---------- 实例化布局处理 ----------
+                    bool submeshInstanced = instanced;
+                    const Assets::InstancingLayout* instLayout = nullptr;
+                    if (submeshInstanced) {
+                        instLayout = materialInst->getInstancingLayout();
+                        if (!instLayout) {
+                            LOG_WARN("Object requires instancing but material has no instancing layout. Falling back to non-instanced.");
+                            submeshInstanced = false;
+                        }
+                    }
+
                     Scene::GraphicsPipelineState pso;
-                    pso.vertexInput = geometry->getVertexInputState();  // 基础布局
+                    pso.vertexInput = geometry->getVertexInputStateWithInstancing(instLayout);
                     pso.topology = geometry->getPrimitiveTopology();
                     pso.vertexShader = materialInst->getTemplate()->getVertexShader();
                     pso.fragmentShader = materialInst->getTemplate()->getFragmentShader();
@@ -180,31 +194,7 @@ namespace StarryEngine {
                     pso.depthTestEnable = materialInst->isDepthTestEnable();
                     pso.depthWriteEnable = materialInst->isDepthWriteEnable();
                     pso.depthCompareOp = materialInst->getDethCompareOp();
-                    if (materialInst->isDeferred()) {
-                        pso.attachments = {
-                            RHI::BlendAttachmentState{}, // Albedo
-                            RHI::BlendAttachmentState{}, // Normal
-                            RHI::BlendAttachmentState{}  // Material
-                        };
-                    }
-                    else {
-                        pso.attachments = materialInst->getAttachments();
-                    }
-
-                    // **实例化特殊处理：合并实例布局**
-                    if (instanced) {
-                        // 定义实例布局的 VertexInputState
-                        RHI::VertexInputState instanceState;
-                        // 绑定 1：实例数据，步长 64 字节，每实例
-                        instanceState.bindings.push_back({ 1, 64, RHI::VertexInputRate::PerInstance });
-                        // 属性：矩阵的 4 行，每行一个 vec4
-                        instanceState.attributes.push_back({ 3, 1, 0 , RHI::Format::RGBA32_Float }); // 行0
-                        instanceState.attributes.push_back({ 4, 1, 16, RHI::Format::RGBA32_Float }); // 行1
-                        instanceState.attributes.push_back({ 5, 1, 32 ,RHI::Format::RGBA32_Float }); // 行2
-                        instanceState.attributes.push_back({ 6, 1, 48 , RHI::Format::RGBA32_Float });// 行3
-                        // 合并到 pso.vertexInput
-                        pso.vertexInput = mergeVertexInputStates(pso.vertexInput, instanceState);
-                    }
+                    pso.attachments = materialInst->getAttachments();
 
                     uint32_t pipelineIdx;
                     auto it = pipelineIndexMap.find(pso);
@@ -217,75 +207,107 @@ namespace StarryEngine {
                         pipelineIdx = it->second;
                     }
 
-                    // 2. 收集描述符集
+                    for (const auto& [setIdx, layout] : materialInst->getTemplate()->getLayouts()) {
+                        if (setIdx != 0) {
+                            materialInst->getOrCreateSet(setIdx); 
+                        }
+                    }
                     std::unordered_map<uint32_t, RHI::DescriptorSetHandle> descSets;
                     descSets[0] = m_globalDescriptorSet;
                     for (const auto& [setIdx, setHandle] : materialInst->getAllSets()) {
                         if (setIdx != 0) descSets[setIdx] = setHandle;
                     }
 
-                    // 3. 填充 DrawItem
-                    Scene::DrawItem item;
-                    item.object = obj;
-                    item.submeshIndex = static_cast<uint32_t>(i);
-                    item.vertexBuffer = vb;
-                    item.indexBuffer = ib;
-                    item.descriptorSets = std::move(descSets);
-                    item.indexOffset = submesh.indexOffset;
-                    item.indexCount = submesh.indexCount;
-                    item.pipelineIndex = pipelineIdx;
-                    item.queue = materialInst->getRenderQueue();
-                    item.stage = materialInst->getRenderStage();
+                    auto item = std::make_shared<Scene::DrawItem>();
+                    item->type = Scene::DrawItemType::Mesh;
+                    item->object = obj;
+                    item->vertexBuffer = vb;
+                    item->indexBuffer = ib;
+                    item->indexOffset = submesh.indexOffset;
+                    item->indexCount = submesh.indexCount;
+                    item->descriptorSets = std::move(descSets);
+                    item->pipelineIndex = pipelineIdx;
+                    item->queue = materialInst->getRenderQueue();
+                    item->stage = materialInst->getRenderStage();
 
-                    // ---------- 实例化 ----------
-                    if (instanced) {
-                        item.isInstanced = true;
-                        item.instanceCount = static_cast<uint32_t>(obj->instanceTransforms.size());
-                        item.instanceBuffer = *obj->instanceBuffer;
-                        item.instanceBufferStride = sizeof(glm::mat4);
+                    if (submeshInstanced) {
+                        item->isInstanced = true;
+                        item->instanceCount = static_cast<uint32_t>(obj->instanceTransforms.size());
+                        item->instanceBuffer = *obj->instanceBuffer;
+                        item->instanceBufferStride = instLayout->stride;
                     }
                     else {
-                        item.isInstanced = false;
-                        item.instanceCount = 1;
-                        item.instanceBuffer = RHI::BufferHandle::Null();
-                        item.instanceBufferStride = 0;
+                        item->isInstanced = false;
+                        item->instanceCount = 1;
+                        item->instanceBuffer = RHI::BufferHandle::Null();
+                        item->instanceBufferStride = 0;
                     }
 
-                    result.drawItems.push_back(std::make_shared<Scene::DrawItem>(std::move(item)));
+                    result.drawItems.push_back(item);
                 }
             }
             };
 
-        // 处理 opaque 和 transparent 物体
         processObjects(m_scene->getOpaqueObjects());
         processObjects(m_scene->getTransparentObjects());
+
+        // 处理过程式特效
+        for (auto& effect : m_scene->getProceduralEffects()) {
+            auto material = effect->material;
+            if (!material) continue;
+
+            if (uniqueMaterials.insert(material.get()).second) {
+                result.materials.push_back(material);
+            }
+
+            Scene::GraphicsPipelineState pso;
+            pso.vertexShader = material->getTemplate()->getVertexShader();
+            pso.fragmentShader = material->getTemplate()->getFragmentShader();
+            pso.layout = material->getTemplate()->getPipelineLayout(m_resMgr.get());
+            pso.vertexInput = {};   
+            pso.topology = RHI::PrimitiveTopology::TriangleList;
+            pso.cullMode = material->getCullMode();
+            pso.depthTestEnable = material->isDepthTestEnable();
+            pso.depthWriteEnable = material->isDepthWriteEnable();
+            pso.depthCompareOp = material->getDethCompareOp();
+            pso.attachments = material->getAttachments();
+
+            uint32_t pipelineIdx;
+            auto it = pipelineIndexMap.find(pso);
+            if (it == pipelineIndexMap.end()) {
+                pipelineIdx = static_cast<uint32_t>(result.PSO.size());
+                result.PSO.push_back(std::make_shared<Scene::GraphicsPipelineState>(pso));
+                pipelineIndexMap[pso] = pipelineIdx;
+            }
+            else {
+                pipelineIdx = it->second;
+            }
+
+            for (const auto& [setIdx, layout] : material->getTemplate()->getLayouts()) {
+                if (setIdx != 0) {
+                    material->getOrCreateSet(setIdx);
+                }
+            }
+            std::unordered_map<uint32_t, RHI::DescriptorSetHandle> descSets;
+            descSets[0] = m_globalDescriptorSet;
+            for (const auto& [setIdx, setHandle] : material->getAllSets()) {
+                if (setIdx != 0) descSets[setIdx] = setHandle;
+            }
+
+            auto item = std::make_shared<Scene::DrawItem>();
+            item->type = Scene::DrawItemType::Procedural;
+            item->vertexCount = effect->vertexCount;
+            item->instanceCount = effect->instanceCount;
+            item->firstVertex = 0;
+            item->firstInstance = 0;
+            item->descriptorSets = std::move(descSets);
+            item->pipelineIndex = pipelineIdx;
+            item->queue = effect->queue;
+            item->stage = effect->stage;
+            result.drawItems.push_back(item);
+        }
 
         m_analysisSceneResult = std::make_shared<Scene::AnalysisSceneResult>(std::move(result));
     }
 
-    RHI::VertexInputState Renderer::mergeVertexInputStates(
-        const RHI::VertexInputState& base,
-        const RHI::VertexInputState& additional)
-    {
-        RHI::VertexInputState result = base;
-
-        for (const auto& binding : additional.bindings) {
-            bool exists = false;
-            for (const auto& b : result.bindings) {
-                if (b.binding == binding.binding) {
-                    exists = true;
-                    break;
-                }
-            }
-            if (!exists) {
-                result.bindings.push_back(binding);
-            }
-        }
-
-        result.attributes.insert(result.attributes.end(),
-            additional.attributes.begin(),
-            additional.attributes.end());
-
-        return result;
-    }
-}
+} // namespace StarryEngine

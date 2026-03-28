@@ -2,7 +2,7 @@
 #include "IRenderPath.hpp"
 #include "../graph/RenderGraph.hpp"
 #include "../../scene/Scene.hpp"
-#include "RenderPathConfig.hpp"
+#include "../passes/Subpass.hpp"
 #include <vector>
 #include <memory>
 #include <unordered_map>
@@ -26,11 +26,12 @@ namespace StarryEngine {
 
         void setTextureDescs(const std::unordered_map<std::string, RHI::TextureDesc>& descs);
 
-        void setLightingMaterial(std::shared_ptr<Assets::MaterialInstance> material) { m_material = material; }
-        std::shared_ptr<Assets::MaterialInstance> getMaterial() const override { return m_material; }
+        void addTextureDesc(std::string name, RHI::TextureDesc desc);
+        void addSubpass(Scene::RenderStage stage,Scene::RenderQueue Queue,Subpass subpass);
     private:
         bool buildGraph();
         void distributeDrawItems(const Scene::AnalysisSceneResult& sceneData);
+        void updateMaterialTextures(const Scene::AnalysisSceneResult& sceneData);
 
         std::shared_ptr<RHI::IRHI> m_rhi;
         std::shared_ptr<RHI::ResourceManager> m_resMgr;
@@ -47,7 +48,6 @@ namespace StarryEngine {
         std::unordered_map<std::string, RenderGraph::TextureId> m_textureIdMap;
 
         std::string m_swapchainTextureName = "Swapchain";
-        std::shared_ptr<Assets::MaterialInstance> m_material;
     };
 
 } // namespace StarryEngine

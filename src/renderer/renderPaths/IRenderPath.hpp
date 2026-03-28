@@ -8,10 +8,12 @@
 #include "../../scene/Scene.hpp"
 #include "../graph/RenderGraph.hpp"
 #include "../backend/RHIFactory.hpp"
-#include "RenderPathConfig.hpp" 
+#include"../passes/Subpass.hpp"  
 
 
 namespace StarryEngine {
+    using RenderPathConfig = std::unordered_map<Scene::RenderStage, std::map<Scene::RenderQueue, SubpassConfig>>;
+
     class IRenderPath {
     public:
         virtual ~IRenderPath() = default;
@@ -19,7 +21,6 @@ namespace StarryEngine {
         virtual bool initialize() = 0;
         virtual void onResize(uint32_t width, uint32_t height) = 0;
         virtual void setConfig(const RenderPathConfig& config) = 0;
-        virtual std::shared_ptr<Assets::MaterialInstance> getMaterial() const = 0;
         virtual void setDrawItems(const Scene::AnalysisSceneResult& secneData) = 0;
         virtual void render(RHI::RHICommandEncoder* encoder, uint32_t frameIndex) = 0;
         virtual void update(const glm::mat4& view, const glm::mat4& proj, float deltaTime) = 0;

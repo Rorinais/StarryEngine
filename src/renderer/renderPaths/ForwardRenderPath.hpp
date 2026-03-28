@@ -2,7 +2,6 @@
 #include "IRenderPath.hpp"
 #include "../graph/RenderGraph.hpp"
 #include "../../scene/Scene.hpp"
-#include "RenderPathConfig.hpp"
 #include <vector>
 #include <memory>
 #include <unordered_map>
@@ -26,7 +25,6 @@ namespace StarryEngine {
 
         void setTextureDescs(const std::unordered_map<std::string, RHI::TextureDesc>& descs);
         void setLightingMaterial(std::shared_ptr<Assets::MaterialInstance> material) { m_material = material; }
-        std::shared_ptr<Assets::MaterialInstance> getMaterial() const override { return m_material; }
     private:
         bool buildGraph();
         void distributeDrawItems(const Scene::AnalysisSceneResult& sceneData);

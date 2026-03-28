@@ -1,5 +1,10 @@
+#include "../src/renderer/passes/PassWrapper.hpp"
+#include "../src/renderer/passes/GeometrySubpass.hpp"
+#include "../src/renderer/passes/LightSubpass.hpp"
+
 #include"../src/application/Application.hpp"
 #include "type.hpp"
+
 using namespace StarryEngine;
 struct MaterialUniforms {
     glm::vec4 baseColor;   // 16 字节
@@ -56,237 +61,75 @@ int main() {
 std::shared_ptr<DeferredRenderPath> createDeferredRenderPath(
     std::shared_ptr<RHI::IRHI> rhi,
     uint32_t width, uint32_t height,
-    GlobalDescriptorData globalDescriptorData){
+    GlobalDescriptorData globalDescriptorData) {
+
     auto renderPath = std::make_shared<DeferredRenderPath>(rhi, width, height);
-    std::unordered_map<std::string, RHI::TextureDesc> textureDescs;
 
-    textureDescs["Albedo"] = {
-        .extent = { width, height, 1 },
-        .format = RHI::Format::RGBA8_UNorm,
-        .type = RHI::TextureType::Texture2D,
-        .allowRenderTarget = true,
-        .allowInputAttachment = true
-    };
-
-    textureDescs["Material"] = {
-        .extent = { width, height, 1 },
-        .format = RHI::Format::RGBA8_UNorm,
-        .type = RHI::TextureType::Texture2D,
-        .allowRenderTarget = true,
-        .allowInputAttachment = true
-    };
-
-    textureDescs["SceneColor"] = {
-        .extent = { width, height, 1 },
-        .format = RHI::Format::RGBA8_UNorm,
-        .type = RHI::TextureType::Texture2D,
-        .allowRenderTarget = true,
-        .allowInputAttachment = true
-    };
-
-    textureDescs["Normal"] = {
-        .extent = { width, height, 1 },
-        .format = RHI::Format::RGBA16_Float,
-        .type = RHI::TextureType::Texture2D,
-        .allowRenderTarget = true,
-        .allowInputAttachment = true
-    };
-
-    textureDescs["Depth"] = {
-        .extent = { width, height, 1 },
-        .format = rhi->getDepthFormat(),
-        .type = RHI::TextureType::Texture2D,
-        .allowRenderTarget = false,
-        .allowDepthStencil = true,
-        .allowInputAttachment = true
-    };
-
-    textureDescs["Swapchain"] = {
-        .extent = { width, height, 1 },
-        .format = RHI::Format::BGRA8_sRGB,
-        .type = RHI::TextureType::Texture2D,
-        .allowRenderTarget = true,
-        .allowDepthStencil = true
-    };
-    renderPath->setTextureDescs(textureDescs);
+    renderPath->addTextureDesc("Depth", PassWrapper::createDepthTextureDesc({ width, height, 1 }, rhi->getDepthFormat()));
+    renderPath->addTextureDesc("Albedo", PassWrapper::createColorTextureDesc({ width, height, 1 }, RHI::Format::RGBA8_UNorm));
+    renderPath->addTextureDesc("Normal", PassWrapper::createColorTextureDesc({ width, height, 1 }, RHI::Format::RGBA16_Float));
+    renderPath->addTextureDesc("Material", PassWrapper::createColorTextureDesc({ width, height, 1 }, RHI::Format::RGBA8_UNorm));
+    renderPath->addTextureDesc("Swapchain", PassWrapper::createColorTextureDesc({ width, height, 1 }, RHI::Format::BGRA8_sRGB));
+    renderPath->addTextureDesc("SceneColor", PassWrapper::createColorTextureDesc({ width, height, 1 }, RHI::Format::RGBA8_UNorm));
 
     // ---------- 几何子通道 ----------
-    RenderGraph::AttachmentParams geomColorAttachments{
-        .clearColor = RHI::Color{ 0.0f, 0.0f, 0.0f, 0.0f },
-        .loadOp = RHI::AttachmentLoadOp::Clear,
-        .storeOp = RHI::AttachmentStoreOp::Store,
-        .initialLayout = RHI::ImageLayout::Undefined,
-        .finalLayout = RHI::ImageLayout::ColorAttachment,
-    };
-    RenderGraph::AttachmentParams geomDepthAttachment{
-        .clearDepth = 1.0f,
-        .loadOp = RHI::AttachmentLoadOp::Clear,
-        .storeOp = RHI::AttachmentStoreOp::DontCare,
-        .initialLayout = RHI::ImageLayout::Undefined,
-        .finalLayout = RHI::ImageLayout::DepthStencilAttachment,
-    };
+    auto colorAttach = PassWrapper::createColorAttachment(
+        RHI::ImageLayout::Undefined, RHI::ImageLayout::ColorAttachment,
+        RHI::AttachmentLoadOp::Clear, RHI::AttachmentStoreOp::Store);
+    auto depthAttach = PassWrapper::createDepthAttachment(
+        RHI::ImageLayout::Undefined, RHI::ImageLayout::DepthStencilAttachment,
+        RHI::AttachmentLoadOp::Clear, RHI::AttachmentStoreOp::Store);
 
-    // ---------- 几何子通道 ----------
-    SubpassConfig geomSubpass = {
-        .name = "Geometry",
-        .colorAttachments = {
-            { "Albedo",geomColorAttachments },
-            { "Normal",geomColorAttachments },
-            { "Material",geomColorAttachments },
-        },
-        .depthAttachment = {
-            { "Depth",geomDepthAttachment }
-        },
-        .recorder = std::make_shared<MeshDrawRecorder>()
-    };
+    Subpass geometrypass("Geometry", std::make_shared<MeshDrawRecorder>());
+    geometrypass.addColorAttachment("Albedo", colorAttach)
+        .addColorAttachment("Normal", colorAttach)
+        .addColorAttachment("Material", colorAttach)
+        .setDepthAttachment("Depth", depthAttach);
+    renderPath->addSubpass(Scene::RenderStage::GBuffer, Scene::RenderQueue::Opaque, geometrypass);
 
-    // ---------- 2. 光照子通道 ----------
-    RenderGraph::AttachmentParams lightColorAttachment{
-        .clearColor = RHI::Color{ 0.0f, 0.0f, 0.0f, 0.0f },
-        .loadOp = RHI::AttachmentLoadOp::Clear,        // ✅ 第一次写入，必须 Clear
-        .storeOp = RHI::AttachmentStoreOp::Store,
-        .initialLayout = RHI::ImageLayout::Undefined,  // 首次使用
-        .finalLayout = RHI::ImageLayout::ColorAttachment,
-    };
+    // ---------- 光照子通道 ----------
+    auto lightColorAttachment = PassWrapper::createColorAttachment(
+        RHI::ImageLayout::Undefined, RHI::ImageLayout::ColorAttachment,
+        RHI::AttachmentLoadOp::Clear, RHI::AttachmentStoreOp::Store);
+    auto lightInputAttachment = PassWrapper::createColorAttachment(
+        RHI::ImageLayout::ColorAttachment, RHI::ImageLayout::ShaderReadOnly,
+        RHI::AttachmentLoadOp::Load, RHI::AttachmentStoreOp::DontCare);
 
-    RenderGraph::AttachmentParams lightInputAttachment{
-        .loadOp = RHI::AttachmentLoadOp::Load,
-        .storeOp = RHI::AttachmentStoreOp::DontCare,
-        .initialLayout = RHI::ImageLayout::ColorAttachment,
-        .finalLayout = RHI::ImageLayout::ShaderReadOnly,
-    };
+    Subpass lightSubpass("Lighting", std::make_shared<DeferredLightingRecorder>());
+    lightSubpass.addColorAttachment("SceneColor", lightColorAttachment)
+        .addInputAttachment("Albedo", lightInputAttachment)
+        .addInputAttachment("Normal", lightInputAttachment)
+        .addInputAttachment("Material", lightInputAttachment);
+    renderPath->addSubpass(Scene::RenderStage::Lighting, Scene::RenderQueue::Opaque, lightSubpass);
 
-    SubpassConfig lightSubpass = {
-        .name = "Lighting",
-        .colorAttachments{
-            { "SceneColor",lightColorAttachment },
-        },
-        .inputAttachments = {
-            { "Albedo",lightInputAttachment },
-            { "Normal",lightInputAttachment },
-            { "Material",lightInputAttachment },
-        },
-        .recorder = std::make_shared<DeferredLightingRecorder>()
+    // ---------- 网格子通道 ----------
+    auto gridColorAttachment = PassWrapper::createColorAttachment(
+        RHI::ImageLayout::ColorAttachment, RHI::ImageLayout::ColorAttachment,
+        RHI::AttachmentLoadOp::Load, RHI::AttachmentStoreOp::Store);
+    auto gridDepthAttachment = PassWrapper::createDepthAttachment(
+        RHI::ImageLayout::DepthStencilAttachment, RHI::ImageLayout::DepthStencilAttachment,
+        RHI::AttachmentLoadOp::Load, RHI::AttachmentStoreOp::DontCare);
 
-    };
-    auto lightingMaterial = createLightingMaterial(rhi->getResourceManager(), globalDescriptorData);
-    lightSubpass.recorder->setMaterial(lightingMaterial);
-    renderPath->setLightingMaterial(lightingMaterial);
+    Subpass gridSubpass("Grid", std::make_shared<MeshDrawRecorder>());
+    gridSubpass.addColorAttachment("SceneColor", gridColorAttachment)
+        .setDepthAttachment("Depth", gridDepthAttachment);
+    renderPath->addSubpass(Scene::RenderStage::PostProcess, Scene::RenderQueue::Opaque, gridSubpass);
 
-    // 固定管线描述（光照子通道）
-    Scene::GraphicsPipelineState lightPSO;
-    lightPSO.vertexShader = lightingMaterial->getTemplate()->getVertexShader();
-    lightPSO.fragmentShader = lightingMaterial->getTemplate()->getFragmentShader();
-    lightPSO.layout = lightingMaterial->getTemplate()->getPipelineLayout(rhi->getResourceManager().get());
-    lightPSO.vertexInput = RHI::VertexInputState{};
-    lightPSO.topology = RHI::PrimitiveTopology::TriangleList;
-    lightPSO.attachments = { RHI::BlendAttachmentState{} };
-    lightPSO.cullMode = RHI::CullMode::None;
-    lightPSO.depthTestEnable = false;
-    lightPSO.depthWriteEnable = false;
-    lightSubpass.pipelineDesc = lightPSO;
+    // ---------- 复制子通道 ----------
+    auto copyInputAttachment = PassWrapper::createColorAttachment(
+        RHI::ImageLayout::ColorAttachment, RHI::ImageLayout::ShaderReadOnly,
+        RHI::AttachmentLoadOp::Load, RHI::AttachmentStoreOp::DontCare);
+    auto copyColorAttachment = PassWrapper::createColorAttachment(
+        RHI::ImageLayout::Undefined, RHI::ImageLayout::PresentSrc,
+        RHI::AttachmentLoadOp::Clear, RHI::AttachmentStoreOp::Store);
 
-    // 纹理绑定：将三个 GBuffer 纹理绑定到光照材质（set 1, binding 0,1,2）
-    TextureBinding bindingAlbedo;
-    bindingAlbedo.textureName = "Albedo";
-    bindingAlbedo.set = 1;
-    bindingAlbedo.binding = 0;
-    bindingAlbedo.samplerDesc.minFilter = RHI::SamplerFilter::Linear;
-    bindingAlbedo.samplerDesc.magFilter = RHI::SamplerFilter::Linear;
-    lightSubpass.textureBindings.push_back(bindingAlbedo);
-
-    TextureBinding bindingNormal;
-    bindingNormal.textureName = "Normal";
-    bindingNormal.set = 1;
-    bindingNormal.binding = 1;
-    bindingNormal.samplerDesc = bindingAlbedo.samplerDesc;
-    lightSubpass.textureBindings.push_back(bindingNormal);
-
-    TextureBinding bindingMaterial;
-    bindingMaterial.textureName = "Material";
-    bindingMaterial.set = 1;
-    bindingMaterial.binding = 2;
-    bindingMaterial.samplerDesc = bindingAlbedo.samplerDesc;
-    lightSubpass.textureBindings.push_back(bindingMaterial);
-
-    // ---------- 3. 复制子通道 ----------
-    RenderGraph::AttachmentParams copyInputAttachment{
-        .loadOp = RHI::AttachmentLoadOp::Load,
-        .storeOp = RHI::AttachmentStoreOp::DontCare,
-        .initialLayout = RHI::ImageLayout::ColorAttachment,
-        .finalLayout = RHI::ImageLayout::ShaderReadOnly,
-    };
-
-    RenderGraph::AttachmentParams copyColorAttachment{
-        .clearColor = RHI::Color{ 0.2f, 0.3f, 0.5f, 1.0f },
-        .loadOp = RHI::AttachmentLoadOp::Clear,
-        .storeOp = RHI::AttachmentStoreOp::Store,
-        .initialLayout = RHI::ImageLayout::Undefined,
-        .finalLayout = RHI::ImageLayout::PresentSrc,
-    };
-
-    SubpassConfig copySubpass = {
-        .name = "Copy",
-        .colorAttachments = { { "Swapchain", copyColorAttachment } },
-        .inputAttachments = { { "SceneColor", copyInputAttachment } },
-        .recorder = std::make_shared<CopyToSwapchainRecorder>()
-    };
-
-    auto copyMaterial = createCopyMaterial(rhi->getResourceManager(), globalDescriptorData);
-    copySubpass.recorder->setMaterial(copyMaterial);
-
-    Scene::GraphicsPipelineState copyPSO;
-    copyPSO.vertexShader = copyMaterial->getTemplate()->getVertexShader();
-    copyPSO.fragmentShader = copyMaterial->getTemplate()->getFragmentShader();
-    copyPSO.layout = copyMaterial->getTemplate()->getPipelineLayout(rhi->getResourceManager().get());
-    copyPSO.vertexInput = RHI::VertexInputState{};
-    copyPSO.topology = RHI::PrimitiveTopology::TriangleList;
-    copyPSO.attachments = { RHI::BlendAttachmentState{} };
-    copyPSO.cullMode = RHI::CullMode::None;
-    copyPSO.depthTestEnable = false;
-    copyPSO.depthWriteEnable = false;
-    copySubpass.pipelineDesc = copyPSO;
-
-    TextureBinding bindingSceneColor;
-    bindingSceneColor.textureName = "SceneColor";
-    bindingSceneColor.set = 1;
-    bindingSceneColor.binding = 0;
-    bindingSceneColor.samplerDesc.minFilter = RHI::SamplerFilter::Linear;
-    bindingSceneColor.samplerDesc.magFilter = RHI::SamplerFilter::Linear;
-    copySubpass.textureBindings.push_back(bindingSceneColor);
-
-    RenderGraph::AttachmentParams gridColorAttachment{
-        .clearColor = RHI::Color{ 1.0f, 0.1f, 0.1f, 1.0f },  // 测试用红色
-        .loadOp = RHI::AttachmentLoadOp::Load,                // ✅ 加载光照写入的颜色
-        .storeOp = RHI::AttachmentStoreOp::Store,
-        .initialLayout = RHI::ImageLayout::ColorAttachment,   // ✅ 匹配光照 finalLayout
-        .finalLayout = RHI::ImageLayout::ColorAttachment,
-    };
-
-    RenderGraph::AttachmentParams gridDepthAttachment{
-    .loadOp = RHI::AttachmentLoadOp::Load,
-    .storeOp = RHI::AttachmentStoreOp::DontCare,
-    .initialLayout = RHI::ImageLayout::DepthStencilAttachment,
-    .finalLayout = RHI::ImageLayout::DepthStencilAttachment,
-    };
-
-    SubpassConfig gridSubpass = {
-        .name = "Grid",
-        .colorAttachments = { { "SceneColor", gridColorAttachment } },
-        .depthAttachment = { { "Depth", gridDepthAttachment } },
-        .recorder = std::make_shared<TestRecorder>()
-    };
-
-    RenderPathConfig config;
-    config[Scene::RenderStage::GBuffer][Scene::RenderQueue::Opaque] = geomSubpass;          // 几何
-    config[Scene::RenderStage::Lighting][Scene::RenderQueue::Opaque] = lightSubpass;        // 光照
-    config[Scene::RenderStage::PostProcess][Scene::RenderQueue::Opaque] = gridSubpass;      // 网格（后处理阶段）
-    config[Scene::RenderStage::PostProcess][Scene::RenderQueue::Transparent] = copySubpass;
-
-    renderPath->setConfig(config);
+    Subpass copySubpass("Copy", std::make_shared<CopyToSwapchainRecorder>());
+    copySubpass.addColorAttachment("Swapchain", copyColorAttachment)
+        .addInputAttachment("SceneColor", copyInputAttachment);
+    renderPath->addSubpass(Scene::RenderStage::PostProcess, Scene::RenderQueue::Transparent, copySubpass);
 
     if (!renderPath->initialize()) {
-        LOG_ERROR("Failed to initialize forward render path");
+        LOG_ERROR("Failed to initialize deferred render path");
     }
 
     return renderPath;
@@ -304,6 +147,22 @@ DataSet createRenderer(std::shared_ptr<RHI::IRHI> rhi, RHI::DescriptorPoolHandle
     globalDescriptorData.globalSetLayout = renderer->getGlobalSetLayout();
     globalDescriptorData.globalDescriptorSet = renderer->getGlobalDescriptorSet();
 
+    auto renderPath = createDeferredRenderPath(rhi, width, height, globalDescriptorData);
+    renderer->setRenderPath(std::move(renderPath));
+
+    auto lightingMaterial = createLightingMaterial(rhi->getResourceManager(), globalDescriptorData);
+    auto lightEffect = std::make_shared<Scene::ProceduralEffect>();
+    lightEffect->material = lightingMaterial;
+    lightEffect->stage = Scene::RenderStage::Lighting;
+    lightEffect->queue = Scene::RenderQueue::Opaque;
+    scene->addProceduralEffect(lightEffect);
+
+    auto copyMaterial = createCopyMaterial(rhi->getResourceManager(), globalDescriptorData);
+    auto copyEffect = std::make_shared<Scene::ProceduralEffect>();
+    copyEffect->material = copyMaterial;
+    copyEffect->stage = Scene::RenderStage::PostProcess;
+    copyEffect->queue = Scene::RenderQueue::Transparent;  
+    scene->addProceduralEffect(copyEffect);
 
     auto SphereMeshData = createSphere(rhi->getResourceManager(), globalDescriptorData);
     auto SphereObj = std::make_shared<Scene::RenderObject>();
@@ -316,18 +175,14 @@ DataSet createRenderer(std::shared_ptr<RHI::IRHI> rhi, RHI::DescriptorPoolHandle
     auto gridObj = std::make_shared<Scene::RenderObject>();
     gridObj->geometry = gridMeshData.geometry;
     gridObj->materials = gridMeshData.materials;
-    gridObj->transform = glm::scale(glm::translate(glm::mat4(1.0f), glm::vec3(0, 0, 2.5)), glm::vec3(5, 5, 1));
+    gridObj->transform = glm::scale(glm::translate(glm::mat4(1.0f), glm::vec3(0, 0, 0)), glm::vec3(5, 5, 5));
     scene->addObject(gridObj);
-
 
     auto perspectiveCamera = std::make_shared<Scene::PerspectiveCamera>();
     perspectiveCamera->setPerspective(glm::radians(45.0f), (float)width / height, 0.1f, 100.0f);
-    perspectiveCamera->lookAt(glm::vec3(0.0f, 2.0f, 5.0f), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    perspectiveCamera->lookAt(glm::vec3(1.0f, 2.0f, 5.0f), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
     scene->addCamera(perspectiveCamera);
     scene->setActiveCamera(perspectiveCamera);
-
-    auto renderPath = createDeferredRenderPath(rhi, width, height, globalDescriptorData);
-    renderer->setRenderPath(std::move(renderPath));
     return DataSet(scene, renderer);
 }
 
@@ -344,9 +199,8 @@ ModelData createGrid(std::shared_ptr<RHI::ResourceManager> resMgr, GlobalDescrip
     auto gridMaterialInst = std::make_shared<Assets::MaterialInstance>(gridTmpl, data.globalDescriptorPool, resMgr.get(), data.globalDescriptorSet);
     gridMaterialInst->setRenderStage(Scene::RenderStage::PostProcess);
     gridMaterialInst->setRenderQueue(Scene::RenderQueue::Opaque);
-    gridMaterialInst->enableDepthTest(false);
-    gridMaterialInst->enableDepthWrite(false);
-    gridMaterialInst->setCullMode(RHI::CullMode::None);
+    gridMaterialInst->enableDepthTest(true);
+    gridMaterialInst->setDepthCompareOp(RHI::CompareOp::Less); // 默认就是 Less，可显式设置
 
     return ModelData(Assets::Shape::createGridGeometry(resMgr), { gridMaterialInst });
 }
@@ -383,7 +237,7 @@ ModelData createSphere(std::shared_ptr<RHI::ResourceManager> resMgr, GlobalDescr
     SphereMaterialInst->setAttachments(attachments);
 
     MaterialUniforms uniforms;
-    uniforms.baseColor = glm::vec4(0.0f, 1.0f, 0.0f, 1.0f); // 红色
+    uniforms.baseColor = glm::vec4(0.0f, 1.0f, 0.0f, 0.5f); // 半透明绿色
     uniforms.metallic = 0.0f;
     uniforms.roughness = 0.5f;
 
@@ -416,8 +270,11 @@ std::shared_ptr<Assets::MaterialInstance> createLightingMaterial(
         return nullptr;
     }
 
-    auto material = std::make_shared<Assets::MaterialInstance>(
-        tmpl, data.globalDescriptorPool, resMgr.get(), data.globalDescriptorSet);
+    auto material = std::make_shared<Assets::MaterialInstance>(tmpl, data.globalDescriptorPool, resMgr.get(), data.globalDescriptorSet);
+
+    material->addTextureDependency("Albedo", 1, 0);
+    material->addTextureDependency("Normal", 1, 1);
+    material->addTextureDependency("Material", 1, 2);
 
     material->setRenderStage(Scene::RenderStage::Lighting);
     material->setRenderQueue(Scene::RenderQueue::Opaque);
@@ -449,8 +306,8 @@ std::shared_ptr<Assets::MaterialInstance> createCopyMaterial(
         return nullptr;
     }
 
-    auto material = std::make_shared<Assets::MaterialInstance>(
-        tmpl, data.globalDescriptorPool, resMgr.get(), data.globalDescriptorSet);
+    auto material = std::make_shared<Assets::MaterialInstance>(tmpl, data.globalDescriptorPool, resMgr.get(), data.globalDescriptorSet);
+    material->addTextureDependency("SceneColor", 1, 0);
 
     material->setRenderStage(Scene::RenderStage::PostProcess);
     material->setRenderQueue(Scene::RenderQueue::Opaque);

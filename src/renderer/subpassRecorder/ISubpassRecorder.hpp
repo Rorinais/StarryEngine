@@ -7,7 +7,7 @@
 #include <vector>
 #include <any>
 #include "../../assets/Assets.hpp"
-#include "../../scene/SceneType.hpp"
+#include "../../scene/Scene.hpp"
 #include "../interface/RHI_RESOURCE_FACTORY.hpp"
 #include "../../logging/Logger.hpp"
 
@@ -60,9 +60,8 @@ namespace StarryEngine{
         virtual void clearDrawItems() = 0;
         virtual void setDrawItems(const std::vector<std::shared_ptr<Scene::DrawItem>>& items) = 0;
         virtual const std::vector<std::shared_ptr<Scene::DrawItem>>& getDrawItems() = 0;
-        virtual void setPipelines(const std::vector<RHI::PipelineHandle>& pipelines) = 0;
         virtual void setPipeline(RHI::PipelineHandle pipeline) {}
-        virtual void setGlobalToLocalMapping(const std::unordered_map<uint32_t, uint32_t>& mapping) = 0; 
+        virtual void setPipelineMapping(const std::unordered_map<uint32_t, RHI::PipelineHandle>& mapping) = 0;
         virtual std::shared_ptr<Assets::MaterialInstance> getMaterial() const { return nullptr; }
         virtual void setMaterial(std::shared_ptr<Assets::MaterialInstance> material) {}
 

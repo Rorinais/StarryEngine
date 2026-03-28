@@ -19,6 +19,7 @@ namespace StarryEngine::Assets {
         RHI::ShaderHandle getVertexShader() const override { return m_vertexShader; }
         RHI::ShaderHandle getFragmentShader() const override { return m_fragmentShader; }
 
+        const InstancingLayout* getInstancingLayout() const override;
     private:
         std::shared_ptr<RHI::ResourceManager> m_resMgr;
 

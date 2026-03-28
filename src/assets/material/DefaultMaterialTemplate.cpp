@@ -27,4 +27,20 @@ namespace StarryEngine::Assets {
         }
         return true;
     }
+
+    const InstancingLayout* DefaultMaterialTemplate::getInstancingLayout() const {
+        static InstancingLayout defaultLayout = []() {
+            InstancingLayout layout;
+            layout.binding = 1;
+            layout.attributes = {
+                {3, RHI::Format::RGBA32_Float, 0},
+                {4, RHI::Format::RGBA32_Float, 16},
+                {5, RHI::Format::RGBA32_Float, 32},
+                {6, RHI::Format::RGBA32_Float, 48}
+            };
+            layout.autoCalculateOffsets(); // stride = 64
+            return layout;
+            }();
+        return &defaultLayout;
+    }
 }

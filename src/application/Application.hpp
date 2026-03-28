@@ -17,7 +17,6 @@
 #include "../assets/geometry/GeomtryCreateFunc.hpp"
 #include "../renderer/subpassRecorder/GbufferRecorder.hpp"
 #include "../renderer/subpassRecorder/DeferredLightingRecorder.hpp"
-#include "../renderer/subpassRecorder/TestRecorder.hpp"
 
 
 namespace StarryEngine {

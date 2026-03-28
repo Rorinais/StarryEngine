@@ -191,6 +191,7 @@ namespace StarryEngine::RHI {
         static Color Green() { return Color(0.0f, 1.0f, 0.0f, 1.0f); }
         static Color Blue() { return Color(0.0f, 0.0f, 1.0f, 1.0f); }
         static Color Transparent() { return Color(0.0f, 0.0f, 0.0f, 0.0f); }
+        static Color Gray() { return Color(0.05f, 0.05f, 0.05f, 1.0f); }
 
         bool operator==(const Color& other) const {
             return r == other.r && g == other.g && b == other.b && a == other.a;

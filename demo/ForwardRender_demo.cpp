@@ -157,17 +157,15 @@ std::shared_ptr<ForwardRenderPath> createRenderPathConfig(
     SubpassConfig geomSubpass;
     geomSubpass.name = "Geometry";
     
-    // 颜色附件：输出到 SceneColor
     SubpassAttachment colorAttach;
     colorAttach.textureName = "SceneColor";
     colorAttach.params.clearColor = RHI::Color{ 0.05f, 0.05f, 0.05f, 1.0f };
-    colorAttach.params.loadOp = RHI::AttachmentLoadOp::Clear;      // Clear
+    colorAttach.params.loadOp = RHI::AttachmentLoadOp::Clear;      
     colorAttach.params.storeOp = RHI::AttachmentStoreOp::Store;
-    colorAttach.params.initialLayout = RHI::ImageLayout::Undefined; // 允许
-    colorAttach.params.finalLayout = RHI::ImageLayout::ColorAttachment; // 供后续读取
+    colorAttach.params.initialLayout = RHI::ImageLayout::Undefined; 
+    colorAttach.params.finalLayout = RHI::ImageLayout::ColorAttachment; 
     geomSubpass.colorAttachments.push_back(colorAttach);
     
-    // 深度附件
     SubpassAttachment depthAttach;
     depthAttach.textureName = "Depth";
     depthAttach.params.clearDepth = 1.0f;

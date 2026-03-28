@@ -17,6 +17,14 @@ namespace StarryEngine {
         m_textureDescs = descs;
     }
 
+    void DeferredRenderPath::addTextureDesc(std::string name, RHI::TextureDesc desc) {
+        m_textureDescs[name] = desc;
+    }
+
+    void DeferredRenderPath::addSubpass(Scene::RenderStage stage, Scene::RenderQueue Queue, Subpass subpass) {
+        m_config[stage][Queue] = subpass.getConfig();
+    }
+
     bool DeferredRenderPath::initialize() {
         if (m_config.empty()) {
             LOG_ERROR("DeferredRenderPath: No config set!");
@@ -154,72 +162,9 @@ namespace StarryEngine {
             return false;
         }
 
-        // 统一处理所有子通道的固定管线创建和纹理绑定
-        for (auto& [stage, queueMap] : m_config) {
-            uint32_t idx = 0;
-            for (auto& [queue, subpassCfg] : queueMap) {
-                ++idx;
-            }
+        m_textureIdMap = std::move(texIdMap);
 
-            for (auto& [queue, subpassCfg] : queueMap) {
-                auto* passNode = m_stagePassNode[stage];
-                uint32_t subpassIdx = m_stagePassInfo[stage].queueToSubpass[queue];
-                RHI::RenderPassHandle rpHandle = passNode->getRenderPassHandle();
-
-                if (subpassCfg.pipelineDesc) {
-                    const auto& state = *subpassCfg.pipelineDesc;
-
-                    RHI::GraphicsPipelineDesc gpDesc;
-                    gpDesc.vertexShader = state.vertexShader;
-                    gpDesc.fragmentShader = state.fragmentShader;
-                    gpDesc.pipelineLayoutHandle = state.layout;
-                    gpDesc.vertexInput = state.vertexInput;
-                    gpDesc.topology = state.topology;
-                    gpDesc.rasterizer.cullMode = state.cullMode;
-                    gpDesc.rasterizer.frontFace = state.frontFace;
-                    gpDesc.rasterizer.lineWidth = state.lineWidth;
-                    gpDesc.depthStencil.depthTestEnable = state.depthTestEnable;
-                    gpDesc.depthStencil.depthWriteEnable = state.depthWriteEnable;
-                    gpDesc.depthStencil.depthCompareOp = state.depthCompareOp;
-                    gpDesc.colorBlend.attachments = state.attachments;
-                    gpDesc.viewport.viewports = state.viewports;
-                    gpDesc.viewport.scissors = state.scissors;
-                    gpDesc.dynamicStates = state.dynamicStates;
-                    gpDesc.renderPass = rpHandle;
-                    gpDesc.subpass = subpassIdx;
-                    gpDesc.debugName = subpassCfg.name + "_Pipeline";
-
-                    auto pipeline = m_resMgr->createGraphicsPipeline(gpDesc);
-                    if (pipeline.isValid()) {
-                        subpassCfg.recorder->setPipeline(pipeline);
-                    }
-                    else {
-                        LOG_ERROR("Pipeline creation failed for subpass: {}", subpassCfg.name);
-                    }
-                }
-
-                // 纹理绑定
-                auto material = subpassCfg.recorder->getMaterial();
-                if (material) {
-                    for (const auto& binding : subpassCfg.textureBindings) {
-                        auto texIt = texIdMap.find(binding.textureName);
-                        if (texIt == texIdMap.end()) {
-                            LOG_WARN("Texture '{}' not found for subpass '{}'", binding.textureName, subpassCfg.name);
-                            continue;
-                        }
-                        auto phys = m_renderGraph->getPhysicalTextureHandle(texIt->second);
-                        if (!phys.isValid()) {
-                            LOG_WARN("Physical texture handle for '{}' is invalid", binding.textureName);
-                            continue;
-                        }
-                        auto sampler = m_resMgr->createSampler(binding.samplerDesc);
-                        material->setTexture(binding.set, binding.binding, phys, sampler);
-                    }
-                }
-            }
-        }
-
-        // 为所有 stage 设置 RenderPassHandle（用于 update 中的 PSO 创建）
+        // 为所有 stage 设置 RenderPassHandle
         for (auto& [stage, passNode] : m_stagePassNode) {
             if (passNode) {
                 m_stagePassInfo[stage].renderPassHandle = passNode->getRenderPassHandle();
@@ -231,6 +176,7 @@ namespace StarryEngine {
 
     void DeferredRenderPath::setDrawItems(const Scene::AnalysisSceneResult& sceneData) {
         m_cachedSceneData = std::make_shared<Scene::AnalysisSceneResult>(sceneData);
+        updateMaterialTextures(sceneData);  
         distributeDrawItems(sceneData);
     }
 
@@ -261,81 +207,21 @@ namespace StarryEngine {
             uint64_t key = (static_cast<uint64_t>(item->stage) << 32) | subpass;
             groups[key].push_back(item);
         }
-        if (unmatched > 0) { // [LOG]
-            LOG_WARN("distributeDrawItems: {} draw items had no matching stage/subpass", unmatched); // [LOG]
+
+        if (unmatched > 0) {
+            LOG_WARN("distributeDrawItems: {} draw items had no matching stage/subpass", unmatched); 
         }
 
         for (auto& [key, items] : groups) {
-
             auto it = m_subpassRecorders.find(key);
             if (it != m_subpassRecorders.end()) {
                 it->second->setDrawItems(items);
             }
             else {
-                LOG_WARN("No recorder found for key {}", key); // [LOG]
+                LOG_WARN("No recorder found for key {}", key); 
             }
         }
     }
-
-    //void DeferredRenderPath::update(const glm::mat4& view, const glm::mat4& proj, float deltaTime) {
-    //    LOG_INFO("update: view/proj updated, deltaTime={}", deltaTime); // [LOG]
-
-    //    m_lastView = view;
-    //    m_lastProj = proj;
-    //    m_lastDeltaTime = deltaTime;
-
-    //    if (!m_cachedSceneData) {
-    //        LOG_WARN("update: no cached scene data, skipping"); // [LOG]
-    //        return;
-    //    }
-
-    //    size_t totalPipelinesCreated = 0; // [LOG]
-
-    //    for (auto& [stage, passInfo] : m_stagePassInfo) {
-    //        for (auto& [queue, subpass] : passInfo.queueToSubpass) {
-    //            uint64_t key = (static_cast<uint64_t>(stage) << 32) | subpass;
-    //            auto recorderIt = m_subpassRecorders.find(key);
-    //            if (recorderIt == m_subpassRecorders.end()) continue;
-    //            auto& recorder = recorderIt->second;
-    //            auto& items = recorder->getDrawItems();
-    //            if (items.empty()) continue;
-
-    //            LOG_DEBUG("update: stage={}, subpass={}, items={}", static_cast<int>(stage), subpass, items.size()); // [LOG]
-
-    //            // 收集该子通道中所有唯一的材质状态（PSO）
-    //            std::unordered_map<size_t, std::shared_ptr<Scene::GraphicsPipelineState>> uniquePSOs;
-    //            for (auto& item : items) {
-    //                if (item->pipelineIndex >= m_cachedSceneData->PSO.size()) {
-    //                    LOG_WARN("item pipelineIndex {} out of range (PSO size={})", // [LOG]
-    //                        item->pipelineIndex, m_cachedSceneData->PSO.size()); // [LOG]
-    //                    continue;
-    //                }
-    //                auto& pso = m_cachedSceneData->PSO[item->pipelineIndex];
-    //                size_t hash = std::hash<Scene::GraphicsPipelineState>{}(*pso);
-    //                uniquePSOs[hash] = pso;
-    //            }
-
-    //            LOG_DEBUG("update: {} unique PSOs found for subpass", uniquePSOs.size()); // [LOG]
-
-    //            // 为每个唯一状态创建管线
-    //            std::vector<RHI::PipelineHandle> pipelines;
-    //            for (auto& [hash, pso] : uniquePSOs) {
-    //                auto pipeline = Assets::PipelineCache::getOrCreateGraphicsPipeline(
-    //                    m_resMgr.get(), *pso, passInfo.renderPassHandle, subpass);
-    //                if (pipeline.isValid()) {
-    //                    pipelines.push_back(pipeline);
-    //                    ++totalPipelinesCreated; // [LOG]
-    //                }
-    //                else {
-    //                    LOG_ERROR("Failed to create pipeline for PSO hash {}", hash); // [LOG]
-    //                }
-    //            }
-    //            recorder->setPipelines(pipelines);
-    //            LOG_DEBUG("update: set {} pipelines for subpass", pipelines.size()); // [LOG]
-    //        }
-    //    }
-    //    LOG_INFO("update: completed, total pipelines created/retrieved: {}", totalPipelinesCreated); // [LOG]
-    //}
 
     void DeferredRenderPath::update(const glm::mat4& view, const glm::mat4& proj, float deltaTime) {
         m_lastView = view;
@@ -347,8 +233,6 @@ namespace StarryEngine {
             return;
         }
 
-        size_t totalPipelinesCreated = 0;
-
         for (auto& [stage, passInfo] : m_stagePassInfo) {
             for (auto& [queue, subpass] : passInfo.queueToSubpass) {
                 uint64_t key = (static_cast<uint64_t>(stage) << 32) | subpass;
@@ -358,45 +242,33 @@ namespace StarryEngine {
                 auto& items = recorder->getDrawItems();
                 if (items.empty()) continue;
 
-                // 收集唯一 PSO，并建立全局索引 -> 局部索引的映射
-                std::unordered_map<size_t, std::shared_ptr<Scene::GraphicsPipelineState>> uniquePSOs;
-                std::unordered_map<uint32_t, uint32_t> globalToLocal; 
-                uint32_t localIdx = 0;                                
-
+                // 收集该子通道中所有用到的 pipelineIndex（去重）
+                std::unordered_set<uint32_t> usedPipelineIndices;
                 for (auto& item : items) {
-                    if (item->pipelineIndex >= m_cachedSceneData->PSO.size()) {
-                        LOG_WARN("item pipelineIndex {} out of range (PSO size={})",
-                            item->pipelineIndex, m_cachedSceneData->PSO.size());
-                        continue;
+                    if (item->pipelineIndex < m_cachedSceneData->PSO.size()) {
+                        usedPipelineIndices.insert(item->pipelineIndex);
                     }
-                    auto& pso = m_cachedSceneData->PSO[item->pipelineIndex];
-                    size_t hash = std::hash<Scene::GraphicsPipelineState>{}(*pso);
-                    auto it = uniquePSOs.find(hash);
-                    if (it == uniquePSOs.end()) {
-                        uniquePSOs[hash] = pso;
-                        // 记录当前全局索引对应的局部索引（局部索引即本次插入的顺序）
-                        globalToLocal[item->pipelineIndex] = localIdx;
-                        ++localIdx;
+                    else {
+                        LOG_WARN("item pipelineIndex {} out of range", item->pipelineIndex);
                     }
                 }
 
-                // 为每个唯一状态创建管线（按照 uniquePSOs 的迭代顺序，与映射一致）
-                std::vector<RHI::PipelineHandle> pipelines;
-                for (auto& [hash, pso] : uniquePSOs) {
+                // 为每个 pipelineIndex 创建管线句柄
+                std::unordered_map<uint32_t, RHI::PipelineHandle> pipelineMapping;
+                for (uint32_t idx : usedPipelineIndices) {
+                    auto& pso = m_cachedSceneData->PSO[idx];
                     auto pipeline = Assets::PipelineCache::getOrCreateGraphicsPipeline(
                         m_resMgr.get(), *pso, passInfo.renderPassHandle, subpass);
                     if (pipeline.isValid()) {
-                        pipelines.push_back(pipeline);
-                        ++totalPipelinesCreated;
+                        pipelineMapping[idx] = pipeline;
                     }
                     else {
-                        LOG_ERROR("Failed to create pipeline for PSO hash {}", hash);
+                        LOG_ERROR("Failed to create pipeline for PSO index {}", idx);
                     }
                 }
 
-                // 将 pipelines 和映射传递给 recorder
-                recorder->setPipelines(pipelines);
-                recorder->setGlobalToLocalMapping(globalToLocal);  // 新增：传递映射
+                // 将映射表传递给录制器
+                recorder->setPipelineMapping(pipelineMapping);
             }
         }
     }
@@ -419,6 +291,37 @@ namespace StarryEngine {
 
         if (!initialize()) {
             LOG_ERROR("Failed to rebuild render path on resize");
+        }
+    }
+
+    void DeferredRenderPath::updateMaterialTextures(const Scene::AnalysisSceneResult& sceneData) {
+        if (!m_renderGraph || m_textureIdMap.empty()) {
+            LOG_WARN("RenderGraph not ready for texture updates");
+            return;
+        }
+
+        // 默认采样器（可缓存）
+        RHI::SamplerDesc defaultSamplerDesc;
+        defaultSamplerDesc.minFilter = RHI::SamplerFilter::Linear;
+        defaultSamplerDesc.magFilter = RHI::SamplerFilter::Linear;
+        auto defaultSampler = m_resMgr->createSampler(defaultSamplerDesc);
+
+        for (auto& material : sceneData.materials) {
+            if (!material) continue;
+
+            for (const auto& [texName, binding] : material->getTextureDependencies()) {
+                auto texIt = m_textureIdMap.find(texName);
+                if (texIt == m_textureIdMap.end()) {
+                    LOG_WARN("Texture '{}' not found in RenderGraph for material", texName);
+                    continue;
+                }
+                auto phys = m_renderGraph->getPhysicalTextureHandle(texIt->second);
+                if (!phys.isValid()) {
+                    LOG_WARN("Physical texture handle for '{}' is invalid", texName);
+                    continue;
+                }
+                material->setTexture(binding.first, binding.second, phys, defaultSampler);
+            }
         }
     }
 

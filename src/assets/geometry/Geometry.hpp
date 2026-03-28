@@ -39,6 +39,8 @@ namespace StarryEngine::Assets {
         void setPrimitiveTopology(const RHI::PrimitiveTopology& topology) { m_topology = topology; }
         void setLineWidth(float lineWidth) { lineWidth = m_lineWidth; }
 
+        RHI::VertexInputState getVertexInputStateWithInstancing(const InstancingLayout* layout) const;
+
         std::vector<uint32_t> getBindings() const { return m_vertexLayout.getBindings(); }
         RHI::VertexInputState getVertexInputState() const { return m_vertexLayout.build(); }
         RHI::BufferHandle getVertexBuffer() const { return m_vertexBuffer; }
