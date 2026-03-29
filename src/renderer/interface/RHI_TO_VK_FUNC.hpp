@@ -432,4 +432,16 @@ namespace StarryEngine::RHI::FUNC {
         }
     }
 
+    // ==================== 图像创建标志转换 ====================
+    static VkImageCreateFlags RHI_TO_VK_ImageCreateFlags(ImageCreateFlags flags) {
+        VkImageCreateFlags vkFlags = 0;
+        if (static_cast<uint32_t>(flags) & static_cast<uint32_t>(ImageCreateFlags::CubeCompatible))
+            vkFlags |= VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+        if (static_cast<uint32_t>(flags) & static_cast<uint32_t>(ImageCreateFlags::MutableFormat))
+            vkFlags |= VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT;
+        if (static_cast<uint32_t>(flags) & static_cast<uint32_t>(ImageCreateFlags::Protected))
+            vkFlags |= VK_IMAGE_CREATE_PROTECTED_BIT;
+        return vkFlags;
+    }
+
 } // namespace StarryEngine::RHI::FUNC

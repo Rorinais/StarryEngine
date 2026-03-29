@@ -18,6 +18,7 @@ namespace StarryEngine{
             const RenderContext& rctx,
             const PassContext& pctx,
             uint32_t subpassIndex) override {
+
             for (auto& item : m_drawItems) {
                 // 过程式绘制
                 if (item->type != Scene::DrawItemType::Procedural) continue;

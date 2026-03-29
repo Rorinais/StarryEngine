@@ -59,6 +59,7 @@ namespace StarryEngine {
             Assets::GlobalUniforms globals;
             globals.view = camera->getViewMatrix();
             globals.proj = camera->getProjMatrix();
+            globals.invView = glm::inverse(camera->getViewMatrix());
 
             auto* buf = m_resMgr->getBuffer(m_globalUniformBuffer);
             if (buf) {

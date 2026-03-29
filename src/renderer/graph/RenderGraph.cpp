@@ -62,6 +62,8 @@ namespace StarryEngine::RenderGraph {
         m_virtualTextures.push_back(vt);
         if (!name.empty()) {
             m_nameToTextureId[name] = id;
+            m_textureNames[id] = name;
+            LOG_INFO("createVirtualTexture id{}，name{}", id, name);
         }
         return id;
     }
@@ -80,6 +82,8 @@ namespace StarryEngine::RenderGraph {
         m_virtualTextures.push_back(vt);
         if (!name.empty()) {
             m_nameToTextureId[name] = id;
+            m_textureNames[id] = name;
+            LOG_INFO("importExternalTexture id{}，name{}", id, name);
         }
         return id;
     }
@@ -329,33 +333,28 @@ namespace StarryEngine::RenderGraph {
         // 生成跨 Pass 转换
         m_layoutTransitions.clear();
         for (const auto& [texId, layouts] : texPassLayouts) {
-            int32_t lastWritePass = -1;
-            RHI::ImageLayout lastWriteLayout = RHI::ImageLayout::Undefined;
-            for (size_t i = 0; i < layouts.size(); ++i) {
+            // 收集所有写入 Pass 的索引和最终布局
+            std::vector<std::pair<uint32_t, RHI::ImageLayout>> writes;
+            // 收集所有读取 Pass 的索引和初始布局
+            std::vector<std::pair<uint32_t, RHI::ImageLayout>> reads;
+            for (uint32_t i = 0; i < layouts.size(); ++i) {
                 const auto& info = layouts[i];
                 if (!info.used) continue;
-                // 如果当前 Pass 是写入（final 有效），则记录为写入 Pass
                 if (info.final != RHI::ImageLayout::Undefined) {
-                    // 如果有上一个写入 Pass 且与当前写入 Pass 不同，但这里我们更关心写入到下一个读取的转换
-                    // 暂时忽略写-写转换，只处理写后读
-                    lastWritePass = static_cast<int32_t>(i);
-                    lastWriteLayout = info.final;
+                    writes.emplace_back(i, info.final);
                 }
-                // 如果是读取（initial 有效），且存在之前的写入 Pass，且写入 Pass 与当前读取 Pass 不同，则添加转换
-                if (info.initial != RHI::ImageLayout::Undefined && lastWritePass != -1 && lastWritePass != static_cast<int32_t>(i)) {
-                    // 如果写入布局与读取初始布局不同，则需要转换
-                    if (lastWriteLayout != info.initial) {
+                if (info.initial != RHI::ImageLayout::Undefined) {
+                    reads.emplace_back(i, info.initial);
+                }
+            }
+            // 为每个写入-读取对生成转换（写入必须在读取之前）
+            for (const auto& [writeIdx, writeLayout] : writes) {
+                for (const auto& [readIdx, readLayout] : reads) {
+                    if (writeIdx < readIdx) {
                         m_layoutTransitions.push_back({
-                            static_cast<uint32_t>(lastWritePass),
-                            static_cast<uint32_t>(i),
-                            texId,
-                            lastWriteLayout,
-                            info.initial
+                            writeIdx, readIdx, texId, writeLayout, readLayout
                             });
                     }
-                    // 重置，避免同一个写入被多个读取重复使用（可根据需求调整）
-                    lastWritePass = -1;
-                    lastWriteLayout = RHI::ImageLayout::Undefined;
                 }
             }
         }
@@ -445,21 +444,28 @@ namespace StarryEngine::RenderGraph {
         // 用于遍历转换列表的迭代器
         auto transIt = m_layoutTransitions.begin();
         for (size_t i = 0; i < m_sortedPasses.size(); ++i) {
+
+            LOG_INFO("--- Before executing Pass[{}] ---", i);
+            for (const auto& [texId, layout] : currentLayouts) {
+                auto it = m_textureNames.find(texId);
+                std::string texName = (it != m_textureNames.end()) ? it->second : "Unknown";
+                LOG_INFO("Texture '{}' (ID {}) layout = {}", texName, texId.id(), static_cast<int>(layout));
+            }
+
             auto* pass = m_sortedPasses[i];
             RHI::FramebufferHandle fb = m_perPassFramebuffers[i][frameIndex];
 
             while (transIt != m_layoutTransitions.end() && transIt->dstPassIdx == i) {
+                // 在 execute 中，插入屏障时
                 const auto& trans = *transIt;
                 auto texIt = m_textureMap.find(trans.texId);
                 if (texIt != m_textureMap.end() && texIt->second.handle.isValid()) {
-                    // 确定源布局（可能已被之前的屏障更新）
                     RHI::ImageLayout srcLayout = trans.srcLayout;
                     auto curIt = currentLayouts.find(trans.texId);
                     if (curIt != currentLayouts.end() && curIt->second != RHI::ImageLayout::Undefined) {
                         srcLayout = curIt->second;
                     }
 
-                    // 构建图像屏障（不包含阶段掩码）
                     RHI::ImageBarrier barrier{};
                     barrier.image = texIt->second.handle;
                     barrier.oldLayout = srcLayout;
@@ -472,34 +478,13 @@ namespace StarryEngine::RenderGraph {
                     barrier.baseArrayLayer = 0;
                     barrier.layerCount = 1;
 
-                    // 推导阶段掩码（作为 pipelineBarrier 的参数）
-                    RHI::PipelineStage srcStage = RHI::FUNC::layoutToSrcStage(srcLayout);
-                    RHI::PipelineStage dstStage = RHI::FUNC::layoutToSrcStage(trans.dstLayout); // 注意：目标阶段可能不同，可根据新布局调整
-                    // 如果新布局是 ShaderReadOnly，目标阶段应为 FragmentShader
-                    if (trans.dstLayout == RHI::ImageLayout::ShaderReadOnly) {
-                        dstStage = RHI::PipelineStage::FragmentShader;
-                    }
-                    LOG_INFO("Inserting barrier for texId {} before pass {}", trans.texId.id(), i);
-                    // 插入屏障
-                    encoder->pipelineBarrier(
-                        srcStage,                           // 源阶段
-                        dstStage,                           // 目标阶段
-                        RHI::DependencyFlags::None,         // 依赖标志（0）
-                        {},                                 // 内存屏障（无）
-                        {},                                 // 缓冲区屏障（无）
-                        { barrier }                         // 图像屏障列表
-                    );
+                    RHI::PipelineStage srcStage = RHI::PipelineStage::ColorAttachmentOutput;
+                    RHI::PipelineStage dstStage = RHI::PipelineStage::FragmentShader;
+                    encoder->pipelineBarrier(srcStage, dstStage, RHI::DependencyFlags::None, {}, {}, { barrier });
 
-                    // 更新当前布局
                     currentLayouts[trans.texId] = trans.dstLayout;
                 }
                 ++transIt;
-            }
-
-            for (const auto& trans : m_layoutTransitions) {
-                LOG_INFO("Transition: srcPass={}, dstPass={}, texId={}, srcLayout={}, dstLayout={}",
-                    trans.srcPassIdx, trans.dstPassIdx, trans.texId.id(),
-                    static_cast<int>(trans.srcLayout), static_cast<int>(trans.dstLayout));
             }
 
             // 执行当前 PassNode

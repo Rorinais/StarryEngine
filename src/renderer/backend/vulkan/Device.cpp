@@ -369,9 +369,11 @@ namespace StarryEngine {
     // ==================== 图像创建和管理 ====================
 
     // VMA 方式创建图像
-    VMAImage Device::createImageWithVMA(uint32_t width, uint32_t height, VkFormat format,
+    VMAImage Device::createImageWithVMA(
+        uint32_t width, uint32_t height, VkFormat format,
         VkImageTiling tiling, VkImageUsageFlags usage,
-        VmaMemoryUsage memoryUsage, VmaAllocationCreateFlags flags,
+        VmaMemoryUsage memoryUsage, VmaAllocationCreateFlags allocFlags,
+        VkImageCreateFlags imageFlags,       
         uint32_t mipLevels, uint32_t arrayLayers) {
 
         VMAImage result = { VK_NULL_HANDLE, VK_NULL_HANDLE };
@@ -395,11 +397,11 @@ namespace StarryEngine {
         imageInfo.usage = usage;
         imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-        imageInfo.flags = 0;
+        imageInfo.flags = imageFlags;
 
         VmaAllocationCreateInfo allocInfo = {};
         allocInfo.usage = memoryUsage;
-        allocInfo.flags = flags;
+        allocInfo.flags = allocFlags;
 
         VkImage image;
         VmaAllocation allocation;
@@ -428,9 +430,11 @@ namespace StarryEngine {
     }
 
     // 传统方式创建图像
-    VMATraditionalImage Device::createImageTraditional(uint32_t width, uint32_t height, VkFormat format,
+    VMATraditionalImage Device::createImageTraditional(
+        uint32_t width, uint32_t height, VkFormat format,
         VkImageTiling tiling, VkImageUsageFlags usage,
         VkMemoryPropertyFlags properties,
+        VkImageCreateFlags imageFlags,          // 新增参数
         uint32_t mipLevels, uint32_t arrayLayers) {
 
         VMATraditionalImage result = { VK_NULL_HANDLE, VK_NULL_HANDLE };
@@ -449,7 +453,7 @@ namespace StarryEngine {
         imageInfo.usage = usage;
         imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-        imageInfo.flags = 0;
+        imageInfo.flags = imageFlags;
 
         VkImage image;
         if (vkCreateImage(mLogicalDevice, &imageInfo, nullptr, &image) != VK_SUCCESS) {
@@ -569,15 +573,17 @@ namespace StarryEngine {
     }
     // ==================== 组合函数 ====================
 
-    VMAImageFull Device::createImageWithVMAFull(uint32_t width, uint32_t height, VkFormat format,
+    VMAImageFull Device::createImageWithVMAFull(
+        uint32_t width, uint32_t height, VkFormat format,
         VkImageTiling tiling, VkImageUsageFlags usage,
         VmaMemoryUsage memoryUsage, VkImageAspectFlags aspectFlags,
-        VmaAllocationCreateFlags flags,
+        VmaAllocationCreateFlags allocFlags,
+        VkImageCreateFlags imageFlags,  
         uint32_t mipLevels, uint32_t arrayLayers,
         VkImageViewType viewType) {
 
         VMAImage image = createImageWithVMA(width, height, format, tiling, usage,
-            memoryUsage, flags, mipLevels, arrayLayers);
+            memoryUsage, allocFlags, imageFlags, mipLevels, arrayLayers);
 
         VkImageView view = createImageView(image.image, format, aspectFlags,
             viewType, mipLevels, 0, arrayLayers);
@@ -593,11 +599,12 @@ namespace StarryEngine {
     TraditionalImageFull Device::createImageTraditionalFull(uint32_t width, uint32_t height, VkFormat format,
         VkImageTiling tiling, VkImageUsageFlags usage,
         VkMemoryPropertyFlags properties, VkImageAspectFlags aspectFlags,
+        VkImageCreateFlags imageFlags,
         uint32_t mipLevels, uint32_t arrayLayers,
         VkImageViewType viewType) {
 
         VMATraditionalImage image = createImageTraditional(width, height, format, tiling, usage,
-            properties, mipLevels, arrayLayers);
+            properties, imageFlags, mipLevels, arrayLayers);
 
         VkImageView view = createImageView(image.image, format, aspectFlags,
             viewType, mipLevels, 0, arrayLayers);

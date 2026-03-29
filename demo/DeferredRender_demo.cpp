@@ -25,6 +25,8 @@ std::shared_ptr<DeferredRenderPath> createDeferredRenderPath(
     std::shared_ptr<RHI::IRHI> rhi,
     uint32_t width, uint32_t height,
     GlobalDescriptorData globalDescriptorData);  
+std::shared_ptr<Assets::MaterialInstance> createSkyboxMaterial(std::shared_ptr<RHI::ResourceManager> resMgr,
+    GlobalDescriptorData data);
 
 int main() {
 #ifdef __linux__
@@ -71,10 +73,11 @@ std::shared_ptr<DeferredRenderPath> createDeferredRenderPath(
     renderPath->addTextureDesc("Material", PassWrapper::createColorTextureDesc({ width, height, 1 }, RHI::Format::RGBA8_UNorm));
     renderPath->addTextureDesc("Swapchain", PassWrapper::createColorTextureDesc({ width, height, 1 }, RHI::Format::BGRA8_sRGB));
     renderPath->addTextureDesc("SceneColor", PassWrapper::createColorTextureDesc({ width, height, 1 }, RHI::Format::RGBA8_UNorm));
+    renderPath->addTextureDesc("LightAccum", PassWrapper::createColorTextureDesc({ width, height, 1 }, RHI::Format::RGBA16_Float));
 
     // ---------- 几何子通道 ----------
     auto colorAttach = PassWrapper::createColorAttachment(
-        RHI::ImageLayout::Undefined, RHI::ImageLayout::ColorAttachment,
+        RHI::ImageLayout::Undefined, RHI::ImageLayout::ShaderReadOnly,
         RHI::AttachmentLoadOp::Clear, RHI::AttachmentStoreOp::Store);
     auto depthAttach = PassWrapper::createDepthAttachment(
         RHI::ImageLayout::Undefined, RHI::ImageLayout::DepthStencilAttachment,
@@ -85,26 +88,37 @@ std::shared_ptr<DeferredRenderPath> createDeferredRenderPath(
         .addColorAttachment("Normal", colorAttach)
         .addColorAttachment("Material", colorAttach)
         .setDepthAttachment("Depth", depthAttach);
-    renderPath->addSubpass(Scene::RenderStage::GBuffer, Scene::RenderQueue::Opaque, geometrypass);
+
 
     // ---------- 光照子通道 ----------
     auto lightColorAttachment = PassWrapper::createColorAttachment(
-        RHI::ImageLayout::Undefined, RHI::ImageLayout::ColorAttachment,
+        RHI::ImageLayout::Undefined, RHI::ImageLayout::ShaderReadOnly,
         RHI::AttachmentLoadOp::Clear, RHI::AttachmentStoreOp::Store);
     auto lightInputAttachment = PassWrapper::createColorAttachment(
-        RHI::ImageLayout::ColorAttachment, RHI::ImageLayout::ShaderReadOnly,
+        RHI::ImageLayout::ShaderReadOnly, RHI::ImageLayout::ShaderReadOnly,
         RHI::AttachmentLoadOp::Load, RHI::AttachmentStoreOp::DontCare);
 
     Subpass lightSubpass("Lighting", std::make_shared<DeferredLightingRecorder>());
-    lightSubpass.addColorAttachment("SceneColor", lightColorAttachment)
+    lightSubpass.addColorAttachment("LightAccum", lightColorAttachment)
         .addInputAttachment("Albedo", lightInputAttachment)
         .addInputAttachment("Normal", lightInputAttachment)
         .addInputAttachment("Material", lightInputAttachment);
-    renderPath->addSubpass(Scene::RenderStage::Lighting, Scene::RenderQueue::Opaque, lightSubpass);
+
+
+    auto skyboxOutputAttach = PassWrapper::createColorAttachment(
+        RHI::ImageLayout::Undefined, RHI::ImageLayout::ShaderReadOnly,
+        RHI::AttachmentLoadOp::Clear, RHI::AttachmentStoreOp::Store);
+    auto skyboxInputAttach = PassWrapper::createColorAttachment(
+        RHI::ImageLayout::ShaderReadOnly, RHI::ImageLayout::ShaderReadOnly,
+        RHI::AttachmentLoadOp::Load, RHI::AttachmentStoreOp::DontCare);
+
+    Subpass skyboxSubpass("Skybox", std::make_shared<DeferredLightingRecorder>()); // 需要实现 SkyboxRecorder
+    skyboxSubpass.addColorAttachment("SceneColor", skyboxOutputAttach)
+        .addInputAttachment("LightAccum", skyboxInputAttach);
 
     // ---------- 网格子通道 ----------
     auto gridColorAttachment = PassWrapper::createColorAttachment(
-        RHI::ImageLayout::ColorAttachment, RHI::ImageLayout::ColorAttachment,
+        RHI::ImageLayout::ShaderReadOnly, RHI::ImageLayout::ShaderReadOnly,
         RHI::AttachmentLoadOp::Load, RHI::AttachmentStoreOp::Store);
     auto gridDepthAttachment = PassWrapper::createDepthAttachment(
         RHI::ImageLayout::DepthStencilAttachment, RHI::ImageLayout::DepthStencilAttachment,
@@ -113,19 +127,25 @@ std::shared_ptr<DeferredRenderPath> createDeferredRenderPath(
     Subpass gridSubpass("Grid", std::make_shared<MeshDrawRecorder>());
     gridSubpass.addColorAttachment("SceneColor", gridColorAttachment)
         .setDepthAttachment("Depth", gridDepthAttachment);
-    renderPath->addSubpass(Scene::RenderStage::PostProcess, Scene::RenderQueue::Opaque, gridSubpass);
+
 
     // ---------- 复制子通道 ----------
-    auto copyInputAttachment = PassWrapper::createColorAttachment(
-        RHI::ImageLayout::ColorAttachment, RHI::ImageLayout::ShaderReadOnly,
-        RHI::AttachmentLoadOp::Load, RHI::AttachmentStoreOp::DontCare);
     auto copyColorAttachment = PassWrapper::createColorAttachment(
         RHI::ImageLayout::Undefined, RHI::ImageLayout::PresentSrc,
         RHI::AttachmentLoadOp::Clear, RHI::AttachmentStoreOp::Store);
+    auto copyInputAttachment = PassWrapper::createColorAttachment(
+        RHI::ImageLayout::ShaderReadOnly, RHI::ImageLayout::ShaderReadOnly,
+        RHI::AttachmentLoadOp::Load, RHI::AttachmentStoreOp::DontCare);
+
 
     Subpass copySubpass("Copy", std::make_shared<CopyToSwapchainRecorder>());
     copySubpass.addColorAttachment("Swapchain", copyColorAttachment)
         .addInputAttachment("SceneColor", copyInputAttachment);
+
+    renderPath->addSubpass(Scene::RenderStage::GBuffer, Scene::RenderQueue::Opaque, geometrypass);
+    renderPath->addSubpass(Scene::RenderStage::Lighting, Scene::RenderQueue::Opaque, lightSubpass);
+    renderPath->addSubpass(Scene::RenderStage::PostProcess, Scene::RenderQueue::Skybox, skyboxSubpass);
+    renderPath->addSubpass(Scene::RenderStage::PostProcess, Scene::RenderQueue::Opaque, gridSubpass);
     renderPath->addSubpass(Scene::RenderStage::PostProcess, Scene::RenderQueue::Transparent, copySubpass);
 
     if (!renderPath->initialize()) {
@@ -157,12 +177,28 @@ DataSet createRenderer(std::shared_ptr<RHI::IRHI> rhi, RHI::DescriptorPoolHandle
     lightEffect->queue = Scene::RenderQueue::Opaque;
     scene->addProceduralEffect(lightEffect);
 
+    auto skyboxEffect = std::make_shared<Scene::ProceduralEffect>();
+    auto skyboxMaterial = createSkyboxMaterial(rhi->getResourceManager(), globalDescriptorData);
+    if (skyboxMaterial) {
+        auto skyboxEffect = std::make_shared<Scene::ProceduralEffect>();
+        skyboxEffect->material = skyboxMaterial;
+        skyboxEffect->stage = Scene::RenderStage::PostProcess;
+        skyboxEffect->queue = Scene::RenderQueue::Skybox;   
+        skyboxEffect->vertexCount = 3;                     
+        skyboxEffect->instanceCount = 1;
+        scene->addProceduralEffect(skyboxEffect);
+    }
+    else {
+        LOG_WARN("Skybox disabled due to texture loading failure");
+    }
+
     auto copyMaterial = createCopyMaterial(rhi->getResourceManager(), globalDescriptorData);
     auto copyEffect = std::make_shared<Scene::ProceduralEffect>();
     copyEffect->material = copyMaterial;
     copyEffect->stage = Scene::RenderStage::PostProcess;
     copyEffect->queue = Scene::RenderQueue::Transparent;  
     scene->addProceduralEffect(copyEffect);
+
 
     auto SphereMeshData = createSphere(rhi->getResourceManager(), globalDescriptorData);
     auto SphereObj = std::make_shared<Scene::RenderObject>();
@@ -177,6 +213,7 @@ DataSet createRenderer(std::shared_ptr<RHI::IRHI> rhi, RHI::DescriptorPoolHandle
     gridObj->materials = gridMeshData.materials;
     gridObj->transform = glm::scale(glm::translate(glm::mat4(1.0f), glm::vec3(0, 0, 0)), glm::vec3(5, 5, 5));
     scene->addObject(gridObj);
+
 
     auto perspectiveCamera = std::make_shared<Scene::PerspectiveCamera>();
     perspectiveCamera->setPerspective(glm::radians(45.0f), (float)width / height, 0.1f, 100.0f);
@@ -200,7 +237,6 @@ ModelData createGrid(std::shared_ptr<RHI::ResourceManager> resMgr, GlobalDescrip
     gridMaterialInst->setRenderStage(Scene::RenderStage::PostProcess);
     gridMaterialInst->setRenderQueue(Scene::RenderQueue::Opaque);
     gridMaterialInst->enableDepthTest(true);
-    gridMaterialInst->setDepthCompareOp(RHI::CompareOp::Less); // 默认就是 Less，可显式设置
 
     return ModelData(Assets::Shape::createGridGeometry(resMgr), { gridMaterialInst });
 }
@@ -255,9 +291,9 @@ std::shared_ptr<Assets::MaterialInstance> createLightingMaterial(
 
     RHI::DescriptorSetLayoutDesc layoutDesc;
     layoutDesc.bindings = {
-        {0, RHI::DescriptorType::CombinedImageSampler, 1, RHI::ShaderStage::Fragment},
-        {1, RHI::DescriptorType::CombinedImageSampler, 1, RHI::ShaderStage::Fragment},
-        {2, RHI::DescriptorType::CombinedImageSampler, 1, RHI::ShaderStage::Fragment}
+        {0, RHI::DescriptorType::InputAttachment, 1, RHI::ShaderStage::Fragment},
+        {1, RHI::DescriptorType::InputAttachment, 1, RHI::ShaderStage::Fragment},
+        {2, RHI::DescriptorType::InputAttachment, 1, RHI::ShaderStage::Fragment}
     };
     auto set1Layout = Assets::DescriptorSetLayoutCache::getOrCreateLayout(resMgr.get(), layoutDesc);
     layoutMap[1] = set1Layout;
@@ -311,5 +347,53 @@ std::shared_ptr<Assets::MaterialInstance> createCopyMaterial(
 
     material->setRenderStage(Scene::RenderStage::PostProcess);
     material->setRenderQueue(Scene::RenderQueue::Opaque);
+    return material;
+}
+
+std::shared_ptr<Assets::MaterialInstance> createSkyboxMaterial(std::shared_ptr<RHI::ResourceManager> resMgr,
+    GlobalDescriptorData data) {
+    std::unordered_map<uint32_t, RHI::DescriptorSetLayoutHandle> layoutMap;
+    layoutMap[0] = data.globalSetLayout;
+
+    // set 1 布局：绑定 0 为立方体贴图采样器
+    //RHI::DescriptorSetLayoutDesc layoutDesc;
+    //layoutDesc.bindings = {
+    //    {0, RHI::DescriptorType::CombinedImageSampler, 1, RHI::ShaderStage::Fragment}
+    //};
+    //auto set1Layout = Assets::DescriptorSetLayoutCache::getOrCreateLayout(resMgr.get(), layoutDesc);
+    //layoutMap[1] = set1Layout;
+
+    auto tmpl = std::make_shared<Assets::DefaultMaterialTemplate>(resMgr, layoutMap, std::vector<RHI::PushConstantRange>{});
+
+    if (!tmpl->loadShaders("assets/shaders/deferred/fullscreen.vert","assets/shaders/deferred/skybox.frag")) {
+        LOG_ERROR("Failed to load skybox shaders");
+        return nullptr;
+    }
+
+    //std::vector<std::string> skyboxFaces = {
+    //    "assets/textures/skybox/right.jpg",
+    //    "assets/textures/skybox/left.jpg",
+    //    "assets/textures/skybox/top.jpg",
+    //    "assets/textures/skybox/bottom.jpg",
+    //    "assets/textures/skybox/front.jpg",
+    //    "assets/textures/skybox/back.jpg"
+    //};
+    //auto loader = Assets::TextureLoader(resMgr);
+    //auto [skyboxTex, skyboxSampler] = loader.loadTextureCube(skyboxFaces, RHI::Format::RGBA8_sRGB, "SkyboxCubeMap");
+    //LOG_INFO("Skybox texture handle = {}", skyboxTex.getIndex());
+    //if (!skyboxTex.isValid()) {
+    //    LOG_ERROR("Failed to load skybox texture, skybox will be disabled");
+    //    return nullptr;  
+    //}
+
+    auto material = std::make_shared<Assets::MaterialInstance>(tmpl, data.globalDescriptorPool, resMgr.get(), data.globalDescriptorSet);
+    //material->setTexture(1, 0, skyboxTex, skyboxSampler);
+
+    material->setRenderStage(Scene::RenderStage::PostProcess);
+    material->setRenderQueue(Scene::RenderQueue::Skybox);
+    material->enableDepthTest(false);
+    material->enableDepthWrite(false);
+    material->setCullMode(RHI::CullMode::None);
+
     return material;
 }

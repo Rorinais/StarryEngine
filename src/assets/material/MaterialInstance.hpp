@@ -16,6 +16,7 @@ namespace StarryEngine::Assets {
 
         void setUniform(uint32_t setIndex, uint32_t binding, const void* data, size_t size);
         void setTexture(uint32_t setIndex, uint32_t binding, RHI::TextureHandle texture, RHI::SamplerHandle sampler);
+        void setInputAttachment(uint32_t setIndex, uint32_t binding,RHI::TextureHandle texture,RHI::ImageLayout layout = RHI::ImageLayout::ShaderReadOnly);
 
         void setCullMode(RHI::CullMode mode) { m_template->setCullMode(mode); }
         void setDepthTest(bool enable) { m_template->setDepthTest(enable); }

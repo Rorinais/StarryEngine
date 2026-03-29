@@ -1,4 +1,5 @@
 #include "MaterialInstance.hpp"
+#include "../../logging/Logger.hpp"
 #include <cstring>
 
 namespace StarryEngine::Assets {
@@ -86,6 +87,8 @@ namespace StarryEngine::Assets {
     void MaterialInstance::setTexture(uint32_t setIndex, uint32_t binding,
         RHI::TextureHandle texture, RHI::SamplerHandle sampler) {
         auto set = getOrCreateSet(setIndex);
+        LOG_INFO("Material setTexture: set={}, binding={}, texture handle={}", setIndex, binding, texture.getIndex());
+
         if (!set.isValid()) return;
 
         auto* setObj = m_resMgr->getDescriptorSet(set);
@@ -98,6 +101,20 @@ namespace StarryEngine::Assets {
         setObj->update();
     }
 
+    void MaterialInstance::setInputAttachment(uint32_t setIndex, uint32_t binding,
+        RHI::TextureHandle texture, RHI::ImageLayout layout) {
+        LOG_INFO("Material setInputAttachment set={}, binding={}, texture={}, layout={}",setIndex, binding, texture.getIndex(), static_cast<int>(layout));
+
+        auto set = getOrCreateSet(setIndex);
+        if (!set.isValid()) return;
+
+        auto* setObj = m_resMgr->getDescriptorSet(set);
+        auto* textureObj = m_resMgr->getTexture(texture);
+        if (!setObj || !textureObj) return;
+
+        setObj->writeInputAttachment(binding, 0, textureObj, layout);
+        setObj->update();
+    }
 
     void MaterialInstance::setInstancingLayout(const InstancingLayout& layout) {
         m_instancingLayout = layout;

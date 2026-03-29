@@ -961,6 +961,7 @@ namespace StarryEngine::RHI {
      * @details 描述纹理的尺寸、格式、类型和用途
      */
     struct TextureDesc {
+        ImageCreateFlags flags = ImageCreateFlags::None;
         Extent3D extent = { 1, 1, 1 };         ///< 纹理尺寸
         Format format = Format::RGBA8_UNorm;   ///< 纹理格式
         TextureType type = TextureType::Texture2D; ///< 纹理类型
@@ -989,7 +990,7 @@ namespace StarryEngine::RHI {
                 allowSimultaneousAccess == other.allowSimultaneousAccess &&
                 allowCrossQueueSharing == other.allowCrossQueueSharing &&
                 memoryless == other.memoryless && protectedMemory == other.protectedMemory &&
-                sparseBinding == other.sparseBinding;
+                sparseBinding == other.sparseBinding&& flags == other.flags;
         }
 
         bool operator!=(const TextureDesc& other) const {

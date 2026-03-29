@@ -67,7 +67,7 @@ namespace StarryEngine::RHI {
         virtual uint32_t getMipLevels() const = 0;
         virtual uint32_t getArrayLayers() const = 0;
         virtual uint32_t getSampleCount() const = 0;
-        virtual ImageLayout getCurrentLayout() const = 0;
+        //virtual ImageLayout getCurrentLayout() const = 0;
 
         // ========== 视图管理 ==========
         // 创建视图，可指定子资源范围和视图类型（默认从纹理类型推导）

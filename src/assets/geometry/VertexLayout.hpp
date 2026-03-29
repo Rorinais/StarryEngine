@@ -13,6 +13,7 @@ namespace StarryEngine::Assets {
     struct GlobalUniforms {
         glm::mat4 view;
         glm::mat4 proj;
+        glm::mat4 invView;
     };
 
     struct MaterialUniforms {

@@ -196,6 +196,7 @@ namespace StarryEngine {
         VMAImage createImageWithVMA(uint32_t width, uint32_t height, VkFormat format,
             VkImageTiling tiling, VkImageUsageFlags usage,
             VmaMemoryUsage memoryUsage, VmaAllocationCreateFlags flags = 0,
+            VkImageCreateFlags imageFlags = 0,
             uint32_t mipLevels = 1, uint32_t arrayLayers = 1);
 
         void destroyImageWithVMA(const VMAImage& image);
@@ -205,6 +206,7 @@ namespace StarryEngine {
         VMATraditionalImage createImageTraditional(uint32_t width, uint32_t height, VkFormat format,
             VkImageTiling tiling, VkImageUsageFlags usage,
             VkMemoryPropertyFlags properties,
+            VkImageCreateFlags imageFlags = 0,
             uint32_t mipLevels = 1, uint32_t arrayLayers = 1);
 
         void destroyImageTraditional(const VMATraditionalImage& image);
@@ -232,6 +234,7 @@ namespace StarryEngine {
             VkImageTiling tiling, VkImageUsageFlags usage,
             VmaMemoryUsage memoryUsage, VkImageAspectFlags aspectFlags,
             VmaAllocationCreateFlags flags = 0,
+            VkImageCreateFlags imageFlags = 0,
             uint32_t mipLevels = 1, uint32_t arrayLayers = 1,
             VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_2D);
 
@@ -241,6 +244,7 @@ namespace StarryEngine {
         TraditionalImageFull createImageTraditionalFull(uint32_t width, uint32_t height, VkFormat format,
             VkImageTiling tiling, VkImageUsageFlags usage,
             VkMemoryPropertyFlags properties, VkImageAspectFlags aspectFlags,
+            VkImageCreateFlags imageFlags = 0,
             uint32_t mipLevels = 1, uint32_t arrayLayers = 1,
             VkImageViewType viewType = VK_IMAGE_VIEW_TYPE_2D);
 

@@ -114,6 +114,8 @@ namespace StarryEngine::RenderGraph {
         std::vector<LayoutTransition> m_layoutTransitions;
         // 每个 Pass 的帧缓冲（[passIndex][imageIndex]）
         std::vector<std::vector<RHI::FramebufferHandle>> m_perPassFramebuffers;
+
+        std::unordered_map<TextureId, std::string> m_textureNames;
     };
 
 } // namespace StarryEngine::RenderGraph

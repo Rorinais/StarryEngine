@@ -380,7 +380,7 @@ namespace StarryEngine::RHI {
         uint32_t getMipLevels() const override { return mDesc.mipLevels; }
         uint32_t getArrayLayers() const override { return mDesc.arrayLayers; }
         uint32_t getSampleCount() const override { return mDesc.sampleCount; }
-        ImageLayout getCurrentLayout() const override { return mCurrentLayout; }
+        //ImageLayout getCurrentLayout() const override { return mCurrentLayout; }
 
         VkImageView createVkImageView(const ImageSubresourceRange& range, VkImageViewType viewType);
         void* createView(const ImageSubresourceRange& range, ImageViewType viewType = ImageViewType::Auto) override;
@@ -412,7 +412,6 @@ namespace StarryEngine::RHI {
             VMAImageFull vmaImage;
             TraditionalImageFull traditionalImage;
         };
-        ImageLayout mCurrentLayout = ImageLayout::Undefined;
 
         // 视图管理
         struct ViewInfo {
@@ -426,6 +425,29 @@ namespace StarryEngine::RHI {
 
         // 辅助函数
         void createTexture();
+
+        struct SubresourceKey {
+            uint32_t mipLevel;
+            uint32_t arrayLayer;
+            bool operator==(const SubresourceKey& other) const {
+                return mipLevel == other.mipLevel && arrayLayer == other.arrayLayer;
+            }
+        };
+
+        struct SubresourceKeyHash {
+            size_t operator()(const SubresourceKey& key) const {
+                return ((size_t)key.mipLevel << 32) | key.arrayLayer;
+            }
+        };
+
+        std::unordered_map<SubresourceKey, ImageLayout, SubresourceKeyHash> m_subresourceLayouts;
+
+        ImageLayout getSubresourceLayout(uint32_t mipLevel, uint32_t arrayLayer) const;
+
+        void setSubresourceLayout(uint32_t mipLevel, uint32_t arrayLayer, ImageLayout layout);
+
+        void forEachSubresource(const ImageSubresourceRange& range,
+            std::function<void(uint32_t, uint32_t)> func);
     };
 
     // ==================== 采样器类 ====================

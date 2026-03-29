@@ -346,6 +346,8 @@ namespace StarryEngine::RenderGraph {
             }
             m_autoDependencies.push_back(dep);
         }
+
+
     }
 
     bool RenderPassBuilder::isDepthStencilFormat(RHI::Format format) const {
@@ -378,6 +380,12 @@ namespace StarryEngine::RenderGraph {
                 }
             }
             if (!duplicate) result.push_back(autoDep);
+        }
+
+        for (const auto& dep : result) {
+            LOG_INFO("Dependency: src={}, dst={}, srcStage={}, dstStage={}, srcAccess={}, dstAccess={}",
+                dep.srcSubpass, dep.dstSubpass, dep.srcStageMask, dep.dstStageMask,
+                dep.srcAccessMask, dep.dstAccessMask);
         }
         return result;
     }

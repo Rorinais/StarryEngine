@@ -25,23 +25,36 @@ namespace StarryEngine {
             const PassContext& pctx,
             uint32_t subpassIndex) override {
             for (const auto& item : m_drawItems) {
-                // 获取 RenderObject 并获取变换矩阵
+                // 处理过程式绘制（天空盒等全屏效果）
+                if (item->type == Scene::DrawItemType::Procedural) {
+                    auto it = m_pipelineMapping.find(item->pipelineIndex);
+                    if (it == m_pipelineMapping.end()) {
+                        LOG_ERROR("No pipeline found for index {}", item->pipelineIndex);
+                    }
+                    auto pipeline = pctx.getResourceManager()->getPipeline(it->second);
+                    encoder->bindPipeline(pipeline);
+
+                    auto layout = pctx.getResourceManager()->getPipelineLayout(pipeline->getLayout());
+                    for (auto& [set, handle] : item->descriptorSets) {
+                        encoder->bindDescriptorSets(RHI::PipelineBindPoint::Graphics, layout, set, { handle }, {});
+                    }
+
+                    encoder->draw(item->vertexCount, item->instanceCount, item->firstVertex, item->firstInstance);
+                }
+
                 auto obj = item->object.lock();
                 if (!obj) {
                     LOG_WARN("DrawItem object expired");
-                    continue;
                 }
 
                 // 通过 pipelineIndex 获取管线句柄
                 auto it = m_pipelineMapping.find(item->pipelineIndex);
                 if (it == m_pipelineMapping.end()) {
                     LOG_ERROR("No pipeline found for index {}", item->pipelineIndex);
-                    continue;
                 }
                 auto pipeline = pctx.getResourceManager()->getPipeline(it->second);
                 if (!pipeline) {
                     LOG_ERROR("Failed to get pipeline from handle");
-                    continue;
                 }
                 encoder->bindPipeline(pipeline);
 

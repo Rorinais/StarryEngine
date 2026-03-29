@@ -1090,4 +1090,30 @@ namespace StarryEngine::RHI {
         Mesh,
         Task
     };
+
+    enum class ImageCreateFlags : uint32_t {
+        None = 0,
+        CubeCompatible = 0x00000001,           // 允许将2D图像作为立方体贴图处理
+        MutableFormat = 0x00000002,            // 允许格式转换
+        Protected = 0x00000004,                // 受保护内存
+        SparseBinding = 0x00000008,            // 稀疏绑定
+        SparseResidency = 0x00000010,          // 稀疏驻留
+        SparseAliased = 0x00000020,            // 稀疏别名
+        Disjoint = 0x00000040,                 // 分离平面
+        SplitInstanceBindRegions = 0x00000080, // 分割实例绑定区域
+        BlockTexelViewCompatible = 0x00000100, // 块纹素视图兼容
+        ExtendedUsage = 0x00000200,            // 扩展使用
+        NoFlags = 0
+    };
+
+    inline ImageCreateFlags operator|(ImageCreateFlags a, ImageCreateFlags b) {
+        return static_cast<ImageCreateFlags>(static_cast<uint32_t>(a) | static_cast<uint32_t>(b));
+    }
+    inline ImageCreateFlags operator&(ImageCreateFlags a, ImageCreateFlags b) {
+        return static_cast<ImageCreateFlags>(static_cast<uint32_t>(a) & static_cast<uint32_t>(b));
+    }
+    inline ImageCreateFlags& operator|=(ImageCreateFlags& a, ImageCreateFlags b) {
+        a = a | b;
+        return a;
+    }
 } // namespace StarryEngine::RHI

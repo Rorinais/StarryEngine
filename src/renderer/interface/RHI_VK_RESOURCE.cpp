@@ -1,4 +1,5 @@
 #include"RHI_VK_RESOURCE.hpp"
+#include "../../logging/Logger.hpp"
 
 namespace StarryEngine::RHI {
     RHI_VK_ShaderModule::RHI_VK_ShaderModule(Device::Ptr device, ShaderModuleDesc desc)
@@ -977,12 +978,33 @@ namespace StarryEngine::RHI {
         AccessFlags srcAccess,
         AccessFlags dstAccess,
         const ImageSubresourceRange& range) {
+        // 如果范围内没有任何子资源，直接返回
+        if (range.levelCount == 0 || range.layerCount == 0) return;
+
+        // 确定源布局（所有子资源必须处于相同布局才能批量转换）
+        uint32_t firstMip = range.baseMipLevel;
+        uint32_t firstLayer = range.baseArrayLayer;
+        ImageLayout expectedOldLayout = getSubresourceLayout(firstMip, firstLayer);
+
+        // 验证范围内所有子资源的当前布局是否一致（调试模式可检查）
+#ifndef NDEBUG
+        bool consistent = true;
+        forEachSubresource(range, [&](uint32_t mip, uint32_t layer) {
+            if (getSubresourceLayout(mip, layer) != expectedOldLayout) {
+                consistent = false;
+            }
+            });
+        if (!consistent) {
+            LOG_WARN("transitionLayout called on range with mixed layouts");
+        }
+#endif
+
         VkCommandPool cmdPool = mDevice->getTransferCommandPool();
         VkCommandBuffer cmdBuf = mDevice->beginSingleTimeCommands(cmdPool);
 
         VkImageMemoryBarrier barrier = {};
         barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-        barrier.oldLayout = FUNC::RHI_TO_VK_ImageLayout(mCurrentLayout);
+        barrier.oldLayout = FUNC::RHI_TO_VK_ImageLayout(expectedOldLayout);
         barrier.newLayout = FUNC::RHI_TO_VK_ImageLayout(newLayout);
         barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
         barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
@@ -998,13 +1020,14 @@ namespace StarryEngine::RHI {
         vkCmdPipelineBarrier(cmdBuf,
             FUNC::RHI_TO_VK_PipelineStageFlags(static_cast<PipelineStageFlags>(srcStage)),
             FUNC::RHI_TO_VK_PipelineStageFlags(static_cast<PipelineStageFlags>(dstStage)),
-            0,
-            0, nullptr,
-            0, nullptr,
-            1, &barrier);
+            0, 0, nullptr, 0, nullptr, 1, &barrier);
 
         mDevice->endSingleTimeCommands(cmdPool, cmdBuf);
-        mCurrentLayout = newLayout;
+
+        // 更新范围内所有子资源的布局
+        forEachSubresource(range, [&](uint32_t mip, uint32_t layer) {
+            setSubresourceLayout(mip, layer, newLayout);
+            });
     }
 
     void RHI_VK_Texture::copyFromBuffer(RHIBuffer* srcBuffer, const std::vector<BufferImageCopyRegion>& regions) {
@@ -1111,30 +1134,33 @@ namespace StarryEngine::RHI {
     }
 
     void RHI_VK_Texture::update(const void* data, size_t size, const ImageSubresourceRange& range) {
-        // 1. 如果当前布局不是 TransferDst，则进行布局转换
-        if (mCurrentLayout != ImageLayout::TransferDst) {
-            // 注意：转换整个子资源范围（通常为整个纹理）
-            ImageSubresourceRange fullRange = range; // 或使用整个纹理的范围
+        // 1. 检查指定 range 内所有子资源是否已经是 TransferDst
+        bool needTransition = false;
+        forEachSubresource(range, [&](uint32_t mip, uint32_t layer) {
+            if (getSubresourceLayout(mip, layer) != ImageLayout::TransferDst) {
+                needTransition = true;
+            }
+            });
+
+        if (needTransition) {
+            // 转换到 TransferDst
             transitionLayout(
-                ImageLayout::TransferDst,            // 目标布局
-                PipelineStage::TopOfPipe,            // 源阶段（之前无操作）
-                PipelineStage::Transfer,              // 目标阶段（传输操作）
-                static_cast<AccessFlags>(AccessFlag::None),// 源访问掩码（UNDEFINED 无依赖）
-                static_cast<AccessFlags>(AccessFlag::TransferWrite),// 目标访问掩码（写入传输）
-                fullRange
+                ImageLayout::TransferDst,
+                PipelineStage::TopOfPipe,
+                PipelineStage::Transfer,
+                static_cast<AccessFlags>(AccessFlag::None),
+                static_cast<AccessFlags>(AccessFlag::TransferWrite),
+                range
             );
-            mCurrentLayout = ImageLayout::TransferDst; // 更新内部状态
         }
 
-        // 2. 创建暂存缓冲区并拷贝（已有代码）
+        // 2. 创建 staging buffer 并拷贝数据（原逻辑）
         VMABuffer staging = mDevice->createBufferWithVMA(size, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
             VMA_MEMORY_USAGE_CPU_TO_GPU, 0, data, size);
 
         BufferImageCopyRegion region;
         region.imageSubresource = range;
         region.imageExtent = mDesc.extent;
-
-        // 调用原生句柄重载（假设你已添加）
         copyFromBuffer(staging.buffer, { region });
 
         mDevice->destroyBufferWithVMA(staging.buffer, staging.allocation);
@@ -1173,11 +1199,16 @@ namespace StarryEngine::RHI {
         VkImageViewType viewType = FUNC::RHI_TO_VK_ImageViewType(ImageViewType::Auto, mDesc.type);
         VkImageTiling tiling = VK_IMAGE_TILING_OPTIMAL;
 
+        VkImageCreateFlags imageFlags = FUNC::RHI_TO_VK_ImageCreateFlags(static_cast<ImageCreateFlags>(mDesc.flags));
+
         if (mUsingVMA) {
             vmaImage = mDevice->createImageWithVMAFull(
                 mDesc.extent.width, mDesc.extent.height, vkFormat,
-                tiling, usage, convertMemoryUsage(mDesc), aspect,
-                0, mDesc.mipLevels, mDesc.arrayLayers, viewType
+                tiling, usage, 
+                convertMemoryUsage(mDesc), aspect,
+                0, imageFlags,
+                mDesc.mipLevels, mDesc.arrayLayers, 
+                viewType
             );
             if (vmaImage.image == VK_NULL_HANDLE) {
                 std::cerr << "[RHI_VK_Texture] Failed to create VMA image for: " << mDesc.debugName << std::endl;
@@ -1188,7 +1219,8 @@ namespace StarryEngine::RHI {
         else {
             traditionalImage = mDevice->createImageTraditionalFull(
                 mDesc.extent.width, mDesc.extent.height, vkFormat,
-                tiling, usage, convertMemoryProperties(mDesc), aspect,
+                tiling, usage, 
+                convertMemoryProperties(mDesc), aspect, imageFlags,
                 mDesc.mipLevels, mDesc.arrayLayers, viewType
             );
             if (traditionalImage.image == VK_NULL_HANDLE) {
@@ -1202,7 +1234,12 @@ namespace StarryEngine::RHI {
             VkImage image = mUsingVMA ? vmaImage.image : traditionalImage.image;
             mDevice->setImageName(image, mDesc.debugName.c_str());
         }
-        mCurrentLayout = ImageLayout::Undefined;
+
+        for (uint32_t mip = 0; mip < mDesc.mipLevels; ++mip) {
+            for (uint32_t layer = 0; layer < mDesc.arrayLayers; ++layer) {
+                setSubresourceLayout(mip, layer, ImageLayout::Undefined);
+            }
+        }
     }
 
     VkImageView RHI_VK_Texture::createVkImageView(const ImageSubresourceRange& range, VkImageViewType viewType) {
@@ -1213,6 +1250,29 @@ namespace StarryEngine::RHI {
             image, format, aspect, viewType,
             range.levelCount, range.baseArrayLayer, range.layerCount,
             "");
+    }
+
+    ImageLayout RHI_VK_Texture::getSubresourceLayout(uint32_t mipLevel, uint32_t arrayLayer) const {
+        SubresourceKey key{ mipLevel, arrayLayer };
+        auto it = m_subresourceLayouts.find(key);
+        if (it != m_subresourceLayouts.end()) {
+            return it->second;
+        }
+        return ImageLayout::Undefined;
+    }
+
+    void RHI_VK_Texture::setSubresourceLayout(uint32_t mipLevel, uint32_t arrayLayer, ImageLayout layout) {
+        SubresourceKey key{ mipLevel, arrayLayer };
+        m_subresourceLayouts[key] = layout;
+    }
+
+    void RHI_VK_Texture::forEachSubresource(const ImageSubresourceRange& range,
+        std::function<void(uint32_t, uint32_t)> func) {
+        for (uint32_t mip = range.baseMipLevel; mip < range.baseMipLevel + range.levelCount; ++mip) {
+            for (uint32_t layer = range.baseArrayLayer; layer < range.baseArrayLayer + range.layerCount; ++layer) {
+                func(mip, layer);
+            }
+        }
     }
 
     // ==================== RHI_VK_Sampler 实现 ====================

@@ -37,7 +37,6 @@ namespace StarryEngine::Assets {
         texture->update(data, dataSize, range);
  
 
-        // 转换布局为 ShaderReadOnly（假设之后用于着色器采样）
         texture->transitionLayout(
             RHI::ImageLayout::ShaderReadOnly,
             RHI::PipelineStage::Transfer,
@@ -230,6 +229,7 @@ namespace StarryEngine::Assets {
 
         // 创建立方体贴图纹理
         RHI::TextureDesc texDesc;
+        texDesc.flags = RHI::ImageCreateFlags::CubeCompatible;
         texDesc.extent = { static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1 };
         texDesc.format = format;
         texDesc.type = RHI::TextureType::TextureCube;

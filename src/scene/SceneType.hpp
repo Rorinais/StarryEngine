@@ -12,6 +12,7 @@ namespace StarryEngine::Scene {
         Opaque,
         Transparent ,
         UI,
+        Skybox
     };
 
     enum class RenderStage {

@@ -100,6 +100,11 @@ namespace StarryEngine {
                         throw std::runtime_error("Texture not found: " + att.textureName);
                     }
                     std::string key = passNode->addColorOutput(it->second, att.params);
+                    // 示例：在添加颜色附件后
+                    LOG_INFO("Stage {} Subpass {} Color Attachment: name={}, initialLayout={}, finalLayout={}",
+                        static_cast<int>(stage), subpassIdx, att.textureName,
+                        static_cast<int>(att.params.initialLayout.value_or(RHI::ImageLayout::Undefined)),
+                        static_cast<int>(att.params.finalLayout.value_or(RHI::ImageLayout::Undefined)));
                     colorKeys.push_back(key);
                 }
 
@@ -119,6 +124,11 @@ namespace StarryEngine {
                         throw std::runtime_error("Texture not found: " + att.textureName);
                     }
                     std::string key = passNode->addInput(it->second, att.params);
+                    // 示例：在添加颜色附件后
+                    LOG_INFO("Stage {} Subpass {} Color Attachment: name={}, initialLayout={}, finalLayout={}",
+                        static_cast<int>(stage), subpassIdx, att.textureName,
+                        static_cast<int>(att.params.initialLayout.value_or(RHI::ImageLayout::Undefined)),
+                        static_cast<int>(att.params.finalLayout.value_or(RHI::ImageLayout::Undefined)));
                     inputKeys.push_back(key);
                 }
 
@@ -306,21 +316,64 @@ namespace StarryEngine {
         defaultSamplerDesc.magFilter = RHI::SamplerFilter::Linear;
         auto defaultSampler = m_resMgr->createSampler(defaultSamplerDesc);
 
+        RHI::TextureHandle swapchainPhys;
+        auto swapchainIt = m_textureIdMap.find("Swapchain");
+        if (swapchainIt != m_textureIdMap.end()) {
+            swapchainPhys = m_renderGraph->getPhysicalTextureHandle(swapchainIt->second);
+        }
+
         for (auto& material : sceneData.materials) {
             if (!material) continue;
 
+            bool isLightingMaterial = (material->getRenderStage() == Scene::RenderStage::Lighting);
+
             for (const auto& [texName, binding] : material->getTextureDependencies()) {
+                if (texName == "Swapchain") {
+                    LOG_ERROR("Material illegally depends on Swapchain texture!");
+                    continue; // 跳过，不设置
+                }
+
                 auto texIt = m_textureIdMap.find(texName);
                 if (texIt == m_textureIdMap.end()) {
-                    LOG_WARN("Texture '{}' not found in RenderGraph for material", texName);
+                    LOG_WARN("Material requires texture '{}' not found in textureIdMap",texName);
                     continue;
                 }
                 auto phys = m_renderGraph->getPhysicalTextureHandle(texIt->second);
                 if (!phys.isValid()) {
-                    LOG_WARN("Physical texture handle for '{}' is invalid", texName);
+                    LOG_WARN("Material texture '{}' physical handle invalid", texName);
                     continue;
                 }
-                material->setTexture(binding.first, binding.second, phys, defaultSampler);
+
+                // 在 updateMaterialTextures 中，获取 phys 后添加：
+                if (material->getRenderStage() == Scene::RenderStage::PostProcess &&
+                    material->getRenderQueue() == Scene::RenderQueue::Transparent) {
+                    // 这是 copy 材质
+                    if (texName != "SceneColor") {
+                        LOG_ERROR("Copy material tries to bind '{}' instead of SceneColor", texName);
+                        continue;
+                    }
+                    // 额外验证物理纹理是否真的是 SceneColor（通过比较句柄）
+                    auto sceneColorPhys = m_renderGraph->getPhysicalTextureHandle(m_textureIdMap.at("SceneColor"));
+                    if (phys != sceneColorPhys) {
+                        LOG_ERROR("Copy material's SceneColor binding points to wrong texture! Expected SceneColor, got something else.");
+                        // 强制修正
+                        phys = sceneColorPhys;
+                    }
+                }
+
+                if (swapchainPhys.isValid() && phys == swapchainPhys) {
+                    LOG_ERROR("Material BINDS SWAPCHAIN as '{}' (set={}, binding={})", texName, binding.first, binding.second);
+                    continue; // 跳过错误绑定
+                }
+
+                if (isLightingMaterial) {
+                    LOG_INFO("Material setInputAttachment set={}, binding={}, texture='{}'", binding.first, binding.second, texName);
+                    material->setInputAttachment(binding.first, binding.second, phys, RHI::ImageLayout::ShaderReadOnly);
+                }
+                else {
+                    LOG_INFO("Material setTexture set={}, binding={}, texture='{}'", binding.first, binding.second, texName);
+                    material->setTexture(binding.first, binding.second, phys, defaultSampler);
+                }
             }
         }
     }
