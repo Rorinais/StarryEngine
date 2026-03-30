@@ -67,6 +67,7 @@ namespace StarryEngine::RHI {
         virtual uint32_t getMipLevels() const = 0;
         virtual uint32_t getArrayLayers() const = 0;
         virtual uint32_t getSampleCount() const = 0;
+        virtual void* getImageHandle() const = 0;
         //virtual ImageLayout getCurrentLayout() const = 0;
 
         // ========== 视图管理 ==========
@@ -545,8 +546,8 @@ namespace StarryEngine::RHI {
 
         // 资源屏障
         virtual void pipelineBarrier(
-            PipelineStage srcStage,
-            PipelineStage dstStage,
+            PipelineStageFlags srcStage,
+            PipelineStageFlags dstStage,
             DependencyFlags flags,
             const std::vector<ImageMemoryBarrier>& memoryBarriers,
             const std::vector<BufferBarrier>& bufferBarriers,

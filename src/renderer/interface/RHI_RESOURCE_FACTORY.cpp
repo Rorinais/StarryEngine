@@ -549,12 +549,100 @@ namespace StarryEngine::RHI {
 
     // 资源屏障
     void RHI_VK_CommandEncoder::pipelineBarrier(
-        PipelineStage srcStage,
-        PipelineStage dstStage,
+        PipelineStageFlags srcStage,
+        PipelineStageFlags dstStage,
         DependencyFlags flags,
         const std::vector<ImageMemoryBarrier>& memoryBarriers,
         const std::vector<BufferBarrier>& bufferBarriers,
-        const std::vector<ImageBarrier>& imageBarriers) {
+        const std::vector<ImageBarrier>& imageBarriers)
+    {
+        VkCommandBuffer cmdBuf = getVkCommandBuffer();
+        if (cmdBuf == VK_NULL_HANDLE) {
+            // 如果没有原生命令缓冲区，可能需要从 mCommandBuffer 获取
+            if (mCommandBuffer) {
+                cmdBuf = static_cast<VkCommandBuffer>(mCommandBuffer->getNativeHandle());
+            }
+            if (cmdBuf == VK_NULL_HANDLE) {
+                // 日志错误或直接返回
+                return;
+            }
+        }
+
+        // 转换阶段掩码和依赖标志
+        VkPipelineStageFlags vkSrcStage = static_cast<VkPipelineStageFlags>(srcStage);
+        VkPipelineStageFlags vkDstStage = static_cast<VkPipelineStageFlags>(dstStage);
+        VkDependencyFlags vkFlags = static_cast<VkDependencyFlags>(flags);
+
+        // 转换 ImageMemoryBarrier（如果使用）
+        std::vector<VkMemoryBarrier> vkMemoryBarriers;
+        vkMemoryBarriers.reserve(memoryBarriers.size());
+        for (const auto& mb : memoryBarriers) {
+            VkMemoryBarrier vkMb{ VK_STRUCTURE_TYPE_MEMORY_BARRIER };
+            vkMb.srcAccessMask = static_cast<VkAccessFlags>(mb.srcAccessMask);
+            vkMb.dstAccessMask = static_cast<VkAccessFlags>(mb.dstAccessMask);
+            vkMemoryBarriers.push_back(vkMb);
+        }
+
+        // 转换 BufferBarrier
+        std::vector<VkBufferMemoryBarrier> vkBufferBarriers;
+        vkBufferBarriers.reserve(bufferBarriers.size());
+        for (const auto& bb : bufferBarriers) {
+            VkBufferMemoryBarrier vkBb{ VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER };
+            vkBb.srcAccessMask = static_cast<VkAccessFlags>(bb.srcAccessMask);
+            vkBb.dstAccessMask = static_cast<VkAccessFlags>(bb.dstAccessMask);
+            vkBb.srcQueueFamilyIndex = bb.srcQueueFamilyIndex;
+            vkBb.dstQueueFamilyIndex = bb.dstQueueFamilyIndex;
+            // 需要从 BufferHandle 获取 VkBuffer
+            RHIBuffer* bufObj = mResourceManager->getBuffer(bb.buffer);
+            if (bufObj) {
+                vkBb.buffer = static_cast<VkBuffer>(bufObj->getNativeHandle());
+            }
+            vkBb.offset = bb.offset;
+            vkBb.size = bb.size;
+            vkBufferBarriers.push_back(vkBb);
+        }
+
+        // 转换 ImageBarrier
+        std::vector<VkImageMemoryBarrier> vkImageBarriers;
+        vkImageBarriers.reserve(imageBarriers.size());
+        for (const auto& ib : imageBarriers) {
+            RHITexture* texObj = mResourceManager->getTexture(ib.image);
+            if (!texObj) {
+                // 跳过无效纹理
+                continue;
+            }
+            VkImage image = static_cast<VkImage>(texObj->getImageHandle());
+
+            VkImageMemoryBarrier vkIb{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
+            vkIb.srcAccessMask = static_cast<VkAccessFlags>(ib.srcAccessMask);
+            vkIb.dstAccessMask = static_cast<VkAccessFlags>(ib.dstAccessMask);
+            vkIb.oldLayout = static_cast<VkImageLayout>(ib.oldLayout);
+            vkIb.newLayout = static_cast<VkImageLayout>(ib.newLayout);
+            vkIb.srcQueueFamilyIndex = ib.srcQueueFamilyIndex;
+            vkIb.dstQueueFamilyIndex = ib.dstQueueFamilyIndex;
+            vkIb.image = image;
+            vkIb.subresourceRange.aspectMask = static_cast<VkImageAspectFlags>(ib.aspectMask);
+            vkIb.subresourceRange.baseMipLevel = ib.baseMipLevel;
+            vkIb.subresourceRange.levelCount = ib.levelCount;
+            vkIb.subresourceRange.baseArrayLayer = ib.baseArrayLayer;
+            vkIb.subresourceRange.layerCount = ib.layerCount;
+
+            vkImageBarriers.push_back(vkIb);
+        }
+
+        // 调用 Vulkan API
+        vkCmdPipelineBarrier(
+            cmdBuf,
+            vkSrcStage,
+            vkDstStage,
+            vkFlags,
+            static_cast<uint32_t>(vkMemoryBarriers.size()),
+            vkMemoryBarriers.data(),
+            static_cast<uint32_t>(vkBufferBarriers.size()),
+            vkBufferBarriers.data(),
+            static_cast<uint32_t>(vkImageBarriers.size()),
+            vkImageBarriers.data()
+        );
     }
 
     // 拷贝操作

@@ -21,11 +21,16 @@ namespace StarryEngine::RenderGraph {
     };
 
     struct LayoutTransition {
-        uint32_t srcPassIdx;
+        int32_t srcPassIdx;  
         uint32_t dstPassIdx;
         TextureId texId;
         RHI::ImageLayout srcLayout;
         RHI::ImageLayout dstLayout;
+        RHI::PipelineStageFlags srcStage;
+        RHI::PipelineStageFlags dstStage;
+        RHI::AccessFlags srcAccess;
+        RHI::AccessFlags dstAccess;
+        uint32_t aspectMask;
     };
 
     class PassNode {

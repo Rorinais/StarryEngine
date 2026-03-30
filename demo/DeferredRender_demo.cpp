@@ -1,6 +1,7 @@
 #include "../src/renderer/passes/PassWrapper.hpp"
 #include "../src/renderer/passes/GeometrySubpass.hpp"
 #include "../src/renderer/passes/LightSubpass.hpp"
+#include "../src/renderer/subpassRecorder/SkyboxRecorder.hpp"
 
 #include"../src/application/Application.hpp"
 #include "type.hpp"
@@ -104,15 +105,14 @@ std::shared_ptr<DeferredRenderPath> createDeferredRenderPath(
         .addInputAttachment("Normal", lightInputAttachment)
         .addInputAttachment("Material", lightInputAttachment);
 
-
     auto skyboxOutputAttach = PassWrapper::createColorAttachment(
-        RHI::ImageLayout::Undefined, RHI::ImageLayout::ShaderReadOnly,
-        RHI::AttachmentLoadOp::Clear, RHI::AttachmentStoreOp::Store);
+        RHI::ImageLayout::ShaderReadOnly, RHI::ImageLayout::ShaderReadOnly,
+        RHI::AttachmentLoadOp::Clear, RHI::AttachmentStoreOp::Store);  
     auto skyboxInputAttach = PassWrapper::createColorAttachment(
         RHI::ImageLayout::ShaderReadOnly, RHI::ImageLayout::ShaderReadOnly,
-        RHI::AttachmentLoadOp::Load, RHI::AttachmentStoreOp::DontCare);
+        RHI::AttachmentLoadOp::Load, RHI::AttachmentStoreOp::DontCare);      
 
-    Subpass skyboxSubpass("Skybox", std::make_shared<DeferredLightingRecorder>()); // 需要实现 SkyboxRecorder
+    Subpass skyboxSubpass("Skybox", std::make_shared<SkyboxRecorder>()); 
     skyboxSubpass.addColorAttachment("SceneColor", skyboxOutputAttach)
         .addInputAttachment("LightAccum", skyboxInputAttach);
 
@@ -251,7 +251,8 @@ ModelData createSphere(std::shared_ptr<RHI::ResourceManager> resMgr, GlobalDescr
 
     RHI::DescriptorSetLayoutDesc materialLayoutDesc;
     materialLayoutDesc.bindings = {
-        {0, RHI::DescriptorType::UniformBuffer, 1, RHI::ShaderStage::Fragment}
+        {0, RHI::DescriptorType::UniformBuffer, 1, RHI::ShaderStage::Fragment},
+        { 1, RHI::DescriptorType::InputAttachment, 1, RHI::ShaderStage::Fragment }
     };
     auto set1Layout = Assets::DescriptorSetLayoutCache::getOrCreateLayout(resMgr.get(), materialLayoutDesc);
     LayoutMap[1] = set1Layout;
@@ -308,9 +309,9 @@ std::shared_ptr<Assets::MaterialInstance> createLightingMaterial(
 
     auto material = std::make_shared<Assets::MaterialInstance>(tmpl, data.globalDescriptorPool, resMgr.get(), data.globalDescriptorSet);
 
-    material->addTextureDependency("Albedo", 1, 0);
-    material->addTextureDependency("Normal", 1, 1);
-    material->addTextureDependency("Material", 1, 2);
+    material->addTextureDependency("Albedo", 1, 0, Assets::ResourceDependencyType::InputAttachment);
+    material->addTextureDependency("Normal", 1, 1, Assets::ResourceDependencyType::InputAttachment);
+    material->addTextureDependency("Material", 1, 2, Assets::ResourceDependencyType::InputAttachment);
 
     material->setRenderStage(Scene::RenderStage::Lighting);
     material->setRenderQueue(Scene::RenderQueue::Opaque);
@@ -343,7 +344,7 @@ std::shared_ptr<Assets::MaterialInstance> createCopyMaterial(
     }
 
     auto material = std::make_shared<Assets::MaterialInstance>(tmpl, data.globalDescriptorPool, resMgr.get(), data.globalDescriptorSet);
-    material->addTextureDependency("SceneColor", 1, 0);
+    material->addTextureDependency("SceneColor", 1, 0, Assets::ResourceDependencyType::Sampler);
 
     material->setRenderStage(Scene::RenderStage::PostProcess);
     material->setRenderQueue(Scene::RenderQueue::Opaque);
@@ -356,44 +357,46 @@ std::shared_ptr<Assets::MaterialInstance> createSkyboxMaterial(std::shared_ptr<R
     layoutMap[0] = data.globalSetLayout;
 
     // set 1 布局：绑定 0 为立方体贴图采样器
-    //RHI::DescriptorSetLayoutDesc layoutDesc;
-    //layoutDesc.bindings = {
-    //    {0, RHI::DescriptorType::CombinedImageSampler, 1, RHI::ShaderStage::Fragment}
-    //};
-    //auto set1Layout = Assets::DescriptorSetLayoutCache::getOrCreateLayout(resMgr.get(), layoutDesc);
-    //layoutMap[1] = set1Layout;
+    RHI::DescriptorSetLayoutDesc layoutDesc;
+    layoutDesc.bindings = {
+        {0, RHI::DescriptorType::CombinedImageSampler, 1, RHI::ShaderStage::Fragment},
+        {1, RHI::DescriptorType::InputAttachment, 1, RHI::ShaderStage::Fragment}
+    };
+    auto set1Layout = Assets::DescriptorSetLayoutCache::getOrCreateLayout(resMgr.get(), layoutDesc);
+    layoutMap[1] = set1Layout;
 
     auto tmpl = std::make_shared<Assets::DefaultMaterialTemplate>(resMgr, layoutMap, std::vector<RHI::PushConstantRange>{});
 
-    if (!tmpl->loadShaders("assets/shaders/deferred/fullscreen.vert","assets/shaders/deferred/skybox.frag")) {
+    if (!tmpl->loadShaders("assets/shaders/deferred/skybox.vert","assets/shaders/deferred/skybox.frag")) {
         LOG_ERROR("Failed to load skybox shaders");
         return nullptr;
     }
 
-    //std::vector<std::string> skyboxFaces = {
-    //    "assets/textures/skybox/right.jpg",
-    //    "assets/textures/skybox/left.jpg",
-    //    "assets/textures/skybox/top.jpg",
-    //    "assets/textures/skybox/bottom.jpg",
-    //    "assets/textures/skybox/front.jpg",
-    //    "assets/textures/skybox/back.jpg"
-    //};
-    //auto loader = Assets::TextureLoader(resMgr);
-    //auto [skyboxTex, skyboxSampler] = loader.loadTextureCube(skyboxFaces, RHI::Format::RGBA8_sRGB, "SkyboxCubeMap");
-    //LOG_INFO("Skybox texture handle = {}", skyboxTex.getIndex());
-    //if (!skyboxTex.isValid()) {
-    //    LOG_ERROR("Failed to load skybox texture, skybox will be disabled");
-    //    return nullptr;  
-    //}
+    std::vector<std::string> skyboxFaces = {
+        "assets/textures/skybox/right.jpg",
+        "assets/textures/skybox/left.jpg",
+        "assets/textures/skybox/top.jpg",
+        "assets/textures/skybox/bottom.jpg",
+        "assets/textures/skybox/front.jpg",
+        "assets/textures/skybox/back.jpg"
+    };
+    auto loader = Assets::TextureLoader(resMgr);
+    auto [skyboxTex, skyboxSampler] = loader.loadTextureCube(skyboxFaces, RHI::Format::RGBA8_sRGB, "SkyboxCubeMap");
+    LOG_INFO("Skybox texture handle = {}", skyboxTex.getIndex());
+    if (!skyboxTex.isValid()) {
+        LOG_ERROR("Failed to load skybox texture, skybox will be disabled");
+        return nullptr;  
+    }
 
     auto material = std::make_shared<Assets::MaterialInstance>(tmpl, data.globalDescriptorPool, resMgr.get(), data.globalDescriptorSet);
-    //material->setTexture(1, 0, skyboxTex, skyboxSampler);
+    material->setTexture(1, 0, skyboxTex, skyboxSampler);
+    material->addTextureDependency("LightAccum", 1, 1, Assets::ResourceDependencyType::InputAttachment);
 
     material->setRenderStage(Scene::RenderStage::PostProcess);
     material->setRenderQueue(Scene::RenderQueue::Skybox);
-    material->enableDepthTest(false);
+    material->enableDepthTest(false);          
     material->enableDepthWrite(false);
-    material->setCullMode(RHI::CullMode::None);
+    material->setDepthCompareOp(RHI::CompareOp::LessOrEqual);
 
     return material;
 }

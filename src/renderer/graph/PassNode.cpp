@@ -281,6 +281,8 @@ namespace StarryEngine::RenderGraph {
         m_builder.addDependency(dep);
     }
 
+
+
     bool PassNode::isDepthFormat(RHI::Format format) {
         switch (format) {
         case RHI::Format::D16_UNorm:

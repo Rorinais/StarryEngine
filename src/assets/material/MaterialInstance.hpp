@@ -6,6 +6,19 @@
 #include "MaterialTemplate.hpp"
 
 namespace StarryEngine::Assets {
+    enum class ResourceDependencyType {
+        Sampler,           
+        InputAttachment,   
+        StorageImage,      
+        UniformBuffer,     
+    };
+
+    struct DependencyInfo {
+        uint32_t set;
+        uint32_t binding;
+        ResourceDependencyType type;
+    };
+
     class MaterialInstance {
     public:
         MaterialInstance(std::shared_ptr<MaterialTemplate> tmpl,
@@ -50,11 +63,14 @@ namespace StarryEngine::Assets {
         void setInstancingLayout(const InstancingLayout& layout);
         const InstancingLayout* getInstancingLayout() const;
 
-        void addTextureDependency(const std::string& textureName, uint32_t set, uint32_t binding) {
-            m_textureDependencies[textureName] = { set, binding };
+        void addTextureDependency(const std::string& textureName,
+            uint32_t set,
+            uint32_t binding,
+            ResourceDependencyType type = ResourceDependencyType::Sampler) {
+            m_textureDependencies[textureName] = { set, binding, type };
         }
 
-        const std::unordered_map<std::string, std::pair<uint32_t, uint32_t>>& getTextureDependencies() const {
+        const std::unordered_map<std::string, DependencyInfo>& getTextureDependencies() const {
             return m_textureDependencies;
         }
         
@@ -77,7 +93,7 @@ namespace StarryEngine::Assets {
         };
         std::unordered_map<uint64_t, BufferResource> m_buffers; // 键 = ((uint64_t)set << 32) | binding
 
-        std::unordered_map<std::string, std::pair<uint32_t, uint32_t>> m_textureDependencies;
+        std::unordered_map<std::string, DependencyInfo> m_textureDependencies;
 
         InstancingLayout m_instancingLayout;
         bool m_hasCustomInstancingLayout = false;

@@ -60,6 +60,7 @@ namespace StarryEngine {
             globals.view = camera->getViewMatrix();
             globals.proj = camera->getProjMatrix();
             globals.invView = glm::inverse(camera->getViewMatrix());
+            globals.invProj = glm::inverse(camera->getProjMatrix());
 
             auto* buf = m_resMgr->getBuffer(m_globalUniformBuffer);
             if (buf) {
@@ -81,6 +82,13 @@ namespace StarryEngine {
         m_rhi->waitIdle();
         if (m_renderPath) {
             m_renderPath->onResize(width, height);
+        }
+
+        if (m_scene) {
+            analysisScene();
+            if (m_renderPath && m_analysisSceneResult) {
+                m_renderPath->setDrawItems(*m_analysisSceneResult);
+            }
         }
     }
 

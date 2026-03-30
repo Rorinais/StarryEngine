@@ -294,13 +294,20 @@ namespace StarryEngine {
         m_width = width;
         m_height = height;
 
+        // 更新纹理描述尺寸
         for (auto& [name, desc] : m_textureDescs) {
             desc.extent.width = width;
             desc.extent.height = height;
         }
 
+        // 重新初始化渲染图
         if (!initialize()) {
             LOG_ERROR("Failed to rebuild render path on resize");
+            return;
+        }
+
+        if (m_cachedSceneData) {
+            setDrawItems(*m_cachedSceneData);
         }
     }
 
@@ -325,17 +332,15 @@ namespace StarryEngine {
         for (auto& material : sceneData.materials) {
             if (!material) continue;
 
-            bool isLightingMaterial = (material->getRenderStage() == Scene::RenderStage::Lighting);
-
-            for (const auto& [texName, binding] : material->getTextureDependencies()) {
+            for (const auto& [texName, dep] : material->getTextureDependencies()) {
                 if (texName == "Swapchain") {
                     LOG_ERROR("Material illegally depends on Swapchain texture!");
-                    continue; // 跳过，不设置
+                    continue;
                 }
 
                 auto texIt = m_textureIdMap.find(texName);
                 if (texIt == m_textureIdMap.end()) {
-                    LOG_WARN("Material requires texture '{}' not found in textureIdMap",texName);
+                    LOG_WARN("Material requires texture '{}' not found in textureIdMap", texName);
                     continue;
                 }
                 auto phys = m_renderGraph->getPhysicalTextureHandle(texIt->second);
@@ -344,35 +349,20 @@ namespace StarryEngine {
                     continue;
                 }
 
-                // 在 updateMaterialTextures 中，获取 phys 后添加：
-                if (material->getRenderStage() == Scene::RenderStage::PostProcess &&
-                    material->getRenderQueue() == Scene::RenderQueue::Transparent) {
-                    // 这是 copy 材质
-                    if (texName != "SceneColor") {
-                        LOG_ERROR("Copy material tries to bind '{}' instead of SceneColor", texName);
-                        continue;
-                    }
-                    // 额外验证物理纹理是否真的是 SceneColor（通过比较句柄）
-                    auto sceneColorPhys = m_renderGraph->getPhysicalTextureHandle(m_textureIdMap.at("SceneColor"));
-                    if (phys != sceneColorPhys) {
-                        LOG_ERROR("Copy material's SceneColor binding points to wrong texture! Expected SceneColor, got something else.");
-                        // 强制修正
-                        phys = sceneColorPhys;
-                    }
-                }
-
                 if (swapchainPhys.isValid() && phys == swapchainPhys) {
-                    LOG_ERROR("Material BINDS SWAPCHAIN as '{}' (set={}, binding={})", texName, binding.first, binding.second);
-                    continue; // 跳过错误绑定
+                    LOG_ERROR("Material BINDS SWAPCHAIN as '{}' (set={}, binding={})", texName, dep.set, dep.binding);
+                    continue;
                 }
 
-                if (isLightingMaterial) {
-                    LOG_INFO("Material setInputAttachment set={}, binding={}, texture='{}'", binding.first, binding.second, texName);
-                    material->setInputAttachment(binding.first, binding.second, phys, RHI::ImageLayout::ShaderReadOnly);
-                }
-                else {
-                    LOG_INFO("Material setTexture set={}, binding={}, texture='{}'", binding.first, binding.second, texName);
-                    material->setTexture(binding.first, binding.second, phys, defaultSampler);
+                switch (dep.type) {
+                case Assets::ResourceDependencyType::Sampler:
+                    LOG_INFO("Material setTexture set={}, binding={}, texture='{}'", dep.set, dep.binding, texName);
+                    material->setTexture(dep.set, dep.binding, phys, defaultSampler);
+                    break;
+                case Assets::ResourceDependencyType::InputAttachment:
+                    LOG_INFO("Material setInputAttachment set={}, binding={}, texture='{}'", dep.set, dep.binding, texName);
+                    material->setInputAttachment(dep.set, dep.binding, phys, RHI::ImageLayout::ShaderReadOnly);
+                    break;
                 }
             }
         }

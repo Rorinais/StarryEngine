@@ -70,6 +70,35 @@ namespace StarryEngine::RenderGraph {
         TextureId getTextureId(const std::string& name) const;
 
         const std::vector<RHI::FramebufferHandle>& getFramebuffersForPass(size_t passIndex) const;
+        std::pair<RHI::PipelineStageFlags, RHI::AccessFlags> getStageAccessFromLayout(RHI::ImageLayout layout);
+
+        bool isDepthOnlyFormat(RHI::Format format) {
+            return format == RHI::Format::D16_UNorm || format == RHI::Format::D32_Float;
+        }
+
+        bool isStencilOnlyFormat(RHI::Format format) {
+            return false;
+        }
+
+        bool isDepthStencilFormat(RHI::Format format) {
+            return format == RHI::Format::D24_UNorm_S8_UInt || format == RHI::Format::D32_Float_S8_UInt;
+        }
+
+        uint32_t getAspectMask(RHI::Format format) {
+            if (isDepthOnlyFormat(format)) {
+                return static_cast<uint32_t>(RHI::ImageAspect::Depth);
+            }
+            else if (isStencilOnlyFormat(format)) {
+                return static_cast<uint32_t>(RHI::ImageAspect::Stencil);
+            }
+            else if (isDepthStencilFormat(format)) {
+                return static_cast<uint32_t>(RHI::ImageAspect::Depth) |
+                    static_cast<uint32_t>(RHI::ImageAspect::Stencil);
+            }
+            else {
+                return static_cast<uint32_t>(RHI::ImageAspect::Color);
+            }
+        }
 
     private:
         struct VirtualTexture {

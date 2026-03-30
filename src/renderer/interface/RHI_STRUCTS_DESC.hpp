@@ -613,9 +613,9 @@ namespace StarryEngine::RHI {
         TextureHandle image;                      ///< 图像句柄
         ImageLayout oldLayout = ImageLayout::Undefined; ///< 旧布局
         ImageLayout newLayout = ImageLayout::Undefined; ///< 新布局
-        AccessFlag srcAccessMask = AccessFlag::None; ///< 源访问掩码
-        AccessFlag dstAccessMask = AccessFlag::None; ///< 目标访问掩码
-        ImageAspect aspectMask = ImageAspect::Color; ///< 图像切面掩码
+        AccessFlags srcAccessMask = static_cast<AccessFlags>(AccessFlag::None); ///< 源访问掩码
+        AccessFlags dstAccessMask = static_cast<AccessFlags>(AccessFlag::None); ///< 目标访问掩码
+        uint32_t aspectMask = static_cast<uint32_t>(ImageAspect::Color); ///< 图像切面掩码
         uint32_t srcQueueFamilyIndex = 0;           ///< 源队列族索引
         uint32_t dstQueueFamilyIndex = 0;           ///< 目标队列族索引
         uint32_t baseMipLevel = 0;                  ///< 基础MIP层级

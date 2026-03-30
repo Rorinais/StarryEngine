@@ -256,8 +256,8 @@ namespace StarryEngine::RHI {
 
         // 资源屏障
         void pipelineBarrier(
-            PipelineStage srcStage,
-            PipelineStage dstStage,
+            PipelineStageFlags srcStage,
+            PipelineStageFlags dstStage,
             DependencyFlags flags,
             const std::vector<ImageMemoryBarrier>& memoryBarriers,
             const std::vector<BufferBarrier>& bufferBarriers,

@@ -13,15 +13,10 @@ void main() {
     vec3 normal = normalTex.xyz * 2.0 - 1.0;
     vec4 materialTex = subpassLoad(uMaterial);
 
-    if (materialTex.a < 0.5) {
-        outColor = vec4(0.2, 0.3, 0.5, 1.0);
-        return;
-    }
-
     float metallic = materialTex.r;
     float roughness = materialTex.g;
 
     vec3 lightDir = normalize(vec3(1.0, 2.0, 1.0));
     float diff = max(dot(normal, lightDir), 0.0);
-    outColor = albedo * diff;
+    outColor = vec4(albedo.rgb * diff,albedo.g);
 }

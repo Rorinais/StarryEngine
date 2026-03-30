@@ -380,6 +380,9 @@ namespace StarryEngine::RHI {
         uint32_t getMipLevels() const override { return mDesc.mipLevels; }
         uint32_t getArrayLayers() const override { return mDesc.arrayLayers; }
         uint32_t getSampleCount() const override { return mDesc.sampleCount; }
+        void* getImageHandle() const override {
+            return mUsingVMA ? (void*)vmaImage.image : (void*)traditionalImage.image;
+        }
         //ImageLayout getCurrentLayout() const override { return mCurrentLayout; }
 
         VkImageView createVkImageView(const ImageSubresourceRange& range, VkImageViewType viewType);
