@@ -38,8 +38,8 @@ add_subdirectory(application)
 
 # 使用封装函数创建可执行文件
 add_engine_executable(
-    TARGET_NAME ForwardRender_demo
-    SOURCES ../demo/ForwardRender_demo.cpp
+    TARGET_NAME test1
+    SOURCES ../demo/test1.cpp
     OUTPUT_DIR ${CMAKE_BINARY_DIR}/bin
     SHADERS_DIR ${SHADERS_DIR}
     FONTS_DIR ${FONTS_DIR}

@@ -21,5 +21,5 @@ void main() {
     vec4 worldPos = global.invView * global.invProj * clipPos;
     worldDir = normalize(worldPos.xyz);
 
-    gl_Position = vec4(uv * 2.0 - 1.0, 0.0, 1.0);
+    gl_Position = vec4(uv * 2.0 - 1.0, 1.0, 1.0);
 }

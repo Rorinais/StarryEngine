@@ -9,10 +9,11 @@ namespace StarryEngine::Scene {
     struct RenderObject;
 
     enum class RenderQueue {
+        Skybox,
         Opaque,
         Transparent ,
         UI,
-        Skybox
+        Copy
     };
 
     enum class RenderStage {

@@ -100,11 +100,6 @@ namespace StarryEngine {
                         throw std::runtime_error("Texture not found: " + att.textureName);
                     }
                     std::string key = passNode->addColorOutput(it->second, att.params);
-                    // 示例：在添加颜色附件后
-                    LOG_INFO("Stage {} Subpass {} Color Attachment: name={}, initialLayout={}, finalLayout={}",
-                        static_cast<int>(stage), subpassIdx, att.textureName,
-                        static_cast<int>(att.params.initialLayout.value_or(RHI::ImageLayout::Undefined)),
-                        static_cast<int>(att.params.finalLayout.value_or(RHI::ImageLayout::Undefined)));
                     colorKeys.push_back(key);
                 }
 
@@ -124,11 +119,6 @@ namespace StarryEngine {
                         throw std::runtime_error("Texture not found: " + att.textureName);
                     }
                     std::string key = passNode->addInput(it->second, att.params);
-                    // 示例：在添加颜色附件后
-                    LOG_INFO("Stage {} Subpass {} Color Attachment: name={}, initialLayout={}, finalLayout={}",
-                        static_cast<int>(stage), subpassIdx, att.textureName,
-                        static_cast<int>(att.params.initialLayout.value_or(RHI::ImageLayout::Undefined)),
-                        static_cast<int>(att.params.finalLayout.value_or(RHI::ImageLayout::Undefined)));
                     inputKeys.push_back(key);
                 }
 
