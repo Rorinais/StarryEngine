@@ -4,6 +4,7 @@
 #include <sstream>
 #include<fstream>
 #include<vector>
+#include<unordered_map>
 #include <shaderc/shaderc.hpp>
 
 namespace StarryEngine::Utils {
@@ -16,7 +17,8 @@ namespace StarryEngine::Utils {
         static std::vector<uint32_t> compileGlslToSpirv(
             const std::string& source,
             const std::string& name,
-            shaderc_shader_kind kind);
+            shaderc_shader_kind kind, 
+            const std::unordered_map<std::string, std::string>& macros = {});
     };
 
 } // namespace StarryEngine::Utils

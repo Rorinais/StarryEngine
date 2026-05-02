@@ -271,6 +271,11 @@ namespace StarryEngine {
                 recorder->setPipelineMapping(pipelineMapping);
             }
         }
+
+        if (!m_resourceStatsPrinted) {
+            m_rhi->printResourceStatistics();
+            m_resourceStatsPrinted = true;
+        }
     }
 
     void DeferredRenderPath::render(RHI::RHICommandEncoder* encoder, uint32_t frameIndex) {

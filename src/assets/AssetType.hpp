@@ -56,8 +56,11 @@ namespace StarryEngine::Assets {
     struct ShaderCreateInfo {
         RHI::ShaderHandle module;                     // 已创建的模块句柄
         std::vector<uint32_t> spirv;                        // 编译后的 SPIR-V（可选保留）
-        std::unordered_map<uint32_t, RHI::DescriptorSetLayoutHandle> setLayouts; // 每个 set 的布局句柄
         std::vector<RHI::VertexAttribute> vertexAttributes; // 顶点输入描述（用于管线创建）
+
+        RHI::ShaderReflectionInfo reflection;
+
+        std::unordered_map<uint32_t, RHI::DescriptorSetLayoutDesc> layoutDescs;
     };
 
     struct TextureLoadResult {

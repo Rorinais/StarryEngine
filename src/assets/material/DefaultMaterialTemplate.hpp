@@ -7,7 +7,12 @@ namespace StarryEngine::Assets {
         DefaultMaterialTemplate(
             std::shared_ptr<RHI::ResourceManager> resMgr,
             const std::unordered_map<uint32_t, RHI::DescriptorSetLayoutHandle>& layouts,
-            const std::vector<RHI::PushConstantRange>& pushConstants);
+            const std::vector<RHI::PushConstantRange>& pushConstants = {});
+
+        DefaultMaterialTemplate(
+            std::shared_ptr<RHI::ResourceManager> resMgr,
+            RHI::DescriptorSetLayoutHandle globalSetLayout,
+            const std::vector<RHI::PushConstantRange>& pushConstants = {});
 
         ~DefaultMaterialTemplate() = default;
 
@@ -20,6 +25,10 @@ namespace StarryEngine::Assets {
         RHI::ShaderHandle getFragmentShader() const override { return m_fragmentShader; }
 
         const InstancingLayout* getInstancingLayout() const override;
+
+        const RHI::ShaderReflectionInfo& getVSReflection() const override { return m_vsReflection; }
+        const RHI::ShaderReflectionInfo& getFSReflection() const override { return m_fsReflection; }
+
     private:
         std::shared_ptr<RHI::ResourceManager> m_resMgr;
 
@@ -27,5 +36,9 @@ namespace StarryEngine::Assets {
         std::vector<RHI::PushConstantRange> m_pushConstants;
 
         RHI::ShaderHandle m_vertexShader, m_fragmentShader;
+
+        RHI::ShaderReflectionInfo m_vsReflection;
+        RHI::ShaderReflectionInfo m_fsReflection;
+
     };
 }

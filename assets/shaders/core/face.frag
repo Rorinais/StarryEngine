@@ -5,17 +5,9 @@ layout(location = 1) in vec3 fragNormal;
 
 layout(location = 0) out vec4 outColor;
 
-layout(set = 1, binding = 0) uniform MaterialUniforms {
-    vec4 baseColor;
-    float metallic;
-    float roughness;
-    float emissiveIntensity;
-    vec3 emissiveColor;
-} material;
 
-layout(set = 1, binding = 1) uniform sampler2D texSampler;
+layout(set = 1, binding = 0) uniform sampler2D texSampler;
 
 void main() {
-
-    outColor = texture(texSampler, fragTexCoord);
+    outColor = texture(texSampler, -fragTexCoord);
 }

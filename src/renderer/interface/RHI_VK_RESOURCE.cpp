@@ -205,8 +205,7 @@ namespace StarryEngine::RHI {
         }
         
         // 上传数据到暂存缓冲区
-        mDevice->uploadDataToTraditionalMemory(
-            stagingBuffer.memory, data, size, 0, true);
+        mDevice->uploadDataToTraditionalMemory(stagingBuffer.memory, data, size, 0, true);
         
         // 获取传输命令池并复制
         VkCommandPool transferPool = mDevice->getTransferCommandPool();
@@ -572,7 +571,7 @@ namespace StarryEngine::RHI {
 
         for (const auto& range : mDesc.pushConstants) {
             VkPushConstantRange vkRange{};
-            vkRange.stageFlags = static_cast<VkShaderStageFlags>(range.stage);
+            vkRange.stageFlags = static_cast<VkShaderStageFlags>(range.stageFlags);
             vkRange.offset = range.offset;
             vkRange.size = range.size;
             vkPushConstants.push_back(vkRange);

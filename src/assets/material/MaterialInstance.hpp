@@ -4,13 +4,15 @@
 #include <unordered_map>
 #include "../../renderer/interface/RHI_RESOURCE_MANAGER.hpp"
 #include "MaterialTemplate.hpp"
+#include "DefaultMaterialTemplate.hpp"
+#include "MaterialParameterBlock.hpp"
 
 namespace StarryEngine::Assets {
     enum class ResourceDependencyType {
-        Sampler,           
-        InputAttachment,   
-        StorageImage,      
-        UniformBuffer,     
+        Sampler,
+        InputAttachment,
+        StorageImage,
+        UniformBuffer,
     };
 
     struct DependencyInfo {
@@ -29,32 +31,38 @@ namespace StarryEngine::Assets {
 
         void setUniform(uint32_t setIndex, uint32_t binding, const void* data, size_t size);
         void setTexture(uint32_t setIndex, uint32_t binding, RHI::TextureHandle texture, RHI::SamplerHandle sampler);
-        void setInputAttachment(uint32_t setIndex, uint32_t binding,RHI::TextureHandle texture,RHI::ImageLayout layout = RHI::ImageLayout::ShaderReadOnly);
+        void setInputAttachment(uint32_t setIndex, uint32_t binding, RHI::TextureHandle texture, RHI::ImageLayout layout = RHI::ImageLayout::ShaderReadOnly);
 
-        void setCullMode(RHI::CullMode mode) { m_template->setCullMode(mode); }
-        void setDepthTest(bool enable) { m_template->setDepthTest(enable); }
-        void setDepthWrite(bool enable) { m_template->setDepthWrite(enable); }
-        void setDepthCompareOp(RHI::CompareOp op) { m_template->setDepthCompareOp(op); }
-        void setAttachments(std::vector<RHI::BlendAttachmentState> attachments) { m_template->setAttachments(attachments); }
-        void setRenderQueue(Scene::RenderQueue queue) { m_template->setRenderQueue(queue); }
-        void setRenderStage(Scene::RenderStage stage) { m_template->setRenderStage(stage); }
-        void setDeferred(bool deferred) { m_template->setDeferred(deferred); }
-        void enableTransparent(bool enable = true) { m_template->enableTransparent(enable); }
-        void enableDepthTest(bool enable = true) { m_template->enableDepthTest(enable); }
-        void enableDepthWrite(bool enable = true) { m_template->enableDepthWrite(enable); }
-        void setDebugName(std::string debugName) { m_template->setDebugName(debugName); }
+        MaterialParameterBlock* getBlock(const std::string& blockName);
+        void setTexture(const std::string& name, RHI::TextureHandle texture, RHI::SamplerHandle sampler);
+        void addTextureDependency(const std::string& shaderVarName,const std::string& rgTextureName,ResourceDependencyType type);
+        void applyAllDirtyBlocks();
 
-        RHI::CullMode getCullMode() { return m_template->getCullMode(); }
-        RHI::FrontFace getFrontFace() { return m_template->getFrontFace(); }
-        RHI::CompareOp getDethCompareOp() { return m_template->getDethCompareOp(); }
-        std::vector<RHI::BlendAttachmentState> getAttachments() { return m_template->getAttachments(); }
-        Scene::RenderQueue getRenderQueue() const { return m_template->getRenderQueue(); }
-        Scene::RenderStage getRenderStage() const { return m_template->getRenderStage(); }
-        bool isTransparent() const { return m_template->isTransparent(); }
-        bool isDepthTestEnable() const { return m_template->isDepthTestEnable(); }
-        bool isDepthWriteEnable() const { return m_template->isDepthWriteEnable(); }
-        bool isDeferred() const { return m_template->isDeferred(); }
-        std::string getDebugName() { return m_template->getDebugName(); }
+        // 实例独立的渲染状态 setter / getter
+        void setCullMode(RHI::CullMode mode) { m_cullMode = mode; }
+        void setDepthTest(bool enable) { m_depthTestEnable = enable; }
+        void setDepthWrite(bool enable) { m_depthWriteEnable = enable; }
+        void setDepthCompareOp(RHI::CompareOp op) { m_depthCompareOp = op; }
+        void setAttachments(std::vector<RHI::BlendAttachmentState> attachments) { m_attachments = std::move(attachments); }
+        void setRenderQueue(Scene::RenderQueue queue) { m_queue = queue; }
+        void setRenderStage(Scene::RenderStage stage) { m_stage = stage; }
+        void setDeferred(bool deferred) { m_isDeferred = deferred; }
+        void enableTransparent(bool enable = true) { m_alphaBlend = enable; }
+        void enableDepthTest(bool enable = true) { m_depthTestEnable = enable; }
+        void enableDepthWrite(bool enable = true) { m_depthWriteEnable = enable; }
+        void setDebugName(std::string debugName) { m_debugName = std::move(debugName); }
+
+        RHI::CullMode getCullMode() const { return m_cullMode; }
+        RHI::FrontFace getFrontFace() const { return m_frontFace; }
+        RHI::CompareOp getDethCompareOp() const { return m_depthCompareOp; }
+        const std::vector<RHI::BlendAttachmentState>& getAttachments() const { return m_attachments; }
+        Scene::RenderQueue getRenderQueue() const { return m_queue; }
+        Scene::RenderStage getRenderStage() const { return m_stage; }
+        bool isTransparent() const { return m_alphaBlend; }
+        bool isDepthTestEnable() const { return m_depthTestEnable; }
+        bool isDepthWriteEnable() const { return m_depthWriteEnable; }
+        bool isDeferred() const { return m_isDeferred; }
+        std::string getDebugName() const { return m_debugName; }
 
         RHI::DescriptorSetHandle getSet(uint32_t setIndex) const;
         const std::unordered_map<uint32_t, RHI::DescriptorSetHandle>& getAllSets() const { return m_sets; }
@@ -73,17 +81,30 @@ namespace StarryEngine::Assets {
         const std::unordered_map<std::string, DependencyInfo>& getTextureDependencies() const {
             return m_textureDependencies;
         }
-        
+
         RHI::DescriptorSetHandle getOrCreateSet(uint32_t setIndex);
+
+        static std::shared_ptr<DefaultMaterialTemplate> createDefaultTemplate(std::shared_ptr<RHI::ResourceManager> resMgr, RHI::DescriptorSetLayoutHandle globalSetLayout);
+
+        static std::shared_ptr<MaterialInstance> createDefault(
+            std::shared_ptr<RHI::ResourceManager> resMgr,
+            RHI::DescriptorSetLayoutHandle globalSetLayout,
+            RHI::DescriptorPoolHandle pool,
+            RHI::DescriptorSetHandle globalSet);
+
+        static std::shared_ptr<MaterialInstance> createError(
+            std::shared_ptr<RHI::ResourceManager> resMgr,
+            RHI::DescriptorSetLayoutHandle globalSetLayout,
+            RHI::DescriptorPoolHandle pool,
+            RHI::DescriptorSetHandle globalSet);
 
     private:
         std::shared_ptr<MaterialTemplate> m_template;
         RHI::ResourceManager* m_resMgr;
         RHI::DescriptorPoolHandle m_pool;
 
-        // 存储已分配的描述符集，键为 set 索引
+        // 描述符集管理
         std::unordered_map<uint32_t, RHI::DescriptorSetHandle> m_sets;
-        // 存储每个 set 索引对应的布局句柄
         std::unordered_map<uint32_t, RHI::DescriptorSetLayoutHandle> m_layouts;
 
         struct BufferResource {
@@ -91,11 +112,34 @@ namespace StarryEngine::Assets {
             void* mappedData;
             size_t size;
         };
-        std::unordered_map<uint64_t, BufferResource> m_buffers; // 键 = ((uint64_t)set << 32) | binding
-
+        std::unordered_map<uint64_t, BufferResource> m_buffers;
         std::unordered_map<std::string, DependencyInfo> m_textureDependencies;
 
         InstancingLayout m_instancingLayout;
         bool m_hasCustomInstancingLayout = false;
+
+        // 反射缓存
+        std::unordered_map<std::string, MaterialParameterBlock> m_blocks;
+        std::unordered_map<std::string, std::pair<uint32_t, uint32_t>> m_blockBindings;    // 块名 -> (set,binding)
+        std::unordered_map<std::string, std::pair<uint32_t, uint32_t>> m_samplerBindings;  // 纹理名 -> (set,binding)
+        std::unordered_map<std::string, std::pair<uint32_t, uint32_t>> m_inputAttachmentBindings;
+        bool m_reflectionCached = false;
+        void buildReflectionCache();
+
+        // ---------- 实例独立的渲染状态 ----------
+        RHI::CullMode m_cullMode = RHI::CullMode::None;
+        RHI::FrontFace m_frontFace = RHI::FrontFace::CounterClockwise;
+        RHI::CompareOp m_depthCompareOp = RHI::CompareOp::Less;
+        std::vector<RHI::BlendAttachmentState> m_attachments = { RHI::BlendAttachmentState{} };
+
+        bool m_alphaBlend = false;
+        bool m_depthTestEnable = true;
+        bool m_depthWriteEnable = true;
+        bool m_isDeferred = false;
+
+        Scene::RenderQueue m_queue = Scene::RenderQueue::Opaque;
+        Scene::RenderStage m_stage = Scene::RenderStage::GBuffer;
+
+        std::string m_debugName;
     };
 }

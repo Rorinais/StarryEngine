@@ -61,6 +61,7 @@ namespace StarryEngine {
             globals.proj = camera->getProjMatrix();
             globals.invView = glm::inverse(camera->getViewMatrix());
             globals.invProj = glm::inverse(camera->getProjMatrix());
+			globals.time = deltaTime;
 
             auto* buf = m_resMgr->getBuffer(m_globalUniformBuffer);
             if (buf) {
@@ -140,6 +141,22 @@ namespace StarryEngine {
         descSet->update();
     }
 
+    void Renderer::initDefaultMaterials() {
+        if (m_materialsInitialized) return;
+
+        m_defaultMaterial = Assets::MaterialInstance::createDefault(m_resMgr, m_globalSetLayout, m_globalPool, m_globalDescriptorSet);
+        if (!m_defaultMaterial) {
+            LOG_ERROR("Failed to create default material");
+        }
+
+        m_errorMaterial = Assets::MaterialInstance::createError(m_resMgr, m_globalSetLayout, m_globalPool, m_globalDescriptorSet);
+        if (!m_errorMaterial) {
+            LOG_ERROR("Failed to create error material");
+        }
+
+        m_materialsInitialized = true;
+    }
+
     void Renderer::analysisScene() {
         Scene::AnalysisSceneResult result;
         std::unordered_map<Scene::GraphicsPipelineState, uint32_t, std::hash<Scene::GraphicsPipelineState>> pipelineIndexMap;
@@ -173,10 +190,37 @@ namespace StarryEngine {
                 const auto& submeshes = geometry->getSubmeshes();
                 for (size_t i = 0; i < submeshes.size(); ++i) {
                     const auto& submesh = submeshes[i];
-                    if (submesh.materialIndex >= obj->materials.size()) continue;
 
-                    auto materialInst = obj->materials[submesh.materialIndex];
-                    if (!materialInst) continue;
+                    // 获取材质：优先使用模型提供的材质，否则 fallback 到默认材质
+                    std::shared_ptr<Assets::MaterialInstance> materialInst;
+                    if (submesh.materialIndex < obj->materials.size()) {
+                        materialInst = obj->materials[submesh.materialIndex];
+                    }
+
+                    // ========== Fallback 逻辑开始 ==========
+                    if (!materialInst) {
+                        materialInst = m_defaultMaterial;
+                        if (materialInst) {
+                            LOG_WARN("Missing material for submesh, using default");
+                        }
+                        else {
+                            LOG_ERROR("Default material not available, skipping submesh");
+                            continue;
+                        }
+                    }
+                    else {
+                        // 检查材质是否有效（shader 是否加载成功）
+                        auto tmpl = materialInst->getTemplate();
+                        if (!tmpl || !tmpl->getVertexShader().isValid() || !tmpl->getFragmentShader().isValid()) {
+                            LOG_ERROR("Invalid material (shader missing), using error material");
+                            materialInst = m_errorMaterial;
+                            if (!materialInst) {
+                                LOG_ERROR("Error material not available, skipping submesh");
+                                continue;
+                            }
+                        }
+                    }
+                    // ========== Fallback 逻辑结束 ==========
 
                     if (uniqueMaterials.insert(materialInst.get()).second) {
                         result.materials.push_back(materialInst);

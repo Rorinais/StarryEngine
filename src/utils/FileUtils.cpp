@@ -42,11 +42,18 @@ namespace StarryEngine::Utils {
     std::vector<uint32_t> FileUtils::compileGlslToSpirv(
         const std::string& source,
         const std::string& name,
-        shaderc_shader_kind kind)
+        shaderc_shader_kind kind,
+        const std::unordered_map<std::string, std::string>& macros)
     {
         shaderc::Compiler compiler;
         shaderc::CompileOptions options;
         options.SetOptimizationLevel(shaderc_optimization_level_performance);
+        options.SetGenerateDebugInfo();
+
+        // 注入变体宏
+        for (const auto& [macro, value] : macros) {
+            options.AddMacroDefinition(macro, value);
+        }
 
         auto result = compiler.CompileGlslToSpv(source, kind, name.c_str(), options);
         if (result.GetCompilationStatus() != shaderc_compilation_status_success) {

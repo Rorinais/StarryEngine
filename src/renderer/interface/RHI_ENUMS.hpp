@@ -248,8 +248,8 @@ namespace StarryEngine::RHI {
         Texture2DMultisampleArray
     };
 
-    enum class TextureDimension {
-        Unknown,
+    enum class TextureDimension :uint8_t {
+        Unknown = 0,
         Tex1D,
         Tex2D,
         Tex3D,
@@ -434,47 +434,81 @@ namespace StarryEngine::RHI {
     };
 
     // ==================== 着色器阶段枚举 ====================
-    enum class ShaderStage {
-        Vertex = 0x01,
-        TessellationControl = 0x02,
-        TessellationEvaluation = 0x04,
-        Geometry = 0x08,
-        Fragment = 0x10,
-        Compute = 0x20,
-        Amplification = 0x40,     // DX12 Mesh Shading
-        Mesh = 0x80,              // DX12 Mesh Shading
-        RayGen = 0x100,
-        AnyHit = 0x200,
-        ClosestHit = 0x400,
-        Miss = 0x800,
+    /**
+     * @brief 着色器阶段（单值，用于标识单个 shader module 的类型）
+     */
+    enum class ShaderStage : uint32_t {
+        Vertex = 0x0001,
+        TessellationControl = 0x0002,
+        TessellationEvaluation = 0x0004,
+        Geometry = 0x0008,
+        Fragment = 0x0010,
+        Compute = 0x0020,
+        Amplification = 0x0040,
+        Mesh = 0x0080,
+        RayGen = 0x0100,
+        AnyHit = 0x0200,
+        ClosestHit = 0x0400,
+        Miss = 0x0800,
         Intersection = 0x1000,
         Callable = 0x2000,
-
-        // 组合枚举
-        AllGraphics = Vertex | TessellationControl | TessellationEvaluation | Geometry | Fragment,
-        All = AllGraphics | Compute | RayGen | AnyHit | ClosestHit | Miss | Intersection | Callable
     };
 
-    inline ShaderStage operator|(ShaderStage lhs, ShaderStage rhs) {
-        return static_cast<ShaderStage>(static_cast<uint32_t>(lhs) | static_cast<uint32_t>(rhs));
-    }
-    inline ShaderStage operator&(ShaderStage lhs, ShaderStage rhs) {
-        return static_cast<ShaderStage>(static_cast<uint32_t>(lhs) & static_cast<uint32_t>(rhs));
-    }
-    inline ShaderStage& operator|=(ShaderStage& lhs, ShaderStage rhs) {
-        lhs = lhs | rhs;
-        return lhs;
-    }
-    inline ShaderStage& operator&=(ShaderStage& lhs, ShaderStage rhs) {
-        lhs = lhs & rhs;
-        return lhs;
-    }
-    inline ShaderStage operator~(ShaderStage val) {
-        return static_cast<ShaderStage>(~static_cast<uint32_t>(val));
-    }
-    // 方便将枚举转为整数标志
-    inline uint32_t toFlags(ShaderStage val) {
-        return static_cast<uint32_t>(val);
+    /**
+     * @brief 着色器阶段标志集（位掩码，一个值可包含多个阶段）
+     */
+    struct ShaderStageFlags {
+        uint32_t bits = 0;
+
+        // ── 所有构造函数都标记 constexpr ──
+        constexpr ShaderStageFlags() = default;
+        constexpr ShaderStageFlags(ShaderStage s) : bits(static_cast<uint32_t>(s)) {}
+        explicit constexpr ShaderStageFlags(uint32_t rawBits) : bits(rawBits) {}
+
+        // ── 运算符也加上 constexpr（可选，但推荐，可支持编译期位运算）──
+        constexpr ShaderStageFlags& operator|=(ShaderStage s) {
+            bits |= static_cast<uint32_t>(s);
+            return *this;
+        }
+        constexpr ShaderStageFlags& operator&=(ShaderStage s) {
+            bits &= static_cast<uint32_t>(s);
+            return *this;
+        }
+
+        friend constexpr ShaderStageFlags operator|(ShaderStageFlags f, ShaderStage s) {
+            return ShaderStageFlags{ f.bits | static_cast<uint32_t>(s) };
+        }
+        friend constexpr ShaderStageFlags operator&(ShaderStageFlags f, ShaderStage s) {
+            return ShaderStageFlags{ f.bits & static_cast<uint32_t>(s) };
+        }
+        friend constexpr ShaderStageFlags operator~(ShaderStageFlags f) {
+            constexpr uint32_t kValidMask = 0x3FFF;
+            return ShaderStageFlags{ f.bits & kValidMask };
+        }
+
+        constexpr bool Has(ShaderStage s) const {
+            return (bits & static_cast<uint32_t>(s)) != 0;
+        }
+
+        explicit constexpr operator uint32_t() const { return bits; }
+
+        constexpr bool operator==(const ShaderStageFlags&) const = default;
+
+        static constexpr ShaderStageFlags AllGraphics() {
+            return ShaderStageFlags{ 0x00FFu };  
+        }
+        static constexpr ShaderStageFlags AllRayTracing() {
+            return ShaderStageFlags{ 0x3F00u };
+        }
+        static constexpr ShaderStageFlags All() {
+            return ShaderStageFlags{ 0x3FFFu };
+        }
+    };
+
+    inline constexpr ShaderStageFlags operator|(ShaderStage lhs, ShaderStage rhs) {
+        return ShaderStageFlags{
+            static_cast<uint32_t>(lhs) | static_cast<uint32_t>(rhs)
+        };
     }
 
     // ==================== 采样器枚举 ====================

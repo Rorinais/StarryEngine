@@ -17,12 +17,14 @@ namespace StarryEngine::Assets {
         ~ShaderLoader() = default;
 
         // 从文件加载单个阶段，返回创建信息
-        std::optional<ShaderCreateInfo> loadFromFile(const std::string& path, RHI::ShaderStage stage);
+        std::optional<ShaderCreateInfo> loadFromFile(const std::string& path, RHI::ShaderStage stage,
+            const std::unordered_map<std::string, std::string>& macros = {});
 
         // 从源码加载单个阶段
         std::optional<ShaderCreateInfo> loadFromSource(const std::string& source,
             RHI::ShaderStage stage,
-            const std::string& name = "");
+            const std::string& name = "",
+            const std::unordered_map<std::string, std::string>& macros = {});
 
         void clearCache();
 
@@ -32,14 +34,27 @@ namespace StarryEngine::Assets {
         // 编译 GLSL 到 SPIR-V
         std::vector<uint32_t> compileToSpirv(const std::string& source,
             RHI::ShaderStage stage,
-            const std::string& name);
+            const std::string& name,
+            const std::unordered_map<std::string, std::string>& macros = {});
 
         // 反射 SPIR-V，提取资源绑定和输入布局，并创建描述符集布局
         bool reflectAndCreateLayouts(const std::vector<uint32_t>& spirv,
             ShaderCreateInfo& outInfo);
+        void fillTextureInfo(const spirv_cross::SPIRType& type,RHI::ResourceBinding::TextureInfo& info);
+
+        void flattenUBOMembers(
+            const spirv_cross::CompilerGLSL& compiler,
+            const spirv_cross::SPIRType& type,
+            uint32_t baseOffset,
+            const std::string& baseName,
+            std::vector<RHI::BufferMember>& flatMembers);
+
+        RHI::Format spirvImageFormatToRHI(spv::ImageFormat fmt);
 
         RHI::ShaderStage getShaderStageFromSpirv(const spirv_cross::Compiler& compiler) const;
         RHI::Format spirvTypeToFormat(const spirv_cross::SPIRType& type) const;
+
+        static uint32_t getTypeSize(const spirv_cross::SPIRType& type);
 
         size_t computeHash(const std::string& source, RHI::ShaderStage stage) const;
         mutable std::mutex m_cacheMutex;                         

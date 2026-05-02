@@ -17,6 +17,7 @@ namespace StarryEngine {
         ~Renderer();
 
         void destroy();
+        void initDefaultMaterials();
         void renderFrame(RHI::RHICommandEncoder* encoder, uint32_t frameIndex, float deltaTime);
         void onResize(uint32_t width, uint32_t height);
         void setRenderPath(std::shared_ptr<IRenderPath> newRenderPath);
@@ -42,5 +43,9 @@ namespace StarryEngine {
         std::shared_ptr<Scene::Scene> m_scene;
         std::shared_ptr<Scene::AnalysisSceneResult> m_analysisSceneResult;
         uint32_t m_lastAnalyzedVersion = UINT32_MAX;
+
+        std::shared_ptr<Assets::MaterialInstance> m_defaultMaterial;
+        std::shared_ptr<Assets::MaterialInstance> m_errorMaterial;
+        bool m_materialsInitialized = false;
     };
 }

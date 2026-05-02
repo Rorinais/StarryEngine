@@ -78,14 +78,27 @@ namespace StarryEngine {
 
         GetEventDispatcher().subscribe(EventType::WindowResize, [this](IEvent& e) {
             auto& ev = static_cast<WindowResizeEvent&>(e);
-            m_width = ev.getWidth();
-            m_height = ev.getHeight();
+            int newWidth = ev.getWidth();
+            int newHeight = ev.getHeight();
+
+            // 防止最小化时出现零尺寸
+            if (newWidth == 0 || newHeight == 0) {
+                // 仍然记录尺寸变化，但跳过相机投影更新
+                m_width = newWidth;
+                m_height = newHeight;
+                m_framebufferResized = true;
+                return;
+            }
+
+            m_width = newWidth;
+            m_height = newHeight;
             m_framebufferResized = true;
 
             if (m_scene && m_scene->getActiveCamera()) {
                 auto cam = std::dynamic_pointer_cast<Scene::PerspectiveCamera>(m_scene->getActiveCamera());
                 if (cam) {
-                    cam->setPerspective(cam->getFov(), (float)m_width / m_height, cam->getNear(), cam->getFar());
+                    float aspect = static_cast<float>(m_width) / static_cast<float>(m_height);
+                    cam->setPerspective(cam->getFov(), aspect, cam->getNear(), cam->getFar());
                     cam->updateProjection();
                 }
             }

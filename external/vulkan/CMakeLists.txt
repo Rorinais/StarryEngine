@@ -19,15 +19,26 @@ if(WIN32)
         INTERFACE_INCLUDE_DIRECTORIES "${VULKAN_INC_DIR}"
     )
 
-    set_target_properties(spirv-cross-core PROPERTIES
-        IMPORTED_LOCATION     "${VULKAN_LIB_DIR}/spirv_cross/spirv-cross-cored.lib"
-        INTERFACE_INCLUDE_DIRECTORIES "${VULKAN_INC_DIR}"
-    )
+    if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+        set_target_properties(spirv-cross-core PROPERTIES
+            IMPORTED_LOCATION     "${VULKAN_LIB_DIR}/spirv_cross/spirv-cross-cored.lib"
+            INTERFACE_INCLUDE_DIRECTORIES "${VULKAN_INC_DIR}"
+        )
 
-    set_target_properties(spirv-cross-glsl PROPERTIES
-        IMPORTED_LOCATION    "${VULKAN_LIB_DIR}/spirv_cross/spirv-cross-glsld.lib"
-        INTERFACE_INCLUDE_DIRECTORIES "${VULKAN_INC_DIR}"
-    )
+        set_target_properties(spirv-cross-glsl PROPERTIES
+            IMPORTED_LOCATION    "${VULKAN_LIB_DIR}/spirv_cross/spirv-cross-glsld.lib"
+            INTERFACE_INCLUDE_DIRECTORIES "${VULKAN_INC_DIR}"
+        )
+    else()
+        set_target_properties(spirv-cross-core PROPERTIES
+            IMPORTED_LOCATION     "${VULKAN_LIB_DIR}/spirv_cross/spirv-cross-core.lib"
+            INTERFACE_INCLUDE_DIRECTORIES "${VULKAN_INC_DIR}"
+        )
+        set_target_properties(spirv-cross-glsl PROPERTIES
+            IMPORTED_LOCATION    "${VULKAN_LIB_DIR}/spirv_cross/spirv-cross-glsl.lib"
+            INTERFACE_INCLUDE_DIRECTORIES "${VULKAN_INC_DIR}"
+        )
+    endif()
 
 elseif(UNIX AND NOT APPLE)
     set_target_properties(vulkan PROPERTIES

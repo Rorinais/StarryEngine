@@ -48,6 +48,8 @@ namespace StarryEngine {
         std::unordered_map<std::string, RenderGraph::TextureId> m_textureIdMap;
 
         std::string m_swapchainTextureName = "Swapchain";
+
+        bool m_resourceStatsPrinted = false;
     };
 
 } // namespace StarryEngine

@@ -3,13 +3,12 @@
 
 namespace StarryEngine::Assets {
 
-    VertexLayout& VertexLayout::addBinding(uint32_t binding, uint32_t stride, RHI::VertexInputRate inputRate) {
-        mBindings[binding] = { stride, inputRate };
+    VertexLayout& VertexLayout::addBinding(uint32_t binding, uint32_t stride,RHI::VertexInputRate inputRate) {
+        mBindings[binding] = { stride, inputRate, (stride == 0) };
         return *this;
     }
 
-    VertexLayout& VertexLayout::addAttribute(uint32_t location, uint32_t binding,
-        RHI::Format format, uint32_t offset) {
+    VertexLayout& VertexLayout::addAttribute(uint32_t location, uint32_t binding,RHI::Format format, uint32_t offset) {
         RHI::VertexAttribute attr{};
         attr.location = location;
         attr.binding = binding;
@@ -23,9 +22,53 @@ namespace StarryEngine::Assets {
         uint32_t offset = getNextOffset(binding);
         uint32_t size = getFormatSize(format);
         addAttribute(location, binding, format, offset);
-        mBindingCurrentOffsets[binding] = offset + size;
+
+        // 更新自动 stride
+        if (mBindings[binding].autoStride) {
+            mBindingCurrentOffsets[binding] = offset + size;
+            mBindings[binding].stride = std::max(mBindings[binding].stride, offset + size);
+        }
         return *this;
     }
+
+    VertexLayout& VertexLayout::addAttribute(VertexSemantic semantic, uint32_t binding,
+        RHI::Format format) {
+        uint32_t location = getLocationForSemantic(semantic);
+        if (location == UINT32_MAX) {
+            LOG_ERROR("No location mapping for semantic %d", (int)semantic);
+            return *this;
+        }
+        uint32_t offset = getNextOffset(binding);
+        uint32_t size = getFormatSize(format);
+
+        RHI::VertexAttribute attr{};
+        attr.location = location;
+        attr.binding = binding;
+        attr.format = format;
+        attr.offset = offset;
+        mAttributes.push_back(attr);
+
+        m_appAttributes.push_back({ semantic, binding, format, offset });
+
+        // 更新自动 stride
+        if (mBindings[binding].autoStride) {
+            mBindingCurrentOffsets[binding] = offset + size;
+            mBindings[binding].stride = std::max(mBindings[binding].stride, offset + size);
+        }
+        return *this;
+    }
+
+    uint32_t VertexLayout::getLocationForSemantic(VertexSemantic sem) const {
+        if (m_hasCustomMapping) {
+            auto it = m_semanticMapping.find(sem);
+            if (it != m_semanticMapping.end()) return it->second;
+            return UINT32_MAX;  
+        }
+
+        auto defIt = DefaultSemanticLocation.find(sem);
+        return (defIt != DefaultSemanticLocation.end()) ? defIt->second : UINT32_MAX;
+    }
+
 
     RHI::VertexInputState VertexLayout::build() const {
         RHI::VertexInputState state;
@@ -173,12 +216,11 @@ namespace StarryEngine::Assets {
 
     VertexLayout VertexLayout::makeInstancingLayout(uint32_t binding) {
         VertexLayout layout;
-        layout.addBinding(binding, sizeof(glm::mat4), RHI::VertexInputRate::PerInstance);
-        // 矩阵的4行，每行一个 vec4，自动计算偏移
-        layout.addAttribute(3, binding, RHI::Format::RGBA32_Float); // 行0
-        layout.addAttribute(4, binding, RHI::Format::RGBA32_Float); // 行1
-        layout.addAttribute(5, binding, RHI::Format::RGBA32_Float); // 行2
-        layout.addAttribute(6, binding, RHI::Format::RGBA32_Float); // 行3
+        layout.addBinding(binding, 0, RHI::VertexInputRate::PerInstance);
+        layout.addAttribute(VertexSemantic::InstanceMatrixRow0, binding, RHI::Format::RGBA32_Float);
+        layout.addAttribute(VertexSemantic::InstanceMatrixRow1, binding, RHI::Format::RGBA32_Float);
+        layout.addAttribute(VertexSemantic::InstanceMatrixRow2, binding, RHI::Format::RGBA32_Float);
+        layout.addAttribute(VertexSemantic::InstanceMatrixRow3, binding, RHI::Format::RGBA32_Float);
         return layout;
     }
 }

@@ -14,7 +14,6 @@
 #include "../renderer/backend/RHIFactory.hpp"
 #include "../renderer/interface/RHI_TYPES.hpp"
 #include "../scene/camera/CameraController.hpp"
-#include "../assets/geometry/GeomtryCreateFunc.hpp"
 #include "../renderer/subpassRecorder/GbufferRecorder.hpp"
 #include "../renderer/subpassRecorder/DeferredLightingRecorder.hpp"
 

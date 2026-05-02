@@ -3,6 +3,7 @@
 #include "RHI_HANDLES_SYSTEM.hpp"
 #include <cstdint>
 #include <array>
+#include <optional>
 #include <glm/glm.hpp>
 
 namespace StarryEngine::RHI {
@@ -441,131 +442,174 @@ namespace StarryEngine::RHI {
     };
 
     /**
+     * @brief 输入属性结构体
+     */
+    struct InputAttribute {
+        std::string name;      ///< 属性名称
+        uint32_t location;     ///< 位置索引
+        Format format;         ///< 格式
+
+        bool operator==(const InputAttribute& other) const {
+            return name == other.name &&
+                location == other.location &&
+                format == other.format;
+        }
+
+        bool operator!=(const InputAttribute& other) const {
+            return !(*this == other);
+        }
+    };
+
+    /**
+     * @brief 输出属性结构体
+     */
+    struct OutputAttribute {
+        std::string name;      ///< 属性名称
+        uint32_t location;     ///< 位置索引
+        Format format;         ///< 格式
+
+        bool operator==(const OutputAttribute& other) const {
+            return name == other.name &&
+                location == other.location &&
+                format == other.format;
+        }
+
+        bool operator!=(const OutputAttribute& other) const {
+            return !(*this == other);
+        }
+    };
+
+
+    /**
+     * @brief UBO/SSBO 内部成员（深度反射）
+     * @details 描述一个 uniform/storage buffer 内部的字段信息
+     */
+    struct BufferMember {
+        std::string name;      ///< 字段名称（如 "viewProj", "albedo"）
+        uint32_t    offset;    ///< 在 buffer 内的字节偏移
+        uint32_t    size;      ///< 字节大小
+        Format      format;    ///< 类型（如 R32G32B32A32_SFLOAT 表示 vec4）
+
+        bool operator==(const BufferMember& other) const {
+            return name == other.name &&
+                offset == other.offset &&
+                size == other.size &&
+                format == other.format;
+        }
+
+        bool operator!=(const BufferMember& other) const {
+            return !(*this == other);
+        }
+    };
+
+    /**
+     * @brief 资源绑定结构体
+     */
+    struct ResourceBinding {
+        std::string name;
+        uint32_t    set;
+        uint32_t    binding;
+        DescriptorType type;
+        uint32_t    count;
+        ShaderStageFlags stageFlags;
+
+        // ── UBO/SSBO 内部成员（仅 buffer 有效）──
+        std::vector<BufferMember> members;
+
+        // ── 纹理元信息（仅 texture 类型有效）──
+        struct TextureInfo {
+            TextureDimension dimension;// 1=1D, 2=2D, 3=3D, Cube=6
+            bool        isArray;      // 是否是 Array 纹理
+            bool        isMultisample;// 是否有多重采样
+            Format      imageFormat;  // 存储图像的内部格式（仅 StorageImage 有效）
+
+            bool operator==(const TextureInfo&) const = default;
+        };
+        std::optional<TextureInfo> texture;  // 非纹理类型时为 std::nullopt
+
+        bool operator==(const ResourceBinding& other) const {
+            return name == other.name &&
+                set == other.set &&
+                binding == other.binding &&
+                type == other.type &&
+                count == other.count &&
+                stageFlags == other.stageFlags &&
+                members == other.members &&
+                texture == other.texture;
+        }
+
+        bool operator!=(const ResourceBinding& other) const {
+            return !(*this == other);
+        }
+    };
+
+    /**
+     * @brief 推送常量结构体
+     */
+    struct PushConstant {
+        std::string name;      ///< 常量名称
+        uint32_t offset;       ///< 偏移量
+        uint32_t size;         ///< 大小
+        ShaderStageFlags  stageFlags;     ///< 着色器阶段
+
+        std::vector<BufferMember> members;   // 内部成员列表
+
+        bool operator==(const PushConstant& other) const {
+            return name == other.name &&
+                offset == other.offset &&
+                size == other.size &&
+                stageFlags == other.stageFlags &&
+                members == other.members;
+        }
+
+        bool operator!=(const PushConstant& other) const {
+            return !(*this == other);
+        }
+    };
+
+    /**
+     * @brief 常量结构体
+     */
+    struct SpecConstant {
+        std::string name;      ///< 常量名称
+        uint32_t constantId;  ///< specialization constant ID
+        uint32_t size;         ///< 大小
+
+        bool operator==(const SpecConstant& other) const {
+            return name == other.name &&
+                constantId == other.constantId &&
+                size == other.size;
+        }
+
+        bool operator!=(const SpecConstant& other) const {
+            return !(*this == other);
+        }
+    };
+
+    /**
      * @brief 着色器反射信息结构体
      * @details 包含从着色器字节码中提取的反射信息
      */
     struct ShaderReflectionInfo {
-        /**
-         * @brief 输入属性结构体
-         */
-        struct InputAttribute {
-            std::string name;      ///< 属性名称
-            uint32_t location;     ///< 位置索引
-            Format format;         ///< 格式
-            uint32_t offset;       ///< 偏移量
-
-            bool operator==(const InputAttribute& other) const {
-                return name == other.name &&
-                    location == other.location &&
-                    format == other.format &&
-                    offset == other.offset;
-            }
-
-            bool operator!=(const InputAttribute& other) const {
-                return !(*this == other);
-            }
-        };
-
-        /**
-         * @brief 输出属性结构体
-         */
-        struct OutputAttribute {
-            std::string name;      ///< 属性名称
-            uint32_t location;     ///< 位置索引
-            Format format;         ///< 格式
-
-            bool operator==(const OutputAttribute& other) const {
-                return name == other.name &&
-                    location == other.location &&
-                    format == other.format;
-            }
-
-            bool operator!=(const OutputAttribute& other) const {
-                return !(*this == other);
-            }
-        };
-
-        /**
-         * @brief 资源绑定结构体
-         */
-        struct ResourceBinding {
-            std::string name;      ///< 资源名称
-            uint32_t binding;      ///< 绑定索引
-            uint32_t set;          ///< 描述符集索引
-            DescriptorType type;   ///< 描述符类型
-            uint32_t count;        ///< 数组元素数量
-            ShaderStage stage;     ///< 着色器阶段
-
-            bool operator==(const ResourceBinding& other) const {
-                return name == other.name &&
-                    binding == other.binding &&
-                    set == other.set &&
-                    type == other.type &&
-                    count == other.count &&
-                    stage == other.stage;
-            }
-
-            bool operator!=(const ResourceBinding& other) const {
-                return !(*this == other);
-            }
-        };
-
-        /**
-         * @brief 推送常量结构体
-         */
-        struct PushConstant {
-            std::string name;      ///< 常量名称
-            uint32_t offset;       ///< 偏移量
-            uint32_t size;         ///< 大小
-            ShaderStage stage;     ///< 着色器阶段
-
-            bool operator==(const PushConstant& other) const {
-                return name == other.name &&
-                    offset == other.offset &&
-                    size == other.size &&
-                    stage == other.stage;
-            }
-
-            bool operator!=(const PushConstant& other) const {
-                return !(*this == other);
-            }
-        };
-
-        /**
-         * @brief 常量结构体
-         */
-        struct Constant {
-            std::string name;      ///< 常量名称
-            uint32_t offset;       ///< 偏移量
-            uint32_t size;         ///< 大小
-
-            bool operator==(const Constant& other) const {
-                return name == other.name &&
-                    offset == other.offset &&
-                    size == other.size;
-            }
-
-            bool operator!=(const Constant& other) const {
-                return !(*this == other);
-            }
-        };
+        ShaderStage shaderStage;
 
         std::vector<InputAttribute> inputAttributes;     ///< 输入属性列表
         std::vector<OutputAttribute> outputAttributes;   ///< 输出属性列表
         std::vector<ResourceBinding> resourceBindings;   ///< 资源绑定列表
         std::vector<PushConstant> pushConstants;         ///< 推送常量列表
-        std::vector<Constant> constants;                 ///< 常量列表
+        std::vector<SpecConstant> specConstants;         ///< 特化常量列表
 
         uint32_t workGroupSizeX = 1;    ///< 工作组X大小
         uint32_t workGroupSizeY = 1;    ///< 工作组Y大小
         uint32_t workGroupSizeZ = 1;    ///< 工作组Z大小
 
         bool operator==(const ShaderReflectionInfo& other) const {
-            return inputAttributes == other.inputAttributes &&
+            return shaderStage == other.shaderStage &&  
+                inputAttributes == other.inputAttributes &&
                 outputAttributes == other.outputAttributes &&
                 resourceBindings == other.resourceBindings &&
                 pushConstants == other.pushConstants &&
-                constants == other.constants &&
+                specConstants == other.specConstants &&
                 workGroupSizeX == other.workGroupSizeX &&
                 workGroupSizeY == other.workGroupSizeY &&
                 workGroupSizeZ == other.workGroupSizeZ;
@@ -1143,7 +1187,7 @@ namespace StarryEngine::RHI {
         uint32_t binding = 0;                     ///< 绑定索引
         DescriptorType type = DescriptorType::UniformBuffer; ///< 描述符类型
         uint32_t count = 1;                       ///< 数组元素个数
-        ShaderStage stageFlags = ShaderStage::Vertex; ///< 可见的着色器阶段
+        ShaderStageFlags stageFlags = ShaderStage::Vertex; ///< 可见的着色器阶段
         bool immutableSamplers = false;           ///< 是否为不可变采样器
         std::vector<SamplerDesc> samplerDescs;    ///< 不可变采样器描述
 
@@ -1311,12 +1355,12 @@ namespace StarryEngine::RHI {
      * @details 描述推送常量的内存布局
      */
     struct PushConstantRange {
-        ShaderStage stage = ShaderStage::Vertex; ///< 可见的着色器阶段
+        ShaderStageFlags stageFlags = ShaderStage::Vertex; ///< 可见的着色器阶段
         uint32_t offset = 0;                     ///< 偏移量
         uint32_t size = 0;                       ///< 大小
 
         bool operator==(const PushConstantRange& other) const {
-            return stage == other.stage && offset == other.offset && size == other.size;
+            return stageFlags == other.stageFlags && offset == other.offset && size == other.size;
         }
 
         bool operator!=(const PushConstantRange& other) const {

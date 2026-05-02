@@ -65,6 +65,12 @@ namespace std {
         }
     };
 
+    template<> struct hash<StarryEngine::RHI::ShaderStageFlags> {
+        size_t operator()(const StarryEngine::RHI::ShaderStageFlags& flags) const noexcept {
+            return static_cast<size_t>(static_cast<uint32_t>(flags));
+        }
+    };
+
     template<> struct hash<StarryEngine::RHI::DescriptorType> {
         size_t operator()(StarryEngine::RHI::DescriptorType val) const noexcept {
             return static_cast<size_t>(val);
@@ -222,7 +228,7 @@ namespace std {
     template<> struct hash<StarryEngine::RHI::PushConstantRange> {
         size_t operator()(const StarryEngine::RHI::PushConstantRange& pc) const {
             size_t seed = 0;
-            StarryEngine::Utils::hash_combine(seed, pc.stage);
+            StarryEngine::Utils::hash_combine(seed, pc.stageFlags);
             StarryEngine::Utils::hash_combine(seed, pc.offset);
             StarryEngine::Utils::hash_combine(seed, pc.size);
             return seed;

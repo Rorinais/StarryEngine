@@ -104,6 +104,10 @@ namespace StarryEngine::Assets {
         virtual std::string getDebugName() { return m_debugName; }
 
         virtual const InstancingLayout* getInstancingLayout() const { return nullptr; }
+
+        virtual const RHI::ShaderReflectionInfo& getVSReflection() const = 0;
+        virtual const RHI::ShaderReflectionInfo& getFSReflection() const = 0;
+
     private:
         //全局渲染管线布局缓存，将管线描述hash，作为键，因为管线描述之和描述符布局与常量推送布局有关系
         //如果以创建相同的管线布局，则使用缓存中的布局，否则通过描述符布局生成创建新的管线布局

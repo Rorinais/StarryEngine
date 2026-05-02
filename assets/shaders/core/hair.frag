@@ -5,15 +5,7 @@ layout(location = 1) in vec3 fragNormal;
 
 layout(location = 0) out vec4 outColor;
 
-layout(set = 1, binding = 0) uniform MaterialUniforms {
-    vec4 baseColor;
-    float metallic;
-    float roughness;
-    float emissiveIntensity;
-    vec3 emissiveColor;
-} material;
-
-layout(set = 1, binding = 1) uniform sampler2D texSampler;
+layout(set = 1, binding = 0) uniform sampler2D texSampler;
 
 float halfLambert(vec3 Nomal,vec3 L){
     float NOL=dot(Nomal,L);
@@ -28,5 +20,5 @@ void main() {
     vec3 shadowColor=vec3(texture(texSampler, fragTexCoord).xyz)*0.5;
 
 
-    outColor = mix(vec4(shadowColor,1.0f),texture(texSampler, fragTexCoord),smoothstep(0.35,0.4,halfLambert));
+    outColor =vec4(fragTexCoord,1.0,1.0) ;
 }
