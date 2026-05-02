@@ -220,10 +220,10 @@ DataSet createRenderer(std::shared_ptr<RHI::IRHI> rhi, RHI::DescriptorPoolHandle
     modelObj->transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 2.5f));
     scene->addObject(modelObj);
 
-    //auto SphereObj = std::make_shared<Scene::RenderObject>();
-    //SphereObj->geometry = Assets::GeometryGenerator::createSphere(rhi->getResourceManager(),1.0f);
+    auto SphereObj = std::make_shared<Scene::RenderObject>();
+    SphereObj->geometry = Assets::GeometryGenerator::createSphere(rhi->getResourceManager(),1.0f);
     //SphereObj->geometry = modelMeshData.geometry;
-    //SphereObj->materials = { createPbrMaterial(rhi->getResourceManager(), globalDescriptorData) };
+    SphereObj->materials = { createPbrMaterial(rhi->getResourceManager(), globalDescriptorData) };
 
     //const auto& submeshes = modelMeshData.geometry->getSubmeshes();
     //size_t submeshCount = submeshes.size();
@@ -233,16 +233,16 @@ DataSet createRenderer(std::shared_ptr<RHI::IRHI> rhi, RHI::DescriptorPoolHandle
     //}
 
     //SphereObj->materials = pbrMaterials;
-    //SphereObj->transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-    //scene->addObject(SphereObj);
+    SphereObj->transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+    scene->addObject(SphereObj);
 
-    //auto QuadObj = std::make_shared<Scene::RenderObject>();
-    //QuadObj->geometry = Assets::GeometryGenerator::createQuad(rhi->getResourceManager());
-    //glm::mat4 scale = glm::scale(glm::mat4(1.0f), glm::vec3(20.0f, 20.0f, 20.0f));
-    //glm::mat4 translation = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.01f, 0.0f));
-    //glm::mat4 rotation = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f)); 
-    //QuadObj->transform = translation * rotation * scale;
-    //scene->addObject(QuadObj);
+    auto QuadObj = std::make_shared<Scene::RenderObject>();
+    QuadObj->geometry = Assets::GeometryGenerator::createQuad(rhi->getResourceManager());
+    glm::mat4 scale = glm::scale(glm::mat4(1.0f), glm::vec3(20.0f, 20.0f, 20.0f));
+    glm::mat4 translation = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.01f, 0.0f));
+    glm::mat4 rotation = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f)); 
+    QuadObj->transform = translation * rotation * scale;
+    scene->addObject(QuadObj);
 
     //auto cubeObj = std::make_shared<Scene::RenderObject>();
     //cubeObj->geometry = Assets::GeometryGenerator::createCube(rhi->getResourceManager());
@@ -266,12 +266,12 @@ DataSet createRenderer(std::shared_ptr<RHI::IRHI> rhi, RHI::DescriptorPoolHandle
     //SphereObj->transform = glm::mat4(1.0f);
     //scene->addObject(SphereObj);
 
-    //auto gridMeshData = createGrid(rhi->getResourceManager(), globalDescriptorData);
-    //auto gridObj = std::make_shared<Scene::RenderObject>();
-    //gridObj->geometry = gridMeshData.geometry;
-    //gridObj->materials = gridMeshData.materials;
-    //gridObj->transform = glm::scale(glm::translate(glm::mat4(1.0f), glm::vec3(0, 0, 0)), glm::vec3(5, 5, 5));
-    //scene->addObject(gridObj);
+    auto gridMeshData = createGrid(rhi->getResourceManager(), globalDescriptorData);
+    auto gridObj = std::make_shared<Scene::RenderObject>();
+    gridObj->geometry = gridMeshData.geometry;
+    gridObj->materials = gridMeshData.materials;
+    gridObj->transform = glm::scale(glm::translate(glm::mat4(1.0f), glm::vec3(0, 0, 0)), glm::vec3(5, 5, 5));
+    scene->addObject(gridObj);
 
 
     auto perspectiveCamera = std::make_shared<Scene::PerspectiveCamera>();
@@ -349,12 +349,12 @@ ModelData createModel(std::shared_ptr<RHI::ResourceManager> resMgr, GlobalDescri
     std::vector<std::shared_ptr<Assets::MaterialInstance>> materialInstances;
 
     for (auto& param : params) {
-        std::string fsPath= "assets/shaders/core/shader.frag";
-        //if (param.name == "body") fsPath = "assets/shaders/core/shader.frag";
-        //else if (param.name == "brow") fsPath = "assets/shaders/core/shader.frag";
-        //else if (param.name == "eyes") fsPath = "assets/shaders/core/shader.frag";
-        //else if (param.name == "face") fsPath = "assets/shaders/core/shader.frag";
-        //else fsPath = "assets/shaders/core/shader.frag";
+        std::string fsPath;
+        if (param.name == "body") fsPath = "assets/shaders/core/shader.frag";
+        else if (param.name == "brow") fsPath = "assets/shaders/core/shader.frag";
+        else if (param.name == "eyes") fsPath = "assets/shaders/core/shader.frag";
+        else if (param.name == "face") fsPath = "assets/shaders/core/face.frag";
+        else fsPath = "assets/shaders/core/hair.frag";
 
         auto tmpl = std::make_shared<Assets::DefaultMaterialTemplate>(resMgr, data.globalSetLayout);
         if (!tmpl->loadShaders("assets/shaders/core/shader.vert", fsPath)) {
@@ -363,7 +363,7 @@ ModelData createModel(std::shared_ptr<RHI::ResourceManager> resMgr, GlobalDescri
         }
 
         LOG_INFO("createModel:fsPath{}", fsPath);
-        auto material = std::make_shared<Assets::MaterialInstance>(tmpl, data.globalDescriptorPool, resMgr.get(), data.globalDescriptorSet);
+        auto instance = std::make_shared<Assets::MaterialInstance>(tmpl, data.globalDescriptorPool, resMgr.get(), data.globalDescriptorSet);
 
         if (!param.albedoTexture.empty()) {
             Assets::TextureLoader loader(resMgr);
@@ -372,7 +372,7 @@ ModelData createModel(std::shared_ptr<RHI::ResourceManager> resMgr, GlobalDescri
 
             
             if (texResult.texture.isValid()) {
-                material->setTexture("texSampler", texResult.texture, texResult.sampler);
+                instance->setTexture("texSampler", texResult.texture, texResult.sampler);
             }
             else {
                 LOG_ERROR("Failed to load texture: {}", param.albedoTexture);
@@ -382,11 +382,11 @@ ModelData createModel(std::shared_ptr<RHI::ResourceManager> resMgr, GlobalDescri
             LOG_WARN("Material {} has no albedo texture", param.name);
         }
 
-        material->setRenderStage(Scene::RenderStage::Forward);
-        material->setRenderQueue(Scene::RenderQueue::Opaque);
-        material->setDepthTest(true);
-        material->setDepthWrite(true);
-        materialInstances.push_back(material);
+        instance->setRenderStage(Scene::RenderStage::Forward);
+        instance->setRenderQueue(Scene::RenderQueue::Opaque);
+        instance->setDepthTest(true);
+        instance->setDepthWrite(true);
+        materialInstances.push_back(instance);
     }
 
     return ModelData(geometry, materialInstances);

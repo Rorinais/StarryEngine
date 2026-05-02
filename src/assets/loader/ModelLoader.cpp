@@ -48,27 +48,28 @@ namespace StarryEngine::Assets {
         }
 
         uint32_t binding = 0;
-        uint32_t stride = 0;
-        uint32_t offset = 0;
+        uint32_t currentOffset = 0;
+
+        layout.addBinding(binding, 0, RHI::VertexInputRate::PerVertex);
 
         // 约定 location 顺序：位置=0，法线=1，UV=2，切线=3
         if (hasPos) {
             layout.addAttribute(0, binding, RHI::Format::RGB32_Float);
-            offset += 12;
+            currentOffset += 12;
         }
         if (hasNormal) {
             layout.addAttribute(1, binding, RHI::Format::RGB32_Float);
-            offset += 12;
+            currentOffset += 12;
         }
         if (hasUV) {
             layout.addAttribute(2, binding, RHI::Format::RG32_Float);
-            offset += 8;
+            currentOffset += 8;
         }
         if (hasTangent) {
             layout.addAttribute(3, binding, RHI::Format::RGB32_Float);
-            offset += 12;
+            currentOffset += 12;
         }
-        layout.addBinding(binding, stride = offset, RHI::VertexInputRate::PerVertex);
+        layout.addBinding(binding, currentOffset, RHI::VertexInputRate::PerVertex);
 
         // 递归处理节点，填充顶点和索引
         std::function<void(aiNode*, const glm::mat4&)> processNode;
@@ -84,7 +85,7 @@ namespace StarryEngine::Assets {
 
             for (unsigned int i = 0; i < node->mNumMeshes; ++i) {
                 aiMesh* mesh = scene->mMeshes[node->mMeshes[i]];
-                processMesh(mesh, vertices, indices, submeshes, layout, stride, globalTransform);
+                processMesh(mesh, vertices, indices, submeshes, layout, currentOffset, globalTransform);
             }
             for (unsigned int i = 0; i < node->mNumChildren; ++i) {
                 processNode(node->mChildren[i], parentTransform);
