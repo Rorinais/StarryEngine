@@ -81,8 +81,8 @@ namespace StarryEngine::Assets {
             addPush(m_vsReflection);
             addPush(m_fsReflection);
         }
-        LOG_INFO(m_vsReflection);
-        LOG_INFO(m_fsReflection);
+        //LOG_INFO(m_vsReflection);
+        //LOG_INFO(m_fsReflection);
 
         return true;
     }

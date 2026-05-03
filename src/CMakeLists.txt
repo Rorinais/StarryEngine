@@ -25,6 +25,8 @@ set(FONTS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../assets/fonts")
 set(MODELS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../assets/models")
 set(TEXTURES_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../assets/textures")
 set(ICONS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../assets/icons")
+set(CONFIG_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../assets/configs")
+set(MATERIAL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../assets/materials")
 
 # 添加子目录（库）
 add_subdirectory(core)
@@ -46,6 +48,8 @@ add_engine_executable(
     MODELS_DIR ${MODELS_DIR}
     TEXTURES_DIR ${TEXTURES_DIR}
     ICONS_DIR ${ICONS_DIR}
+    CONFIG_DIR ${CONFIG_DIR}
+    MATERIAL_DIR ${MATERIAL_DIR}
 )
 
 add_engine_executable(

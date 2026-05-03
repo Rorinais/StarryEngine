@@ -22,8 +22,6 @@ namespace StarryEngine::Scene {
 
     struct ProceduralEffect {
         std::shared_ptr<Assets::MaterialInstance> material;
-        RenderStage stage = RenderStage::PostProcess;
-        RenderQueue queue = RenderQueue::Opaque;
         uint32_t vertexCount = 3;       
         uint32_t instanceCount = 1;     
         int order = 0;                 

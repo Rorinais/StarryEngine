@@ -1,6 +1,6 @@
 
 function(copy_target_resources TARGET_NAME RESOURCES_OUTPUT_DIR)
-    cmake_parse_arguments(ARG "" "SHADERS;FONTS;MODELS;TEXTURES;ICONS" "" ${ARGN})
+    cmake_parse_arguments(ARG "" "SHADERS;FONTS;MODELS;TEXTURES;ICONS;CONFIG;MATERIAL" "" ${ARGN})
 
     get_target_property(TARGET_OUTPUT_DIR ${TARGET_NAME} RUNTIME_OUTPUT_DIRECTORY)
     set(ASSETS_DEST "${TARGET_OUTPUT_DIR}/assets")
@@ -9,6 +9,51 @@ function(copy_target_resources TARGET_NAME RESOURCES_OUTPUT_DIR)
 
     set(ALL_RESOURCE_FILES "")
     set(ALL_COPY_COMMANDS "")
+
+    if(ARG_CONFIG)
+        file(GLOB_RECURSE CONFIG_FILES CONFIGURE_DEPENDS
+            "${ARG_CONFIG}/*.json"
+            "${ARG_CONFIG}/*.yaml"
+            "${ARG_CONFIG}/*.ini"
+            "${ARG_CONFIG}/*.cfg"
+        )
+        foreach(cfg_file IN LISTS CONFIG_FILES)
+            file(RELATIVE_PATH relative_path "${ARG_CONFIG}" "${cfg_file}")
+            set(final_dest "${ASSETS_DEST}/configs/${relative_path}")
+            get_filename_component(final_dir "${final_dest}" DIRECTORY)
+            list(APPEND ALL_COPY_COMMANDS
+                COMMAND ${CMAKE_COMMAND} -E make_directory "${final_dir}"
+            )
+            list(APPEND ALL_COPY_COMMANDS
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${cfg_file}"
+                    "${final_dest}"
+            )
+            list(APPEND ALL_RESOURCE_FILES "${final_dest}")
+        endforeach()
+    endif()
+
+    if(ARG_MATERIAL)
+        file(GLOB_RECURSE MATERIAL_FILES CONFIGURE_DEPENDS
+            "${ARG_MATERIAL}/*.json"
+            "${ARG_MATERIAL}/*.mat"
+            "${ARG_MATERIAL}/*.cfg"
+        )
+        foreach(mat_file IN LISTS MATERIAL_FILES)             
+            file(RELATIVE_PATH relative_path "${ARG_MATERIAL}" "${mat_file}")
+            set(final_dest "${ASSETS_DEST}/materials/${relative_path}")
+            get_filename_component(final_dir "${final_dest}" DIRECTORY)
+            list(APPEND ALL_COPY_COMMANDS
+                COMMAND ${CMAKE_COMMAND} -E make_directory "${final_dir}"
+            )
+            list(APPEND ALL_COPY_COMMANDS
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "${mat_file}" 
+                    "${final_dest}"
+            )
+            list(APPEND ALL_RESOURCE_FILES "${final_dest}")
+        endforeach()
+    endif()
 
     if(ARG_SHADERS)
         file(GLOB_RECURSE SHADER_FILES CONFIGURE_DEPENDS
@@ -168,7 +213,7 @@ endfunction()
 # ==================== 主函数：创建可执行文件 ====================
 function(add_engine_executable)
     set(options)
-    set(oneValueArgs TARGET_NAME OUTPUT_DIR SHADERS_DIR FONTS_DIR MODELS_DIR TEXTURES_DIR ICONS_DIR ICON_FILE)
+    set(oneValueArgs TARGET_NAME OUTPUT_DIR SHADERS_DIR FONTS_DIR MODELS_DIR TEXTURES_DIR ICONS_DIR ICON_FILE )
     set(multiValueArgs SOURCES)
     cmake_parse_arguments(ARG "${options}" "${oneValueArgs}" "${multiValueArgs}" ${ARGN})
 
@@ -199,6 +244,12 @@ function(add_engine_executable)
     endif()
     if(NOT ARG_ICONS_DIR)
         set(ARG_ICONS_DIR "${CMAKE_SOURCE_DIR}/../StarryEngine/assets/icons")
+    endif()
+    if(NOT ARG_CONFIG_DIR)
+        set(ARG_CONFIG_DIR "${CMAKE_SOURCE_DIR}/../StarryEngine/assets/configs")
+    endif()
+    if(NOT ARG_MATERIAL_DIR)
+        set(ARG_MATERIAL_DIR "${CMAKE_SOURCE_DIR}/../StarryEngine/assets/materials")
     endif()
     if(NOT ARG_ICON_FILE)
         set(ARG_ICON_FILE "${ARG_ICONS_DIR}/app_icon.ico")
@@ -239,6 +290,8 @@ function(add_engine_executable)
         MODELS     ${ARG_MODELS_DIR}
         TEXTURES   ${ARG_TEXTURES_DIR}
         ICONS      ${ARG_ICONS_DIR}
+        CONFIG     ${ARG_CONFIG_DIR}
+        MATERIAL   ${ARG_MATERIAL_DIR}
     )
 
     # 复制 DLL（仅 Windows）

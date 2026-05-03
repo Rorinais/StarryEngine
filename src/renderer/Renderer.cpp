@@ -355,8 +355,8 @@ namespace StarryEngine {
             item->firstInstance = 0;
             item->descriptorSets = std::move(descSets);
             item->pipelineIndex = pipelineIdx;
-            item->queue = effect->queue;
-            item->stage = effect->stage;
+            item->queue = effect->material->getRenderQueue();
+            item->stage = effect->material->getRenderStage();
             result.drawItems.push_back(item);
         }
 

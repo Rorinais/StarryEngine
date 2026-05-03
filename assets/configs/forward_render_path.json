@@ -1,0 +1,55 @@
+{
+	"renderPathType": "DeferredRenderPath",
+	"textures": [
+		{"name": "Depth","type": "depth","format": "D32_Float"},
+		{"name": "Albedo","type": "color","format": "RGBA8_UNorm"},
+		{"name": "Normal","type": "color","format": "RGBA16_Float"},
+		{"name": "Material","type": "color","format": "RGBA8_UNorm"},
+		{"name": "Swapchain","type": "color","format": "BGRA8_sRGB"},
+		{"name": "SceneColor","type": "color","format": "RGBA8_UNorm"}
+	],
+	"subpasses": [
+		{
+			"name": "Forward",
+			"stage": "Forward",
+			"queue": "Opaque",
+			"recorder": "MeshDrawRecorder",
+			"colorAttachments": [
+				{"texture": "SceneColor","initialLayout": "Undefined","finalLayout": "ShaderReadOnly","loadOp": "Clear","storeOp": "Store"}
+			],
+			"depthAttachment": {"texture": "Depth","initialLayout": "Undefined","finalLayout": "DepthStencilAttachment","loadOp": "Clear","storeOp": "Store"}
+		},
+		{
+			"name": "Skybox",
+			"stage": "PostProcess",
+			"queue": "Skybox",
+			"recorder": "SkyboxRecorder",
+			"colorAttachments": [
+				{"texture": "SceneColor","initialLayout": "ShaderReadOnly","finalLayout": "ShaderReadOnly","loadOp": "Load","storeOp": "Store"}
+			],
+			"depthAttachment": {"texture": "Depth","initialLayout": "DepthStencilAttachment","finalLayout": "DepthStencilAttachment","loadOp": "Load","storeOp": "Store"}
+		},
+		{
+			"name": "Grid",
+			"stage": "PostProcess",
+			"queue": "Opaque",
+			"recorder": "MeshDrawRecorder",
+			"colorAttachments": [
+				{"texture": "SceneColor","initialLayout": "ShaderReadOnly","finalLayout": "ShaderReadOnly","loadOp": "Load","storeOp": "Store"}
+			],
+			"depthAttachment": {"texture": "Depth","initialLayout": "DepthStencilAttachment","finalLayout": "DepthStencilAttachment","loadOp": "Load","storeOp": "DontCare"}
+		},
+		{
+			"name": "Copy",
+			"stage": "PostProcess",
+			"queue": "Transparent",
+			"recorder": "CopyToSwapchainRecorder",
+			"colorAttachments": [
+				{"texture": "Swapchain","initialLayout": "Undefined","finalLayout": "PresentSrc","loadOp": "Clear","storeOp": "Store"}
+			],
+			"inputAttachments": [
+				{"texture": "SceneColor","initialLayout": "ShaderReadOnly","finalLayout": "ShaderReadOnly","loadOp": "Load","storeOp": "DontCare"}
+			]
+		}
+	]
+}
