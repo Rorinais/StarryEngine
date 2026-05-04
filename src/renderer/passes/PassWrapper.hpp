@@ -56,13 +56,13 @@ namespace StarryEngine {
             uint32_t clearStencil = 1);
 
         // 新增工厂方法
-        static SubpassConfig createGeometrySubpassConfig(
+        static SubpassDesc createGeometrySubpassConfig(
             const std::string& name,
             std::shared_ptr<ISubpassRecorder> recorder,
             const std::vector<std::string>& colorTextureNames,
             const std::string& depthTextureName);
 
-        static SubpassConfig createFullscreenSubpassConfig(
+        static SubpassDesc createFullscreenSubpassConfig(
             const std::string& name,
             std::shared_ptr<ISubpassRecorder> recorder,
             const std::vector<SubpassAttachment>& colorAttachments,

@@ -20,20 +20,13 @@ namespace StarryEngine {
             uint32_t width, uint32_t height);
 
     private:
-
         static RHI::ImageLayout layoutFromString(const std::string& s);
-
         static RHI::AttachmentLoadOp loadOpFromString(const std::string& s);
-
         static RHI::AttachmentStoreOp storeOpFromString(const std::string& s);
-
         static RHI::Format formatFromString(const std::string& s);
-
-        static Scene::RenderStage stageFromString(const std::string& s);
-
-        static Scene::RenderQueue queueFromString(const std::string& s);
-
         static std::shared_ptr<ISubpassRecorder> createRecorder(const std::string& name);
 
+        // 从 JSON 对象创建 AttachmentParams
+        static RenderGraph::AttachmentParams parseAttachmentParams(const json& att);
     };
 }

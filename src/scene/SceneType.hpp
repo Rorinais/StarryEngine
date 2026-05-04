@@ -8,23 +8,6 @@
 namespace StarryEngine::Scene {
     struct RenderObject;
 
-    enum class RenderQueue {
-        Skybox,
-        Opaque,
-        Transparent ,
-        UI,
-        Copy
-    };
-
-    enum class RenderStage {
-        Shadow,       // 阴影投射
-        GBuffer,      // 延迟渲染几何体 Pass
-        Lighting,     // 延迟渲染光照 Pass
-        Forward,      // 前向渲染 Pass
-        PostProcess,
-        UI            // UI 渲染
-    };
-
     enum class DrawItemType {
         Mesh,        // 普通网格（可含实例化）
         Procedural   // 无网格，直接绘制顶点（全屏三角形等）
@@ -33,11 +16,11 @@ namespace StarryEngine::Scene {
     struct DrawItem {
         DrawItemType type = DrawItemType::Mesh;
 
+        std::string passTag;
+
         // ---------- 通用字段 ----------
         std::unordered_map<uint32_t, RHI::DescriptorSetHandle> descriptorSets;
         uint32_t pipelineIndex = 0;
-        RenderQueue queue = RenderQueue::Opaque;
-        RenderStage stage = RenderStage::Forward;
 
         // 对象引用（用于获取变换矩阵）
         std::weak_ptr<RenderObject> object;

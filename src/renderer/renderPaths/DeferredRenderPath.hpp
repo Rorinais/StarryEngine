@@ -20,18 +20,18 @@ namespace StarryEngine {
         void onResize(uint32_t width, uint32_t height) override;
         void setDrawItems(const Scene::AnalysisSceneResult& sceneData) override;
         void render(RHI::RHICommandEncoder* encoder, uint32_t frameIndex) override;
-        void update(const glm::mat4& view, const glm::mat4& proj, float deltaTime) override;
+        void rebuildResources(const Scene::AnalysisSceneResult& sceneData) override;
 
         std::shared_ptr<RenderGraph::RenderGraph> getRenderGraph() { return m_renderGraph; }
 
         void setTextureDescs(const std::unordered_map<std::string, RHI::TextureDesc>& descs);
 
         void addTextureDesc(std::string name, RHI::TextureDesc desc);
-        void addSubpass(Scene::RenderStage stage,Scene::RenderQueue Queue,Subpass subpass);
     private:
         bool buildGraph();
         void distributeDrawItems(const Scene::AnalysisSceneResult& sceneData);
         void updateMaterialTextures(const Scene::AnalysisSceneResult& sceneData);
+        void prepareAllPipelines(const Scene::AnalysisSceneResult& sceneData);
 
         std::shared_ptr<RHI::IRHI> m_rhi;
         std::shared_ptr<RHI::ResourceManager> m_resMgr;
@@ -40,15 +40,21 @@ namespace StarryEngine {
         RenderPathConfig m_config;
         std::shared_ptr<RenderGraph::RenderGraph> m_renderGraph;
 
-        std::unordered_map<Scene::RenderStage, StagePassInfo> m_stagePassInfo;
-        std::unordered_map<Scene::RenderStage, RenderGraph::PassNode*> m_stagePassNode;
-        std::unordered_map<uint64_t, std::shared_ptr<ISubpassRecorder>> m_subpassRecorders;
+        struct SubpassTarget {
+            RHI::RenderPassHandle renderPass;  // 初始化时为空，compile 后填入
+            uint32_t subpassIndex;
+            std::shared_ptr<ISubpassRecorder> recorder;
+        };
+
+        std::unordered_map<std::string, SubpassTarget> m_tagToSubpass;   // 标签 → Subpass 物理信息
+        std::unordered_map<std::string, RenderGraph::PassNode*> m_tagToPassNode; // 标签 → PassNode
 
         std::unordered_map<std::string, RHI::TextureDesc> m_textureDescs;
         std::unordered_map<std::string, RenderGraph::TextureId> m_textureIdMap;
 
         std::string m_swapchainTextureName = "Swapchain";
 
+        RHI::SamplerHandle m_defaultSampler;
         bool m_resourceStatsPrinted = false;
     };
 

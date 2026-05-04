@@ -3,10 +3,13 @@
 
 namespace StarryEngine {
 
-    DeferredRenderPath::DeferredRenderPath(std::shared_ptr<RHI::IRHI> rhi,
-        uint32_t width, uint32_t height)
-        : m_rhi(rhi), m_resMgr(rhi->getResourceManager()),
-        m_width(width), m_height(height) {
+    DeferredRenderPath::DeferredRenderPath(std::shared_ptr<RHI::IRHI> rhi, uint32_t width, uint32_t height)
+        : m_rhi(rhi), m_resMgr(rhi->getResourceManager()), m_width(width), m_height(height) {
+
+        RHI::SamplerDesc samplerDesc;
+        samplerDesc.minFilter = RHI::SamplerFilter::Linear;
+        samplerDesc.magFilter = RHI::SamplerFilter::Linear;
+        m_defaultSampler = m_resMgr->createSampler(samplerDesc);
     }
 
     void DeferredRenderPath::setConfig(const RenderPathConfig& config) {
@@ -19,10 +22,6 @@ namespace StarryEngine {
 
     void DeferredRenderPath::addTextureDesc(std::string name, RHI::TextureDesc desc) {
         m_textureDescs[name] = desc;
-    }
-
-    void DeferredRenderPath::addSubpass(Scene::RenderStage stage, Scene::RenderQueue Queue, Subpass subpass) {
-        m_config[stage][Queue] = subpass.getConfig();
     }
 
     bool DeferredRenderPath::initialize() {
@@ -45,16 +44,16 @@ namespace StarryEngine {
     }
 
     bool DeferredRenderPath::buildGraph() {
+        // 1. 清除旧的标签映射
+        m_tagToSubpass.clear();
+        m_tagToPassNode.clear();
 
-        m_stagePassNode.clear();
-        m_subpassRecorders.clear();
-        m_stagePassInfo.clear();
-
+        // 2. 创建新的 RenderGraph
         m_renderGraph = std::make_shared<RenderGraph::RenderGraph>(m_rhi);
         m_renderGraph->setSwapchainImageCount(m_rhi->getSwapChainImageCount());
 
+        // 3. 创建纹理 ID 映射（与旧版相同，保留）
         std::unordered_map<std::string, RenderGraph::TextureId> texIdMap;
-
         for (const auto& [name, desc] : m_textureDescs) {
             try {
                 if (name == m_swapchainTextureName) {
@@ -78,99 +77,118 @@ namespace StarryEngine {
             }
         }
 
-        for (auto& [stage, queueMap] : m_config) {
-            std::string passName = "Pass_" + std::to_string(static_cast<int>(stage));
-            auto* passNode = m_renderGraph->addPassNode(passName);
+        // 4. 按 PassDesc 列表创建每个 RenderPass
+// 4. 按 PassDesc 列表创建每个 RenderPass
+        for (const auto& passDesc : m_config) {
+            auto* passNode = m_renderGraph->addPassNode(passDesc.name);
             passNode->setRenderArea(m_width, m_height);
-            m_stagePassNode[stage] = passNode;
 
-            StagePassInfo& passInfo = m_stagePassInfo[stage];
-            uint32_t subpassIdx = 0;
+            // 用于该 Pass 内附件去重：按纹理 ID + 用途分类存储已注册的 key
+            std::unordered_map<RenderGraph::TextureId, std::string> colorKeyMap;
+            std::unordered_map<RenderGraph::TextureId, std::string> depthKeyMap;
+            std::unordered_map<RenderGraph::TextureId, std::string> inputKeyMap;
+            std::unordered_map<RenderGraph::TextureId, std::string> resolveKeyMap;
+            std::unordered_map<RenderGraph::TextureId, std::string> preserveKeyMap;
 
-            for (auto& [queue, subpassCfg] : queueMap) {
-                passInfo.queueToSubpass[queue] = subpassIdx;
+            // 5. 遍历该 Pass 内的 Subpass
+            for (size_t subpassIdx = 0; subpassIdx < passDesc.subpasses.size(); ++subpassIdx) {
+                const auto& subpassCfg = passDesc.subpasses[subpassIdx];
 
-                std::vector<std::string> colorKeys, inputKeys, resolveKeys, preserveKeys;
-                std::string depthKey;
+                auto& subpassBuilder = passNode->addSubpass(subpassCfg.name);
+                subpassBuilder.setTag(subpassCfg.tag);
 
-                // 颜色附件
+                // ---- 颜色附件 ----
+                std::vector<std::string> colorKeys;
                 for (auto& att : subpassCfg.colorAttachments) {
-                    auto it = texIdMap.find(att.textureName);
-                    if (it == texIdMap.end()) {
-                        throw std::runtime_error("Texture not found: " + att.textureName);
+                    auto texId = texIdMap.at(att.textureName);
+                    auto& key = colorKeyMap[texId];
+                    if (key.empty()) {
+                        key = passNode->addColorOutput(texId, att.params);   // 获取 PassNode 生成的实际 key
                     }
-                    std::string key = passNode->addColorOutput(it->second, att.params);
                     colorKeys.push_back(key);
                 }
 
-                // 深度附件
+                // ---- 深度附件 ----
+                std::string depthKey;
                 if (subpassCfg.depthAttachment) {
-                    auto it = texIdMap.find(subpassCfg.depthAttachment->textureName);
-                    if (it == texIdMap.end()) {
-                        throw std::runtime_error("Texture not found: " + subpassCfg.depthAttachment->textureName);
+                    auto& att = *subpassCfg.depthAttachment;
+                    auto texId = texIdMap.at(att.textureName);
+                    auto& key = depthKeyMap[texId];
+                    if (key.empty()) {
+                        key = passNode->addDepthOutput(texId, att.params);
                     }
-                    depthKey = passNode->addDepthOutput(it->second, subpassCfg.depthAttachment->params);
+                    depthKey = key;
                 }
 
-                // 输入附件
+                // ---- 输入附件 ----
+                std::vector<std::string> inputKeys;
                 for (auto& att : subpassCfg.inputAttachments) {
-                    auto it = texIdMap.find(att.textureName);
-                    if (it == texIdMap.end()) {
-                        throw std::runtime_error("Texture not found: " + att.textureName);
+                    auto texId = texIdMap.at(att.textureName);
+                    auto& key = inputKeyMap[texId];
+                    if (key.empty()) {
+                        key = passNode->addInput(texId, att.params);
                     }
-                    std::string key = passNode->addInput(it->second, att.params);
                     inputKeys.push_back(key);
                 }
 
-                // 解析附件
+                // ---- 解析附件 ----
+                std::vector<std::string> resolveKeys;
                 for (auto& att : subpassCfg.resolveAttachments) {
-                    auto it = texIdMap.find(att.textureName);
-                    if (it == texIdMap.end()) {
-                        throw std::runtime_error("Texture not found: " + att.textureName);
+                    auto texId = texIdMap.at(att.textureName);
+                    auto& key = resolveKeyMap[texId];
+                    if (key.empty()) {
+                        key = passNode->addResolve(texId, att.params);
                     }
-                    std::string key = passNode->addResolve(it->second, att.params);
                     resolveKeys.push_back(key);
                 }
 
-                // 保留附件
+                // ---- 保留附件 ----
+                std::vector<std::string> preserveKeys;
                 for (auto& texName : subpassCfg.preserveAttachments) {
-                    auto it = texIdMap.find(texName);
-                    if (it == texIdMap.end()) {
-                        throw std::runtime_error("Texture not found: " + texName);
+                    auto texId = texIdMap.at(texName);
+                    auto& key = preserveKeyMap[texId];
+                    if (key.empty()) {
+                        key = passNode->addPreserve(texId);   // preserve 无 params
                     }
-                    std::string key = passNode->addPreserve(it->second);
                     preserveKeys.push_back(key);
                 }
 
-                auto& subpassBuilder = passNode->addSubpass(subpassCfg.name);
-                for (const auto& key : colorKeys) subpassBuilder.addColorAttachmentRef(key);
+                // 将附件 key 绑定到当前 Subpass
+                for (auto& k : colorKeys) subpassBuilder.addColorAttachmentRef(k);
                 if (!depthKey.empty()) subpassBuilder.addDepthStencilAttachmentRef(depthKey);
-                for (const auto& key : inputKeys) subpassBuilder.addInputAttachmentRef(key);
-                for (const auto& key : resolveKeys) subpassBuilder.addResolveAttachmentRef(key);
-                for (const auto& key : preserveKeys) subpassBuilder.addPreserveAttachmentRef(key);
+                for (auto& k : inputKeys) subpassBuilder.addInputAttachmentRef(k);
+                for (auto& k : resolveKeys) subpassBuilder.addResolveAttachmentRef(k);
+                for (auto& k : preserveKeys) subpassBuilder.addPreserveAttachmentRef(k);
+
+                // 设置 Recorder 及建立标签映射（保持原有逻辑不变）
                 subpassBuilder.setRecorder(subpassCfg.recorder);
-
-                uint64_t recorderKey = (static_cast<uint64_t>(stage) << 32) | subpassIdx;
-                m_subpassRecorders[recorderKey] = subpassCfg.recorder;
-
-                ++subpassIdx;
+                m_tagToSubpass[subpassCfg.tag] = SubpassTarget{
+                    {},
+                    static_cast<uint32_t>(subpassIdx),
+                    subpassCfg.recorder
+                };
+                m_tagToPassNode[subpassCfg.tag] = passNode;
             }
         }
 
+        // 6. 编译 RenderGraph
         if (!m_renderGraph->compile()) {
             LOG_ERROR("Failed to compile RenderGraph");
             return false;
         }
 
-        m_textureIdMap = std::move(texIdMap);
-
-        // 为所有 stage 设置 RenderPassHandle
-        for (auto& [stage, passNode] : m_stagePassNode) {
-            if (passNode) {
-                m_stagePassInfo[stage].renderPassHandle = passNode->getRenderPassHandle();
+        // 7. compile 完成后，为所有 SubpassTarget 填入真正的 RenderPass 句柄
+        for (auto& [tag, target] : m_tagToSubpass) {
+            auto passIt = m_tagToPassNode.find(tag);
+            if (passIt != m_tagToPassNode.end()) {
+                target.renderPass = passIt->second->getRenderPassHandle();
+            }
+            else {
+                LOG_ERROR("No PassNode found for tag '{}'", tag);
             }
         }
 
+        m_textureIdMap = std::move(texIdMap);
         return true;
     }
 
@@ -181,100 +199,25 @@ namespace StarryEngine {
     }
 
     void DeferredRenderPath::distributeDrawItems(const Scene::AnalysisSceneResult& sceneData) {
-        for (auto& [key, recorder] : m_subpassRecorders) {
-            recorder->clearDrawItems();
+        for (auto& [tag, target] : m_tagToSubpass) {
+            target.recorder->clearDrawItems();
         }
 
-        // 临时分组：键 = (stage << 32) | subpass
-        std::unordered_map<uint64_t, std::vector<std::shared_ptr<Scene::DrawItem>>> groups;
-
-        size_t unmatched = 0;
+        std::string defaultTag = m_config.front().subpasses.front().tag;
         for (auto& item : sceneData.drawItems) {
-            auto stageIt = m_stagePassInfo.find(item->stage);
-            if (stageIt == m_stagePassInfo.end()) {
-                ++unmatched; 
-                continue;
+            std::string tag = item->passTag;
+            if (tag.empty()) {
+                tag = defaultTag;
+                LOG_WARN("DrawItem had empty passTag, assigned to default: {}", tag);
             }
-            const auto& passInfo = stageIt->second;
 
-            auto queueIt = passInfo.queueToSubpass.find(item->queue);
-            if (queueIt == passInfo.queueToSubpass.end()) {
-                ++unmatched; 
-                continue;
-            }
-            uint32_t subpass = queueIt->second;
-
-            uint64_t key = (static_cast<uint64_t>(item->stage) << 32) | subpass;
-            groups[key].push_back(item);
-        }
-
-        if (unmatched > 0) {
-            LOG_WARN("distributeDrawItems: {} draw items had no matching stage/subpass", unmatched); 
-        }
-
-        for (auto& [key, items] : groups) {
-            auto it = m_subpassRecorders.find(key);
-            if (it != m_subpassRecorders.end()) {
-                it->second->setDrawItems(items);
+            auto it = m_tagToSubpass.find(tag);
+            if (it != m_tagToSubpass.end()) {
+                it->second.recorder->addDrawItem(item);
             }
             else {
-                LOG_WARN("No recorder found for key {}", key); 
+                LOG_ERROR("No subpass for tag '{}'", tag);
             }
-        }
-    }
-
-    void DeferredRenderPath::update(const glm::mat4& view, const glm::mat4& proj, float deltaTime) {
-        m_lastView = view;
-        m_lastProj = proj;
-        m_lastDeltaTime = deltaTime;
-
-        if (!m_cachedSceneData) {
-            LOG_WARN("update: no cached scene data, skipping");
-            return;
-        }
-
-        for (auto& [stage, passInfo] : m_stagePassInfo) {
-            for (auto& [queue, subpass] : passInfo.queueToSubpass) {
-                uint64_t key = (static_cast<uint64_t>(stage) << 32) | subpass;
-                auto recorderIt = m_subpassRecorders.find(key);
-                if (recorderIt == m_subpassRecorders.end()) continue;
-                auto& recorder = recorderIt->second;
-                auto& items = recorder->getDrawItems();
-                if (items.empty()) continue;
-
-                // 收集该子通道中所有用到的 pipelineIndex（去重）
-                std::unordered_set<uint32_t> usedPipelineIndices;
-                for (auto& item : items) {
-                    if (item->pipelineIndex < m_cachedSceneData->PSO.size()) {
-                        usedPipelineIndices.insert(item->pipelineIndex);
-                    }
-                    else {
-                        LOG_WARN("item pipelineIndex {} out of range", item->pipelineIndex);
-                    }
-                }
-
-                // 为每个 pipelineIndex 创建管线句柄
-                std::unordered_map<uint32_t, RHI::PipelineHandle> pipelineMapping;
-                for (uint32_t idx : usedPipelineIndices) {
-                    auto& pso = m_cachedSceneData->PSO[idx];
-                    auto pipeline = Assets::PipelineCache::getOrCreateGraphicsPipeline(
-                        m_resMgr.get(), *pso, passInfo.renderPassHandle, subpass);
-                    if (pipeline.isValid()) {
-                        pipelineMapping[idx] = pipeline;
-                    }
-                    else {
-                        LOG_ERROR("Failed to create pipeline for PSO index {}", idx);
-                    }
-                }
-
-                // 将映射表传递给录制器
-                recorder->setPipelineMapping(pipelineMapping);
-            }
-        }
-
-        if (!m_resourceStatsPrinted) {
-            m_rhi->printResourceStatistics();
-            m_resourceStatsPrinted = true;
         }
     }
 
@@ -288,21 +231,16 @@ namespace StarryEngine {
     void DeferredRenderPath::onResize(uint32_t width, uint32_t height) {
         m_width = width;
         m_height = height;
-
-        // 更新纹理描述尺寸
         for (auto& [name, desc] : m_textureDescs) {
             desc.extent.width = width;
             desc.extent.height = height;
         }
-
-        // 重新初始化渲染图
         if (!initialize()) {
             LOG_ERROR("Failed to rebuild render path on resize");
             return;
         }
-
         if (m_cachedSceneData) {
-            setDrawItems(*m_cachedSceneData);
+            rebuildResources(*m_cachedSceneData);   
         }
     }
 
@@ -311,12 +249,6 @@ namespace StarryEngine {
             LOG_WARN("RenderGraph not ready for texture updates");
             return;
         }
-
-        // 默认采样器（可缓存）
-        RHI::SamplerDesc defaultSamplerDesc;
-        defaultSamplerDesc.minFilter = RHI::SamplerFilter::Linear;
-        defaultSamplerDesc.magFilter = RHI::SamplerFilter::Linear;
-        auto defaultSampler = m_resMgr->createSampler(defaultSamplerDesc);
 
         RHI::TextureHandle swapchainPhys;
         auto swapchainIt = m_textureIdMap.find("Swapchain");
@@ -352,7 +284,7 @@ namespace StarryEngine {
                 switch (dep.type) {
                 case Assets::ResourceDependencyType::Sampler:
                     LOG_INFO("Material setTexture set={}, binding={}, texture='{}'", dep.set, dep.binding, texName);
-                    material->setTexture(dep.set, dep.binding, phys, defaultSampler);
+                    material->setTexture(dep.set, dep.binding, phys, m_defaultSampler);
                     break;
                 case Assets::ResourceDependencyType::InputAttachment:
                     LOG_INFO("Material setInputAttachment set={}, binding={}, texture='{}'", dep.set, dep.binding, texName);
@@ -360,6 +292,47 @@ namespace StarryEngine {
                     break;
                 }
             }
+        }
+    }
+
+    void DeferredRenderPath::rebuildResources(const Scene::AnalysisSceneResult& sceneData) {
+        m_cachedSceneData = std::make_shared<Scene::AnalysisSceneResult>(sceneData);
+
+        // ① 刷新材质纹理依赖（从 RenderGraph 解析到 DescriptorSet）
+        updateMaterialTextures(sceneData);
+
+        // ② 分发 DrawItems 到各个 Recorder
+        distributeDrawItems(sceneData);
+
+        // ③ 为所有 DrawItem 预创建管线映射
+        prepareAllPipelines(sceneData);
+
+        if (!m_resourceStatsPrinted) {
+            m_rhi->printResourceStatistics();
+            m_resourceStatsPrinted = true;
+        }
+    }
+
+    void DeferredRenderPath::prepareAllPipelines(const Scene::AnalysisSceneResult& sceneData) {
+        for (auto& [tag, target] : m_tagToSubpass) {
+            auto& items = target.recorder->getDrawItems();
+            if (items.empty()) continue;
+
+            std::unordered_set<uint32_t> usedIndices;
+            for (auto& item : items) {
+                if (item->pipelineIndex < sceneData.PSO.size())
+                    usedIndices.insert(item->pipelineIndex);
+            }
+
+            std::unordered_map<uint32_t, RHI::PipelineHandle> mapping;
+            for (uint32_t idx : usedIndices) {
+                const auto& pso = sceneData.PSO[idx];
+                auto pipeline = Assets::PipelineCache::getOrCreateGraphicsPipeline(
+                    m_resMgr.get(), *pso, target.renderPass, target.subpassIndex);
+                if (pipeline.isValid()) mapping[idx] = pipeline;
+                else LOG_ERROR("Failed to create pipeline for PSO index {}", idx);
+            }
+            target.recorder->setPipelineMapping(std::move(mapping));
         }
     }
 

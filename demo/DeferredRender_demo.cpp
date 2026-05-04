@@ -86,13 +86,13 @@ DataSet createRenderer(std::shared_ptr<RHI::IRHI> rhi, RHI::DescriptorPoolHandle
     SphereObj->transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.0f, 0.0f));
     scene->addObject(SphereObj);
 
-    auto QuadObj = std::make_shared<Scene::RenderObject>();
-    QuadObj->geometry = Assets::GeometryGenerator::createQuad(rhi->getResourceManager());
-    glm::mat4 scale = glm::scale(glm::mat4(1.0f), glm::vec3(20.0f, 20.0f, 20.0f));
-    glm::mat4 translation = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.01f, 0.0f));
-    glm::mat4 rotation = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f)); 
-    QuadObj->transform = translation * rotation * scale;
-    scene->addObject(QuadObj);
+    //auto QuadObj = std::make_shared<Scene::RenderObject>();
+    //QuadObj->geometry = Assets::GeometryGenerator::createQuad(rhi->getResourceManager());
+    //glm::mat4 scale = glm::scale(glm::mat4(1.0f), glm::vec3(20.0f, 20.0f, 20.0f));
+    //glm::mat4 translation = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.01f, 0.0f));
+    //glm::mat4 rotation = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f)); 
+    //QuadObj->transform = translation * rotation * scale;
+    //scene->addObject(QuadObj);
 
     auto gridMeshData = createGrid(rhi->getResourceManager(), globalDescriptorData);
     auto gridObj = std::make_shared<Scene::RenderObject>();
@@ -114,9 +114,9 @@ ModelData createGrid(std::shared_ptr<RHI::ResourceManager> resMgr, GlobalDescrip
     gridTmpl->loadShaders("assets/shaders/core/gridShader.vert", "assets/shaders/core/gridShader.frag");
 
     auto gridMaterialInst = std::make_shared<Assets::MaterialInstance>(gridTmpl, data.globalDescriptorPool, resMgr.get(), data.globalDescriptorSet);
-    gridMaterialInst->setRenderStage(Scene::RenderStage::PostProcess);
-    gridMaterialInst->setRenderQueue(Scene::RenderQueue::Opaque);
     gridMaterialInst->enableDepthTest(true);
+
+    gridMaterialInst->setSubpassTag("PostProcess_Grid");
 
     return ModelData(Assets::GeometryGenerator::createGrid(resMgr), { gridMaterialInst });
 }
@@ -127,9 +127,7 @@ std::shared_ptr<Assets::MaterialInstance> createCopyMaterial(std::shared_ptr<RHI
 
     auto material = std::make_shared<Assets::MaterialInstance>(tmpl, data.globalDescriptorPool, resMgr.get(), data.globalDescriptorSet);
     material->addTextureDependency("uSceneColor","SceneColor", Assets::ResourceDependencyType::Sampler);
-
-    material->setRenderStage(Scene::RenderStage::PostProcess);
-    material->setRenderQueue(Scene::RenderQueue::Transparent);
+    material->setSubpassTag("PostProcess_Copy");
     return material;
 }
 
@@ -152,9 +150,7 @@ std::shared_ptr<Assets::MaterialInstance> createSkyboxMaterial(std::shared_ptr<R
     auto loader = Assets::TextureLoader(resMgr);
     auto texResult = loader.loadTextureCube(skyboxFaces, RHI::Format::RGBA8_sRGB, "SkyboxCubeMap");
     material->setTexture("uSkybox", texResult.texture, texResult.sampler);
-
-    material->setRenderStage(Scene::RenderStage::PostProcess);
-    material->setRenderQueue(Scene::RenderQueue::Skybox);
+    material->setSubpassTag("PostProcess_Skybox");
     material->enableDepthTest(true);
     material->setDepthCompareOp(RHI::CompareOp::LessOrEqual);
 
@@ -208,9 +204,7 @@ ModelData createModel(std::shared_ptr<RHI::ResourceManager> resMgr, GlobalDescri
         else {
             LOG_WARN("Material {} has no albedo texture", param.name);
         }
-
-        instance->setRenderStage(Scene::RenderStage::Forward);
-        instance->setRenderQueue(Scene::RenderQueue::Opaque);
+        instance->setSubpassTag("Forward_Opaque");
         instance->setDepthTest(true);
         instance->setDepthWrite(true);
         materialInstances.push_back(instance);
@@ -224,14 +218,14 @@ std::shared_ptr<Assets::MaterialInstance> createPbrMaterial(std::shared_ptr<RHI:
     tmpl->loadShaders("assets/shaders/pbr/shpere_pbr.vert", "assets/shaders/pbr/shpere_pbr.frag");
 
     auto material = std::make_shared<Assets::MaterialInstance>(tmpl, data.globalDescriptorPool, resMgr.get(), data.globalDescriptorSet);
-    material->setRenderStage(Scene::RenderStage::Forward);
-    material->setRenderQueue(Scene::RenderQueue::Opaque);
+    material->setSubpassTag("Forward_Opaque");
+
     material->enableDepthTest(true);
     material->enableDepthWrite(true);
 
     auto* lightBlock = material->getBlock("LightingUBO");
     lightBlock->setVec4("lights[0].position", glm::vec4(0.2f, 0.0f, -1.0f, 0.0f));
-    lightBlock->setVec4("lights[0].color", glm::vec4(0.9f, 0.9f, 0.5f, 1.0f));
+    lightBlock->setVec4("lights[0].color", glm::vec4(0.9f, 0.1f, 0.5f, 1.0f));
     lightBlock->setFloat("lightCount", 1.0f);
     lightBlock->setFloat("ambientStrength", 0.1f);
 

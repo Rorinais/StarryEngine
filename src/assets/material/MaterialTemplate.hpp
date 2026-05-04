@@ -83,8 +83,6 @@ namespace StarryEngine::Assets {
         void setDepthWrite(bool enable) { m_depthWriteEnable = enable; }
         void setDepthCompareOp(RHI::CompareOp op) { m_depthCompareOp = op; }
         void setAttachments(std::vector<RHI::BlendAttachmentState> attachment) { m_attachments = attachment; }
-        void setRenderQueue(Scene::RenderQueue queue) { m_queue = queue; }
-        void setRenderStage(Scene::RenderStage stage) { m_stage = stage; }
         void setDeferred(bool deferred) { m_isDeferred = deferred; }
         void enableTransparent(bool enable = true) { m_alphaBlend = enable; }
         void enableDepthTest(bool enable = true) { m_depthTestEnable = enable; }
@@ -94,8 +92,6 @@ namespace StarryEngine::Assets {
         RHI::FrontFace getFrontFace() { return m_frontFace; }
         RHI::CompareOp getDethCompareOp() { return m_depthCompareOp; }
         std::vector<RHI::BlendAttachmentState> getAttachments() { return m_attachments; }
-        Scene::RenderQueue getRenderQueue() const { return m_queue; }
-        Scene::RenderStage getRenderStage() const { return m_stage; }
         bool isTransparent() const { return m_alphaBlend; }
         bool isDepthTestEnable() const { return m_depthTestEnable; }
         bool isDepthWriteEnable() const { return m_depthWriteEnable; }
@@ -124,8 +120,5 @@ namespace StarryEngine::Assets {
         bool m_depthTestEnable = true;
         bool m_depthWriteEnable = true;
         bool m_isDeferred = false;
-
-        Scene::RenderQueue m_queue = Scene::RenderQueue::Opaque;
-        Scene::RenderStage m_stage = Scene::RenderStage::GBuffer;
     };
 }

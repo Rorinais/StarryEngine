@@ -12,8 +12,6 @@
 
 
 namespace StarryEngine {
-    using RenderPathConfig = std::unordered_map<Scene::RenderStage, std::map<Scene::RenderQueue, SubpassConfig>>;
-
     class IRenderPath {
     public:
         virtual ~IRenderPath() = default;
@@ -23,7 +21,7 @@ namespace StarryEngine {
         virtual void setConfig(const RenderPathConfig& config) = 0;
         virtual void setDrawItems(const Scene::AnalysisSceneResult& secneData) = 0;
         virtual void render(RHI::RHICommandEncoder* encoder, uint32_t frameIndex) = 0;
-        virtual void update(const glm::mat4& view, const glm::mat4& proj, float deltaTime) = 0;
+        virtual void rebuildResources(const Scene::AnalysisSceneResult& sceneData) = 0;
 
         template<typename T>
         void setCustomData(const std::string& key, const T& data) {

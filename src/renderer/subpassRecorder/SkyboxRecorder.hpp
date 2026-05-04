@@ -13,6 +13,10 @@ namespace StarryEngine {
             m_pipelineMapping = mapping;
         }
 
+        void addDrawItem(std::shared_ptr<Scene::DrawItem> item) override {
+            m_drawItems.push_back(item);
+        }
+
         void recordCommands(RHI::RHICommandEncoder* encoder,
             const RenderContext& rctx,
             const PassContext& pctx,

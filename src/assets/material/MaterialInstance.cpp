@@ -26,8 +26,6 @@ namespace StarryEngine::Assets {
             m_depthCompareOp = m_template->getDethCompareOp();
             m_attachments = m_template->getAttachments();
             m_alphaBlend = m_template->isTransparent();
-            m_queue = m_template->getRenderQueue();
-            m_stage = m_template->getRenderStage();
             m_isDeferred = m_template->isDeferred();
             m_debugName = m_template->getDebugName();
         }
@@ -274,10 +272,11 @@ namespace StarryEngine::Assets {
             LOG_ERROR("Failed to load default shaders, falling back to error material");
             return createError(resMgr, globalSetLayout, pool, globalSet);
         }
-        tmpl->setRenderStage(Scene::RenderStage::Forward);
-        tmpl->setRenderQueue(Scene::RenderQueue::Opaque);
 
-        return std::make_shared<MaterialInstance>(tmpl, pool, resMgr.get(), globalSet);
+        auto material = std::make_shared<MaterialInstance>(tmpl, pool, resMgr.get(), globalSet);
+
+        material->setSubpassTag("Forward_Opaque");
+        return material;
     }
 
     std::shared_ptr<MaterialInstance> MaterialInstance::createError(
@@ -288,9 +287,10 @@ namespace StarryEngine::Assets {
     {
         auto tmpl = createDefaultTemplate(resMgr, globalSetLayout);
         tmpl->loadShaders("assets/shaders/mvp.vert", "assets/shaders/error.frag");
-        tmpl->setRenderStage(Scene::RenderStage::Forward);
-        tmpl->setRenderQueue(Scene::RenderQueue::Opaque);
+        
+        auto material = std::make_shared<MaterialInstance>(tmpl, pool, resMgr.get(), globalSet);
 
-        return std::make_shared<MaterialInstance>(tmpl, pool, resMgr.get(), globalSet);
+        material->setSubpassTag("Forward_Opaque");
+        return material;
     }
 }

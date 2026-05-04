@@ -23,17 +23,13 @@ namespace StarryEngine {
     }
 
     void Renderer::renderFrame(RHI::RHICommandEncoder* encoder, uint32_t frameIndex, float deltaTime) {
-        // 更新所有实例化物体的实例缓冲区（每帧数据可能变化）
-        auto updateInstanceBuffers = [&](const std::vector<std::shared_ptr<Scene::RenderObject>>& objects) {
+        // ====== 阶段1：更新实例缓冲（每帧可能变化） ======
+        auto updateInstanceBuffers = [&](auto& objects) {
             for (auto& obj : objects) {
                 if (obj->isInstanced && obj->instanceBuffer && obj->instanceBuffer->isValid() && !obj->instanceTransforms.empty()) {
-                    auto* bufferObj = m_resMgr->getBuffer(*obj->instanceBuffer);
-                    if (bufferObj) {
-                        size_t dataSize = obj->instanceTransforms.size() * sizeof(glm::mat4);
-                        bufferObj->update(obj->instanceTransforms.data(), dataSize, 0);
-                    }
-                    else {
-                        LOG_ERROR("Instance buffer handle is valid but no Buffer object found!");
+                    auto* buf = m_resMgr->getBuffer(*obj->instanceBuffer);
+                    if (buf) {
+                        buf->update(obj->instanceTransforms.data(), obj->instanceTransforms.size() * sizeof(glm::mat4), 0);
                     }
                 }
             }
@@ -41,39 +37,39 @@ namespace StarryEngine {
         updateInstanceBuffers(m_scene->getOpaqueObjects());
         updateInstanceBuffers(m_scene->getTransparentObjects());
 
-        // 场景内容变化时重新分析并更新 DrawItems
-        uint32_t currentVersion = m_scene->getContentVersion();
-        if (!m_analysisSceneResult || currentVersion != m_lastAnalyzedVersion) {
-            analysisScene();
-            m_lastAnalyzedVersion = currentVersion;
+        // ====== 阶段2：场景分析 & 渲染资源构建（仅在场景变化时执行） ======
+        uint32_t version = m_scene->getContentVersion();
+        if (!m_analysisSceneResult || version != m_lastAnalyzedVersion) {
+            analysisScene();                                       // 生成 DrawItems + PSO
+            m_lastAnalyzedVersion = version;
             if (m_renderPath && m_analysisSceneResult) {
-                m_renderPath->setDrawItems(*m_analysisSceneResult);
+                m_renderPath->rebuildResources(*m_analysisSceneResult); // 分发+管线+纹理绑定
             }
         }
 
-        // 更新相机和全局 Uniform
+        // ====== 阶段3：每帧动态数据上传 ======
         auto camera = m_scene->getActiveCamera();
         if (camera) {
-            camera->update();
-
+            camera->update();  // 内部更新 view/proj 矩阵
             Assets::GlobalUniforms globals;
             globals.view = camera->getViewMatrix();
             globals.proj = camera->getProjMatrix();
-            globals.invView = glm::inverse(camera->getViewMatrix());
-            globals.invProj = glm::inverse(camera->getProjMatrix());
-			globals.time = deltaTime;
+            globals.invView = glm::inverse(globals.view);
+            globals.invProj = glm::inverse(globals.proj);
+            globals.time = deltaTime;  // 或改为累积时间，见文末建议
 
             auto* buf = m_resMgr->getBuffer(m_globalUniformBuffer);
-            if (buf) {
-                buf->update(&globals, sizeof(globals), 0);
-            }
+            if (buf) buf->update(&globals, sizeof(globals), 0);
+        }
 
-            if (m_renderPath) {
-                m_renderPath->update(globals.view, globals.proj, deltaTime);
+        // 统一提交所有材质的脏 UBO
+        if (m_analysisSceneResult) {
+            for (auto& mat : m_analysisSceneResult->materials) {
+                mat->applyAllDirtyBlocks();
             }
         }
 
-        // 执行渲染路径
+        // ====== 阶段4：执行渲染 ======
         if (m_renderPath) {
             m_renderPath->render(encoder, frameIndex);
         }
@@ -85,12 +81,7 @@ namespace StarryEngine {
             m_renderPath->onResize(width, height);
         }
 
-        if (m_scene) {
-            analysisScene();
-            if (m_renderPath && m_analysisSceneResult) {
-                m_renderPath->setDrawItems(*m_analysisSceneResult);
-            }
-        }
+        m_lastAnalyzedVersion = UINT32_MAX;
     }
 
     void Renderer::setRenderPath(std::shared_ptr<IRenderPath> newRenderPath) {
@@ -280,8 +271,7 @@ namespace StarryEngine {
                     item->indexCount = submesh.indexCount;
                     item->descriptorSets = std::move(descSets);
                     item->pipelineIndex = pipelineIdx;
-                    item->queue = materialInst->getRenderQueue();
-                    item->stage = materialInst->getRenderStage();
+                    item->passTag = materialInst->getSubpassTag();
 
                     if (submeshInstanced) {
                         item->isInstanced = true;
@@ -355,8 +345,8 @@ namespace StarryEngine {
             item->firstInstance = 0;
             item->descriptorSets = std::move(descSets);
             item->pipelineIndex = pipelineIdx;
-            item->queue = effect->material->getRenderQueue();
-            item->stage = effect->material->getRenderStage();
+            item->passTag = material->getSubpassTag();
+
             result.drawItems.push_back(item);
         }
 

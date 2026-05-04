@@ -44,8 +44,6 @@ namespace StarryEngine::Assets {
         void setDepthWrite(bool enable) { m_depthWriteEnable = enable; }
         void setDepthCompareOp(RHI::CompareOp op) { m_depthCompareOp = op; }
         void setAttachments(std::vector<RHI::BlendAttachmentState> attachments) { m_attachments = std::move(attachments); }
-        void setRenderQueue(Scene::RenderQueue queue) { m_queue = queue; }
-        void setRenderStage(Scene::RenderStage stage) { m_stage = stage; }
         void setDeferred(bool deferred) { m_isDeferred = deferred; }
         void enableTransparent(bool enable = true) { m_alphaBlend = enable; }
         void enableDepthTest(bool enable = true) { m_depthTestEnable = enable; }
@@ -56,8 +54,6 @@ namespace StarryEngine::Assets {
         RHI::FrontFace getFrontFace() const { return m_frontFace; }
         RHI::CompareOp getDethCompareOp() const { return m_depthCompareOp; }
         const std::vector<RHI::BlendAttachmentState>& getAttachments() const { return m_attachments; }
-        Scene::RenderQueue getRenderQueue() const { return m_queue; }
-        Scene::RenderStage getRenderStage() const { return m_stage; }
         bool isTransparent() const { return m_alphaBlend; }
         bool isDepthTestEnable() const { return m_depthTestEnable; }
         bool isDepthWriteEnable() const { return m_depthWriteEnable; }
@@ -81,6 +77,13 @@ namespace StarryEngine::Assets {
         const std::unordered_map<std::string, DependencyInfo>& getTextureDependencies() const {
             return m_textureDependencies;
         }
+
+        void setSubpassTag(const std::string& tag) {
+            m_subpassTag = tag;
+            m_hasTag = true;
+        }
+        const std::string& getSubpassTag() const { return m_subpassTag; }
+        bool hasSubpassTag() const { return m_hasTag; }
 
         RHI::DescriptorSetHandle getOrCreateSet(uint32_t setIndex);
 
@@ -137,8 +140,8 @@ namespace StarryEngine::Assets {
         bool m_depthWriteEnable = true;
         bool m_isDeferred = false;
 
-        Scene::RenderQueue m_queue = Scene::RenderQueue::Opaque;
-        Scene::RenderStage m_stage = Scene::RenderStage::GBuffer;
+        std::string m_subpassTag;
+        bool m_hasTag = false;
 
         std::string m_debugName;
     };

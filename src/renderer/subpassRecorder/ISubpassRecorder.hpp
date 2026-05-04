@@ -65,6 +65,8 @@ namespace StarryEngine{
         virtual std::shared_ptr<Assets::MaterialInstance> getMaterial() const { return nullptr; }
         virtual void setMaterial(std::shared_ptr<Assets::MaterialInstance> material) {}
 
+        virtual void addDrawItem(std::shared_ptr<Scene::DrawItem> item) {}
+
         virtual void recordCommands(RHI::RHICommandEncoder* encoder,
             const RenderContext& rctx,
             const PassContext& pctx,

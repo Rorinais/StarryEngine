@@ -110,13 +110,13 @@ namespace StarryEngine {
 		);
 	}
 
-	SubpassConfig PassWrapper::createGeometrySubpassConfig(
+	SubpassDesc PassWrapper::createGeometrySubpassConfig(
 		const std::string& name,
 		std::shared_ptr<ISubpassRecorder> recorder,
 		const std::vector<std::string>& colorTextureNames,
 		const std::string& depthTextureName) {
 
-		SubpassConfig config;
+		SubpassDesc config;
 		config.name = name;
 		config.recorder = recorder;
 
@@ -139,14 +139,14 @@ namespace StarryEngine {
 		return config;
 	}
 
-	SubpassConfig PassWrapper::createFullscreenSubpassConfig(
+	SubpassDesc PassWrapper::createFullscreenSubpassConfig(
 		const std::string& name,
 		std::shared_ptr<ISubpassRecorder> recorder,
 		const std::vector<SubpassAttachment>& colorAttachments,
 		const std::vector<SubpassAttachment>& inputAttachments,
 		std::optional<SubpassAttachment> depthAttachment) {
 
-		SubpassConfig config;
+		SubpassDesc config;
 		config.name = name;
 		config.recorder = recorder;
 		config.colorAttachments = colorAttachments;

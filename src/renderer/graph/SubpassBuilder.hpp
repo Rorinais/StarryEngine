@@ -43,6 +43,12 @@ namespace StarryEngine::RenderGraph {
         const std::vector<std::string>& getPreserveAttachmentNames() const { return m_preserveAttachmentKeys; }
         const std::string& getSubpassName() const { return m_subpassName; }
 
+        SubpassBuilder& setTag(const std::string& tag) {
+            m_tag = tag;
+            return *this;
+        }
+        const std::string& getTag() const { return m_tag; }
+
     private:
         std::string m_subpassName;
 
@@ -54,6 +60,7 @@ namespace StarryEngine::RenderGraph {
 
         std::shared_ptr<StarryEngine::ISubpassRecorder> m_recorder;
         std::unordered_map<std::string, RHI::ImageLayout> m_attachmentLayouts;
+        std::string m_tag;
     };
 
 } // namespace StarryEngine::RenderGraph

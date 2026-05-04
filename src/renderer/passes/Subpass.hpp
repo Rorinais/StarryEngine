@@ -47,9 +47,9 @@ namespace StarryEngine {
         }
 
         // 获取最终配置
-        SubpassConfig getConfig() const { return m_subpass; }
+        SubpassDesc getConfig() const { return m_subpass; }
 
     protected:
-        SubpassConfig m_subpass;
+        SubpassDesc m_subpass;
     };
 }
