@@ -1422,4 +1422,26 @@ namespace StarryEngine::RHI {
         }
     }
 
+    void ResourceManager::scheduleDestroy(std::function<void()> destructor, uint32_t framesToWait) {
+        m_deferredDestroys.push_back({ m_currentFrame + framesToWait, std::move(destructor) });
+    }
+
+    void ResourceManager::tickFrame(uint64_t currentFrame) {
+        if (currentFrame != 0) {
+            m_currentFrame = currentFrame;
+        }
+        else {
+            ++m_currentFrame;
+        }
+        auto it = std::remove_if(m_deferredDestroys.begin(), m_deferredDestroys.end(),
+            [this](const DeferredDestruction& d) {
+                if (d.targetFrame <= m_currentFrame) {
+                    d.destructor();
+                    return true;
+                }
+                return false;
+            });
+        m_deferredDestroys.erase(it, m_deferredDestroys.end());
+    }
+
 } // namespace StarryEngine::RHI

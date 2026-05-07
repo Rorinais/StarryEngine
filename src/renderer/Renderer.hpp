@@ -30,6 +30,10 @@ namespace StarryEngine {
         RHI::DescriptorSetLayoutHandle getGlobalSetLayout() { return m_globalSetLayout; }
         RHI::DescriptorSetHandle getGlobalDescriptorSet() { return m_globalDescriptorSet; }
 
+        void reloadAllShaders();
+        void reloadShader(const std::string& vertPath, const std::string& fragPath);
+        void prepareFrame(float deltaTime); 
+
     private:
         std::shared_ptr<RHI::IRHI> m_rhi;
         std::shared_ptr<RHI::ResourceManager> m_resMgr;

@@ -592,6 +592,16 @@ namespace StarryEngine::RHI {
         // 获取资源泄露报告
         std::vector<std::string> getResourceLeakReport() const;
 
+        void scheduleDestroy(std::function<void()> destructor, uint32_t framesToWait = 2);
+        void tickFrame(uint64_t currentFrame = 0);
+
+    private:
+        struct DeferredDestruction {
+            uint64_t targetFrame;
+            std::function<void()> destructor;
+        };
+        std::vector<DeferredDestruction> m_deferredDestroys;
+        uint64_t m_currentFrame = 0;
     private:
         void initStatistics();
         void updateStatistics();

@@ -6,6 +6,9 @@
 #include <dlfcn.h>
 #endif
 
+#include <filesystem>
+#include <chrono>
+
 #include "../event/Events.hpp"
 #include "../logging/Logger.hpp"
 #include "../core/FrameMonitor.hpp"
@@ -54,5 +57,11 @@ namespace StarryEngine {
 
         std::unique_ptr<CameraController> m_cameraController;
         bool m_controlActive = false;
+
+        // ---------- 自动 Shader 热重载相关 ----------
+        std::unordered_map<std::string, std::filesystem::file_time_type> m_shaderTimestamps;
+        std::chrono::steady_clock::time_point m_lastFileCheck;
+        std::chrono::steady_clock::time_point m_nextAllowedReload;
+        static constexpr auto kReloadCooldown = std::chrono::milliseconds(1000); // 防抖冷却
     };
 } // namespace StarryEngine

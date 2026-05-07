@@ -23,28 +23,21 @@ namespace StarryEngine::Assets {
         Assets::ShaderLoader loader(m_resMgr);
         auto vertInfo = loader.loadFromFile(vsPath, RHI::ShaderStage::Vertex);
         auto fragInfo = loader.loadFromFile(fsPath, RHI::ShaderStage::Fragment);
-
         if (!vertInfo || !fragInfo) return false;
 
         m_vertexShader = vertInfo->module;
         m_fragmentShader = fragInfo->module;
-
         m_vsReflection = std::move(vertInfo->reflection);
         m_fsReflection = std::move(fragInfo->reflection);
 
-        // ───── 1. 合并除 set0 以外的所有 descriptor set 布局 ─────
+        // 合并除 set0 以外的所有 descriptor set 布局
         auto mergeLayouts = [&](const ShaderCreateInfo& info) {
             for (const auto& [setIdx, desc] : info.layoutDescs) {
-                if (setIdx == 0) continue; // set0 由外部提供，不重复创建
+                if (setIdx == 0) continue;
                 if (m_layouts.find(setIdx) == m_layouts.end()) {
-                    auto layout = Assets::DescriptorSetLayoutCache::getOrCreateLayout(
-                        m_resMgr.get(), desc);
-                    if (layout.isValid()) {
-                        m_layouts[setIdx] = layout;
-                    }
-                    else {
-                        LOG_ERROR("Failed to create descriptor set layout for set {}", setIdx);
-                    }
+                    auto layout = Assets::DescriptorSetLayoutCache::getOrCreateLayout(m_resMgr.get(), desc);
+                    if (layout.isValid()) m_layouts[setIdx] = layout;
+                    else LOG_ERROR("Failed to create descriptor set layout for set {}", setIdx);
                 }
                 LOG_INFO("Merge layout set={}, bindingCount={}", setIdx, desc.bindings.size());
             }
@@ -52,7 +45,7 @@ namespace StarryEngine::Assets {
         mergeLayouts(*vertInfo);
         mergeLayouts(*fragInfo);
 
-        // ───── 2. 如果外部未提供推送常量，则从反射自动生成 ─────
+        // 推送常量生成（保持原逻辑）
         if (m_pushConstants.empty()) {
             auto addPush = [&](const RHI::ShaderReflectionInfo& refl) {
                 for (const auto& pc : refl.pushConstants) {
@@ -60,11 +53,9 @@ namespace StarryEngine::Assets {
                     range.stageFlags = static_cast<RHI::ShaderStageFlags>(pc.stageFlags);
                     range.offset = 0;
                     range.size = pc.size;
-
                     auto it = std::find_if(m_pushConstants.begin(), m_pushConstants.end(),
                         [&](const RHI::PushConstantRange& r) { return r.size == range.size; });
                     if (it != m_pushConstants.end()) {
-                        // 合并可见阶段
                         it->stageFlags = static_cast<RHI::ShaderStageFlags>(
                             static_cast<uint32_t>(it->stageFlags) | static_cast<uint32_t>(range.stageFlags));
                     }
@@ -72,18 +63,27 @@ namespace StarryEngine::Assets {
                         m_pushConstants.push_back(range);
                     }
                     else {
-                        // 大小不同！报错，因为当前引擎不支持多个独立的推送常量范围
-                        LOG_ERROR("Incompatible push constant block sizes between shader stages ({} vs {}). "
-                            "Use UBO for per‑stage data.", range.size, m_pushConstants[0].size);
+                        LOG_ERROR("Incompatible push constant sizes");
                     }
                 }
                 };
             addPush(m_vsReflection);
             addPush(m_fsReflection);
         }
-        //LOG_INFO(m_vsReflection);
-        //LOG_INFO(m_fsReflection);
 
+        LOG_DEBUG(m_fsReflection);
+
+        // 补全连续 set（只填充实际最大 set 内的空洞，不设上限）
+        fillMissingLayouts(m_layouts, m_resMgr);
+
+        MaterialTemplate::clearCache();
+        RHI::PipelineLayoutHandle testLayout = getPipelineLayout(m_resMgr.get());
+        if (!testLayout.isValid()) {
+            LOG_ERROR("Failed to create pipeline layout after loading shaders");
+            return false;
+        }
+
+        setShaderPaths(vsPath, fsPath);
         return true;
     }
 
@@ -101,5 +101,127 @@ namespace StarryEngine::Assets {
             return layout;
             }();
         return &defaultLayout;
+    }
+
+    void DefaultMaterialTemplate::fillMissingLayouts(
+        std::unordered_map<uint32_t, RHI::DescriptorSetLayoutHandle>& layouts,
+        std::shared_ptr<RHI::ResourceManager> resMgr)
+    {
+        uint32_t maxSet = 0;
+        for (const auto& [setIdx, _] : layouts)
+            if (setIdx > maxSet) maxSet = setIdx;
+
+        for (uint32_t i = 1; i <= maxSet; ++i) {
+            if (layouts.find(i) == layouts.end()) {
+                RHI::DescriptorSetLayoutDesc emptyDesc;
+                auto layout = Assets::DescriptorSetLayoutCache::getOrCreateLayout(resMgr.get(), emptyDesc);
+                if (layout.isValid()) {
+                    layouts[i] = layout;
+                    LOG_INFO("Created empty placeholder layout for set {}", i);
+                }
+                else {
+                    LOG_ERROR("Failed to create placeholder layout for set {}", i);
+                }
+            }
+        }
+    }
+
+    void DefaultMaterialTemplate::setShaderPaths(const std::string& vsPath, const std::string& fsPath) {
+        m_vsPath = vsPath;
+        m_fsPath = fsPath;
+    }
+
+    bool DefaultMaterialTemplate::reloadShaders(const std::string& vsPath, const std::string& fsPath) {
+        auto oldVert = m_vertexShader;
+        auto oldFrag = m_fragmentShader;
+        auto oldLayouts = m_layouts;
+        auto oldPushConstants = m_pushConstants;
+        auto oldVSRefl = std::move(m_vsReflection);
+        auto oldFSRefl = std::move(m_fsReflection);
+
+        Assets::ShaderLoader loader(m_resMgr);
+        auto vertInfo = loader.loadFromFile(vsPath, RHI::ShaderStage::Vertex);
+        auto fragInfo = loader.loadFromFile(fsPath, RHI::ShaderStage::Fragment);
+        if (!vertInfo || !fragInfo) {
+            // 失败回退
+            m_vertexShader = oldVert;
+            m_fragmentShader = oldFrag;
+            m_layouts = oldLayouts;
+            m_pushConstants = oldPushConstants;
+            m_vsReflection = std::move(oldVSRefl);
+            m_fsReflection = std::move(oldFSRefl);
+            LOG_ERROR("Shader reload failed, keeping previous");
+            return false;
+        }
+
+        m_vertexShader = vertInfo->module;
+        m_fragmentShader = fragInfo->module;
+        m_vsReflection = std::move(vertInfo->reflection);
+        m_fsReflection = std::move(fragInfo->reflection);
+
+        RHI::DescriptorSetLayoutHandle globalLayout;
+        if (auto it = oldLayouts.find(0); it != oldLayouts.end()) globalLayout = it->second;
+        m_layouts.clear();
+        if (globalLayout.isValid()) m_layouts[0] = globalLayout;
+
+        auto mergeLayouts = [&](const ShaderCreateInfo& info) {
+            for (auto& [setIdx, desc] : info.layoutDescs) {
+                if (setIdx == 0) continue;
+                if (m_layouts.find(setIdx) == m_layouts.end()) {
+                    auto layout = Assets::DescriptorSetLayoutCache::getOrCreateLayout(m_resMgr.get(), desc);
+                    if (layout.isValid()) m_layouts[setIdx] = layout;
+                }
+            }
+            };
+        mergeLayouts(*vertInfo);
+        mergeLayouts(*fragInfo);
+
+        // 推据常量
+        if (oldPushConstants.empty()) {
+            m_pushConstants.clear();
+            auto addPush = [&](const RHI::ShaderReflectionInfo& refl) {
+                for (const auto& pc : refl.pushConstants) {
+                    RHI::PushConstantRange range;
+                    range.stageFlags = static_cast<RHI::ShaderStageFlags>(pc.stageFlags);
+                    range.offset = 0;
+                    range.size = pc.size;
+
+                    auto it = std::find_if(m_pushConstants.begin(), m_pushConstants.end(),
+                        [&](const RHI::PushConstantRange& r) { return r.size == range.size; });
+                    if (it != m_pushConstants.end()) {
+                        it->stageFlags = static_cast<RHI::ShaderStageFlags>(
+                            static_cast<uint32_t>(it->stageFlags) | static_cast<uint32_t>(range.stageFlags));
+                    }
+                    else if (m_pushConstants.empty()) {
+                        m_pushConstants.push_back(range);
+                    }
+                    else {
+                        LOG_ERROR("Incompatible push constant block sizes between shader stages ({} vs {}). "
+                            "Use UBO for per‑stage data.", range.size, m_pushConstants[0].size);
+                    }
+                }
+                };
+            addPush(m_vsReflection);
+            addPush(m_fsReflection);
+        }
+
+        fillMissingLayouts(m_layouts, m_resMgr);
+
+        MaterialTemplate::clearCache();
+        if (!getPipelineLayout(m_resMgr.get()).isValid())
+            LOG_ERROR("Pipeline layout creation failed after reload");
+
+        if (oldVert.isValid())
+            m_resMgr->scheduleDestroy([oldVert, resMgr = m_resMgr]() { resMgr->destroy(oldVert); }, 2);
+        if (oldFrag.isValid())
+            m_resMgr->scheduleDestroy([oldFrag, resMgr = m_resMgr]() { resMgr->destroy(oldFrag); }, 2);
+
+        setShaderPaths(vsPath, fsPath);
+        return true;
+    }
+
+    void DefaultMaterialTemplate::invalidate() {
+        m_vertexShader = RHI::ShaderHandle::Null();
+        m_fragmentShader = RHI::ShaderHandle::Null();
     }
 }

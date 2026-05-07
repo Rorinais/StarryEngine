@@ -6,6 +6,16 @@ namespace StarryEngine::Assets {
     std::unordered_map<size_t, RHI::DescriptorSetLayoutHandle> DescriptorSetLayoutCache::s_layoutCache;
     std::unordered_map<size_t, RHI::PipelineLayoutHandle> MaterialTemplate::s_layoutCache;
 
+    void PipelineCache::invalidateAll(RHI::ResourceManager* resMgr) {
+        std::lock_guard<std::mutex> lock(s_mutex);
+        for (auto& [key, pipeline] : s_cache) {
+            resMgr->scheduleDestroy([pipeline, resMgr]() {
+                resMgr->destroy(pipeline);
+                }, 2);
+        }
+        s_cache.clear();
+    }
+
     RHI::PipelineHandle PipelineCache::getOrCreateGraphicsPipeline(
         RHI::ResourceManager* resMgr,
         const Scene::GraphicsPipelineState& state,

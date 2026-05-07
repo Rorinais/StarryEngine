@@ -37,10 +37,42 @@ namespace StarryEngine {
         auto frameContext = m_rhi->getFrameContext();
         FrameMonitor monitor(m_window, frameContext, m_flightFrame);
 
+        // 初始化 shader 文件时间戳
+        for (const auto& entry : std::filesystem::recursive_directory_iterator("assets/shaders")) {
+            if (entry.is_regular_file())
+                m_shaderTimestamps[entry.path().string()] = std::filesystem::last_write_time(entry);
+        }
+        m_lastFileCheck = std::chrono::steady_clock::now();
+        m_nextAllowedReload = m_lastFileCheck;
+
         while (!glfwWindowShouldClose(m_window->getHandle())) {
             glfwPollEvents();
             monitor.tick();
 
+            // ----- 自动 Shader 热重载（文件监控 + 防抖）-----
+            auto now = std::chrono::steady_clock::now();
+            if (now - m_lastFileCheck > std::chrono::milliseconds(500)) {
+                m_lastFileCheck = now;
+                bool anyChange = false;
+                for (const auto& entry : std::filesystem::recursive_directory_iterator("assets/shaders")) {
+                    if (!entry.is_regular_file()) continue;
+                    std::string path = entry.path().string();
+                    auto currentTime = std::filesystem::last_write_time(entry);
+                    auto it = m_shaderTimestamps.find(path);
+                    if (it == m_shaderTimestamps.end() || currentTime > it->second) {
+                        anyChange = true;
+                        m_shaderTimestamps[path] = currentTime;
+                    }
+                }
+
+                if (anyChange && now >= m_nextAllowedReload && m_renderer) {
+                    m_rhi->waitIdle();                     // 确保渲染空闲
+                    m_renderer->reloadAllShaders();        // 重载所有使用的 shader
+                    m_nextAllowedReload = now + kReloadCooldown; // 冷却
+                }
+            }
+
+            // 窗口尺寸变化处理
             if (m_framebufferResized) {
                 m_rhi->waitIdle();
                 m_framebufferResized = false;
@@ -51,11 +83,11 @@ namespace StarryEngine {
                     continue;
                 }
                 m_renderer->onResize(m_width, m_height);
-
                 continue;
             }
             if (m_width == 0 || m_height == 0) continue;
 
+            // 每帧逻辑
             float deltaTime = monitor.getDeltaTime();
             if (m_cameraController) {
                 m_cameraController->update(deltaTime);
@@ -65,10 +97,14 @@ namespace StarryEngine {
                 m_renderer->renderFrame(encoder, imageIndex, deltaTime);
                 });
             monitor.updateTitle();
+
+            // 执行延迟销毁（资源释放队列）
+            m_resMgr->tickFrame();
         }
     }
 
     void Application::initEventDispatcher() {
+        // Esc 退出
         GetEventDispatcher().subscribe(EventType::KeyPressed, [this](IEvent& e) {
             auto& ev = static_cast<KeyEvent&>(e);
             if (ev.getKey() == GLFW_KEY_ESCAPE && ev.getAction() == GLFW_PRESS) {
@@ -76,14 +112,13 @@ namespace StarryEngine {
             }
             });
 
+        // 窗口尺寸变化
         GetEventDispatcher().subscribe(EventType::WindowResize, [this](IEvent& e) {
             auto& ev = static_cast<WindowResizeEvent&>(e);
             int newWidth = ev.getWidth();
             int newHeight = ev.getHeight();
 
-            // 防止最小化时出现零尺寸
             if (newWidth == 0 || newHeight == 0) {
-                // 仍然记录尺寸变化，但跳过相机投影更新
                 m_width = newWidth;
                 m_height = newHeight;
                 m_framebufferResized = true;
@@ -104,7 +139,7 @@ namespace StarryEngine {
             }
             });
 
-        // 订阅相机切换事件
+        // 相机切换事件
         GetEventDispatcher().subscribe(EventType::CameraSwitch, [this](IEvent& e) {
             auto& ev = static_cast<CameraSwitchEvent&>(e);
             uint32_t index = ev.getCameraIndex();
@@ -138,53 +173,45 @@ namespace StarryEngine {
             m_cameraController = std::make_unique<CameraController>(m_scene->getActiveCamera());
             m_cameraController->setEnabled(false);
 
-            // 鼠标按钮事件：左键激活控制，右键退出控制
+            // 鼠标控制
             GetEventDispatcher().subscribe(EventType::MouseButtonPressed, [this](IEvent& e) {
                 auto& ev = static_cast<MouseButtonEvent&>(e);
                 if (ev.getButton() == GLFW_MOUSE_BUTTON_LEFT && ev.getAction() == GLFW_PRESS && !m_controlActive) {
-                    // 进入控制模式
                     m_controlActive = true;
                     glfwSetInputMode(m_window->getHandle(), GLFW_CURSOR, GLFW_CURSOR_DISABLED);
                     m_cameraController->setEnabled(true);
                 }
                 else if (ev.getButton() == GLFW_MOUSE_BUTTON_RIGHT && ev.getAction() == GLFW_PRESS && m_controlActive) {
-                    // 退出控制模式
                     m_controlActive = false;
                     glfwSetInputMode(m_window->getHandle(), GLFW_CURSOR, GLFW_CURSOR_NORMAL);
                     m_cameraController->setEnabled(false);
                 }
                 });
 
-            // 键盘事件
             GetEventDispatcher().subscribe(EventType::KeyPressed, [this](IEvent& e) {
                 if (!m_controlActive) return;
                 auto& ev = static_cast<KeyEvent&>(e);
                 m_cameraController->onKeyPressed(ev.getKey(), ev.getAction());
                 });
 
-            // 鼠标移动事件
             GetEventDispatcher().subscribe(EventType::MouseMoved, [this](IEvent& e) {
                 if (!m_controlActive) return;
                 auto& ev = static_cast<MouseMoveEvent&>(e);
                 m_cameraController->onMouseMoved(ev.getX(), ev.getY());
                 });
 
-            // 鼠标滚轮事件
             GetEventDispatcher().subscribe(EventType::MouseScrolled, [this](IEvent& e) {
                 auto& ev = static_cast<MouseScrollEvent&>(e);
-                if (!m_controlActive) return;  // 仅在控制模式下生效
+                if (!m_controlActive) return;
 
-                // 检查 Ctrl 键是否按下
                 bool ctrlPressed = glfwGetKey(m_window->getHandle(), GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS ||
                     glfwGetKey(m_window->getHandle(), GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS;
 
                 float delta = static_cast<float>(ev.getYOffset()) * 1.0f;
                 if (ctrlPressed) {
-                    // Ctrl+滚轮：调整视野（FOV）
                     m_cameraController->setFov(delta);
                 }
                 else {
-                    // 普通滚轮：调整移动速度（沿用原有逻辑）
                     m_cameraController->onMouseScrolled(ev.getXOffset(), ev.getYOffset());
                 }
                 });

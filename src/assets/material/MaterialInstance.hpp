@@ -27,13 +27,22 @@ namespace StarryEngine::Assets {
             RHI::DescriptorPoolHandle pool,
             RHI::ResourceManager* resMgr,
             RHI::DescriptorSetHandle globalSet = RHI::DescriptorSetHandle::Null());
-        ~MaterialInstance() = default;
+        ~MaterialInstance();
+
+        MaterialInstance(const MaterialInstance&) = delete;
+        MaterialInstance& operator=(const MaterialInstance&) = delete;
+        MaterialInstance(MaterialInstance&&) = delete;
+        MaterialInstance& operator=(MaterialInstance&&) = delete;
+
+        void recreateDescriptorSets();
+        void invalidateReflectionCache();
 
         void setUniform(uint32_t setIndex, uint32_t binding, const void* data, size_t size);
         void setTexture(uint32_t setIndex, uint32_t binding, RHI::TextureHandle texture, RHI::SamplerHandle sampler);
         void setInputAttachment(uint32_t setIndex, uint32_t binding, RHI::TextureHandle texture, RHI::ImageLayout layout = RHI::ImageLayout::ShaderReadOnly);
 
         MaterialParameterBlock* getBlock(const std::string& blockName);
+        void registerBlockLayout(const std::string& blockName, const RHI::ResourceBinding& binding);
         void setTexture(const std::string& name, RHI::TextureHandle texture, RHI::SamplerHandle sampler);
         void addTextureDependency(const std::string& shaderVarName,const std::string& rgTextureName,ResourceDependencyType type);
         void applyAllDirtyBlocks();
@@ -126,8 +135,26 @@ namespace StarryEngine::Assets {
         std::unordered_map<std::string, std::pair<uint32_t, uint32_t>> m_blockBindings;    // 块名 -> (set,binding)
         std::unordered_map<std::string, std::pair<uint32_t, uint32_t>> m_samplerBindings;  // 纹理名 -> (set,binding)
         std::unordered_map<std::string, std::pair<uint32_t, uint32_t>> m_inputAttachmentBindings;
+        std::unordered_map<std::string, std::vector<uint8_t>> m_savedBlockData;
         bool m_reflectionCached = false;
+
+        struct CachedTexture {
+            uint32_t set = UINT32_MAX;
+            uint32_t binding = UINT32_MAX;
+            RHI::TextureHandle texture;
+            RHI::SamplerHandle sampler;
+            bool valid() const { return set != UINT32_MAX && binding != UINT32_MAX; }
+        };
+        std::unordered_map<std::string, CachedTexture> m_cachedTextures;
+        std::unordered_map<std::string, std::vector<uint8_t>> m_blockBackups;
+        std::unordered_map<std::string, RHI::ResourceBinding> m_blockLayouts;
+        void backupBlockValues();
+        void restoreBlockValues();
+        void restoreCachedBindings();
         void buildReflectionCache();
+        void ensureGPUBufferForBlock(const std::string& blockName,
+            uint32_t setIdx, uint32_t binding,
+            size_t blockSize);
 
         // ---------- 实例独立的渲染状态 ----------
         RHI::CullMode m_cullMode = RHI::CullMode::None;

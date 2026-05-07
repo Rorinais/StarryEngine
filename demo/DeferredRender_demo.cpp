@@ -63,22 +63,22 @@ DataSet createRenderer(std::shared_ptr<RHI::IRHI> rhi, RHI::DescriptorPoolHandle
     auto renderPath = RenderPathFactory::createRenderPathFromJSON("assets/configs/forward_render_path.json",rhi, width, height);
     renderer->setRenderPath(std::move(renderPath));
 
-    auto skyboxEffect = std::make_shared<Scene::ProceduralEffect>();
-    auto skyboxMaterial = createSkyboxMaterial(rhi->getResourceManager(), globalDescriptorData);
-    skyboxEffect->material = skyboxMaterial;  
-    scene->addProceduralEffect(skyboxEffect);
+    //auto skyboxEffect = std::make_shared<Scene::ProceduralEffect>();
+    //auto skyboxMaterial = createSkyboxMaterial(rhi->getResourceManager(), globalDescriptorData);
+    //skyboxEffect->material = skyboxMaterial;  
+    //scene->addProceduralEffect(skyboxEffect);
 
     auto copyMaterial = createCopyMaterial(rhi->getResourceManager(), globalDescriptorData);
     auto copyEffect = std::make_shared<Scene::ProceduralEffect>();
     copyEffect->material = copyMaterial;
     scene->addProceduralEffect(copyEffect);
 
-    auto modelMeshData = createModel(rhi->getResourceManager(), globalDescriptorData);
-    auto modelObj = std::make_shared<Scene::RenderObject>();
-    modelObj->geometry = modelMeshData.geometry;
-    modelObj->materials = modelMeshData.materials;
-    modelObj->transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 2.5f));
-    scene->addObject(modelObj);
+    //auto modelMeshData = createModel(rhi->getResourceManager(), globalDescriptorData);
+    //auto modelObj = std::make_shared<Scene::RenderObject>();
+    //modelObj->geometry = modelMeshData.geometry;
+    //modelObj->materials = modelMeshData.materials;
+    //modelObj->transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 2.5f));
+    //scene->addObject(modelObj);
 
     auto SphereObj = std::make_shared<Scene::RenderObject>();
     SphereObj->geometry = Assets::GeometryGenerator::createSphere(rhi->getResourceManager(),1.0f);
@@ -94,12 +94,12 @@ DataSet createRenderer(std::shared_ptr<RHI::IRHI> rhi, RHI::DescriptorPoolHandle
     //QuadObj->transform = translation * rotation * scale;
     //scene->addObject(QuadObj);
 
-    auto gridMeshData = createGrid(rhi->getResourceManager(), globalDescriptorData);
-    auto gridObj = std::make_shared<Scene::RenderObject>();
-    gridObj->geometry = gridMeshData.geometry;
-    gridObj->materials = gridMeshData.materials;
-    gridObj->transform = glm::scale(glm::translate(glm::mat4(1.0f), glm::vec3(0, 0, 0)), glm::vec3(5, 5, 5));
-    scene->addObject(gridObj);
+    //auto gridMeshData = createGrid(rhi->getResourceManager(), globalDescriptorData);
+    //auto gridObj = std::make_shared<Scene::RenderObject>();
+    //gridObj->geometry = gridMeshData.geometry;
+    //gridObj->materials = gridMeshData.materials;
+    //gridObj->transform = glm::scale(glm::translate(glm::mat4(1.0f), glm::vec3(0, 0, 0)), glm::vec3(5, 5, 5));
+    //scene->addObject(gridObj);
 
     auto perspectiveCamera = std::make_shared<Scene::PerspectiveCamera>();
     perspectiveCamera->setPerspective(glm::radians(45.0f), (float)width / height, 0.1f, 100.0f);
@@ -223,12 +223,6 @@ std::shared_ptr<Assets::MaterialInstance> createPbrMaterial(std::shared_ptr<RHI:
     material->enableDepthTest(true);
     material->enableDepthWrite(true);
 
-    auto* lightBlock = material->getBlock("LightingUBO");
-    lightBlock->setVec4("lights[0].position", glm::vec4(0.2f, 0.0f, -1.0f, 0.0f));
-    lightBlock->setVec4("lights[0].color", glm::vec4(0.9f, 0.1f, 0.5f, 1.0f));
-    lightBlock->setFloat("lightCount", 1.0f);
-    lightBlock->setFloat("ambientStrength", 0.1f);
-
     Assets::TextureLoader loader(resMgr);
     auto texResult0 = loader.loadTexture2D("assets/textures/pbr/seaworn_sandstone_brick_arm_1k.png", RHI::Format::RGBA8_UNorm, "arm");
     auto texResult1 = loader.loadTexture2D("assets/textures/pbr/seaworn_sandstone_brick_diff_1k.png", RHI::Format::RGBA8_UNorm, "diff");
@@ -237,6 +231,12 @@ std::shared_ptr<Assets::MaterialInstance> createPbrMaterial(std::shared_ptr<RHI:
     material->setTexture("armMap", texResult0.texture, texResult0.sampler);
     material->setTexture("albedoMap", texResult1.texture, texResult1.sampler);
     material->setTexture("normalMap", texResult2.texture, texResult2.sampler);
+
+    auto* lightBlock = material->getBlock("LightingUBO");
+    lightBlock->setVec4("lights.position", glm::vec4(0.2f, 0.0f, -1.0f, 0.0f));
+    lightBlock->setVec4("lights.color", glm::vec4(0.9f, 0.1f, 0.5f, 1.0f));
+    lightBlock->setFloat("lightCount", 1.0f);
+    lightBlock->setFloat("ambientStrength", 0.1f);
 
     material->applyAllDirtyBlocks();
 	return material;

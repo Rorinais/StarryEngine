@@ -45,6 +45,7 @@ namespace StarryEngine::Assets {
             uint32_t subpassIndex);
 
         static void clearCache();
+        static void invalidateAll(RHI::ResourceManager* resMgr);
 
     private:
         static std::unordered_map<Key, RHI::PipelineHandle> s_cache;
@@ -108,6 +109,7 @@ namespace StarryEngine::Assets {
         //全局渲染管线布局缓存，将管线描述hash，作为键，因为管线描述之和描述符布局与常量推送布局有关系
         //如果以创建相同的管线布局，则使用缓存中的布局，否则通过描述符布局生成创建新的管线布局
         static std::unordered_map<size_t, RHI::PipelineLayoutHandle> s_layoutCache;
+        bool m_hasCustomLayout = false;
 
         std::string m_debugName = " ";
 

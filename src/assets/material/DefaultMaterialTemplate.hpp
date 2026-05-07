@@ -29,7 +29,17 @@ namespace StarryEngine::Assets {
         const RHI::ShaderReflectionInfo& getVSReflection() const override { return m_vsReflection; }
         const RHI::ShaderReflectionInfo& getFSReflection() const override { return m_fsReflection; }
 
+        void invalidate();
+        void setShaderPaths(const std::string& vsPath, const std::string& fsPath);
+        bool reloadShaders(const std::string& vsPath, const std::string& fsPath);
+        const std::string& getVSPath() const { return m_vsPath; }
+        const std::string& getFSPath() const { return m_fsPath; }
+
     private:
+        static void fillMissingLayouts(
+            std::unordered_map<uint32_t, RHI::DescriptorSetLayoutHandle>& layouts,
+            std::shared_ptr<RHI::ResourceManager> resMgr);
+
         std::shared_ptr<RHI::ResourceManager> m_resMgr;
 
         std::unordered_map<uint32_t, RHI::DescriptorSetLayoutHandle> m_layouts;
@@ -40,5 +50,6 @@ namespace StarryEngine::Assets {
         RHI::ShaderReflectionInfo m_vsReflection;
         RHI::ShaderReflectionInfo m_fsReflection;
 
+        std::string m_vsPath, m_fsPath; 
     };
 }

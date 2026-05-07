@@ -34,13 +34,22 @@ namespace StarryEngine::Assets {
 
         // 获取底层数据指针和大小，供上传 GPU 使用
         const uint8_t* data() const { return m_data.data(); }
+        uint8_t* data() { return m_data.data(); }
         size_t size() const { return m_data.size(); }
 
         // 脏标记管理
+        void markDirty() { m_dirty = true; }
         bool isDirty() const { return m_dirty; }
         void clearDirty() { m_dirty = false; }
 
+        MaterialParameterBlock* getBlock(const std::string& blockName);
+
     private:
+        void buildReflectionCache();
+
+    private:
+        std::unordered_map<std::string, RHI::ResourceBinding> m_blockLayouts;
+
         struct MemberInfo {
             uint32_t offset;
             uint32_t size;    // 可用于后续类型校验

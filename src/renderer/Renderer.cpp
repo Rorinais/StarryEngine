@@ -353,4 +353,61 @@ namespace StarryEngine {
         m_analysisSceneResult = std::make_shared<Scene::AnalysisSceneResult>(std::move(result));
     }
 
+    void Renderer::reloadShader(const std::string& vertPath, const std::string& fragPath) {
+        if (!m_analysisSceneResult) return;
+
+        // 收集需要重载的模板（去重）
+        std::unordered_set<Assets::MaterialTemplate*> affectedTemplates;
+        for (auto& matInst : m_analysisSceneResult->materials) {
+            auto tmpl = matInst->getTemplate();
+            if (auto* dmpl = dynamic_cast<Assets::DefaultMaterialTemplate*>(tmpl.get())) {
+                if (dmpl->getVSPath() == vertPath || dmpl->getFSPath() == fragPath) {
+                    affectedTemplates.insert(tmpl.get());
+                }
+            }
+        }
+
+        if (affectedTemplates.empty()) return;
+
+        // 对每个受影响的模板执行一次 reloadShaders
+        bool anySuccess = false;
+        for (auto* tmpl : affectedTemplates) {
+            auto* dmpl = dynamic_cast<Assets::DefaultMaterialTemplate*>(tmpl);
+            if (!dmpl) continue;
+            if (dmpl->reloadShaders(vertPath, fragPath)) {
+                anySuccess = true;
+            }
+            else {
+                dmpl->invalidate();
+                LOG_ERROR("Shader reload failed, switching to error material");
+            }
+        }
+
+        // 然后对所有引用了这些模板的材质实例，重建描述符集
+        for (auto& matInst : m_analysisSceneResult->materials) {
+            if (affectedTemplates.count(matInst->getTemplate().get())) {
+                matInst->recreateDescriptorSets();
+            }
+        }
+
+        if (anySuccess || !affectedTemplates.empty()) {
+            Assets::PipelineCache::invalidateAll(m_resMgr.get());
+            m_lastAnalyzedVersion = UINT32_MAX;
+        }
+    }
+
+    void Renderer::reloadAllShaders() {
+        if (!m_analysisSceneResult) return;
+        std::unordered_set<std::string> processed;
+        for (auto& matInst : m_analysisSceneResult->materials) {
+            auto tmpl = matInst->getTemplate();
+            auto* dmpl = dynamic_cast<Assets::DefaultMaterialTemplate*>(tmpl.get());
+            if (!dmpl) continue;
+            std::string key = dmpl->getVSPath() + "|" + dmpl->getFSPath();
+            if (processed.count(key)) continue;
+            processed.insert(key);
+            reloadShader(dmpl->getVSPath(), dmpl->getFSPath());
+        }
+    }
+
 } // namespace StarryEngine

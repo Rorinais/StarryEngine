@@ -19,6 +19,5 @@ void main() {
 
     vec3 shadowColor=vec3(texture(texSampler, fragTexCoord).xyz)*0.5;
 
-
-    outColor = mix(vec4(shadowColor,1.0f),texture(texSampler, fragTexCoord),smoothstep(0.35,0.4,halfLambert));
+    outColor = texture(texSampler, fragTexCoord);
 }
