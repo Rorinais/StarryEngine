@@ -37,6 +37,7 @@ add_subdirectory(utils)
 add_subdirectory(logging)
 add_subdirectory(renderer)
 add_subdirectory(application)
+add_subdirectory(ui)
 
 # 使用封装函数创建可执行文件
 add_engine_executable(

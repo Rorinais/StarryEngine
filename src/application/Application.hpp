@@ -20,6 +20,8 @@
 #include "../renderer/subpassRecorder/GbufferRecorder.hpp"
 #include "../renderer/subpassRecorder/DeferredLightingRecorder.hpp"
 
+#include "../ui/ImGuiManager.hpp"
+#include "../ui/ImGuiRecorder.hpp"
 
 namespace StarryEngine {
     class Application {
@@ -38,6 +40,9 @@ namespace StarryEngine {
         RHI::DescriptorPoolHandle getGlobalDescriptorPool() { return m_descriptorPool; }
         uint32_t getWidth() { return m_width; }
         uint32_t getHeight() { return m_height; }
+
+        ImGuiManager* getImGuiManager() { return m_imguiManager.get(); }
+        bool isImGuiEnabled() const { return m_imguiEnabled; }
 
     private:
         Window::Ptr m_window;
@@ -63,5 +68,16 @@ namespace StarryEngine {
         std::chrono::steady_clock::time_point m_lastFileCheck;
         std::chrono::steady_clock::time_point m_nextAllowedReload;
         static constexpr auto kReloadCooldown = std::chrono::milliseconds(1000); // 防抖冷却
+
+        std::unique_ptr<ImGuiManager>                m_imguiManager;
+        std::shared_ptr<ImGuiRecorder>               m_imguiRecorder;
+        bool m_imguiEnabled = true;
+        bool m_showDemoWindow = false;
+        bool m_showPerformancePanel = true;
+        bool m_showSceneGraph = false;
+        bool m_showMaterialEditor = false;
+        bool m_showDeveloperTools = true;
+        void initImGui();
+        void drawImGuiPanels(float deltaTime);
     };
 } // namespace StarryEngine

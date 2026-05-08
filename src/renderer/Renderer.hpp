@@ -34,6 +34,32 @@ namespace StarryEngine {
         void reloadShader(const std::string& vertPath, const std::string& fragPath);
         void prepareFrame(float deltaTime); 
 
+        void addOverlayPass(const std::string& tag, std::shared_ptr<ISubpassRecorder> recorder) {
+            if (m_renderPath) {
+                m_renderPath->addOverlayPass(tag, std::move(recorder));
+            }
+        }
+
+        void rebuildRenderGraph() {
+            if (m_renderPath && m_analysisSceneResult) {
+                m_renderPath->initialize();             
+                m_renderPath->rebuildResources(*m_analysisSceneResult);
+            }
+            else {
+                LOG_ERROR("rebuildRenderGraph called but no scene result");
+            }
+        }
+
+        void setNeedRebuildGraph() { m_needRebuildGraph = true; }
+
+        void setImGuiManager(ImGuiManager* mgr, uint32_t imageCount) {
+            if (m_renderPath) {
+                if (auto* dp = dynamic_cast<DeferredRenderPath*>(m_renderPath.get())) {
+                    dp->setImGuiManager(mgr, imageCount);
+                }
+            }
+        }
+
     private:
         std::shared_ptr<RHI::IRHI> m_rhi;
         std::shared_ptr<RHI::ResourceManager> m_resMgr;
@@ -51,5 +77,7 @@ namespace StarryEngine {
         std::shared_ptr<Assets::MaterialInstance> m_defaultMaterial;
         std::shared_ptr<Assets::MaterialInstance> m_errorMaterial;
         bool m_materialsInitialized = false;
+
+        bool m_needRebuildGraph = false;
     };
 }

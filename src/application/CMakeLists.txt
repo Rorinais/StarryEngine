@@ -8,5 +8,7 @@ PRIVATE
     BaseInterface
     core
     event
+    ui
     renderer
+
 )

@@ -1,5 +1,7 @@
 #include "DeferredRenderPath.hpp"
+//#include "../graph/Types.hpp"
 #include "../../logging/Logger.hpp"
+#include "../../ui/ImGuiManager.hpp"
 
 namespace StarryEngine {
 
@@ -78,7 +80,6 @@ namespace StarryEngine {
         }
 
         // 4. 按 PassDesc 列表创建每个 RenderPass
-// 4. 按 PassDesc 列表创建每个 RenderPass
         for (const auto& passDesc : m_config) {
             auto* passNode = m_renderGraph->addPassNode(passDesc.name);
             passNode->setRenderArea(m_width, m_height);
@@ -171,6 +172,29 @@ namespace StarryEngine {
             }
         }
 
+        for (const auto& overlay : m_overlayPasses) {
+            auto* passNode = m_renderGraph->addPassNode(overlay.tag + "Pass");
+            passNode->setRenderArea(m_width, m_height);
+
+            auto& subpassBuilder = passNode->addSubpass(overlay.tag);
+            subpassBuilder.setTag(overlay.tag);
+
+            RenderGraph::AttachmentParams params;
+            params.loadOp = RHI::AttachmentLoadOp::Load;
+            params.storeOp = RHI::AttachmentStoreOp::Store;
+            params.initialLayout = RHI::ImageLayout::ColorAttachment;
+            params.finalLayout = RHI::ImageLayout::PresentSrc;
+
+            auto swapchainTexId = texIdMap.at(m_swapchainTextureName);
+            std::string key = passNode->addColorOutput(swapchainTexId, params);
+            subpassBuilder.addColorAttachmentRef(key);
+
+            subpassBuilder.setRecorder(overlay.recorder);
+
+            m_tagToSubpass[overlay.tag] = SubpassTarget{ {}, 0, overlay.recorder };
+            m_tagToPassNode[overlay.tag] = passNode;
+        }
+
         // 6. 编译 RenderGraph
         if (!m_renderGraph->compile()) {
             LOG_ERROR("Failed to compile RenderGraph");
@@ -185,6 +209,18 @@ namespace StarryEngine {
             }
             else {
                 LOG_ERROR("No PassNode found for tag '{}'", tag);
+            }
+        }
+
+        if (m_imguiManager && !m_imguiManager->isVulkanReady()) {
+            auto it = m_tagToSubpass.find("ImGui");
+            if (it != m_tagToSubpass.end()) {
+                m_imguiManager->initializeVulkanBackend(
+                    m_rhi.get(),
+                    m_resMgr.get(),
+                    it->second.renderPass,
+                    m_imguiImageCount
+                );
             }
         }
 

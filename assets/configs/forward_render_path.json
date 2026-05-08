@@ -97,7 +97,7 @@
 						{
 							"texture": "Swapchain",
 							"initialLayout": "Undefined",
-							"finalLayout": "PresentSrc",
+							"finalLayout": "ColorAttachment",
 							"loadOp": "Clear",
 							"storeOp": "Store"
 						}

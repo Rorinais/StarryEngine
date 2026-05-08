@@ -39,11 +39,24 @@ namespace StarryEngine {
 
         // ====== 阶段2：场景分析 & 渲染资源构建（仅在场景变化时执行） ======
         uint32_t version = m_scene->getContentVersion();
+        //if (!m_analysisSceneResult || version != m_lastAnalyzedVersion) {
+        //    analysisScene();                                       // 生成 DrawItems + PSO
+        //    m_lastAnalyzedVersion = version;
+        //    if (m_renderPath && m_analysisSceneResult) {
+        //        m_renderPath->rebuildResources(*m_analysisSceneResult); // 分发+管线+纹理绑定
+        //    }
+        //}
+
         if (!m_analysisSceneResult || version != m_lastAnalyzedVersion) {
-            analysisScene();                                       // 生成 DrawItems + PSO
+            analysisScene();
             m_lastAnalyzedVersion = version;
-            if (m_renderPath && m_analysisSceneResult) {
-                m_renderPath->rebuildResources(*m_analysisSceneResult); // 分发+管线+纹理绑定
+
+            if (m_needRebuildGraph) {
+                rebuildRenderGraph();   
+                m_needRebuildGraph = false;
+            }
+            else if (m_renderPath && m_analysisSceneResult) {
+                m_renderPath->rebuildResources(*m_analysisSceneResult);
             }
         }
 
@@ -407,6 +420,9 @@ namespace StarryEngine {
             if (processed.count(key)) continue;
             processed.insert(key);
             reloadShader(dmpl->getVSPath(), dmpl->getFSPath());
+        }
+        if (m_renderPath) {
+            m_renderPath->rebuildResources(*m_analysisSceneResult);
         }
     }
 

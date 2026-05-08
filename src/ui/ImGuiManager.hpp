@@ -1,0 +1,125 @@
+#pragma once
+
+#include <imgui.h>
+#include <memory>
+#include <functional>
+#include <vector>
+#include <string>
+
+#include "../renderer/interface/RHI_ENUMS.hpp"
+#include "../renderer/interface/RHI_TYPES.hpp"
+#include "../renderer/interface/RHI_STRUCTS_DESC.hpp"
+#include "../renderer/interface/RHI_STRUCTS_RESOURCE.hpp"
+#include "../renderer/interface/RHI_RESOURCE_FACTORY.hpp"
+#include "../renderer/interface/RHI_RESOURCE_MANAGER.hpp"
+
+namespace StarryEngine {
+
+    // 前向声明 Window
+    class Window;
+
+    class ImGuiManager {
+    public:
+        ImGuiManager();
+        ~ImGuiManager();
+
+        // ── 初始化 / 关闭 ──
+        // GLFW 初始化 + DescriptorPool 创建
+        bool initialize(
+            RHI::IRHI* rhi,
+            RHI::ResourceManager* resMgr,
+            std::shared_ptr<Window> window,
+            uint32_t                width,
+            uint32_t                height,
+            uint32_t                swapchainImageCount,
+            RHI::Format             swapchainFormat,
+            const RHI::DescriptorPoolHandle& globalDescriptorPool
+        );
+
+        // Vulkan 后端初始化（需要 RenderPass，在 RenderGraph compile 之后调用）
+        bool initializeVulkanBackend(
+            RHI::IRHI* rhi,
+            RHI::ResourceManager* resMgr,
+            RHI::RenderPassHandle   guiRenderPass,
+            uint32_t                imageCount
+        );
+
+        void shutdown(RHI::ResourceManager* resMgr);
+
+        // ── 每帧 ──
+        void beginFrame();
+        void endFrame();
+
+        // ── 渲染（由 ImGuiRecorder 调用）──
+        void render(RHI::RHICommandEncoder* encoder, uint32_t frameIndex);
+
+        // ── 输入转发 ──
+        void onKeyEvent(int glfwKey, int scancode, int action, int mods);
+        void onMouseButtonEvent(int button, int action, int mods);
+        void onMouseMoveEvent(float x, float y);
+        void onMouseScrollEvent(float xOffset, float yOffset);
+        void onWindowResize(uint32_t width, uint32_t height);
+
+        // ── 字体 / 样式 ──
+        void setDefaultFont(const std::string& fontPath = "");
+        void setDarkTheme();
+
+        // ── 获取状态 ──
+        ImGuiContext* getContext() const { return m_context; }
+
+        // 完全就绪 = GLFW + Vulkan 都初始化完成
+        bool isInitialized() const {
+            return m_glfwInitialized && m_vulkanBackendReady;
+        }
+
+        // GLFW 已就绪（可以调用 NewFrame，但还不能渲染）
+        bool isGlfwReady() const { return m_glfwInitialized; }
+
+        // Vulkan 已就绪（可以调用 RenderDrawData）
+        bool isVulkanReady() const { return m_vulkanBackendReady; }
+
+        // 暴露给使用者，用于 ImGui:: 调用前的上下文设置
+        static void SetCurrent(ImGuiManager* mgr) {
+            if (mgr && mgr->m_context)
+                ImGui::SetCurrentContext(mgr->m_context);
+        }
+
+    private:
+        void createDescriptorPool(RHI::ResourceManager* resMgr, uint32_t imageCount);
+        void setupVulkanInitInfo(
+            RHI::IRHI* rhi,
+            RHI::ResourceManager* resMgr,
+            std::shared_ptr<Window> window,
+            uint32_t                width,
+            uint32_t                height,
+            uint32_t                imageCount,
+            RHI::Format             swapchainFormat,
+            const RHI::DescriptorPoolHandle& globalDescriptorPool
+        );
+
+        ImGuiContext* m_context = nullptr;
+
+        bool m_glfwInitialized = false;
+        bool m_vulkanBackendReady = false;
+
+        // 自定义资源
+        RHI::DescriptorPoolHandle m_descriptorPool;
+        RHI::TextureHandle        m_fontTexture;
+
+        // 尺寸
+        uint32_t m_width = 0;
+        uint32_t m_height = 0;
+
+        RHI::IRHI* m_rhi = nullptr;
+        RHI::ResourceManager* resMgr = nullptr;
+        VkDevice m_vkDevice = VK_NULL_HANDLE;
+        uint32_t m_graphicsQueueFamily = 0;
+        VkQueue  m_graphicsQueue = VK_NULL_HANDLE;
+        std::shared_ptr<Window> m_window;
+
+        // 存储 initInfo 需要的原生句柄（在 setupVulkanInitInfo 中获取）
+        // 如果 RHI 每次都能返回，可以不用存；否则存下来
+        bool m_initInfoStored = false;
+    };
+
+} // namespace StarryEngine

@@ -22,7 +22,7 @@ struct Light {
 };
 
 layout(set = 1, binding = 1) uniform LightingUBO {
-    Light lights[4];
+    Light lights;
     uint lightCount;
     float ambientStrength;
 } lighting;
@@ -66,7 +66,7 @@ void main() {
     vec3 Lo = vec3(0.0);
 
     vec3 L;
-    Light light = lighting.lights[0];
+    Light light = lighting.lights;
     vec3 radiance = light.color.rgb;
 
     if (light.position.w == 0.0) {

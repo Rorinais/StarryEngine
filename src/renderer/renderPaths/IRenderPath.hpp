@@ -12,6 +12,11 @@
 
 
 namespace StarryEngine {
+    struct OverlayPassDesc {
+        std::string tag;                              // 标签（用于 SubpassTarget 映射）
+        std::shared_ptr<ISubpassRecorder> recorder;   // 录制回调
+    };
+
     class IRenderPath {
     public:
         virtual ~IRenderPath() = default;
@@ -22,6 +27,13 @@ namespace StarryEngine {
         virtual void setDrawItems(const Scene::AnalysisSceneResult& secneData) = 0;
         virtual void render(RHI::RHICommandEncoder* encoder, uint32_t frameIndex) = 0;
         virtual void rebuildResources(const Scene::AnalysisSceneResult& sceneData) = 0;
+
+        virtual void addOverlayPass(const OverlayPassDesc& desc) = 0;
+
+        void addOverlayPass(const std::string& tag,
+            std::shared_ptr<ISubpassRecorder> recorder) {
+            addOverlayPass({ tag, std::move(recorder) });
+        }
 
         template<typename T>
         void setCustomData(const std::string& key, const T& data) {
@@ -41,7 +53,6 @@ namespace StarryEngine {
             if (it == m_customData.end()) return nullptr;
             return std::any_cast<T>(&it->second);
         }
-
     protected:
         glm::mat4 m_lastView;
         glm::mat4 m_lastProj;

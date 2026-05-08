@@ -8,7 +8,7 @@
 #include <unordered_map>
 
 namespace StarryEngine {
-
+    class ImGuiManager;
     class DeferredRenderPath : public IRenderPath {
     public:
         DeferredRenderPath(std::shared_ptr<RHI::IRHI> rhi,
@@ -27,6 +27,20 @@ namespace StarryEngine {
         void setTextureDescs(const std::unordered_map<std::string, RHI::TextureDesc>& descs);
 
         void addTextureDesc(std::string name, RHI::TextureDesc desc);
+
+        void addOverlayPass(const OverlayPassDesc& desc) override {
+            m_overlayPasses.push_back(desc);
+        }
+
+        void setImGuiManager(ImGuiManager* mgr, uint32_t imageCount) {
+            m_imguiManager = mgr;
+            m_imguiImageCount = imageCount;
+        }
+    private:
+        ImGuiManager* m_imguiManager = nullptr;
+        uint32_t m_imguiImageCount = 2;
+
+        std::vector<OverlayPassDesc> m_overlayPasses;
     private:
         bool buildGraph();
         void distributeDrawItems(const Scene::AnalysisSceneResult& sceneData);
@@ -45,10 +59,8 @@ namespace StarryEngine {
             uint32_t subpassIndex;
             std::shared_ptr<ISubpassRecorder> recorder;
         };
-
         std::unordered_map<std::string, SubpassTarget> m_tagToSubpass;   // 标签 → Subpass 物理信息
         std::unordered_map<std::string, RenderGraph::PassNode*> m_tagToPassNode; // 标签 → PassNode
-
         std::unordered_map<std::string, RHI::TextureDesc> m_textureDescs;
         std::unordered_map<std::string, RenderGraph::TextureId> m_textureIdMap;
 

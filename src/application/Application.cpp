@@ -18,6 +18,117 @@ namespace StarryEngine {
         createDescriptorPool();
     }
 
+    void Application::initImGui() {
+        if (!m_imguiEnabled) return;
+
+        m_imguiManager = std::make_unique<ImGuiManager>();
+
+        bool ok = m_imguiManager->initialize(
+            m_rhi.get(),
+            m_resMgr.get(),
+            m_window,
+            m_width,
+            m_height,
+            m_flightFrame,
+            RHI::Format::RGBA8_UNorm,
+            m_descriptorPool
+        );
+
+        if (!ok) {
+            LOG_ERROR("Failed to initialize ImGui (GLFW)");
+            m_imguiManager.reset();
+            return;
+        }
+
+        m_imguiRecorder = std::make_shared<ImGuiRecorder>(m_imguiManager.get());
+
+        if (m_renderer) {
+            m_renderer->addOverlayPass("ImGui", m_imguiRecorder);
+            m_renderer->setImGuiManager(m_imguiManager.get(), m_flightFrame);
+            m_renderer->setNeedRebuildGraph();
+        }
+    }
+
+    void Application::drawImGuiPanels(float deltaTime) {
+        ImGuiManager::SetCurrent(m_imguiManager.get());
+
+        // ════════════════════════════════════════
+        // 主菜单栏
+        // ════════════════════════════════════════
+        if (ImGui::BeginMainMenuBar()) {
+            if (ImGui::BeginMenu("Engine")) {
+                ImGui::MenuItem("Performance", nullptr, &m_showPerformancePanel);
+                ImGui::MenuItem("Scene Graph", nullptr, &m_showSceneGraph);
+                ImGui::MenuItem("Material", nullptr, &m_showMaterialEditor);
+                ImGui::MenuItem("Demo Window", nullptr, &m_showDemoWindow);
+                ImGui::Separator();
+                if (ImGui::MenuItem("Exit", "Esc")) {
+                    glfwSetWindowShouldClose(m_window->getHandle(), GLFW_TRUE);
+                }
+                ImGui::EndMenu();
+            }
+            if (ImGui::BeginMenu("Tools")) {
+                ImGui::MenuItem("Developer", nullptr, &m_showDeveloperTools);
+                ImGui::EndMenu();
+            }
+            ImGui::EndMainMenuBar();
+        }
+
+        // ════════════════════════════════════════
+        // 性能面板
+        // ════════════════════════════════════════
+        if (m_showPerformancePanel) {
+            ImGui::Begin("Performance", &m_showPerformancePanel);
+            ImGui::Text("FPS:     %.1f (%.3f ms)", 1.0f / deltaTime, deltaTime * 1000.0f);
+            ImGui::Text("CPU:     %.2f ms", deltaTime * 1000.0f);
+
+            // 帧时间图
+            static float frameTimes[120] = {};
+            static int   frameTimeIndex = 0;
+            frameTimes[frameTimeIndex % 120] = deltaTime * 1000.0f;
+            frameTimeIndex++;
+            ImGui::PlotLines("Frame (ms)", frameTimes, 120, frameTimeIndex % 120,
+                nullptr, 0.0f, 33.0f, ImVec2(0, 80));
+
+            ImGui::Separator();
+            // 如果 RHI 有统计接口：
+            // ImGui::Text("Draw Calls: %d", m_rhi->getLastDrawCallCount());
+            // ImGui::Text("Pipelines:  %d", m_rhi->getLastPipelineCount());
+            ImGui::End();
+        }
+
+        // ════════════════════════════════════════
+        // 开发者工具
+        // ════════════════════════════════════════
+        if (m_showDeveloperTools) {
+            ImGui::Begin("Developer Tools", &m_showDeveloperTools);
+
+            if (ImGui::Button("Reload All Shaders")) {
+                m_renderer->reloadAllShaders();
+            }
+            ImGui::SameLine();
+            ImGui::TextDisabled("Hot reload shader files");
+
+            ImGui::Separator();
+
+            if (ImGui::Button("Rebuild Render Graph")) {
+                if (m_renderer) {
+                    m_renderer->addOverlayPass("ImGui", m_imguiRecorder);
+                    m_renderer->rebuildRenderGraph();
+                }
+            }
+
+            ImGui::End();
+        }
+
+        // ════════════════════════════════════════
+        // ImGui Demo（调试用）
+        // ════════════════════════════════════════
+        if (m_showDemoWindow) {
+            ImGui::ShowDemoWindow(&m_showDemoWindow);
+        }
+    }
+
     void Application::createDescriptorPool() {
         m_resMgr = m_rhi->getResourceManager();
 
@@ -44,6 +155,8 @@ namespace StarryEngine {
         }
         m_lastFileCheck = std::chrono::steady_clock::now();
         m_nextAllowedReload = m_lastFileCheck;
+
+        initImGui();
 
         while (!glfwWindowShouldClose(m_window->getHandle())) {
             glfwPollEvents();
@@ -91,6 +204,13 @@ namespace StarryEngine {
             float deltaTime = monitor.getDeltaTime();
             if (m_cameraController) {
                 m_cameraController->update(deltaTime);
+            }
+
+            // 在主循环中
+            if (m_imguiManager && m_imguiManager->isInitialized()) {
+                m_imguiManager->beginFrame();
+                drawImGuiPanels(deltaTime);
+                m_imguiManager->endFrame();
             }
 
             bool success = m_rhi->renderFrame([this, deltaTime](RHI::RHICommandEncoder* encoder, uint32_t imageIndex) {
