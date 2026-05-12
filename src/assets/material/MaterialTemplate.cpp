@@ -6,6 +6,19 @@ namespace StarryEngine::Assets {
     std::unordered_map<size_t, RHI::DescriptorSetLayoutHandle> DescriptorSetLayoutCache::s_layoutCache;
     std::unordered_map<size_t, RHI::PipelineLayoutHandle> MaterialTemplate::s_layoutCache;
 
+    void PipelineCache::clearCache() {
+        std::lock_guard<std::mutex> lock(s_mutex);
+        s_cache.clear();
+    }
+
+    void DescriptorSetLayoutCache::clearCache() {
+        s_layoutCache.clear();
+    }
+
+    void MaterialTemplate::clearCache() {
+        s_layoutCache.clear();
+    }
+
     void PipelineCache::invalidateAll(RHI::ResourceManager* resMgr) {
         std::lock_guard<std::mutex> lock(s_mutex);
         for (auto& [key, pipeline] : s_cache) {
@@ -56,11 +69,6 @@ namespace StarryEngine::Assets {
         return pipeline;
     }
 
-    void PipelineCache::clearCache() {
-        std::lock_guard<std::mutex> lock(s_mutex);
-        s_cache.clear();
-    }
-
     RHI::DescriptorSetLayoutHandle DescriptorSetLayoutCache::getOrCreateLayout(
         RHI::ResourceManager* resMgr,
         const RHI::DescriptorSetLayoutDesc& desc) {
@@ -76,10 +84,6 @@ namespace StarryEngine::Assets {
         auto layout = resMgr->createDescriptorSetLayout(desc);
         s_layoutCache[hash] = layout;
         return layout;
-    }
-
-    void DescriptorSetLayoutCache::clearCache() {
-        s_layoutCache.clear();
     }
 
     RHI::PipelineLayoutHandle MaterialTemplate::getPipelineLayout(RHI::ResourceManager* resMgr) {
@@ -114,7 +118,5 @@ namespace StarryEngine::Assets {
         return layout;
     }
 
-    void MaterialTemplate::clearCache() {
-        s_layoutCache.clear();
-    }
+
 }

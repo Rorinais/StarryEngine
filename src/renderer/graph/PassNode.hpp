@@ -73,6 +73,8 @@ namespace StarryEngine::RenderGraph {
         RHI::ImageLayout getFinalLayout(TextureId texId) const { return m_finalLayouts.at(texId); }
         void addDependency(const RHI::SubpassDependency& dep);
 
+        static bool isDepthFormat(RHI::Format format);
+
     private:
         std::string m_name;
         RenderPassBuilder m_builder;
@@ -101,7 +103,7 @@ namespace StarryEngine::RenderGraph {
 
         std::unordered_map<TextureId, RHI::ImageLayout> m_finalLayouts;
 
-        static bool isDepthFormat(RHI::Format format);
+        
     };
 
 } // namespace StarryEngine::RenderGraph

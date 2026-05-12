@@ -62,6 +62,7 @@ namespace StarryEngine {
 
         std::unique_ptr<CameraController> m_cameraController;
         bool m_controlActive = false;
+        bool m_enableControl = true;
 
         // ---------- 自动 Shader 热重载相关 ----------
         std::unordered_map<std::string, std::filesystem::file_time_type> m_shaderTimestamps;
@@ -72,7 +73,7 @@ namespace StarryEngine {
         std::unique_ptr<ImGuiManager>                m_imguiManager;
         std::shared_ptr<ImGuiRecorder>               m_imguiRecorder;
         bool m_imguiEnabled = true;
-        bool m_showDemoWindow = false;
+        bool m_showDemoWindow = true;
         bool m_showPerformancePanel = true;
         bool m_showSceneGraph = false;
         bool m_showMaterialEditor = false;

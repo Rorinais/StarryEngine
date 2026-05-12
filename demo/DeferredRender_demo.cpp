@@ -68,10 +68,10 @@ DataSet createRenderer(std::shared_ptr<RHI::IRHI> rhi, RHI::DescriptorPoolHandle
     skyboxEffect->material = skyboxMaterial;  
     scene->addProceduralEffect(skyboxEffect);
 
-    auto copyMaterial = createCopyMaterial(rhi->getResourceManager(), globalDescriptorData);
-    auto copyEffect = std::make_shared<Scene::ProceduralEffect>();
-    copyEffect->material = copyMaterial;
-    scene->addProceduralEffect(copyEffect);
+    //auto copyMaterial = createCopyMaterial(rhi->getResourceManager(), globalDescriptorData);
+    //auto copyEffect = std::make_shared<Scene::ProceduralEffect>();
+    //copyEffect->material = copyMaterial;
+    //scene->addProceduralEffect(copyEffect);
 
     auto modelMeshData = createModel(rhi->getResourceManager(), globalDescriptorData);
     auto modelObj = std::make_shared<Scene::RenderObject>();

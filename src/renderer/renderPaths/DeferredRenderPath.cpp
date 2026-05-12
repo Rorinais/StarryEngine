@@ -1,5 +1,4 @@
 #include "DeferredRenderPath.hpp"
-//#include "../graph/Types.hpp"
 #include "../../logging/Logger.hpp"
 #include "../../ui/ImGuiManager.hpp"
 
@@ -18,12 +17,46 @@ namespace StarryEngine {
         m_config = config;
     }
 
+    void DeferredRenderPath::setDrawItems(const Scene::AnalysisSceneResult& sceneData) {
+        m_cachedSceneData = std::make_shared<Scene::AnalysisSceneResult>(sceneData);
+        updateMaterialTextures(sceneData);
+        distributeDrawItems(sceneData);
+    }
+
     void DeferredRenderPath::setTextureDescs(const std::unordered_map<std::string, RHI::TextureDesc>& descs) {
         m_textureDescs = descs;
     }
 
     void DeferredRenderPath::addTextureDesc(std::string name, RHI::TextureDesc desc) {
         m_textureDescs[name] = desc;
+    }
+
+    void DeferredRenderPath::setImGuiManager(ImGuiManager* mgr, uint32_t imageCount) {
+        m_imguiManager = mgr;
+        m_imguiImageCount = imageCount;
+    }
+
+    void DeferredRenderPath::render(RHI::RHICommandEncoder* encoder, uint32_t frameIndex) {
+        if (!m_renderGraph) return;
+
+        auto context = buildRenderContext();
+        m_renderGraph->execute(encoder, context, frameIndex);
+    }
+
+    void DeferredRenderPath::onResize(uint32_t width, uint32_t height) {
+        m_width = width;
+        m_height = height;
+        for (auto& [name, desc] : m_textureDescs) {
+            desc.extent.width = width;
+            desc.extent.height = height;
+        }
+        if (!initialize()) {
+            LOG_ERROR("Failed to rebuild render path on resize");
+            return;
+        }
+        if (m_cachedSceneData) {
+            rebuildResources(*m_cachedSceneData);
+        }
     }
 
     bool DeferredRenderPath::initialize() {
@@ -46,15 +79,21 @@ namespace StarryEngine {
     }
 
     bool DeferredRenderPath::buildGraph() {
-        // 1. 清除旧的标签映射
         m_tagToSubpass.clear();
         m_tagToPassNode.clear();
 
-        // 2. 创建新的 RenderGraph
         m_renderGraph = std::make_shared<RenderGraph::RenderGraph>(m_rhi);
         m_renderGraph->setSwapchainImageCount(m_rhi->getSwapChainImageCount());
 
-        // 3. 创建纹理 ID 映射（与旧版相同，保留）
+        auto texIdMap = buildTextureIdMap();
+
+        buildConfigPasses(texIdMap);
+        buildOverlayPasses(texIdMap);
+
+        return compileAndFinalize(texIdMap);
+    }
+
+    std::unordered_map<std::string, RenderGraph::TextureId> DeferredRenderPath::buildTextureIdMap() {
         std::unordered_map<std::string, RenderGraph::TextureId> texIdMap;
         for (const auto& [name, desc] : m_textureDescs) {
             try {
@@ -78,8 +117,10 @@ namespace StarryEngine {
                 throw;
             }
         }
+        return texIdMap;
+    }
 
-        // 4. 按 PassDesc 列表创建每个 RenderPass
+    void DeferredRenderPath::buildConfigPasses(std::unordered_map<std::string, RenderGraph::TextureId>& texIdMap){
         for (const auto& passDesc : m_config) {
             auto* passNode = m_renderGraph->addPassNode(passDesc.name);
             passNode->setRenderArea(m_width, m_height);
@@ -161,7 +202,7 @@ namespace StarryEngine {
                 for (auto& k : resolveKeys) subpassBuilder.addResolveAttachmentRef(k);
                 for (auto& k : preserveKeys) subpassBuilder.addPreserveAttachmentRef(k);
 
-                // 设置 Recorder 及建立标签映射（保持原有逻辑不变）
+                // 设置 Recorder 及建立标签映射
                 subpassBuilder.setRecorder(subpassCfg.recorder);
                 m_tagToSubpass[subpassCfg.tag] = SubpassTarget{
                     {},
@@ -171,7 +212,11 @@ namespace StarryEngine {
                 m_tagToPassNode[subpassCfg.tag] = passNode;
             }
         }
+    }
 
+    void DeferredRenderPath::buildOverlayPasses(
+        std::unordered_map<std::string, RenderGraph::TextureId>& texIdMap)
+    {
         for (const auto& overlay : m_overlayPasses) {
             auto* passNode = m_renderGraph->addPassNode(overlay.tag + "Pass");
             passNode->setRenderArea(m_width, m_height);
@@ -179,104 +224,84 @@ namespace StarryEngine {
             auto& subpassBuilder = passNode->addSubpass(overlay.tag);
             subpassBuilder.setTag(overlay.tag);
 
-            RenderGraph::AttachmentParams params;
-            params.loadOp = RHI::AttachmentLoadOp::Load;
-            params.storeOp = RHI::AttachmentStoreOp::Store;
-            params.initialLayout = RHI::ImageLayout::ColorAttachment;
-            params.finalLayout = RHI::ImageLayout::PresentSrc;
+            // ---- Swapchain 颜色附件 ----
+            RenderGraph::AttachmentParams scParams;
+            scParams.loadOp        = RHI::AttachmentLoadOp::Clear;       // 清除背景
+            scParams.storeOp       = RHI::AttachmentStoreOp::Store;
+            scParams.initialLayout = RHI::ImageLayout::Undefined;
+            scParams.finalLayout   = RHI::ImageLayout::PresentSrc;
+            scParams.clearColor    = { 0.08f, 0.08f, 0.10f, 1.0f };
 
             auto swapchainTexId = texIdMap.at(m_swapchainTextureName);
-            std::string key = passNode->addColorOutput(swapchainTexId, params);
-            subpassBuilder.addColorAttachmentRef(key);
+            std::string scKey = passNode->addColorOutput(swapchainTexId, scParams);
+            subpassBuilder.addColorAttachmentRef(scKey);
+
+            // ---- SceneColor 输入附件（制造依赖，确保顺序） ----
+            RenderGraph::AttachmentParams inputParams;
+            inputParams.loadOp        = RHI::AttachmentLoadOp::Load;
+            inputParams.storeOp       = RHI::AttachmentStoreOp::DontCare;
+            inputParams.initialLayout = RHI::ImageLayout::ShaderReadOnly;
+            inputParams.finalLayout   = RHI::ImageLayout::ShaderReadOnly;
+
+            auto sceneColorTexId = texIdMap.at("SceneColor");
+            std::string inputKey = passNode->addInput(sceneColorTexId, inputParams);
+            subpassBuilder.addInputAttachmentRef(inputKey);
 
             subpassBuilder.setRecorder(overlay.recorder);
 
+            // 注意：这里的 subpassIndex 始终是 0，因为该 Pass 只有一个子通道
             m_tagToSubpass[overlay.tag] = SubpassTarget{ {}, 0, overlay.recorder };
             m_tagToPassNode[overlay.tag] = passNode;
         }
+    }
 
-        // 6. 编译 RenderGraph
+    bool DeferredRenderPath::compileAndFinalize(std::unordered_map<std::string, RenderGraph::TextureId>& texIdMap){
         if (!m_renderGraph->compile()) {
             LOG_ERROR("Failed to compile RenderGraph");
             return false;
         }
 
-        // 7. compile 完成后，为所有 SubpassTarget 填入真正的 RenderPass 句柄
         for (auto& [tag, target] : m_tagToSubpass) {
             auto passIt = m_tagToPassNode.find(tag);
             if (passIt != m_tagToPassNode.end()) {
                 target.renderPass = passIt->second->getRenderPassHandle();
             }
-            else {
-                LOG_ERROR("No PassNode found for tag '{}'", tag);
-            }
         }
 
+        // 初始化 ImGui
         if (m_imguiManager && !m_imguiManager->isVulkanReady()) {
             auto it = m_tagToSubpass.find("ImGui");
             if (it != m_tagToSubpass.end()) {
                 m_imguiManager->initializeVulkanBackend(
-                    m_rhi.get(),
-                    m_resMgr.get(),
-                    it->second.renderPass,
-                    m_imguiImageCount
-                );
+                    m_rhi.get(), m_resMgr.get(),
+                    it->second.renderPass, m_imguiImageCount);
             }
+
+            m_imguiManager->setRenderGraph(m_renderGraph);
+
+            m_imguiManager->setDefaultSampler(m_defaultSampler);
+            m_imguiManager->registerSceneTexture(m_resMgr.get());
         }
 
         m_textureIdMap = std::move(texIdMap);
         return true;
     }
 
-    void DeferredRenderPath::setDrawItems(const Scene::AnalysisSceneResult& sceneData) {
+    void DeferredRenderPath::rebuildResources(const Scene::AnalysisSceneResult& sceneData) {
         m_cachedSceneData = std::make_shared<Scene::AnalysisSceneResult>(sceneData);
-        updateMaterialTextures(sceneData);  
+
+        // ① 刷新材质纹理依赖（从 RenderGraph 解析到 DescriptorSet）
+        updateMaterialTextures(sceneData);
+
+        // ② 分发 DrawItems 到各个 Recorder
         distributeDrawItems(sceneData);
-    }
 
-    void DeferredRenderPath::distributeDrawItems(const Scene::AnalysisSceneResult& sceneData) {
-        for (auto& [tag, target] : m_tagToSubpass) {
-            target.recorder->clearDrawItems();
-        }
+        // ③ 为所有 DrawItem 预创建管线映射
+        prepareAllPipelines(sceneData);
 
-        std::string defaultTag = m_config.front().subpasses.front().tag;
-        for (auto& item : sceneData.drawItems) {
-            std::string tag = item->passTag;
-            if (tag.empty()) {
-                tag = defaultTag;
-                LOG_WARN("DrawItem had empty passTag, assigned to default: {}", tag);
-            }
-
-            auto it = m_tagToSubpass.find(tag);
-            if (it != m_tagToSubpass.end()) {
-                it->second.recorder->addDrawItem(item);
-            }
-            else {
-                LOG_ERROR("No subpass for tag '{}'", tag);
-            }
-        }
-    }
-
-    void DeferredRenderPath::render(RHI::RHICommandEncoder* encoder, uint32_t frameIndex) {
-        if (!m_renderGraph) return;
-
-        auto context = buildRenderContext();
-        m_renderGraph->execute(encoder, context, frameIndex);
-    }
-
-    void DeferredRenderPath::onResize(uint32_t width, uint32_t height) {
-        m_width = width;
-        m_height = height;
-        for (auto& [name, desc] : m_textureDescs) {
-            desc.extent.width = width;
-            desc.extent.height = height;
-        }
-        if (!initialize()) {
-            LOG_ERROR("Failed to rebuild render path on resize");
-            return;
-        }
-        if (m_cachedSceneData) {
-            rebuildResources(*m_cachedSceneData);   
+        if (!m_resourceStatsPrinted) {
+            m_rhi->printResourceStatistics();
+            m_resourceStatsPrinted = true;
         }
     }
 
@@ -331,21 +356,26 @@ namespace StarryEngine {
         }
     }
 
-    void DeferredRenderPath::rebuildResources(const Scene::AnalysisSceneResult& sceneData) {
-        m_cachedSceneData = std::make_shared<Scene::AnalysisSceneResult>(sceneData);
+    void DeferredRenderPath::distributeDrawItems(const Scene::AnalysisSceneResult& sceneData) {
+        for (auto& [tag, target] : m_tagToSubpass) {
+            target.recorder->clearDrawItems();
+        }
 
-        // ① 刷新材质纹理依赖（从 RenderGraph 解析到 DescriptorSet）
-        updateMaterialTextures(sceneData);
+        std::string defaultTag = m_config.front().subpasses.front().tag;
+        for (auto& item : sceneData.drawItems) {
+            std::string tag = item->passTag;
+            if (tag.empty()) {
+                tag = defaultTag;
+                LOG_WARN("DrawItem had empty passTag, assigned to default: {}", tag);
+            }
 
-        // ② 分发 DrawItems 到各个 Recorder
-        distributeDrawItems(sceneData);
-
-        // ③ 为所有 DrawItem 预创建管线映射
-        prepareAllPipelines(sceneData);
-
-        if (!m_resourceStatsPrinted) {
-            m_rhi->printResourceStatistics();
-            m_resourceStatsPrinted = true;
+            auto it = m_tagToSubpass.find(tag);
+            if (it != m_tagToSubpass.end()) {
+                it->second.recorder->addDrawItem(item);
+            }
+            else {
+                LOG_ERROR("No subpass for tag '{}'", tag);
+            }
         }
     }
 

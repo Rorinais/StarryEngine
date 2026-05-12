@@ -469,13 +469,11 @@ namespace StarryEngine::Assets {
             size_t blockSize = block.size();
 
             if (savedSize == blockSize) {
-                // 完美匹配：直接拷贝
                 std::memcpy(block.data(), savedIt->second.data(), blockSize);
                 block.markDirty();
                 LOG_INFO("Restored block '{}', size={} (exact match)", name, blockSize);
             }
             else {
-                // ✅ 宽松匹配：取较小值，超出部分零填充
                 size_t copySize = std::min(savedSize, blockSize);
                 std::memcpy(block.data(), savedIt->second.data(), copySize);
 

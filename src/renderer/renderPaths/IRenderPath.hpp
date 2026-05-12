@@ -30,8 +30,7 @@ namespace StarryEngine {
 
         virtual void addOverlayPass(const OverlayPassDesc& desc) = 0;
 
-        void addOverlayPass(const std::string& tag,
-            std::shared_ptr<ISubpassRecorder> recorder) {
+        void addOverlayPass(const std::string& tag,std::shared_ptr<ISubpassRecorder> recorder) {
             addOverlayPass({ tag, std::move(recorder) });
         }
 

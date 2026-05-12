@@ -88,6 +88,29 @@
 						"loadOp": "Load",
 						"storeOp": "DontCare"
 					}
+				},
+				{
+					"name": "CopyToSwapchain",
+					"tag": "PostProcess_Copy",
+					"recorder": "CopyToSwapchainRecorder",
+					"colorAttachments": [
+						{
+							"texture": "Swapchain",
+							"initialLayout": "Undefined",
+							"finalLayout": "ColorAttachment",
+							"loadOp": "Clear",
+							"storeOp": "Store"
+						}
+					],
+					"inputAttachments": [
+						{
+							"texture": "SceneColor",
+							"initialLayout": "ShaderReadOnly",
+							"finalLayout": "ShaderReadOnly",
+							"loadOp": "Load",
+							"storeOp": "DontCare"
+						}
+					]
 				}
 			]
 		}

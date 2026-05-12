@@ -19,6 +19,16 @@ namespace StarryEngine::Assets {
         }
     }
 
+    void DefaultMaterialTemplate::invalidate() {
+        m_vertexShader = RHI::ShaderHandle::Null();
+        m_fragmentShader = RHI::ShaderHandle::Null();
+    }
+
+    void DefaultMaterialTemplate::setShaderPaths(const std::string& vsPath, const std::string& fsPath) {
+        m_vsPath = vsPath;
+        m_fsPath = fsPath;
+    }
+
     bool DefaultMaterialTemplate::loadShaders(const std::string& vsPath, const std::string& fsPath) {
         Assets::ShaderLoader loader(m_resMgr);
         auto vertInfo = loader.loadFromFile(vsPath, RHI::ShaderStage::Vertex);
@@ -85,50 +95,6 @@ namespace StarryEngine::Assets {
 
         setShaderPaths(vsPath, fsPath);
         return true;
-    }
-
-    const InstancingLayout* DefaultMaterialTemplate::getInstancingLayout() const {
-        static InstancingLayout defaultLayout = []() {
-            InstancingLayout layout;
-            layout.binding = 1;
-            layout.attributes = {
-                {3, RHI::Format::RGBA32_Float, 0},
-                {4, RHI::Format::RGBA32_Float, 16},
-                {5, RHI::Format::RGBA32_Float, 32},
-                {6, RHI::Format::RGBA32_Float, 48}
-            };
-            layout.autoCalculateOffsets(); // stride = 64
-            return layout;
-            }();
-        return &defaultLayout;
-    }
-
-    void DefaultMaterialTemplate::fillMissingLayouts(
-        std::unordered_map<uint32_t, RHI::DescriptorSetLayoutHandle>& layouts,
-        std::shared_ptr<RHI::ResourceManager> resMgr)
-    {
-        uint32_t maxSet = 0;
-        for (const auto& [setIdx, _] : layouts)
-            if (setIdx > maxSet) maxSet = setIdx;
-
-        for (uint32_t i = 1; i <= maxSet; ++i) {
-            if (layouts.find(i) == layouts.end()) {
-                RHI::DescriptorSetLayoutDesc emptyDesc;
-                auto layout = Assets::DescriptorSetLayoutCache::getOrCreateLayout(resMgr.get(), emptyDesc);
-                if (layout.isValid()) {
-                    layouts[i] = layout;
-                    LOG_INFO("Created empty placeholder layout for set {}", i);
-                }
-                else {
-                    LOG_ERROR("Failed to create placeholder layout for set {}", i);
-                }
-            }
-        }
-    }
-
-    void DefaultMaterialTemplate::setShaderPaths(const std::string& vsPath, const std::string& fsPath) {
-        m_vsPath = vsPath;
-        m_fsPath = fsPath;
     }
 
     bool DefaultMaterialTemplate::reloadShaders(const std::string& vsPath, const std::string& fsPath) {
@@ -220,8 +186,42 @@ namespace StarryEngine::Assets {
         return true;
     }
 
-    void DefaultMaterialTemplate::invalidate() {
-        m_vertexShader = RHI::ShaderHandle::Null();
-        m_fragmentShader = RHI::ShaderHandle::Null();
+    const InstancingLayout* DefaultMaterialTemplate::getInstancingLayout() const {
+        static InstancingLayout defaultLayout = []() {
+            InstancingLayout layout;
+            layout.binding = 1;
+            layout.attributes = {
+                {3, RHI::Format::RGBA32_Float, 0},
+                {4, RHI::Format::RGBA32_Float, 16},
+                {5, RHI::Format::RGBA32_Float, 32},
+                {6, RHI::Format::RGBA32_Float, 48}
+            };
+            layout.autoCalculateOffsets(); // stride = 64
+            return layout;
+            }();
+        return &defaultLayout;
+    }
+
+    void DefaultMaterialTemplate::fillMissingLayouts(
+        std::unordered_map<uint32_t, RHI::DescriptorSetLayoutHandle>& layouts,
+        std::shared_ptr<RHI::ResourceManager> resMgr)
+    {
+        uint32_t maxSet = 0;
+        for (const auto& [setIdx, _] : layouts)
+            if (setIdx > maxSet) maxSet = setIdx;
+
+        for (uint32_t i = 1; i <= maxSet; ++i) {
+            if (layouts.find(i) == layouts.end()) {
+                RHI::DescriptorSetLayoutDesc emptyDesc;
+                auto layout = Assets::DescriptorSetLayoutCache::getOrCreateLayout(resMgr.get(), emptyDesc);
+                if (layout.isValid()) {
+                    layouts[i] = layout;
+                    LOG_INFO("Created empty placeholder layout for set {}", i);
+                }
+                else {
+                    LOG_ERROR("Failed to create placeholder layout for set {}", i);
+                }
+            }
+        }
     }
 }

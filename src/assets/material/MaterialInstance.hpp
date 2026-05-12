@@ -37,17 +37,19 @@ namespace StarryEngine::Assets {
         void recreateDescriptorSets();
         void invalidateReflectionCache();
 
-        void setUniform(uint32_t setIndex, uint32_t binding, const void* data, size_t size);
-        void setTexture(uint32_t setIndex, uint32_t binding, RHI::TextureHandle texture, RHI::SamplerHandle sampler);
-        void setInputAttachment(uint32_t setIndex, uint32_t binding, RHI::TextureHandle texture, RHI::ImageLayout layout = RHI::ImageLayout::ShaderReadOnly);
-
         MaterialParameterBlock* getBlock(const std::string& blockName);
         void registerBlockLayout(const std::string& blockName, const RHI::ResourceBinding& binding);
         void setTexture(const std::string& name, RHI::TextureHandle texture, RHI::SamplerHandle sampler);
         void addTextureDependency(const std::string& shaderVarName,const std::string& rgTextureName,ResourceDependencyType type);
         void applyAllDirtyBlocks();
 
-        // 实例独立的渲染状态 setter / getter
+        void setUniform(uint32_t setIndex, uint32_t binding, const void* data, size_t size);
+        void setTexture(uint32_t setIndex, uint32_t binding, RHI::TextureHandle texture, RHI::SamplerHandle sampler);
+        void setInputAttachment(uint32_t setIndex, uint32_t binding, RHI::TextureHandle texture, RHI::ImageLayout layout = RHI::ImageLayout::ShaderReadOnly);
+        void addTextureDependency(const std::string& textureName,uint32_t set,uint32_t binding,ResourceDependencyType type = ResourceDependencyType::Sampler) {
+            m_textureDependencies[textureName] = { set, binding, type };
+        }
+
         void setCullMode(RHI::CullMode mode) { m_cullMode = mode; }
         void setDepthTest(bool enable) { m_depthTestEnable = enable; }
         void setDepthWrite(bool enable) { m_depthWriteEnable = enable; }
@@ -58,6 +60,8 @@ namespace StarryEngine::Assets {
         void enableDepthTest(bool enable = true) { m_depthTestEnable = enable; }
         void enableDepthWrite(bool enable = true) { m_depthWriteEnable = enable; }
         void setDebugName(std::string debugName) { m_debugName = std::move(debugName); }
+        const InstancingLayout* getInstancingLayout() const;
+        void setInstancingLayout(const InstancingLayout& layout);
 
         RHI::CullMode getCullMode() const { return m_cullMode; }
         RHI::FrontFace getFrontFace() const { return m_frontFace; }
@@ -69,34 +73,23 @@ namespace StarryEngine::Assets {
         bool isDeferred() const { return m_isDeferred; }
         std::string getDebugName() const { return m_debugName; }
 
+        RHI::DescriptorSetHandle getOrCreateSet(uint32_t setIndex);
         RHI::DescriptorSetHandle getSet(uint32_t setIndex) const;
-        const std::unordered_map<uint32_t, RHI::DescriptorSetHandle>& getAllSets() const { return m_sets; }
+
         std::shared_ptr<MaterialTemplate> getTemplate() const { return m_template; }
+        const std::unordered_map<uint32_t, RHI::DescriptorSetHandle>& getAllSets() const { return m_sets; }
+        const std::unordered_map<std::string, DependencyInfo>& getTextureDependencies() const {return m_textureDependencies;}
 
-        void setInstancingLayout(const InstancingLayout& layout);
-        const InstancingLayout* getInstancingLayout() const;
-
-        void addTextureDependency(const std::string& textureName,
-            uint32_t set,
-            uint32_t binding,
-            ResourceDependencyType type = ResourceDependencyType::Sampler) {
-            m_textureDependencies[textureName] = { set, binding, type };
-        }
-
-        const std::unordered_map<std::string, DependencyInfo>& getTextureDependencies() const {
-            return m_textureDependencies;
-        }
-
+        bool hasSubpassTag() const { return m_hasTag; }
+        const std::string& getSubpassTag() const { return m_subpassTag; }
         void setSubpassTag(const std::string& tag) {
             m_subpassTag = tag;
             m_hasTag = true;
         }
-        const std::string& getSubpassTag() const { return m_subpassTag; }
-        bool hasSubpassTag() const { return m_hasTag; }
 
-        RHI::DescriptorSetHandle getOrCreateSet(uint32_t setIndex);
-
-        static std::shared_ptr<DefaultMaterialTemplate> createDefaultTemplate(std::shared_ptr<RHI::ResourceManager> resMgr, RHI::DescriptorSetLayoutHandle globalSetLayout);
+        static std::shared_ptr<DefaultMaterialTemplate> createDefaultTemplate(
+            std::shared_ptr<RHI::ResourceManager> resMgr, 
+            RHI::DescriptorSetLayoutHandle globalSetLayout);
 
         static std::shared_ptr<MaterialInstance> createDefault(
             std::shared_ptr<RHI::ResourceManager> resMgr,

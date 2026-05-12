@@ -25,6 +25,10 @@ namespace StarryEngine {
     }
 
     ImGuiManager::~ImGuiManager() {
+        if (m_sceneTextureID != 0) {
+            ImGui_ImplVulkan_RemoveTexture(reinterpret_cast<VkDescriptorSet>(m_sceneTextureID));
+            m_sceneTextureID = 0;
+        }
         if (m_context) {
             ImGui::SetCurrentContext(m_context);
 
@@ -58,6 +62,9 @@ namespace StarryEngine {
     {
         ImGui::SetCurrentContext(m_context);
         ImGuiIO& io = ImGui::GetIO();
+        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+        io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+        io.IniFilename = "imgui.ini";
 
         m_width = width;
         m_height = height;
@@ -98,6 +105,7 @@ namespace StarryEngine {
         m_vkDevice = static_cast<VkDevice>(rhi->getDevice());
         m_graphicsQueueFamily = rhi->getGraphicsQueueFamilyIndex();
         m_graphicsQueue = static_cast<VkQueue>(rhi->getGraphicsQueue());
+        
 
         VkInstance       instance = static_cast<VkInstance>(rhi->getInstance());
         VkPhysicalDevice physicalDevice = static_cast<VkPhysicalDevice>(rhi->getPhysicalDevice());
@@ -298,4 +306,37 @@ namespace StarryEngine {
         }
     }
 
+    void ImGuiManager::registerSceneTexture(RHI::ResourceManager* resMgr) {
+        if (!m_rdg || !m_vulkanBackendReady || !resMgr) return;
+
+        // 如果已有，先移除
+        if (m_sceneTextureID != 0) {
+            ImGui_ImplVulkan_RemoveTexture(reinterpret_cast<VkDescriptorSet>(m_sceneTextureID));
+            m_sceneTextureID = 0;
+        }
+
+        // 获取 SceneColor 纹理
+        auto texId = m_rdg->getTextureId("SceneColor");
+        RHI::TextureHandle scHandle = m_rdg->getPhysicalTextureHandle(texId);
+        if (!scHandle.isValid()) {
+            LOG_ERROR("SceneColor texture not available");
+            return;
+        }
+        auto* tex = resMgr->getTexture(scHandle);
+        VkImageView view = static_cast<VkImageView>(tex->getDefaultView());
+
+        // 获取采样器
+        VkSampler sampler = VK_NULL_HANDLE;
+        if (m_defaultSampler.isValid()) {
+            sampler = static_cast<VkSampler>(resMgr->getSampler(m_defaultSampler)->getNativeHandle());
+        }
+        else {
+            LOG_ERROR("Default sampler not set for ImGui scene texture");
+            return;
+        }
+
+        // 注册纹理，并将指针转为 ImTextureID
+        VkDescriptorSet descSet = ImGui_ImplVulkan_AddTexture(sampler, view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        m_sceneTextureID = reinterpret_cast<ImTextureID>(descSet);
+    }
 } // namespace StarryEngine

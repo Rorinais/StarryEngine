@@ -12,6 +12,7 @@
 #include "../renderer/interface/RHI_STRUCTS_RESOURCE.hpp"
 #include "../renderer/interface/RHI_RESOURCE_FACTORY.hpp"
 #include "../renderer/interface/RHI_RESOURCE_MANAGER.hpp"
+#include "../renderer/graph/RenderGraph.hpp"
 
 namespace StarryEngine {
 
@@ -84,6 +85,17 @@ namespace StarryEngine {
                 ImGui::SetCurrentContext(mgr->m_context);
         }
 
+        void setRenderGraph(std::shared_ptr<RenderGraph::RenderGraph> rdg) {
+            m_rdg = rdg;
+        }
+        void setSubpassIndex(uint32_t subpassIdx) { m_subpassIndex = subpassIdx; }
+        void setDefaultSampler(RHI::SamplerHandle sampler) {
+            m_defaultSampler = sampler;
+        }
+        ImTextureID getSceneTextureID() const { return m_sceneTextureID; }
+
+        void registerSceneTexture(RHI::ResourceManager* resMgr);
+
     private:
         void createDescriptorPool(RHI::ResourceManager* resMgr, uint32_t imageCount);
         void setupVulkanInitInfo(
@@ -111,14 +123,15 @@ namespace StarryEngine {
         uint32_t m_height = 0;
 
         RHI::IRHI* m_rhi = nullptr;
-        RHI::ResourceManager* resMgr = nullptr;
         VkDevice m_vkDevice = VK_NULL_HANDLE;
         uint32_t m_graphicsQueueFamily = 0;
         VkQueue  m_graphicsQueue = VK_NULL_HANDLE;
         std::shared_ptr<Window> m_window;
+        std::shared_ptr<RenderGraph::RenderGraph> m_rdg;
+        RHI::SamplerHandle m_defaultSampler;        
+        ImTextureID m_sceneTextureID = 0;
+        uint32_t m_subpassIndex = 0;
 
-        // 存储 initInfo 需要的原生句柄（在 setupVulkanInitInfo 中获取）
-        // 如果 RHI 每次都能返回，可以不用存；否则存下来
         bool m_initInfoStored = false;
     };
 
