@@ -25,12 +25,8 @@ namespace StarryEngine {
     }
 
     ImGuiManager::~ImGuiManager() {
-        if (m_sceneTextureID != 0) {
-            ImGui_ImplVulkan_RemoveTexture(reinterpret_cast<VkDescriptorSet>(m_sceneTextureID));
-            m_sceneTextureID = 0;
-        }
         if (m_context) {
-            ImGui::SetCurrentContext(m_context);
+            ImGui::SetCurrentContext(m_context);   
 
             if (m_vulkanBackendReady) {
                 ImGui_ImplVulkan_Shutdown();
@@ -299,10 +295,12 @@ namespace StarryEngine {
     void ImGuiManager::setDefaultFont(const std::string& fontPath) {
         ImGuiIO& io = ImGui::GetIO();
         if (!fontPath.empty()) {
-            io.Fonts->AddFontFromFileTTF(fontPath.c_str(), 16.0f);
+            io.Fonts->AddFontFromFileTTF(fontPath.c_str(), 18.0f);  // ← 18px
         }
         else {
-            io.Fonts->AddFontDefault();
+            ImFontConfig config;
+            config.SizePixels = 18.0f;               
+            io.Fonts->AddFontDefault(&config);
         }
     }
 

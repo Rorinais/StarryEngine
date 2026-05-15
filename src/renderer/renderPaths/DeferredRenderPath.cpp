@@ -82,14 +82,17 @@ namespace StarryEngine {
         m_tagToSubpass.clear();
         m_tagToPassNode.clear();
 
+        if (m_imguiManager) {
+            m_imguiManager->setRenderGraph(nullptr);
+        }
+        m_renderGraph.reset();
+
         m_renderGraph = std::make_shared<RenderGraph::RenderGraph>(m_rhi);
         m_renderGraph->setSwapchainImageCount(m_rhi->getSwapChainImageCount());
 
         auto texIdMap = buildTextureIdMap();
-
         buildConfigPasses(texIdMap);
         buildOverlayPasses(texIdMap);
-
         return compileAndFinalize(texIdMap);
     }
 
@@ -268,17 +271,15 @@ namespace StarryEngine {
             }
         }
 
-        // 初始化 ImGui
-        if (m_imguiManager && !m_imguiManager->isVulkanReady()) {
-            auto it = m_tagToSubpass.find("ImGui");
-            if (it != m_tagToSubpass.end()) {
-                m_imguiManager->initializeVulkanBackend(
-                    m_rhi.get(), m_resMgr.get(),
-                    it->second.renderPass, m_imguiImageCount);
-            }
-
+        if (m_imguiManager) {
             m_imguiManager->setRenderGraph(m_renderGraph);
 
+            if (!m_imguiManager->isVulkanReady()) {
+                auto it = m_tagToSubpass.find("ImGui");
+                if (it != m_tagToSubpass.end()) {
+                    m_imguiManager->initializeVulkanBackend( m_rhi.get(), m_resMgr.get(),it->second.renderPass, m_imguiImageCount);
+                }
+            }
             m_imguiManager->setDefaultSampler(m_defaultSampler);
             m_imguiManager->registerSceneTexture(m_resMgr.get());
         }

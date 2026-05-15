@@ -1,5 +1,6 @@
 #include "Application.hpp"
 
+
 namespace StarryEngine {
     Application::Application() {
         Window::Config config;
@@ -47,11 +48,52 @@ namespace StarryEngine {
             m_renderer->setImGuiManager(m_imguiManager.get(), m_flightFrame);
             m_renderer->setNeedRebuildGraph();
         }
+
+        auto lang = TextEditor::LanguageDefinition::GLSL();
+        m_shaderEditor.SetLanguageDefinition(lang);
+        openShaderFile("assets/shaders/pbr/shpere_pbr.frag");
     }
+
+    void Application::openShaderFile(const std::string& path) {
+        std::ifstream file(path);
+        if (!file.is_open()) {
+            LOG_ERROR("Failed to open file: {}", path);
+            return;
+        }
+
+        std::stringstream buffer;
+        buffer << file.rdbuf();
+        file.close();
+
+        m_shaderEditor.SetText(buffer.str());
+        m_currentShaderPath = path;
+
+        LOG_INFO("Opened shader: {}", path);
+    }
+
+    void Application::saveCurrentShaderFile() {
+        if (m_currentShaderPath.empty()) return;
+
+        std::ofstream file(m_currentShaderPath);
+        if (!file.is_open()) {
+            LOG_ERROR("Failed to save file: {}", m_currentShaderPath);
+            return;
+        }
+
+        file << m_shaderEditor.GetText();
+        file.close();
+
+        LOG_INFO("Saved shader: {}", m_currentShaderPath);
+    }
+
+
 
     void Application::drawImGuiPanels(float deltaTime) {
         ImGuiManager::SetCurrent(m_imguiManager.get());
 
+        // ════════════════════════════════════════
+        // 主菜单栏
+        // ════════════════════════════════════════
         if (ImGui::BeginMainMenuBar()) {
             if (ImGui::BeginMenu("Engine")) {
                 ImGui::MenuItem("Performance", nullptr, &m_showPerformancePanel);
@@ -71,16 +113,20 @@ namespace StarryEngine {
             ImGui::EndMainMenuBar();
         }
 
-        // ---------- 全屏 DockSpace 容器 ----------
+        // ════════════════════════════════════════
+        // 全屏 DockSpace
+        // ════════════════════════════════════════
         ImGuiViewport* viewport = ImGui::GetMainViewport();
         ImGui::SetNextWindowPos(viewport->WorkPos);
         ImGui::SetNextWindowSize(viewport->WorkSize);
         ImGui::SetNextWindowViewport(viewport->ID);
+
         ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
 
-        ImGuiWindowFlags dockspace_flags = ImGuiWindowFlags_NoTitleBar |
+        ImGuiWindowFlags dockspace_flags =
+            ImGuiWindowFlags_NoTitleBar |
             ImGuiWindowFlags_NoCollapse |
             ImGuiWindowFlags_NoResize |
             ImGuiWindowFlags_NoMove |
@@ -94,57 +140,134 @@ namespace StarryEngine {
         ImGuiID dockspace_id = ImGui::GetID("MainDockSpace");
         ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
 
-        static bool first_frame = true;
-        if (first_frame) {
-            first_frame = false;
+        static bool layout_initialized = false;
+        if (!layout_initialized) {
+            layout_initialized = true;
 
-            if (ImGui::DockBuilderGetNode(dockspace_id) == NULL) {
+            // 清除默认布局
+            ImGui::DockBuilderRemoveNode(dockspace_id);
+            ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
+            ImGui::DockBuilderSetNodeSize(dockspace_id, viewport->WorkSize);
 
-                ImGui::DockBuilderRemoveNode(dockspace_id); 
-                ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
-                ImGui::DockBuilderSetNodeSize(dockspace_id, viewport->WorkSize);
+            ImGuiID dock_right;
+            ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Right, 0.30f, &dock_right, &dockspace_id);
 
-                ImGuiID dock_left, dock_right, dock_right_up, dock_right_down, dock_bottom;
-                dock_left = ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Left, 0.7f, nullptr, &dockspace_id);
-                dock_right = ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Right, 0.3f, nullptr, &dockspace_id);
-                ImGui::DockBuilderSplitNode(dock_right, ImGuiDir_Up, 0.5f, &dock_right_up, &dock_right_down);
-                dock_bottom = ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Down, 0.2f, nullptr, &dockspace_id);
+            ImGuiID dock_right_up, dock_right_down;
+            ImGui::DockBuilderSplitNode(dock_right, ImGuiDir_Up, 0.20f, &dock_right_up, &dock_right_down);
 
-                ImGui::DockBuilderDockWindow("Scene View", dock_left);
-                ImGui::DockBuilderDockWindow("Inspector", dock_right_up);
-                ImGui::DockBuilderDockWindow("Asset Browser", dock_right_down);
-                ImGui::DockBuilderDockWindow("Console", dock_bottom);
+            ImGuiID dock_bottom;
+            ImGui::DockBuilderSplitNode(dockspace_id, ImGuiDir_Down, 0.30f, &dock_bottom, &dockspace_id);
 
-                ImGui::DockBuilderFinish(dockspace_id);
-            }
+            ImGui::DockBuilderDockWindow("Scene View", dockspace_id);  // 左侧主区域
+            ImGui::DockBuilderDockWindow("Inspector", dock_right_up);  // 右上方
+            ImGui::DockBuilderDockWindow("Code Editor", dock_right_down); // 右下方
+            ImGui::DockBuilderDockWindow("Console", dock_bottom);   // 底部
+
+            ImGui::DockBuilderFinish(dockspace_id);
         }
 
-        ImGui::End(); 
+        ImGui::End(); // MainDockSpace
 
-        // ---------- 具体的面板窗口 ----------
+        // ════════════════════════════════════════
+        // 具体的面板窗口
+        //   （必须在 DockSpace End() 之后）
+        // ════════════════════════════════════════
+
+        // Scene View — 渲染画面
         if (ImGui::Begin("Scene View")) {
             ImTextureID texID = m_imguiManager->getSceneTextureID();
             if (texID) {
-                ImVec2 size = ImGui::GetContentRegionAvail();
-                ImGui::Image(texID, size);
+                ImVec2 avail = ImGui::GetContentRegionAvail();
+                // 保持宽高比（或直接拉伸填充）
+                ImGui::Image(texID, avail);
             }
         }
         ImGui::End();
 
+        // Inspector
         if (ImGui::Begin("Inspector")) {
             ImGui::Text("Object Properties");
+
+            static float col1[4] = { 1.0f, 0.0f, 0.2f ,1.0f};
+
+            if (ImGui::ColorEdit4("color 2", col1)) {
+                // auto block = m_scene->getAllObjects()[1]->materials[0]->getBlock("LightingUBO");
+                //if (block)
+                //{
+                //    block->setVec4("lights.color", glm::vec4(col1[0], col1[1], col1[2], col1[3]));
+                //}
+
+            }
         }
         ImGui::End();
 
-        if (ImGui::Begin("Asset Browser")) {
-            ImGui::Text("Assets...");
+        // Asset Browser
+        if (ImGui::Begin("Code Editor")) {
+            // ═══ 工具栏 ═══
+            if (ImGui::Button("Open")) {
+                std::string path = OpenFileDialog();
+                if (!path.empty()) {
+                    openShaderFile(path);
+                }
+            }
+            ImGui::SameLine();
+
+            if (ImGui::Button("Save")) {
+                saveCurrentShaderFile();
+            }
+            ImGui::SameLine();
+
+            ImGui::Text(" %s", m_currentShaderPath.c_str());
+
+            ImGui::Separator();
+
+            // ═══ 编辑器主体 ═══
+            m_shaderEditor.Render("##editor", ImGui::GetContentRegionAvail());
         }
         ImGui::End();
 
+
+        // Console
         if (ImGui::Begin("Console")) {
-            ImGui::Text("Logs...");
+            auto sink = StarryEngine::Logger::getImGuiSink();
+            if (!sink) {
+                ImGui::Text("Logger not available.");
+            }
+            else {
+                if (ImGui::Button("Clear")) sink->clear();
+
+                ImGui::BeginChild("LogRegion", ImVec2(0, 0), false, ImGuiWindowFlags_HorizontalScrollbar);
+                ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
+
+                // 获取日志拷贝（线程安全）
+                auto logs = sink->getLogs();
+                for (const auto& entry : logs) {
+                    ImVec4 color;
+                    switch (entry.level) {
+                    case spdlog::level::trace:    color = ImVec4(0.7f, 0.7f, 0.7f, 1.0f); break;
+                    case spdlog::level::debug:    color = ImVec4(0.5f, 0.5f, 1.0f, 1.0f); break;
+                    case spdlog::level::info:     color = ImVec4(1.0f, 1.0f, 1.0f, 1.0f); break;
+                    case spdlog::level::warn:     color = ImVec4(1.0f, 1.0f, 0.0f, 1.0f); break;
+                    case spdlog::level::err:      color = ImVec4(1.0f, 0.4f, 0.4f, 1.0f); break;
+                    case spdlog::level::critical: color = ImVec4(1.0f, 0.0f, 0.0f, 1.0f); break;
+                    default:                      color = ImVec4(0.8f, 0.8f, 0.8f, 1.0f); break;
+                    }
+                    ImGui::TextColored(color, "%s", entry.message.c_str());
+                }
+
+                // 自动滚动到底部（仅当用户已在底部时）
+                if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY())
+                    ImGui::SetScrollHereY(1.0f);
+
+                ImGui::PopStyleVar();
+                ImGui::EndChild();
+            }
         }
         ImGui::End();
+
+        if (m_showDemoWindow) {
+            ImGui::ShowDemoWindow(&m_showDemoWindow);
+        }
     }
 
     void Application::createDescriptorPool() {
@@ -180,26 +303,38 @@ namespace StarryEngine {
             glfwPollEvents();
             monitor.tick();
 
-            // ----- 自动 Shader 热重载（文件监控 + 防抖）-----
+            // Application::run() 中，shader 热重载部分改为：
+
             auto now = std::chrono::steady_clock::now();
             if (now - m_lastFileCheck > std::chrono::milliseconds(500)) {
                 m_lastFileCheck = now;
                 bool anyChange = false;
-                for (const auto& entry : std::filesystem::recursive_directory_iterator("assets/shaders")) {
-                    if (!entry.is_regular_file()) continue;
-                    std::string path = entry.path().string();
-                    auto currentTime = std::filesystem::last_write_time(entry);
-                    auto it = m_shaderTimestamps.find(path);
-                    if (it == m_shaderTimestamps.end() || currentTime > it->second) {
-                        anyChange = true;
-                        m_shaderTimestamps[path] = currentTime;
+
+                std::error_code ec;
+                if (std::filesystem::exists("assets/shaders", ec)) {
+                    try {
+                        for (const auto& entry : std::filesystem::recursive_directory_iterator("assets/shaders", ec)) {
+                            if (ec) break;
+                            if (!entry.is_regular_file()) continue;
+                            std::string path = entry.path().string();
+                            auto currentTime = std::filesystem::last_write_time(entry, ec);
+                            if (ec) continue;
+                            auto it = m_shaderTimestamps.find(path);
+                            if (it == m_shaderTimestamps.end() || currentTime > it->second) {
+                                anyChange = true;
+                                m_shaderTimestamps[path] = currentTime;
+                            }
+                        }
+                    }
+                    catch (const std::exception& e) {
+                        LOG_ERROR("Shader file watch error: {}", e.what());
                     }
                 }
 
                 if (anyChange && now >= m_nextAllowedReload && m_renderer) {
-                    m_rhi->waitIdle();                     // 确保渲染空闲
-                    m_renderer->reloadAllShaders();        // 重载所有使用的 shader
-                    m_nextAllowedReload = now + kReloadCooldown; // 冷却
+                    m_rhi->waitIdle();
+                    m_renderer->reloadAllShaders();
+                    m_nextAllowedReload = now + kReloadCooldown;
                 }
             }
 
@@ -213,11 +348,8 @@ namespace StarryEngine {
                     std::cerr << "Failed to recreate swap chain!" << std::endl;
                     continue;
                 }
-                m_renderer->onResize(m_width, m_height);
 
-                if (m_imguiManager) {
-                    m_imguiManager->registerSceneTexture(m_resMgr.get());
-                }
+                m_renderer->onResize(m_width, m_height);
                 continue;
             }
             if (m_width == 0 || m_height == 0) continue;
@@ -360,6 +492,14 @@ namespace StarryEngine {
     }
 
     Application::~Application() {
+        // ✅ 先关闭 ImGui
+        if (m_imguiManager) {
+            m_imguiManager->shutdown(m_resMgr.get());
+        }
+        m_imguiManager.reset();
+        m_imguiRecorder.reset();
+
+        // 然后 RHI
         if (m_rhi) m_rhi->waitIdle();
         m_rhi.reset();
         m_window.reset();

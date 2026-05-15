@@ -23,6 +23,12 @@
 #include "../ui/ImGuiManager.hpp"
 #include "../ui/ImGuiRecorder.hpp"
 
+#include "TextEditor.h"
+#include <windows.h>
+#include <commdlg.h>
+#define GLFW_EXPOSE_NATIVE_WIN32   
+#include <GLFW/glfw3native.h>
+
 namespace StarryEngine {
     class Application {
     public:
@@ -43,6 +49,24 @@ namespace StarryEngine {
 
         ImGuiManager* getImGuiManager() { return m_imguiManager.get(); }
         bool isImGuiEnabled() const { return m_imguiEnabled; }
+
+        std::string OpenFileDialog() {
+            OPENFILENAMEA ofn;
+            char szFile[260] = { 0 };
+            ZeroMemory(&ofn, sizeof(ofn));
+            ofn.lStructSize = sizeof(ofn);
+            ofn.hwndOwner = glfwGetWin32Window(m_window->getHandle());
+            ofn.lpstrFile = szFile;
+            ofn.nMaxFile = sizeof(szFile);
+            ofn.lpstrFilter = "Shader Files\0*.vert;*.frag;*.comp;*.glsl\0All\0*.*\0";
+            ofn.nFilterIndex = 1;
+            ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
+
+            if (GetOpenFileNameA(&ofn) == TRUE) {
+                return std::string(ofn.lpstrFile);
+            }
+            return "";
+        }
 
     private:
         Window::Ptr m_window;
@@ -80,5 +104,14 @@ namespace StarryEngine {
         bool m_showDeveloperTools = true;
         void initImGui();
         void drawImGuiPanels(float deltaTime);
+
+
+        // 代码编辑器相关
+        TextEditor m_shaderEditor;
+        std::string m_currentShaderPath;
+        bool m_showCodeEditor = true;
+        // 辅助函数
+        void openShaderFile(const std::string& path);
+        void saveCurrentShaderFile();
     };
 } // namespace StarryEngine

@@ -10,12 +10,17 @@
 #include "Formatters.hpp"
 
 namespace StarryEngine {
+    struct LogEntry {
+        spdlog::level::level_enum level;
+        std::string message;
+    };
 
     class ImGuiLogSink : public spdlog::sinks::base_sink<std::mutex> {
     public:
-        std::vector<std::string> getLogs() {
+        // 线程安全地返回日志拷贝
+        std::vector<LogEntry> getLogs() const {
             std::lock_guard<std::mutex> lock(m_mutex);
-            return m_logs; 
+            return m_logs;
         }
 
         void clear() {
@@ -27,10 +32,10 @@ namespace StarryEngine {
         void sink_it_(const spdlog::details::log_msg& msg) override {
             spdlog::memory_buf_t formatted;
             formatter_->format(msg, formatted);
-            std::string log_str = fmt::to_string(formatted);
+            std::string message = fmt::to_string(formatted);
 
             std::lock_guard<std::mutex> lock(m_mutex);
-            m_logs.push_back(log_str);
+            m_logs.push_back({ msg.level, std::move(message) });
             if (m_logs.size() > 1000) {
                 m_logs.erase(m_logs.begin());
             }
@@ -39,8 +44,8 @@ namespace StarryEngine {
         void flush_() override {}
 
     private:
-        std::vector<std::string> m_logs;
-        std::mutex m_mutex;
+        std::vector<LogEntry> m_logs;          // 改为 LogEntry
+        mutable std::mutex m_mutex;            // 保护 m_logs 的锁
     };
 
     class Logger {
