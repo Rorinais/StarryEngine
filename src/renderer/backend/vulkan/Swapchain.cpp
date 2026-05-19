@@ -214,6 +214,7 @@ namespace StarryEngine {
                     mFormat,
                     VK_IMAGE_ASPECT_COLOR_BIT,
                     VK_IMAGE_VIEW_TYPE_2D,  
+                    0,
                     1,  // mipLevels
                     0,  // baseArrayLayer
                     1   // layerCount

@@ -1,4 +1,5 @@
 #version 450
+#pragma optimize(off)
 #extension GL_KHR_vulkan_glsl : enable
 layout(location = 0) in vec3 fragNormal;
 layout(location = 1) in vec2 fragTexCoord;
@@ -30,6 +31,11 @@ layout(set = 1, binding = 1) uniform LightingUBO {
 layout(set = 2, binding = 0) uniform sampler2D armMap;
 layout(set = 2, binding = 1) uniform sampler2D albedoMap;
 layout(set = 2, binding = 2) uniform sampler2D normalMap;
+layout(set = 2, binding = 3) uniform samplerCube uIrradianceMap;
+layout(set = 2, binding = 4) uniform samplerCube uPrefilteredMap;
+layout(set = 2, binding = 5) uniform sampler2D   uBrdfLut;
+
+const float PREFILTER_MAX_LOD = 5.0;
 
 const float PI = 3.14159265359;
 
@@ -41,20 +47,15 @@ vec3 FresnelSchlick(float cosTheta, vec3 F0);
 vec3 ScreenSpaceDither(vec2 vScreenPos);
 
 void main() {
-    // 1. 采样纹理
     vec4 albedoSample  = texture(albedoMap, fragTexCoord);
     vec4 armSample     = texture(armMap,    fragTexCoord);
     vec4 normalSample  = texture(normalMap, fragTexCoord);
 
-    // 2. 从 ARM 贴图提取参数
-    float ao         = armSample.r;          // 环境光遮蔽
-    float roughness  = armSample.g;          // 粗糙度
-    float metallic   = armSample.b;          // 金属度
+    float ao         = armSample.r;        // AO 仍然可以用
+    float roughness  = 0.2;                // 固定光滑度，或仍从 g 通道读：armSample.g
+    float metallic   = 0.5; 
 
-    // 3. 处理法线贴图
-    vec3 tangentNormal = normalSample.rgb * 2.0 - 1.0;    // 将法线从 [0,1] 映射到 [-1,1]
-
-    // 构建 TBN 矩阵，将切线空间法线转换到世界空间
+    vec3 tangentNormal = normalSample.rgb * 2.0 - 1.0;
     vec3 T = normalize(fragTangent);
     vec3 B = normalize(fragBitangent);
     vec3 N_world = normalize(fragNormal);
@@ -65,10 +66,10 @@ void main() {
     vec3 F0 = mix(vec3(0.04), albedoSample.rgb, metallic);
     vec3 Lo = vec3(0.0);
 
-    vec3 L;
+    // 直接光照（单个光源）
     Light light = lighting.lights;
+    vec3 L;
     vec3 radiance = light.color.rgb;
-
     if (light.position.w == 0.0) {
         L = normalize(-light.position.xyz);
     } else {
@@ -78,38 +79,49 @@ void main() {
         float attenuation = 1.0 / (dist * dist + 0.001);
         radiance *= attenuation;
     }
-
     vec3 H = normalize(V + L);
-        
     float NdotL = max(dot(N, L), 0.0);
     float NdotV = max(dot(N, V), 0.0);
-
-    float NDF = DistributionGGX(N, H, roughness);        
-    float G   = GeometrySmith(N, V, L, roughness);       
+    
+    float NDF = DistributionGGX(N, H, roughness);
+    float G   = GeometrySmith(N, V, L, roughness);
     vec3  F   = FresnelSchlick(max(dot(H, V), 0.0), F0);
-
+    
     vec3 kS = F;
     vec3 kD = (vec3(1.0) - kS) * (1.0 - metallic);
-
+    
     vec3 nominator = NDF * G * F;
     float denominator = max(4.0 * NdotV * NdotL, 0.0001);
     vec3 specular = nominator / denominator;
-
+    
     Lo += (kD * albedoSample.rgb / PI + specular) * radiance * NdotL;
+    
+    // ========== IBL 环境光 ==========
+    // 漫反射 Irradiance
+    vec3 irradiance = texture(uIrradianceMap, N).rgb;
+    //vec3 irradiance = textureLod(uPrefilteredMap, N, PREFILTER_MAX_LOD - 1.0).rgb;
+    vec3 diffuseIBL = irradiance * albedoSample.rgb;
+    
+    // 镜面反射 Prefiltered + BRDF LUT
+    vec3 R = reflect(-V, N);
+    float roughnessLevel = roughness * 5.0;   // maxLod = 5
+    vec3 prefilteredColor = textureLod(uPrefilteredMap, R, roughnessLevel).rgb;
+    vec2 brdfParams = texture(uBrdfLut, vec2(NdotV, roughness)).rg;
+    vec3 specularIBL = prefilteredColor * (kS * brdfParams.x + brdfParams.y);
+    
+    vec3 ambientIBL = (diffuseIBL * kD + specularIBL) * ao;
+    
+    vec3 color = Lo + ambientIBL;
+    
+     //if (diffuseIBL.x < 0.0) discard;  
 
-    // 环境光 + AO
-    vec3 ambient = vec3(lighting.ambientStrength) * albedoSample.rgb * ao;
-    vec3 color = ambient + Lo;
-
-    // 抖动
+    // 抖动 + 色调映射 + Gamma
     vec2 screenPos = gl_FragCoord.xy;
     vec3 dither = ScreenSpaceDither(screenPos);
     color += dither;
-
-    // 色调映射与 Gamma 校正
     color = color / (color + vec3(1.0));
     color = pow(color, vec3(1.0/2.2));
-
+    
     outColor = vec4(color, 1.0);
 }
 

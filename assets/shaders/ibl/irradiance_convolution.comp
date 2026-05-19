@@ -1,0 +1,65 @@
+#version 450
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+layout(set = 0, binding = 0) uniform samplerCube uEnvironmentMap;
+layout(set = 0, binding = 1, rgba32f) uniform writeonly imageCube uIrradianceMap;
+
+layout(push_constant) uniform PC {
+    int faceSize;
+} pc;
+
+const float PI = 3.14159265359;
+
+vec3 FaceToDirection(int face, float u, float v, float size) {
+    float x = (u + 0.5) / size * 2.0 - 1.0;
+    float y = (v + 0.5) / size * 2.0 - 1.0;
+    vec3 dir;
+    switch (face) {
+        case 0: dir = vec3( 1.0, -y, -x); break;
+        case 1: dir = vec3(-1.0, -y,  x); break;
+        case 2: dir = vec3( x,  1.0,  y); break;
+        case 3: dir = vec3( x, -1.0, -y); break;
+        case 4: dir = vec3( x, -y,  1.0); break;
+        case 5: dir = vec3(-x, -y, -1.0); break;
+    }
+    return normalize(dir);
+}
+
+void main() {
+    int face = int(gl_GlobalInvocationID.z);
+    int px   = int(gl_GlobalInvocationID.x);
+    int py   = int(gl_GlobalInvocationID.y);
+
+    if (face >= 6 || px >= pc.faceSize || py >= pc.faceSize) return;
+
+    vec3 N = FaceToDirection(face, float(px), float(py), float(pc.faceSize));
+
+    vec3 right;
+    if (abs(N.x) > abs(N.y)) {
+        right = normalize(vec3(-N.z, 0.0, N.x));
+    } else {
+        right = normalize(vec3(0.0, N.z, -N.y));
+    }
+    vec3 up = cross(N, right);
+
+    vec3 irradiance = vec3(0.0);
+    float sampleDelta = 0.025;
+    int phiSteps   = int(2.0 * PI / sampleDelta + 0.5);
+    int thetaSteps = int(0.5 * PI / sampleDelta + 0.5);
+    float dPhi   = 2.0 * PI / float(phiSteps);
+    float dTheta = 0.5 * PI / float(thetaSteps);
+
+    for (int i = 0; i < phiSteps; ++i) {
+        float phi = (float(i) + 0.5) * dPhi;
+        for (int j = 0; j < thetaSteps; ++j) {
+            float theta = (float(j) + 0.5) * dTheta;
+            vec3 tangentSample = vec3(sin(theta)*cos(phi), sin(theta)*sin(phi), cos(theta));
+            vec3 sampleVec = tangentSample.x*right + tangentSample.y*up + tangentSample.z*N;
+            irradiance += texture(uEnvironmentMap, sampleVec).rgb
+                          * cos(theta) * sin(theta) * dTheta * dPhi;
+        }
+    }
+    irradiance = irradiance / (irradiance + 1.0);
+    imageStore(uIrradianceMap, ivec3(px, py, face), vec4(irradiance, 1.0));
+}

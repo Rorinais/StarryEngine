@@ -174,65 +174,76 @@ namespace StarryEngine::Assets {
     // ==================== Cube ====================
     std::shared_ptr<Geometry> GeometryGenerator::createCube(
         std::shared_ptr<RHI::ResourceManager> resMgr,
-        float width,
-        float height,
-        float depth)
+        float width, float height, float depth)
     {
         float halfL = width * 0.5f;
         float halfW = depth * 0.5f;   // Z 轴方向
         float halfH = height * 0.5f;  // Y 轴方向
 
-        // 8 个顶点位置（局部坐标，原点为中心）
         std::array<glm::vec3, 8> positions = {
-            glm::vec3(-halfL, -halfW, -halfH), // 0 - 左后下
-            glm::vec3(halfL, -halfW, -halfH), // 1 - 右后下
-            glm::vec3(halfL,  halfW, -halfH), // 2 - 右前下
-            glm::vec3(-halfL,  halfW, -halfH), // 3 - 左前下
-            glm::vec3(-halfL, -halfW,  halfH), // 4 - 左后上
-            glm::vec3(halfL, -halfW,  halfH), // 5 - 右后上
-            glm::vec3(halfL,  halfW,  halfH), // 6 - 右前上
-            glm::vec3(-halfL,  halfW,  halfH)  // 7 - 左前上
+            glm::vec3(-halfL, -halfW, -halfH), // 0
+            glm::vec3(halfL, -halfW, -halfH), // 1
+            glm::vec3(halfL,  halfW, -halfH), // 2
+            glm::vec3(-halfL,  halfW, -halfH), // 3
+            glm::vec3(-halfL, -halfW,  halfH), // 4
+            glm::vec3(halfL, -halfW,  halfH), // 5
+            glm::vec3(halfL,  halfW,  halfH), // 6
+            glm::vec3(-halfL,  halfW,  halfH)  // 7
         };
 
-        // 6 个面，每个面由 4 个顶点索引构成（顺序：左下、右下、右上、左上）
-        std::array<std::array<uint32_t, 4>, 6> faces = { {
-            {0, 1, 2, 3}, // 底面 (-Z)
-            {4, 5, 6, 7}, // 顶面 (+Z)
-            {0, 4, 7, 3}, // 左面 (-X)
-            {1, 5, 6, 2}, // 右面 (+X)
-            {0, 1, 5, 4}, // 后面 (-Y)
-            {3, 2, 6, 7}  // 前面 (+Y)
+        // 面定义：{ 面索引, 顶点顺序（左下、右下、右上、左上），法线 }
+        struct Face {
+            std::array<uint32_t, 4> idx;
+            glm::vec3 normal;
+        };
+        std::array<Face, 6> faces = { {
+            { {0, 1, 2, 3}, glm::vec3(0,  0, -1) }, // 前? 这里按原代码的顺序，只保证法线正确
+            { {4, 5, 6, 7}, glm::vec3(0,  0,  1) },
+            { {0, 4, 7, 3}, glm::vec3(-1,  0,  0) },
+            { {1, 5, 6, 2}, glm::vec3(1,  0,  0) },
+            { {0, 1, 5, 4}, glm::vec3(0, -1,  0) },
+            { {3, 2, 6, 7}, glm::vec3(0,  1,  0) }
         } };
 
-        // 每个面的法线
-        std::array<glm::vec3, 6> normals = {
-            glm::vec3(0.0f,  0.0f, -1.0f), // 底面
-            glm::vec3(0.0f,  0.0f,  1.0f), // 顶面
-            glm::vec3(-1.0f,  0.0f,  0.0f), // 左面
-            glm::vec3(1.0f,  0.0f,  0.0f), // 右面
-            glm::vec3(0.0f, -1.0f,  0.0f), // 后面
-            glm::vec3(0.0f,  1.0f,  0.0f)  // 前面
+        // 每个面的 UV 坐标（逆时针，与顶点顺序一致）
+        std::array<glm::vec2, 4> uvs = {
+            glm::vec2(0, 0), glm::vec2(1, 0),
+            glm::vec2(1, 1), glm::vec2(0, 1)
         };
 
-        // 每个面的 UV（所有面相同）
-        std::array<glm::vec2, 4> texCoords = {
-            glm::vec2(0.0f, 0.0f), // 左下
-            glm::vec2(1.0f, 0.0f), // 右下
-            glm::vec2(1.0f, 1.0f), // 右上
-            glm::vec2(0.0f, 1.0f)  // 左上
-        };
-
-        std::vector<float> vertexData; // 每个顶点：pos(3) + normal(3) + uv(2) = 8 floats
+        std::vector<float> vertexData; // 每顶点 12 floats
         std::vector<uint32_t> indices;
 
-        for (int faceIdx = 0; faceIdx < 6; ++faceIdx) {
-            const auto& face = faces[faceIdx];
-            const glm::vec3& normal = normals[faceIdx];
+        for (int f = 0; f < 6; ++f) {
+            const auto& face = faces[f];
+            glm::vec3 normal = face.normal;
 
-            // 为当前面的 4 个顶点生成数据
+            // 计算切线和副切线（面平坦，可根据 ddx/ddy 近似）
+            // 取顶点 0 到 1 的边作为切线方向
+            glm::vec3 edge1 = positions[face.idx[1]] - positions[face.idx[0]];
+            glm::vec3 edge2 = positions[face.idx[3]] - positions[face.idx[0]];
+            glm::vec2 deltaUV1 = uvs[1] - uvs[0];
+            glm::vec2 deltaUV2 = uvs[3] - uvs[0];
+
+            float fInv = 1.0f / (deltaUV1.x * deltaUV2.y - deltaUV2.x * deltaUV1.y);
+            glm::vec3 tangent, bitangent;
+            tangent.x = fInv * (deltaUV2.y * edge1.x - deltaUV1.y * edge2.x);
+            tangent.y = fInv * (deltaUV2.y * edge1.y - deltaUV1.y * edge2.y);
+            tangent.z = fInv * (deltaUV2.y * edge1.z - deltaUV1.y * edge2.z);
+            tangent = glm::normalize(tangent);
+
+            bitangent.x = fInv * (-deltaUV2.x * edge1.x + deltaUV1.x * edge2.x);
+            bitangent.y = fInv * (-deltaUV2.x * edge1.y + deltaUV1.x * edge2.y);
+            bitangent.z = fInv * (-deltaUV2.x * edge1.z + deltaUV1.x * edge2.z);
+            bitangent = glm::normalize(bitangent);
+
+            // 计算 handedness
+            float handedness = (glm::dot(glm::cross(normal, tangent), bitangent) < 0.0f) ? -1.0f : 1.0f;
+
             for (int i = 0; i < 4; ++i) {
-                const auto& pos = positions[face[i]];
-                const auto& uv = texCoords[i];
+                const glm::vec3& pos = positions[face.idx[i]];
+                const glm::vec2& uv = uvs[i];
+
                 vertexData.push_back(pos.x);
                 vertexData.push_back(pos.y);
                 vertexData.push_back(pos.z);
@@ -241,16 +252,19 @@ namespace StarryEngine::Assets {
                 vertexData.push_back(normal.z);
                 vertexData.push_back(uv.x);
                 vertexData.push_back(uv.y);
+                vertexData.push_back(tangent.x);
+                vertexData.push_back(tangent.y);
+                vertexData.push_back(tangent.z);
+                vertexData.push_back(handedness);
             }
 
-            // 生成索引（两个三角形）
-            uint32_t baseIdx = faceIdx * 4;
-            indices.push_back(baseIdx + 0);
-            indices.push_back(baseIdx + 1);
-            indices.push_back(baseIdx + 2);
-            indices.push_back(baseIdx + 0);
-            indices.push_back(baseIdx + 2);
-            indices.push_back(baseIdx + 3);
+            uint32_t baseIndex = f * 4;
+            indices.push_back(baseIndex + 0);
+            indices.push_back(baseIndex + 1);
+            indices.push_back(baseIndex + 2);
+            indices.push_back(baseIndex + 0);
+            indices.push_back(baseIndex + 2);
+            indices.push_back(baseIndex + 3);
         }
 
         auto geometry = std::make_shared<Geometry>(resMgr);
@@ -259,15 +273,14 @@ namespace StarryEngine::Assets {
         geometry->setPrimitiveTopology(RHI::PrimitiveTopology::TriangleList);
 
         VertexLayout layout;
-        layout.addBinding(0, 8 * sizeof(float), RHI::VertexInputRate::PerVertex);
-        layout.addAttribute(0, 0, RHI::Format::RGB32_Float, 0);                // 位置
-        layout.addAttribute(1, 0, RHI::Format::RGB32_Float, 3 * sizeof(float)); // 法线
-        layout.addAttribute(2, 0, RHI::Format::RG32_Float, 6 * sizeof(float));  // UV
+        layout.addBinding(0, 0, RHI::VertexInputRate::PerVertex);
+        layout.addAttribute(VertexSemantic::Position, 0, RHI::Format::RGB32_Float);  // offset 0
+        layout.addAttribute(VertexSemantic::Normal, 0, RHI::Format::RGB32_Float);  // offset 12
+        layout.addAttribute(VertexSemantic::TexCoord0, 0, RHI::Format::RG32_Float);   // offset 24
+        layout.addAttribute(VertexSemantic::Tangent, 0, RHI::Format::RGBA32_Float); // offset 32
         geometry->setVertexLayout(layout);
-
-        geometry->setSubmeshes({ {0, static_cast<uint32_t>(indices.size()), 0} });
+        geometry->setSubmeshes({ {0, (uint32_t)indices.size(), 0} });
         geometry->uploadToGPU();
-
         return geometry;
     }
 
@@ -279,12 +292,18 @@ namespace StarryEngine::Assets {
     {
         float hw = width * 0.5f;
         float hh = height * 0.5f;
-        // 位置、法线（朝上）、UV
+
+        glm::vec3 normal = glm::vec3(0, 0, 1);
+        glm::vec3 tangent = glm::vec3(1, 0, 0);
+        glm::vec3 bitangent = glm::vec3(0, 1, 0);
+        float handedness = 1.0f; // 正交
+
         std::vector<float> vertices = {
-            -hw, -hh, 0.0f,  0.0f, 0.0f, 1.0f,  0.0f, 0.0f,
-             hw, -hh, 0.0f,  0.0f, 0.0f, 1.0f,  1.0f, 0.0f,
-             hw,  hh, 0.0f,  0.0f, 0.0f, 1.0f,  1.0f, 1.0f,
-            -hw,  hh, 0.0f,  0.0f, 0.0f, 1.0f,  0.0f, 1.0f
+            // position       normal       uv     tangent + handedness
+            -hw, -hh, 0.0f,  0,0,1,  0,0,  1,0,0, handedness,
+             hw, -hh, 0.0f,  0,0,1,  1,0,  1,0,0, handedness,
+             hw,  hh, 0.0f,  0,0,1,  1,1,  1,0,0, handedness,
+            -hw,  hh, 0.0f,  0,0,1,  0,1,  1,0,0, handedness
         };
         std::vector<uint32_t> indices = { 0,1,2, 0,2,3 };
 
@@ -292,11 +311,13 @@ namespace StarryEngine::Assets {
         geometry->setVertices(vertices);
         geometry->setIndices(indices);
         geometry->setPrimitiveTopology(RHI::PrimitiveTopology::TriangleList);
+
         VertexLayout layout;
-        layout.addBinding(0, 8 * sizeof(float), RHI::VertexInputRate::PerVertex);
-        layout.addAttribute(0, 0, RHI::Format::RGB32_Float, 0);
-        layout.addAttribute(1, 0, RHI::Format::RGB32_Float, 3 * sizeof(float));
-        layout.addAttribute(2, 0, RHI::Format::RG32_Float, 6 * sizeof(float));
+        layout.addBinding(0, 0, RHI::VertexInputRate::PerVertex);
+        layout.addAttribute(VertexSemantic::Position, 0, RHI::Format::RGB32_Float);  // offset 0
+        layout.addAttribute(VertexSemantic::Normal, 0, RHI::Format::RGB32_Float);  // offset 12
+        layout.addAttribute(VertexSemantic::TexCoord0, 0, RHI::Format::RG32_Float);   // offset 24
+        layout.addAttribute(VertexSemantic::Tangent, 0, RHI::Format::RGBA32_Float); // offset 32
         geometry->setVertexLayout(layout);
         geometry->setSubmeshes({ {0, (uint32_t)indices.size(), 0} });
         geometry->uploadToGPU();

@@ -188,10 +188,10 @@ namespace StarryEngine {
 
     void ImGuiManager::createDescriptorPool(RHI::ResourceManager* resMgr, uint32_t imageCount) {
         RHI::DescriptorPoolDesc poolDesc;
-        poolDesc.maxSets = 1000;
+        poolDesc.maxSets = 2000;
         poolDesc.poolSizes = {
-            { RHI::DescriptorType::CombinedImageSampler, 1000 },
-            { RHI::DescriptorType::UniformBuffer,        1000 },
+            { RHI::DescriptorType::CombinedImageSampler, 2000 },
+            { RHI::DescriptorType::UniformBuffer,        2000 },
         };
         poolDesc.freeDescriptorSet = true;
         poolDesc.debugName = "ImGuiDescriptorPool";

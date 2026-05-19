@@ -12,8 +12,188 @@ ModelData createModel(std::shared_ptr<RHI::ResourceManager> resMgr, GlobalDescri
 ModelData createGrid(std::shared_ptr<RHI::ResourceManager> resMgr, GlobalDescriptorData data);
 DataSet createRenderer(std::shared_ptr<RHI::IRHI> rhi, RHI::DescriptorPoolHandle descriptorPool, uint32_t width, uint32_t height);
 std::shared_ptr<Assets::MaterialInstance> createCopyMaterial(std::shared_ptr<RHI::ResourceManager> resMgr,GlobalDescriptorData data);
-std::shared_ptr<Assets::MaterialInstance> createSkyboxMaterial(std::shared_ptr<RHI::ResourceManager> resMgr,GlobalDescriptorData data);
+//std::shared_ptr<Assets::MaterialInstance> createSkyboxMaterial(std::shared_ptr<RHI::ResourceManager> resMgr,GlobalDescriptorData data);
 std::shared_ptr<Assets::MaterialInstance> createPbrMaterial(std::shared_ptr<RHI::ResourceManager> resMgr, GlobalDescriptorData data);
+
+
+class PBRDemo {
+public:
+    PBRDemo(std::shared_ptr<RHI::IRHI> rhi, RHI::DescriptorPoolHandle descriptorPool, uint32_t width, uint32_t height):
+    m_rhi(rhi),m_descriptorPool(descriptorPool),m_width(width),m_height(height){
+        m_iblBuilder = std::make_shared<Assets::IBLBuilder>(rhi->getResourceManager(), rhi);
+        createRenderer();
+        createScene();
+    }
+
+    void createRenderer() {
+        m_scene = std::make_shared<Scene::Scene>();
+
+        m_renderer = std::make_shared<Renderer>(m_rhi, m_descriptorPool, m_scene);
+        m_renderer->createGlobalSetLayout();
+        m_renderer->createGlobalUniformBuffer();
+        m_renderer->initDefaultMaterials();
+
+        m_descriptorSetLayout = m_renderer->getGlobalSetLayout();
+        m_descriptorSet = m_renderer->getGlobalDescriptorSet();
+
+        auto renderPath = RenderPathFactory::createRenderPathFromJSON("assets/configs/forward_render_path.json", m_rhi, m_width, m_height);
+        m_renderer->setRenderPath(std::move(renderPath));
+    }
+
+    std::shared_ptr<Assets::MaterialInstance> createSkyboxMaterial() {
+
+        auto tmpl = std::make_shared<Assets::DefaultMaterialTemplate>(m_rhi->getResourceManager(), m_descriptorSetLayout);
+        tmpl->loadShaders("assets/shaders/deferred/skybox.vert", "assets/shaders/deferred/skybox.frag");
+
+        auto material = std::make_shared<Assets::MaterialInstance>(tmpl, m_descriptorPool, m_rhi->getResourceManager().get(), m_descriptorSet);
+
+        auto cubemap = m_iblBuilder->buildEnvCubemap("assets/textures/pbr/rosendal_plains_2_1k.hdr", 512);
+        auto sampler = Assets::TextureLoader(m_rhi->getResourceManager()).createDefaultSampler();
+        material->setTexture("uSkybox", cubemap, sampler);
+
+        material->setSubpassTag("PostProcess_Skybox");
+        material->enableDepthTest(true);
+        material->setDepthCompareOp(RHI::CompareOp::LessOrEqual);
+
+        return material;
+    }
+
+    std::shared_ptr<Assets::MaterialInstance> createPbrMaterial() {
+        auto tmpl = std::make_shared<Assets::DefaultMaterialTemplate>(m_rhi->getResourceManager(), m_descriptorSetLayout);
+        tmpl->loadShaders("assets/shaders/pbr/shpere_pbr.vert", "assets/shaders/pbr/shpere_pbr.frag");
+
+        auto material = std::make_shared<Assets::MaterialInstance>(tmpl, m_descriptorPool, m_rhi->getResourceManager().get(), m_descriptorSet);
+        material->setSubpassTag("Forward_Opaque");
+
+        material->enableDepthTest(true);
+        material->enableDepthWrite(true);
+
+        Assets::TextureLoader loader(m_rhi->getResourceManager());
+        auto texResult0 = loader.loadTexture2D("assets/textures/pbr/seaworn_sandstone_brick_arm_1k.png", RHI::Format::RGBA8_UNorm, "arm");
+        auto texResult1 = loader.loadTexture2D("assets/textures/pbr/seaworn_sandstone_brick_diff_1k.png", RHI::Format::RGBA8_UNorm, "diff");
+        auto texResult2 = loader.loadTexture2D("assets/textures/pbr/seaworn_sandstone_brick_nor_dx_1k.png", RHI::Format::RGBA8_UNorm, "nor_dx");
+
+        material->setTexture("armMap", texResult0.texture, texResult0.sampler);
+        material->setTexture("albedoMap", texResult1.texture, texResult1.sampler);
+        material->setTexture("normalMap", texResult2.texture, texResult2.sampler);
+
+        // 1. 环境 cubemap
+        auto envCubemap = m_iblBuilder->buildEnvCubemap("assets/textures/pbr/rosendal_plains_2_1k.hdr", 512);
+        // 2. Irradiance Map（漫反射）
+        auto irradianceMap = m_iblBuilder->generateIrradianceMapCS(envCubemap, 512);
+
+        // 3. Prefiltered Map（镜面反射）
+        auto prefilteredMap = m_iblBuilder->generatePrefilteredMapCS(envCubemap, 128, 5);
+        // 4. BRDF LUT
+        auto brdfLut = m_iblBuilder->generateBrdfLutCS(512);
+
+        RHI::SamplerDesc cubeSampDesc;
+        cubeSampDesc.minFilter = RHI::SamplerFilter::Linear;
+        cubeSampDesc.magFilter = RHI::SamplerFilter::Linear;
+        cubeSampDesc.addressU = RHI::SamplerAddressMode::ClampToEdge;
+        cubeSampDesc.addressV = RHI::SamplerAddressMode::ClampToEdge;
+        cubeSampDesc.addressW = RHI::SamplerAddressMode::ClampToEdge;
+        cubeSampDesc.maxLod = 1.0f;
+        auto cubeSampler = m_rhi->getResourceManager()->createSampler(cubeSampDesc);
+
+        // Prefiltered cubemap 采样器
+        RHI::SamplerDesc prefilterSampDesc = cubeSampDesc;
+        prefilterSampDesc.mipFilter = RHI::SamplerFilter::Linear;
+        prefilterSampDesc.maxLod = 5.0f;
+        auto prefilterSampler = m_rhi->getResourceManager()->createSampler(prefilterSampDesc);
+
+        // 2D 纹理采样器（BRDF LUT）
+        RHI::SamplerDesc lutSampDesc;
+        lutSampDesc.minFilter = RHI::SamplerFilter::Linear;
+        lutSampDesc.magFilter = RHI::SamplerFilter::Linear;
+        lutSampDesc.addressU = RHI::SamplerAddressMode::ClampToEdge;
+        lutSampDesc.addressV = RHI::SamplerAddressMode::ClampToEdge;
+        lutSampDesc.maxLod = 1.0f;
+        auto lutSampler = m_rhi->getResourceManager()->createSampler(lutSampDesc);
+
+        material->setTexture("uIrradianceMap", irradianceMap, cubeSampler);
+        material->setTexture("uPrefilteredMap", prefilteredMap, prefilterSampler);
+        material->setTexture("uBrdfLut", brdfLut, lutSampler);
+
+        auto* lightBlock = material->getBlock("LightingUBO");
+        if (lightBlock) {
+            lightBlock->setVec4("lights.position", glm::vec4(0.2f, 0.0f, -1.0f, 0.0f));
+            lightBlock->setVec4("lights.color", glm::vec4(0.9f, 0.1f, 0.5f, 1.0f));
+            lightBlock->setFloat("lightCount", 1.0f);
+            lightBlock->setFloat("ambientStrength", 0.1f);
+        }
+
+
+        material->applyAllDirtyBlocks();
+        return material;
+    }
+
+    std::shared_ptr<Assets::MaterialInstance> createGridMaterial() {
+        auto gridTmpl = std::make_shared<Assets::DefaultMaterialTemplate>(m_rhi->getResourceManager(), m_descriptorSetLayout);
+        gridTmpl->loadShaders("assets/shaders/core/gridShader.vert", "assets/shaders/core/gridShader.frag");
+
+        auto gridMaterialInst = std::make_shared<Assets::MaterialInstance>(gridTmpl, m_descriptorPool, m_rhi->getResourceManager().get(), m_descriptorSet);
+        gridMaterialInst->enableDepthTest(true);
+
+        gridMaterialInst->setSubpassTag("PostProcess_Grid");
+
+        return gridMaterialInst;
+    }
+
+
+    void createScene() {
+        auto skyboxEffect = std::make_shared<Scene::ProceduralEffect>();
+        auto skyboxMaterial = createSkyboxMaterial();
+        skyboxEffect->material = skyboxMaterial;
+        m_scene->addProceduralEffect(skyboxEffect);
+
+        auto pbr = createPbrMaterial();
+
+        auto SphereObj = std::make_shared<Scene::RenderObject>();
+        SphereObj->geometry = Assets::GeometryGenerator::createSphere(m_rhi->getResourceManager(), 1.0f);
+        SphereObj->materials = { pbr };
+        SphereObj->transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        m_scene->addObject(SphereObj);
+
+        auto gridObj = std::make_shared<Scene::RenderObject>();
+        gridObj->geometry = Assets::GeometryGenerator::createGrid(m_rhi->getResourceManager());
+        gridObj->materials = { createGridMaterial() };
+        gridObj->transform = glm::scale(glm::translate(glm::mat4(1.0f), glm::vec3(0, 0, 0)), glm::vec3(5, 5, 5));
+        m_scene->addObject(gridObj);
+
+        auto QuadObj = std::make_shared<Scene::RenderObject>();
+        QuadObj->geometry = Assets::GeometryGenerator::createQuad(m_rhi->getResourceManager());
+        QuadObj->materials = { pbr };
+        glm::mat4 scale = glm::scale(glm::mat4(1.0f), glm::vec3(20.0f, 20.0f, 20.0f));
+        glm::mat4 translation = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.01f, 0.0f));
+        glm::mat4 rotation = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f)); 
+        QuadObj->transform = translation * rotation * scale;
+        m_scene->addObject(QuadObj);
+
+        auto perspectiveCamera = std::make_shared<Scene::PerspectiveCamera>();
+        perspectiveCamera->setPerspective(glm::radians(45.0f), (float)m_width / m_height, 0.1f, 100.0f);
+        perspectiveCamera->lookAt(glm::vec3(1.0f, 2.0f, 5.0f), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        m_scene->addCamera(perspectiveCamera);
+        m_scene->setActiveCamera(perspectiveCamera);
+    }
+
+    std::shared_ptr<Renderer> getRenderer() { return m_renderer; }
+
+    std::shared_ptr< Scene::Scene> getScene() { return m_scene; }
+private:
+    uint32_t m_width, m_height;
+    std::shared_ptr<RHI::IRHI> m_rhi;
+    std::shared_ptr<Renderer> m_renderer;
+    std::shared_ptr< Scene::Scene> m_scene;
+
+
+    StarryEngine::RHI::DescriptorSetHandle m_descriptorSet;
+    StarryEngine::RHI::DescriptorPoolHandle m_descriptorPool;
+    StarryEngine::RHI::DescriptorSetLayoutHandle m_descriptorSetLayout;
+
+    std::shared_ptr<Assets::IBLBuilder> m_iblBuilder;
+};
+
 
 int main() {
 #ifdef __linux__
@@ -38,10 +218,12 @@ int main() {
     StarryEngine::Logger::setShowSourceLoc(true);
     StarryEngine::Application app;
 
-    auto dataset = createRenderer(app.getRenderHardwareInterface(), app.getGlobalDescriptorPool(), app.getWidth(), app.getHeight());
+    //auto dataset = createRenderer(app.getRenderHardwareInterface(), app.getGlobalDescriptorPool(), app.getWidth(), app.getHeight());
 
-    app.setRenderer(dataset.renderer);
-    app.setScene(dataset.scene);
+    auto demo = std::make_shared<PBRDemo>(app.getRenderHardwareInterface(), app.getGlobalDescriptorPool(), app.getWidth(), app.getHeight());
+
+    app.setRenderer(demo->getRenderer());
+    app.setScene(demo->getScene());
     app.initEventDispatcher();
     app.run();
     StarryEngine::Logger::shutdown();
@@ -63,22 +245,22 @@ DataSet createRenderer(std::shared_ptr<RHI::IRHI> rhi, RHI::DescriptorPoolHandle
     auto renderPath = RenderPathFactory::createRenderPathFromJSON("assets/configs/forward_render_path.json",rhi, width, height);
     renderer->setRenderPath(std::move(renderPath));
 
-    auto skyboxEffect = std::make_shared<Scene::ProceduralEffect>();
-    auto skyboxMaterial = createSkyboxMaterial(rhi->getResourceManager(), globalDescriptorData);
-    skyboxEffect->material = skyboxMaterial;  
-    scene->addProceduralEffect(skyboxEffect);
+    //auto skyboxEffect = std::make_shared<Scene::ProceduralEffect>();
+    //auto skyboxMaterial = createSkyboxMaterial(rhi->getResourceManager(), globalDescriptorData);
+    //skyboxEffect->material = skyboxMaterial;  
+    //scene->addProceduralEffect(skyboxEffect);
 
     //auto copyMaterial = createCopyMaterial(rhi->getResourceManager(), globalDescriptorData);
     //auto copyEffect = std::make_shared<Scene::ProceduralEffect>();
     //copyEffect->material = copyMaterial;
     //scene->addProceduralEffect(copyEffect);
 
-    auto modelMeshData = createModel(rhi->getResourceManager(), globalDescriptorData);
-    auto modelObj = std::make_shared<Scene::RenderObject>();
-    modelObj->geometry = modelMeshData.geometry;
-    modelObj->materials = modelMeshData.materials;
-    modelObj->transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 2.5f));
-    scene->addObject(modelObj);
+    //auto modelMeshData = createModel(rhi->getResourceManager(), globalDescriptorData);
+    //auto modelObj = std::make_shared<Scene::RenderObject>();
+    //modelObj->geometry = modelMeshData.geometry;
+    //modelObj->materials = modelMeshData.materials;
+    //modelObj->transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 2.5f));
+    //scene->addObject(modelObj);
 
     auto SphereObj = std::make_shared<Scene::RenderObject>();
     SphereObj->geometry = Assets::GeometryGenerator::createSphere(rhi->getResourceManager(),1.0f);
@@ -131,31 +313,35 @@ std::shared_ptr<Assets::MaterialInstance> createCopyMaterial(std::shared_ptr<RHI
     return material;
 }
 
-std::shared_ptr<Assets::MaterialInstance> createSkyboxMaterial(std::shared_ptr<RHI::ResourceManager> resMgr,GlobalDescriptorData data) {
-
-    auto tmpl = std::make_shared<Assets::DefaultMaterialTemplate>(resMgr, data.globalSetLayout);
-    tmpl->loadShaders("assets/shaders/deferred/skybox.vert", "assets/shaders/deferred/skybox.frag");
-
-    auto material = std::make_shared<Assets::MaterialInstance>(tmpl, data.globalDescriptorPool, resMgr.get(), data.globalDescriptorSet);
-
-    std::vector<std::string> skyboxFaces = {
-        "assets/textures/skybox/right.jpg",
-        "assets/textures/skybox/left.jpg",
-        "assets/textures/skybox/top.jpg",
-        "assets/textures/skybox/bottom.jpg",
-        "assets/textures/skybox/front.jpg",
-        "assets/textures/skybox/back.jpg"
-    };
-
-    auto loader = Assets::TextureLoader(resMgr);
-    auto texResult = loader.loadTextureCube(skyboxFaces, RHI::Format::RGBA8_sRGB, "SkyboxCubeMap");
-    material->setTexture("uSkybox", texResult.texture, texResult.sampler);
-    material->setSubpassTag("PostProcess_Skybox");
-    material->enableDepthTest(true);
-    material->setDepthCompareOp(RHI::CompareOp::LessOrEqual);
-
-    return material;
-}
+//std::shared_ptr<Assets::MaterialInstance> createSkyboxMaterial(std::shared_ptr<RHI::ResourceManager> resMgr,GlobalDescriptorData data) {
+//
+//    auto tmpl = std::make_shared<Assets::DefaultMaterialTemplate>(resMgr, data.globalSetLayout);
+//    tmpl->loadShaders("assets/shaders/deferred/skybox.vert", "assets/shaders/deferred/skybox.frag");
+//
+//    auto material = std::make_shared<Assets::MaterialInstance>(tmpl, data.globalDescriptorPool, resMgr.get(), data.globalDescriptorSet);
+//
+//    //std::vector<std::string> skyboxFaces = {
+//    //    "assets/textures/skybox/right.jpg",
+//    //    "assets/textures/skybox/left.jpg",
+//    //    "assets/textures/skybox/top.jpg",
+//    //    "assets/textures/skybox/bottom.jpg",
+//    //    "assets/textures/skybox/front.jpg",
+//    //    "assets/textures/skybox/back.jpg"
+//    //};
+//
+//    auto loader = Assets::TextureLoader(rhi->getResourceManager());
+//
+//    Assets::IBLBuilder iblBuilder(rhi->getResourceManager(), rhi);
+//    auto cubemap = iblBuilder.buildEnvCubemap("assets/textures/pbr/kloofendal_48d_partly_cloudy_puresky_4k.hdr", 1024);
+//    auto sampler = loader.createDefaultSampler();
+//
+//    material->setTexture("uSkybox", cubemap, sampler);
+//    material->setSubpassTag("PostProcess_Skybox");
+//    material->enableDepthTest(true);
+//    material->setDepthCompareOp(RHI::CompareOp::LessOrEqual);
+//
+//    return material;
+//}
 
 ModelData createModel(std::shared_ptr<RHI::ResourceManager> resMgr, GlobalDescriptorData data) {
     std::vector<RHI::PushConstantRange> pushConstants = {

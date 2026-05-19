@@ -69,7 +69,7 @@ namespace StarryEngine::RHI {
         virtual uint32_t getSampleCount() const = 0;
         virtual void* getImageHandle() const = 0;
         //virtual ImageLayout getCurrentLayout() const = 0;
-
+        virtual void* getNativeHandleFromView(void* viewKey) = 0;
         // ========== 视图管理 ==========
         // 创建视图，可指定子资源范围和视图类型（默认从纹理类型推导）
         virtual void* createView(
@@ -360,6 +360,12 @@ namespace StarryEngine::RHI {
             RHITexture* texture,
             ImageLayout layout) = 0;
 
+        virtual void writeTextureCustomView(
+            uint32_t binding, uint32_t arrayElement,
+            void* imageView,       
+            RHISampler* sampler,
+            ImageLayout layout) = 0;
+
         virtual void update() = 0;
         virtual void copyFrom(const RHIDescriptorSet* src, const std::vector<DescriptorCopy>& copies) = 0;
     };
@@ -436,6 +442,7 @@ namespace StarryEngine::RHI {
 
         // 管线绑定
         virtual void bindPipeline(RHIPipeline* pipeline) = 0;
+        virtual void bindComputePipeline(RHIPipeline* pipeline) = 0;
         virtual void bindVertexBuffers(
             uint32_t firstBinding,
             const std::vector<RHIBuffer*>& buffers,

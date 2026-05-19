@@ -279,6 +279,39 @@ namespace StarryEngine::RHI {
 		VkRenderPass mRenderPass = VK_NULL_HANDLE;
     };
 
+    class RHI_VK_ComputePipeline : public RHIPipeline {
+    public:
+        RHI_VK_ComputePipeline(
+            Device::Ptr device,
+            const ComputePipelineDesc& desc,
+            VkPipelineShaderStageCreateInfo shaderStage,   // 计算管线只需一个阶段
+            VkPipelineLayout pipelineLayout
+        );
+
+        ~RHI_VK_ComputePipeline() override { release(); }
+
+        PipelineType getType() const override { return PipelineType::Compute; }
+        PipelineLayoutHandle getLayout() const override { return mDesc.pipelineLayoutHandle; }
+        void* getNativeHandle() const override { return reinterpret_cast<void*>(mPipeline); }
+        bool isValid() const override { return mPipeline != VK_NULL_HANDLE; }
+        size_t getMemoryUsage() const override { return sizeof(*this) + mDesc.debugName.size(); }
+        const char* getTypeName() const override { return "VK_ComputePipeline"; }
+        bool isComputePipeline() const override { return true; }
+        bool isGraphicsPipeline() const override { return false; }
+        bool isRayTracingPipeline() const override { return false; }
+        bool canBeReloaded() const override { return false; }
+        bool reload(const void*) override { return false; }
+        void release() override;
+
+        VkPipeline getVkPipeline() const { return mPipeline; }
+
+    private:
+        Device::Ptr mDevice;
+        VkPipeline mPipeline = VK_NULL_HANDLE;
+        ComputePipelineDesc mDesc;
+        VkPipelineLayout mPipelineLayout = VK_NULL_HANDLE;
+    };
+
 
     class RHI_VK_CommandPool : public RHICommandPool {
     public:
@@ -369,7 +402,7 @@ namespace StarryEngine::RHI {
         // 实现 IResource
         void release() override;
         bool isValid() const override;
-        void* getNativeHandle() const override;      // 返回默认图像视图
+        void* getNativeHandle() const override;     
         size_t getMemoryUsage() const override;
         const char* getTypeName() const override { return "VK_Texture"; }
 
@@ -402,7 +435,7 @@ namespace StarryEngine::RHI {
         void copyFromTexture(RHITexture* srcTexture, const std::vector<ImageCopyRegion>& regions) override;
 		void update(const void* data, size_t size, const ImageSubresourceRange& range) override;
         void generateMipmaps() override;
-
+        void* getNativeHandleFromView(void* viewKey) override;
     private:
         void copyFromBuffer(VkBuffer srcBuffer, const std::vector<BufferImageCopyRegion>& regions);
 
@@ -555,6 +588,7 @@ namespace StarryEngine::RHI {
             uint32_t size, const void* data) override;
         void update() override;
         void copyFrom(const RHIDescriptorSet* src, const std::vector<DescriptorCopy>& copies) override;
+        void writeTextureCustomView(uint32_t binding, uint32_t arrayElement,void* imageView,RHISampler* sampler,ImageLayout layout)override;
 
         void writeInputAttachment(uint32_t binding, uint32_t arrayElement,
             RHITexture* texture, ImageLayout layout) override;
@@ -577,10 +611,23 @@ namespace StarryEngine::RHI {
         RHI_VK_DescriptorPool* mPool;        // 所属池（用于释放判断）
         RHIDescriptorSetLayout* mLayout;      // 布局，用于查询绑定信息
 
-        std::vector<VkWriteDescriptorSet> mPendingWrites;
         std::vector<VkDescriptorBufferInfo> mBufferInfos;   // 确保指针有效
         std::vector<VkDescriptorImageInfo> mImageInfos;
         std::vector<VkWriteDescriptorSetAccelerationStructureKHR> mAccelStructs; // 可选
+
+        struct PendingTextureWrite {
+            uint32_t binding;
+            uint32_t arrayElement;
+            uint32_t imageInfoIndex;
+        };
+        std::vector<PendingTextureWrite> mPendingTextureWrites;
+
+        struct PendingBufferWrite {
+            uint32_t binding;
+            uint32_t arrayElement;
+            uint32_t bufferInfoIndex;
+        };
+        std::vector<PendingBufferWrite> mPendingBufferWrites;
     };
 
 } // namespace StarryEngine::RHI

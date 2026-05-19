@@ -54,8 +54,18 @@ namespace StarryEngine::RHI {
     }
 
     std::unique_ptr<RHIPipeline> VKResourceFactory::createComputePipeline(const ComputePipelineDesc& desc) {
-        // TODO: 实现计算管线创建
-        throw std::runtime_error("Not implemented: createComputePipeline");
+        auto* rhiShader = mResourceManager->getShader(desc.computeShader);
+        if (!rhiShader) return nullptr;
+        auto shaderModule = static_cast<VkShaderModule>(rhiShader->getNativeHandle());
+
+        // 2. 获取管线布局
+        auto* layoutObj = mResourceManager->getPipelineLayout(desc.pipelineLayoutHandle);
+        if (!layoutObj) return nullptr;
+        auto layout = static_cast<VkPipelineLayout>(layoutObj->getNativeHandle());
+
+        auto shaderStage = mDevice->createShaderStageInfo(shaderModule, FUNC::RHI_TO_VK_ShaderStageFlag(rhiShader->getStage()), rhiShader->getEntryPoint().c_str());
+
+        return std::make_unique<RHI_VK_ComputePipeline>(mDevice, desc, shaderStage, layout);
     }
 
     std::unique_ptr<RHIPipelineLayout> VKResourceFactory::createPipelineLayout(const PipelineLayoutDesc& desc) {
@@ -339,6 +349,11 @@ namespace StarryEngine::RHI {
         vkCmdBindPipeline(getVkCommandBuffer(), VK_PIPELINE_BIND_POINT_GRAPHICS, vkPipeline);
     }
 
+    void RHI_VK_CommandEncoder::bindComputePipeline(RHIPipeline* pipeline) {
+        auto vkPipeline = static_cast<VkPipeline>(static_cast<RHI_VK_ComputePipeline*>(pipeline)->getNativeHandle());
+        vkCmdBindPipeline(getVkCommandBuffer(), VK_PIPELINE_BIND_POINT_COMPUTE, vkPipeline);
+    }
+
     void RHI_VK_CommandEncoder::bindVertexBuffers(
         uint32_t firstBinding,
         const std::vector<RHIBuffer*>& buffers,
@@ -458,10 +473,8 @@ namespace StarryEngine::RHI {
     }
 
     // 计算命令
-    void RHI_VK_CommandEncoder::dispatch(
-        uint32_t groupCountX,
-        uint32_t groupCountY,
-        uint32_t groupCountZ) {
+    void RHI_VK_CommandEncoder::dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) {
+        vkCmdDispatch(getVkCommandBuffer(), groupCountX, groupCountY, groupCountZ);
     }
 
     void RHI_VK_CommandEncoder::dispatchIndirect(
@@ -647,9 +660,27 @@ namespace StarryEngine::RHI {
 
     // 拷贝操作
     void RHI_VK_CommandEncoder::copyBuffer(
-        RHIBuffer* src,
-        RHIBuffer* dst,
-        const std::vector<BufferCopyRegion>& regions) {
+        RHIBuffer* src, RHIBuffer* dst,
+        const std::vector<BufferCopyRegion>& regions)
+    {
+        if (!src || !dst) return;
+
+        std::vector<VkBufferCopy> vkRegions;
+        for (auto& r : regions) {
+            VkBufferCopy copy{};
+            copy.srcOffset = r.srcOffset;
+            copy.dstOffset = r.dstOffset;
+            copy.size = r.size;
+            vkRegions.push_back(copy);
+        }
+
+        vkCmdCopyBuffer(
+            getVkCommandBuffer(),
+            static_cast<VkBuffer>(src->getNativeHandle()),
+            static_cast<VkBuffer>(dst->getNativeHandle()),
+            static_cast<uint32_t>(vkRegions.size()),
+            vkRegions.data()
+        );
     }
 
     void RHI_VK_CommandEncoder::copyImage(
@@ -667,7 +698,45 @@ namespace StarryEngine::RHI {
     void RHI_VK_CommandEncoder::copyImageToBuffer(
         RHITexture* src,
         RHIBuffer* dst,
-        const std::vector<BufferImageCopyRegion>& regions) {
+        const std::vector<BufferImageCopyRegion>& regions)
+    {
+        if (!src || !dst || regions.empty()) return;
+
+        // 转换源纹理为 VkImage
+        auto* vkTexture = dynamic_cast<RHI_VK_Texture*>(src);
+        if (!vkTexture) return;
+        VkImage srcImage = static_cast<VkImage>(vkTexture->getImageHandle());
+
+        // 转换目标缓冲区为 VkBuffer
+        auto* vkBuffer = dynamic_cast<RHI_VK_Buffer*>(dst);
+        if (!vkBuffer) return;
+        VkBuffer dstBuffer = static_cast<VkBuffer>(vkBuffer->getNativeHandle());
+
+        // 转换区域
+        std::vector<VkBufferImageCopy> vkRegions;
+        vkRegions.reserve(regions.size());
+        for (const auto& region : regions) {
+            VkBufferImageCopy vkRegion{};
+            vkRegion.bufferOffset = region.bufferOffset;
+            vkRegion.bufferRowLength = region.bufferRowLength;
+            vkRegion.bufferImageHeight = region.bufferImageHeight;
+            vkRegion.imageSubresource.aspectMask = static_cast<VkImageAspectFlags>(region.imageSubresource.aspectMask);
+            vkRegion.imageSubresource.mipLevel = region.imageSubresource.baseMipLevel;
+            vkRegion.imageSubresource.baseArrayLayer = region.imageSubresource.baseArrayLayer;
+            vkRegion.imageSubresource.layerCount = region.imageSubresource.layerCount;
+            vkRegion.imageOffset = { region.imageOffset.x, region.imageOffset.y, region.imageOffset.z };
+            vkRegion.imageExtent = { region.imageExtent.width, region.imageExtent.height, region.imageExtent.depth };
+            vkRegions.push_back(vkRegion);
+        }
+
+        vkCmdCopyImageToBuffer(
+            getVkCommandBuffer(),
+            srcImage,
+            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,   
+            dstBuffer,
+            static_cast<uint32_t>(vkRegions.size()),
+            vkRegions.data()
+        );
     }
 
     void RHI_VK_CommandEncoder::blitImage(

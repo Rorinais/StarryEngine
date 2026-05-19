@@ -755,6 +755,30 @@ namespace StarryEngine::RHI {
         vkState.reference = state.reference;
         return vkState;
     }
+
+    // 构造实现
+    RHI_VK_ComputePipeline::RHI_VK_ComputePipeline(
+        Device::Ptr device,
+        const ComputePipelineDesc& desc,
+        VkPipelineShaderStageCreateInfo shaderStage,
+        VkPipelineLayout pipelineLayout
+    ) : mDevice(device), mDesc(desc), mPipelineLayout(pipelineLayout) {
+        VkComputePipelineCreateInfo pipelineInfo{};
+        pipelineInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+        pipelineInfo.stage = shaderStage;         
+        pipelineInfo.layout = pipelineLayout;
+        pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
+        pipelineInfo.basePipelineIndex = -1;
+
+        mPipeline = mDevice->createComputePipeline(pipelineInfo);
+    }
+
+    void RHI_VK_ComputePipeline::release() {
+        if (mPipeline != VK_NULL_HANDLE) {
+            mDevice->destroyPipeline(mPipeline);
+            mPipeline = VK_NULL_HANDLE;
+        }
+    }
     
 
     RHI_VK_CommandPool::RHI_VK_CommandPool(Device::Ptr device, CommandPoolDesc desc):mDevice(device),mDesc(desc) {
@@ -931,7 +955,7 @@ namespace StarryEngine::RHI {
     }
 
     void* RHI_VK_Texture::getNativeHandle() const {
-        return getDefaultView();
+        return mUsingVMA ? (void*)vmaImage.image : (void*)traditionalImage.image;
     }
 
     size_t RHI_VK_Texture::getMemoryUsage() const {
@@ -1173,6 +1197,14 @@ namespace StarryEngine::RHI {
             mDesc.extent.width, mDesc.extent.height,
             mDesc.mipLevels);
     }
+    void* RHI_VK_Texture::getNativeHandleFromView(void* viewKey){
+        uint64_t key = reinterpret_cast<uint64_t>(viewKey);
+        auto it = mViews.find(key);
+        if (it != mViews.end()) {
+            return reinterpret_cast<void*>(it->second.view);
+        }
+        return nullptr;
+    }
 
     void RHI_VK_Texture::createTexture() {
         VkFormat vkFormat;
@@ -1247,7 +1279,10 @@ namespace StarryEngine::RHI {
         VkImageAspectFlags aspect = FUNC::RHI_TO_VK_ImageAspect(range.aspectMask);
         return mDevice->createImageView(
             image, format, aspect, viewType,
-            range.levelCount, range.baseArrayLayer, range.layerCount,
+            range.baseMipLevel,     // ← 第二行开始是：baseMipLevel
+            range.levelCount,       // ← levelCount
+            range.baseArrayLayer,   // ← baseArrayLayer
+            range.layerCount,       // ← layerCount
             "");
     }
 
@@ -1500,72 +1535,56 @@ namespace StarryEngine::RHI {
         RHIBuffer* buffer, uint64_t offset, uint64_t range) {
         if (!buffer) return;
 
-        VkDescriptorBufferInfo bufferInfo{};
-        bufferInfo.buffer = static_cast<VkBuffer>(buffer->getNativeHandle());
-        bufferInfo.offset = offset;
-        bufferInfo.range = (range == 0) ? VK_WHOLE_SIZE : range;
-        mBufferInfos.push_back(bufferInfo);
+        VkDescriptorBufferInfo info{};
+        info.buffer = static_cast<VkBuffer>(buffer->getNativeHandle());
+        info.offset = offset;
+        info.range = (range == 0) ? VK_WHOLE_SIZE : range;
 
-        VkWriteDescriptorSet write{};
-        write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        write.dstSet = mSet;
-        write.dstBinding = binding;
-        write.dstArrayElement = arrayElement;
-        write.descriptorCount = 1;
-        // 注意：描述符类型应从 mLayout 中查询，这里假设 binding 0 是 UniformBuffer
-        write.descriptorType = getBindingDescriptorType(binding);
-        write.pBufferInfo = &mBufferInfos.back();
+        uint32_t idx = static_cast<uint32_t>(mBufferInfos.size());
+        mBufferInfos.push_back(info);
 
-        mPendingWrites.push_back(write);
+        mPendingBufferWrites.push_back({ binding, arrayElement, idx });
     }
 
     void RHI_VK_DescriptorSet::writeTexture(uint32_t binding, uint32_t arrayElement,
-        RHITexture* texture, RHISampler* sampler,
-        ImageLayout layout) {
+        RHITexture* texture, RHISampler* sampler, ImageLayout layout)
+    {
         if (!texture) return;
 
-        // 确定描述符类型：若有采样器则为 CombinedImageSampler，否则为 SampledImage
-        DescriptorType type = sampler ? DescriptorType::CombinedImageSampler : DescriptorType::SampledImage;
-        // 若布局中该绑定为 StorageImage，则应为 StorageImage，此处简化
+        VkImageView imageView = static_cast<VkImageView>(texture->getDefaultView());
+        if (imageView == VK_NULL_HANDLE) {
+            std::cerr << "[DescriptorSet] Texture default view is null, skip write\n";
+            return;
+        }
 
         VkDescriptorImageInfo imageInfo{};
-        imageInfo.imageView = static_cast<VkImageView>(texture->getDefaultView());
+        imageInfo.imageView = imageView;
         if (sampler) {
             imageInfo.sampler = static_cast<VkSampler>(sampler->getNativeHandle());
         }
         imageInfo.imageLayout = FUNC::RHI_TO_VK_ImageLayout(layout);
         mImageInfos.push_back(imageInfo);
 
-        VkWriteDescriptorSet write{};
-        write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        write.dstSet = mSet;
-        write.dstBinding = binding;
-        write.dstArrayElement = arrayElement;
-        write.descriptorCount = 1;
-        write.descriptorType = FUNC::RHI_TO_VK_DescriptorType(type);
-        write.pImageInfo = &mImageInfos.back();
-
-        mPendingWrites.push_back(write);
+        // ✅ 只保存参数，不保存指针
+        PendingTextureWrite pending;
+        pending.binding = binding;
+        pending.arrayElement = arrayElement;
+        pending.imageInfoIndex = static_cast<uint32_t>(mImageInfos.size() - 1);
+        mPendingTextureWrites.push_back(pending);
     }
 
     void RHI_VK_DescriptorSet::writeSampler(uint32_t binding, uint32_t arrayElement,
         RHISampler* sampler) {
         if (!sampler) return;
 
-        VkDescriptorImageInfo imageInfo{};
-        imageInfo.sampler = static_cast<VkSampler>(sampler->getNativeHandle());
-        mImageInfos.push_back(imageInfo);
+        VkDescriptorImageInfo info{};
+        info.sampler = static_cast<VkSampler>(sampler->getNativeHandle());
+        // imageView 和 imageLayout 保持默认（nullptr/0），驱动会忽略
 
-        VkWriteDescriptorSet write{};
-        write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        write.dstSet = mSet;
-        write.dstBinding = binding;
-        write.dstArrayElement = arrayElement;
-        write.descriptorCount = 1;
-        write.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
-        write.pImageInfo = &mImageInfos.back();
+        uint32_t idx = static_cast<uint32_t>(mImageInfos.size());
+        mImageInfos.push_back(info);
 
-        mPendingWrites.push_back(write);
+        mPendingTextureWrites.push_back({ binding, arrayElement, idx });
     }
 
     void RHI_VK_DescriptorSet::writeAccelerationStructure(uint32_t /*binding*/, uint32_t /*arrayElement*/,
@@ -1579,12 +1598,61 @@ namespace StarryEngine::RHI {
     }
 
     void RHI_VK_DescriptorSet::update() {
-        if (mPendingWrites.empty()) return;
-        mDevice->updateDescriptorSet(mSet, mPendingWrites);
-        mPendingWrites.clear();
+        if (mPendingBufferWrites.empty() && mPendingTextureWrites.empty()) return;
+
+        std::vector<VkWriteDescriptorSet> vkWrites;
+        vkWrites.reserve(mPendingBufferWrites.size() + mPendingTextureWrites.size());
+
+        for (const auto& pw : mPendingBufferWrites) {
+            VkWriteDescriptorSet write{};
+            write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            write.dstSet = mSet;
+            write.dstBinding = pw.binding;
+            write.dstArrayElement = pw.arrayElement;
+            write.descriptorCount = 1;
+            write.descriptorType = getBindingDescriptorType(pw.binding);
+            write.pBufferInfo = &mBufferInfos[pw.bufferInfoIndex];
+            vkWrites.push_back(write);
+        }
+
+        for (const auto& pt : mPendingTextureWrites) {
+            VkWriteDescriptorSet write{};
+            write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            write.dstSet = mSet;
+            write.dstBinding = pt.binding;
+            write.dstArrayElement = pt.arrayElement;
+            write.descriptorCount = 1;
+            write.descriptorType = getBindingDescriptorType(pt.binding);
+            write.pImageInfo = &mImageInfos[pt.imageInfoIndex];
+            vkWrites.push_back(write);
+        }
+
+        mDevice->updateDescriptorSet(mSet, vkWrites);
+
+        // 清理
         mBufferInfos.clear();
         mImageInfos.clear();
-        mAccelStructs.clear();
+        mPendingBufferWrites.clear();
+        mPendingTextureWrites.clear();
+    }
+
+    void RHI_VK_DescriptorSet::writeTextureCustomView(
+        uint32_t binding, uint32_t arrayElement,
+        void* imageView,
+        RHISampler* sampler,
+        ImageLayout layout)
+    {
+        VkDescriptorImageInfo imageInfo{};
+        imageInfo.imageView = static_cast<VkImageView>(imageView);
+        imageInfo.sampler = sampler ? static_cast<VkSampler>(sampler->getNativeHandle()) : VK_NULL_HANDLE;
+        imageInfo.imageLayout = FUNC::RHI_TO_VK_ImageLayout(layout);
+        mImageInfos.push_back(imageInfo);
+
+        PendingTextureWrite pending;
+        pending.binding = binding;
+        pending.arrayElement = arrayElement;
+        pending.imageInfoIndex = static_cast<uint32_t>(mImageInfos.size() - 1);
+        mPendingTextureWrites.push_back(pending);
     }
 
     void RHI_VK_DescriptorSet::copyFrom(const RHIDescriptorSet* src, const std::vector<DescriptorCopy>& copies) {
@@ -1618,20 +1686,20 @@ namespace StarryEngine::RHI {
         RHITexture* texture, ImageLayout layout) {
         if (!texture) return;
 
-        VkDescriptorImageInfo imageInfo{};
-        imageInfo.imageView = static_cast<VkImageView>(texture->getDefaultView());
-        imageInfo.imageLayout = FUNC::RHI_TO_VK_ImageLayout(layout);
-        mImageInfos.push_back(imageInfo);
+        VkImageView view = static_cast<VkImageView>(texture->getDefaultView());
+        if (view == VK_NULL_HANDLE) {
+            std::cerr << "[DescriptorSet] Input attachment view is null\n";
+            return;
+        }
 
-        VkWriteDescriptorSet write{};
-        write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        write.dstSet = mSet;
-        write.dstBinding = binding;
-        write.dstArrayElement = arrayElement;
-        write.descriptorCount = 1;
-        write.descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
-        write.pImageInfo = &mImageInfos.back();
+        VkDescriptorImageInfo info{};
+        info.imageView = view;
+        info.imageLayout = FUNC::RHI_TO_VK_ImageLayout(layout);
+        info.sampler = VK_NULL_HANDLE;
 
-        mPendingWrites.push_back(write);
+        uint32_t idx = static_cast<uint32_t>(mImageInfos.size());
+        mImageInfos.push_back(info);
+
+        mPendingTextureWrites.push_back({ binding, arrayElement, idx });
     }
 }

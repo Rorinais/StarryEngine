@@ -352,6 +352,10 @@ namespace StarryEngine::Assets {
             // 1. 优先处理数组（无论元素是标量还是结构体）
             if (!memberType.array.empty()) {
                 uint32_t arraySize = memberType.array[0];
+                if (arraySize == 0) {
+                    LOG_WARN("Array size is 0 (possibly specialization constant). Skipping member: {}", memberName);
+                    continue; 
+                }
                 uint32_t stride = compiler.get_declared_struct_member_size(type, i) / arraySize;
 
                 for (uint32_t j = 0; j < arraySize; ++j) {

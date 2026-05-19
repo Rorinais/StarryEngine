@@ -1,0 +1,61 @@
+// equirect_to_cubemap.comp
+#version 450
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+layout(set = 0, binding = 0) uniform sampler2D uEquirectMap;
+layout(set = 0, binding = 1, rgba32f) uniform writeonly imageCube uCubemap;
+
+layout(push_constant) uniform PC {
+    int faceSize;   // cubemap 每个面的分辨率（如 512）
+} pc;
+
+const float PI = 3.14159265359;
+
+// Vulkan cubemap face order: +X, -X, +Y, -Y, +Z, -Z
+vec3 FaceUVToDirection(int face, vec2 uv) {
+    // uv 坐标从 [0, 1]
+    float x = uv.x * 2.0 - 1.0;
+    float y = uv.y * 2.0 - 1.0;
+    
+    vec3 dir;
+    switch (face) {
+        case 0: dir = vec3( 1.0, -y, -x); break; // +X
+        case 1: dir = vec3(-1.0, -y,  x); break; // -X
+        case 2: dir = vec3( x,  1.0,  y); break; // +Y
+        case 3: dir = vec3( x, -1.0, -y); break; // -Y
+        case 4: dir = vec3( x, -y,  1.0); break; // +Z
+        case 5: dir = vec3(-x, -y, -1.0); break; // -Z
+    }
+    return normalize(dir);
+}
+
+void main() {
+    // globalInvocationID.x: face index (0~5)
+    // globalInvocationID.y: pixel X
+    // globalInvocationID.z: pixel Y
+    int face = int(gl_GlobalInvocationID.z); 
+    int px   = int(gl_GlobalInvocationID.x);  
+    int py   = int(gl_GlobalInvocationID.y);  
+
+    if (face >= 6 || px >= pc.faceSize || py >= pc.faceSize) return;
+
+    // 像素坐标 → [0, 1] UV（+0.5 取像素中心）
+    vec2 uv = (vec2(px, py) + 0.5) / float(pc.faceSize);
+
+    // UV → 世界方向
+    vec3 dir = FaceUVToDirection(face, uv);
+
+    // 方向 → equirect UV
+    float phi   = atan(dir.z, dir.x);
+    float theta = asin(-dir.y);
+    vec2 equirectUV;
+    equirectUV.x = phi   / (2.0 * PI) + 0.5;
+    equirectUV.y = theta / PI + 0.5;
+
+    // 采样
+    vec4 color = texture(uEquirectMap, equirectUV);
+
+    // 写入 cubemap
+    imageStore(uCubemap, ivec3(px, py, face), color);
+}

@@ -6,6 +6,65 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stb_image_write.h>
 
+namespace {
+
+    // 立方体面索引 + 像素坐标 → 单位方向向量
+    glm::vec3 CubemapFaceToDirection(int face, float u, float v, uint32_t size) {
+        // 将像素坐标映射到 [-1, 1]
+        float x = (u + 0.5f) / float(size) * 2.0f - 1.0f;
+        float y = (v + 0.5f) / float(size) * 2.0f - 1.0f;
+
+        glm::vec3 dir;
+        switch (face) {
+        case 0: dir = glm::vec3(1.0f, -y, -x);    break; // +X
+        case 1: dir = glm::vec3(-1.0f, -y, x);    break; // -X
+        case 2: dir = glm::vec3(x, 1.0f, y);    break; // +Y
+        case 3: dir = glm::vec3(x, -1.0f, -y);    break; // -Y
+        case 4: dir = glm::vec3(x, -y, 1.0f);  break; // +Z
+        default:dir = glm::vec3(-x, -y, -1.0f);  break; // -Z
+        }
+        return glm::normalize(dir);
+    }
+
+    // 方向向量 → equirectangular UV
+    glm::vec2 DirectionToEquirectUV(const glm::vec3& dir) {
+        float phi = std::atan2(dir.z, dir.x);     // [-π, π]
+        float theta = std::asin(-dir.y);             // [-π/2, π/2]
+
+        float u = phi / (2.0f * 3.14159265f) + 0.5f;
+        float v = theta / 3.14159265f + 0.5f;
+        return glm::vec2(u, v);
+    }
+
+    // 双线性采样（浮点 RGBA）
+    glm::vec4 SampleEquirectBilinear(const float* pixels, uint32_t width, uint32_t height, glm::vec2 uv) {
+        uv = glm::clamp(uv, 0.0f, 1.0f);
+        float fx = uv.x * (width - 1);
+        float fy = uv.y * (height - 1);
+
+        uint32_t x0 = uint32_t(fx);
+        uint32_t y0 = uint32_t(fy);
+        uint32_t x1 = std::min(x0 + 1, width - 1);
+        uint32_t y1 = std::min(y0 + 1, height - 1);
+
+        float tx = fx - float(x0);
+        float ty = fy - float(y0);
+
+        auto sample = [&](uint32_t x, uint32_t y) -> glm::vec4 {
+            const float* p = pixels + (y * width + x) * 4;
+            return glm::vec4(p[0], p[1], p[2], p[3]);
+            };
+
+        glm::vec4 c00 = sample(x0, y0);
+        glm::vec4 c10 = sample(x1, y0);
+        glm::vec4 c01 = sample(x0, y1);
+        glm::vec4 c11 = sample(x1, y1);
+
+        return glm::mix(glm::mix(c00, c10, tx), glm::mix(c01, c11, tx), ty);
+    }
+
+} // anonymous namespace
+
 namespace StarryEngine::Assets {
 
     TextureLoader::TextureLoader(std::shared_ptr<RHI::ResourceManager> resMgr)
@@ -378,4 +437,133 @@ namespace StarryEngine::Assets {
         return true;
     }
 
+    TextureLoadResult TextureLoader::loadTextureHDR(
+        const std::string& filepath,
+        const std::string& debugName)
+    {
+        TextureLoadResult result{ RHI::TextureHandle::Null(), RHI::SamplerHandle::Null() };
+
+        int width, height, channels;
+        float* hdrPixels = stbi_loadf(filepath.c_str(), &width, &height, &channels, STBI_rgb_alpha);
+        if (!hdrPixels) {
+            LOG_ERROR("Failed to load HDR texture: {}", filepath);
+            return result;
+        }
+
+        // ✅ 直接用 RGBA32_Float，和 float* 数据一致
+        RHI::TextureDesc texDesc;
+        texDesc.extent = { static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1 };
+        texDesc.format = RHI::Format::RGBA32_Float;
+        texDesc.type = RHI::TextureType::Texture2D;
+        texDesc.mipLevels = 1;
+        texDesc.arrayLayers = 1;
+        texDesc.sampleCount = 1;
+        texDesc.debugName = debugName.empty() ? filepath : debugName;
+
+        result.texture = m_resMgr->createTexture(texDesc);
+        if (!result.texture.isValid()) {
+            stbi_image_free(hdrPixels);
+            return result;
+        }
+
+        // ✅ 上传 float 数据
+        size_t dataSize = width * height * 4 * sizeof(float);
+        uploadPixels(result.texture, hdrPixels, dataSize, width, height, 0);
+
+        // ✅ 转换为 cubemap
+        auto cubemapTex = convertEquirectToCubemap(
+            hdrPixels, width, height, 512, "EnvironmentCubemap");
+        stbi_image_free(hdrPixels);
+
+        result.texture = cubemapTex;
+
+        // ✅ 采样器：cubemap 用 ClampToEdge
+        result.sampler = createSampler(
+            RHI::SamplerFilter::Linear,
+            RHI::SamplerAddressMode::ClampToEdge,
+            1.0f, 1.0f,
+            debugName + "_Sampler");
+
+        return result;
+    }
+
+    RHI::TextureHandle TextureLoader::convertEquirectToCubemap(
+        const float* hdrPixels,
+        uint32_t      hdrWidth,
+        uint32_t      hdrHeight,
+        uint32_t      faceSize,
+        const std::string& debugName)
+    {
+        // 1. 创建空的 cubemap
+        RHI::TextureDesc cubemapDesc;
+        cubemapDesc.extent = { faceSize, faceSize, 1 };
+        cubemapDesc.format = RHI::Format::RGBA32_Float;   // 半精度浮点即可
+        cubemapDesc.type = RHI::TextureType::TextureCube;
+        cubemapDesc.mipLevels = 1;
+        cubemapDesc.arrayLayers = 6;
+        cubemapDesc.sampleCount = 1;
+        cubemapDesc.flags = RHI::ImageCreateFlags::CubeCompatible;
+        cubemapDesc.allowRenderTarget = false;
+        cubemapDesc.allowDepthStencil = false;
+        cubemapDesc.allowUnorderedAccess = false;
+        cubemapDesc.debugName = debugName;
+
+        auto cubemapHandle = m_resMgr->createTexture(cubemapDesc);
+        if (!cubemapHandle.isValid()) {
+            LOG_ERROR("Failed to create cubemap: {}", debugName);
+            return RHI::TextureHandle::Null();
+        }
+
+        // 2. 逐面生成像素并上传
+        size_t facePixelCount = faceSize * faceSize;
+        std::vector<float> faceData(facePixelCount * 4); // RGBA
+
+        for (uint32_t face = 0; face < 6; ++face) {
+            float* dst = faceData.data();
+            for (uint32_t y = 0; y < faceSize; ++y) {
+                for (uint32_t x = 0; x < faceSize; ++x) {
+                    glm::vec3 dir = CubemapFaceToDirection(face, float(x), float(y), faceSize);
+                    glm::vec2 uv = DirectionToEquirectUV(dir);
+                    glm::vec4 c = SampleEquirectBilinear(hdrPixels, hdrWidth, hdrHeight, uv);
+
+                    *dst++ = c.r;
+                    *dst++ = c.g;
+                    *dst++ = c.b;
+                    *dst++ = c.a;
+                }
+            }
+
+            // 上传到 cubemap 的当前面
+            size_t dataSize = facePixelCount * 4 * sizeof(float);
+            if (!uploadPixels(cubemapHandle, faceData.data(), dataSize, faceSize, faceSize, face)) {
+                LOG_ERROR("Failed to upload cubemap face {}", face);
+                m_resMgr->destroy(cubemapHandle);
+                return RHI::TextureHandle::Null();
+            }
+        }
+
+        LOG_INFO("Cubemap '{}' created: {}×{} ×6 faces", debugName, faceSize, faceSize);
+        return cubemapHandle;
+    }
+
+    RHI::TextureHandle TextureLoader::createRenderableCubemap(
+        uint32_t faceSize,
+        RHI::Format format,
+        const std::string& debugName)
+    {
+        RHI::TextureDesc desc;
+        desc.extent = { faceSize, faceSize, 1 };
+        desc.format = format;
+        desc.type = RHI::TextureType::TextureCube;
+        desc.mipLevels = 1;
+        desc.arrayLayers = 6;
+        desc.sampleCount = 1;
+        desc.flags = RHI::ImageCreateFlags::CubeCompatible;
+        desc.allowRenderTarget = true;   
+        desc.allowDepthStencil = false;
+        desc.allowUnorderedAccess = false;
+        desc.debugName = debugName;
+
+        return m_resMgr->createTexture(desc);
+    }
 } // namespace StarryEngine::Assets

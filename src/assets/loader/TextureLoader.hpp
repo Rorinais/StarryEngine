@@ -31,6 +31,22 @@ namespace StarryEngine::Assets {
             RHI::Format format,
             const std::string& debugName = "");
 
+        TextureLoadResult loadTextureHDR(
+            const std::string& filepath,
+            const std::string& debugName = "");
+
+        RHI::TextureHandle convertEquirectToCubemap(
+            const float* hdrPixels,
+            uint32_t      hdrWidth,
+            uint32_t      hdrHeight,
+            uint32_t      faceSize,
+            const std::string& debugName = "EnvCubemap");
+
+        RHI::TextureHandle createRenderableCubemap(
+            uint32_t faceSize,
+            RHI::Format format,
+            const std::string& debugName);
+
         // 将纹理数据保存到文件
         bool saveTextureToFile(
             const RHI::TextureHandle& texture,

@@ -191,11 +191,11 @@ namespace StarryEngine {
             static float col1[4] = { 1.0f, 0.0f, 0.2f ,1.0f};
 
             if (ImGui::ColorEdit4("color 2", col1)) {
-                // auto block = m_scene->getAllObjects()[1]->materials[0]->getBlock("LightingUBO");
-                //if (block)
-                //{
-                //    block->setVec4("lights.color", glm::vec4(col1[0], col1[1], col1[2], col1[3]));
-                //}
+                 auto block = m_scene->getAllObjects()[0]->materials[0]->getBlock("LightingUBO");
+                if (block)
+                {
+                    block->setVec4("lights.color", glm::vec4(col1[0], col1[1], col1[2], col1[3]));
+                }
 
             }
         }
@@ -265,20 +265,21 @@ namespace StarryEngine {
         }
         ImGui::End();
 
-        if (m_showDemoWindow) {
-            ImGui::ShowDemoWindow(&m_showDemoWindow);
-        }
+        //if (m_showDemoWindow) {
+        //    ImGui::ShowDemoWindow(&m_showDemoWindow);
+        //}
     }
 
     void Application::createDescriptorPool() {
         m_resMgr = m_rhi->getResourceManager();
 
         RHI::DescriptorPoolDesc poolDesc;
-        poolDesc.maxSets = 20;
+        poolDesc.maxSets = 50;  // ✅ 20 → 50
         poolDesc.poolSizes = {
-            { RHI::DescriptorType::UniformBuffer, 10 },
-            { RHI::DescriptorType::CombinedImageSampler, 10 },
-            { RHI::DescriptorType::InputAttachment, 10 }
+            { RHI::DescriptorType::UniformBuffer,        20 },
+            { RHI::DescriptorType::CombinedImageSampler, 30 },
+            { RHI::DescriptorType::InputAttachment,      20 },
+            { RHI::DescriptorType::StorageBuffer,         5 }   // 添加这一项
         };
         poolDesc.freeDescriptorSet = true;
         poolDesc.debugName = "GlobalDescriptorPool";
@@ -298,12 +299,11 @@ namespace StarryEngine {
         m_nextAllowedReload = m_lastFileCheck;
 
         initImGui();
+        //initComputePipeline();
 
         while (!glfwWindowShouldClose(m_window->getHandle())) {
             glfwPollEvents();
             monitor.tick();
-
-            // Application::run() 中，shader 热重载部分改为：
 
             auto now = std::chrono::steady_clock::now();
             if (now - m_lastFileCheck > std::chrono::milliseconds(500)) {
@@ -368,8 +368,67 @@ namespace StarryEngine {
             }
 
             bool success = m_rhi->renderFrame([this, deltaTime](RHI::RHICommandEncoder* encoder, uint32_t imageIndex) {
+
+                //auto* computePipeline = m_resMgr->getPipeline(m_computePipeline);
+                //auto* computeLayout = m_resMgr->getPipelineLayout(m_computePipelineLayout);
+
+                //// 绑定计算管线
+                //encoder->bindComputePipeline(computePipeline);
+
+                //// 绑定描述符集
+                //encoder->bindDescriptorSets(
+                //    RHI::PipelineBindPoint::Compute,
+                //    computeLayout,
+                //    0,                               // firstSet
+                //    { m_computeDescriptorSet },      // descriptor sets
+                //    {}                               // dynamic offsets
+                //);
+
+                //// 派发工作组 (1024 / 256 = 4 个工作组)
+                //encoder->dispatch(4, 1, 1);
+
+                //RHI::BufferCopyRegion region{ 0, 0, sizeof(float) * 1024 };
+                //encoder->copyBuffer(m_resMgr->getBuffer(m_computeBuffer), m_resMgr->getBuffer(m_computeStaging), { region });
+
+                //// 插入内存屏障：确保计算写入对后续图形阶段可见
+                //RHI::BufferBarrier barrier;
+                //barrier.buffer = m_computeBuffer;
+                //barrier.srcAccessMask = RHI::AccessFlag::ShaderWrite;
+                //barrier.dstAccessMask = RHI::AccessFlag::ShaderRead;
+                //barrier.offset = 0;
+                //barrier.size = VK_WHOLE_SIZE;
+                //encoder->pipelineBarrier(
+                //    static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::ComputeShader),
+                //    static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::VertexShader),   // 假设下一步图形管线读取该 SSBO
+                //    RHI::DependencyFlags{},
+                //    {},         // memory barriers
+                //    { barrier },
+                //    {}          // image barriers
+                //);
+
                 m_renderer->renderFrame(encoder, imageIndex, deltaTime);
                 });
+
+            m_rhi->waitIdle();
+
+            //auto* stagingBuf = m_resMgr->getBuffer(m_computeStaging);
+            //if (stagingBuf) {
+            //    void* ptr = stagingBuf->map(0, sizeof(float) * 1024);
+            //    if (ptr) {
+            //        std::vector<float> result(1024);
+            //        memcpy(result.data(), ptr, sizeof(float) * 1024);
+            //        stagingBuf->unmap();
+
+            //        // 打印前 10 个元素，避免刷屏
+            //        for (int i = 0; i < 10; ++i) {
+            //            LOG_INFO("Compute result[{}] = {}", i, result[i]);
+            //        }
+            //    }
+            //    else {
+            //        LOG_ERROR("Failed to map staging buffer");
+            //    }
+            //}
+
             monitor.updateTitle();
 
             // 执行延迟销毁（资源释放队列）

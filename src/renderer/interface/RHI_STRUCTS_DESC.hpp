@@ -1627,12 +1627,14 @@ namespace StarryEngine::RHI {
      * @details 描述计算着色器管线配置
      */
     struct ComputePipelineDesc {
-        ShaderModuleDesc computeShader;      ///< 计算着色器
-        PipelineLayoutDesc layoutDesc;       ///< 管线布局
+        PipelineType type = PipelineType::Compute;
+        ShaderHandle computeShader;      ///< 计算着色器
+        PipelineLayoutHandle pipelineLayoutHandle;
         std::string debugName;               ///< 调试名称
 
         bool operator==(const ComputePipelineDesc& other) const {
-            return layoutDesc == other.layoutDesc;
+            return computeShader == other.computeShader&&
+                pipelineLayoutHandle==other.pipelineLayoutHandle;
         }
 
         bool operator!=(const ComputePipelineDesc& other) const {

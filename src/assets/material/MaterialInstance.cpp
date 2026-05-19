@@ -11,11 +11,11 @@ namespace StarryEngine::Assets {
         : m_template(tmpl), m_resMgr(resMgr) {
         
         RHI::DescriptorPoolDesc poolDesc;
-        poolDesc.maxSets = 8;   // 一个材质通常有 2~3 个 Set，8 足够
+        poolDesc.maxSets = 16;  // ✅ 8 → 16
         poolDesc.poolSizes = {
-            { RHI::DescriptorType::UniformBuffer, 4 },
-            { RHI::DescriptorType::CombinedImageSampler, 8 },
-            { RHI::DescriptorType::InputAttachment, 4 }
+            { RHI::DescriptorType::UniformBuffer,         8  },  // ✅ 4 → 8
+            { RHI::DescriptorType::CombinedImageSampler, 16 },  // ✅ 8 → 16
+            { RHI::DescriptorType::InputAttachment,       8  }   // ✅ 4 → 8
         };
         poolDesc.freeDescriptorSet = true;
         poolDesc.debugName = "MaterialPool";
@@ -399,11 +399,11 @@ namespace StarryEngine::Assets {
 
         // 创建新池（配置与构造函数相同）
         RHI::DescriptorPoolDesc poolDesc;
-        poolDesc.maxSets = 8;
+        poolDesc.maxSets = 16;  // ✅ 8 → 16
         poolDesc.poolSizes = {
-            { RHI::DescriptorType::UniformBuffer, 4 },
-            { RHI::DescriptorType::CombinedImageSampler, 8 },
-            { RHI::DescriptorType::InputAttachment, 4 }
+            { RHI::DescriptorType::UniformBuffer,         8  },  // ✅ 4 → 8
+            { RHI::DescriptorType::CombinedImageSampler, 16 },  // ✅ 8 → 16
+            { RHI::DescriptorType::InputAttachment,       8  }   // ✅ 4 → 8
         };
         poolDesc.freeDescriptorSet = true;
         poolDesc.debugName = "MaterialPool";

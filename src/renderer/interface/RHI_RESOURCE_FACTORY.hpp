@@ -125,10 +125,15 @@ namespace StarryEngine::RHI {
         ~RHI_VK_CommandEncoder() override { if (mCommandBuffer != nullptr && !mEnded) mCommandBuffer->end(); }
 
 		void end() override {
-			if (mCommandBuffer != nullptr && !mEnded) {
-				mCommandBuffer->end();
-				mEnded = true;
-			}
+            if (mCommandBuffer != nullptr && !mEnded) {
+                mCommandBuffer->end();
+                mEnded = true;
+            }
+            // 对于 VkCommandBuffer 版本的编码器，也需要结束录制
+            else if (m_vkCmdBuf != VK_NULL_HANDLE && !mEnded) {
+                vkEndCommandBuffer(m_vkCmdBuf);
+                mEnded = true;
+            }
 		}
 
         // 状态设置
@@ -146,6 +151,9 @@ namespace StarryEngine::RHI {
 
         // 管线绑定
         void bindPipeline(RHIPipeline* pipeline)override;
+
+        void bindComputePipeline(RHIPipeline* pipeline)override;
+
         void bindVertexBuffers(
             uint32_t firstBinding,
             const std::vector<RHIBuffer*>& buffers,

@@ -507,27 +507,25 @@ namespace StarryEngine {
         VkFormat format,
         VkImageAspectFlags aspectFlags,
         VkImageViewType viewType,
-        uint32_t mipLevels,
+        uint32_t baseMipLevel,  
+        uint32_t levelCount,
         uint32_t baseArrayLayer,
         uint32_t layerCount,
         const char* debugName) {
-
         VkImageViewCreateInfo viewInfo = {};
         viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
         viewInfo.image = image;
         viewInfo.viewType = viewType;
         viewInfo.format = format;
-
         viewInfo.components = {
             VK_COMPONENT_SWIZZLE_IDENTITY,
             VK_COMPONENT_SWIZZLE_IDENTITY,
             VK_COMPONENT_SWIZZLE_IDENTITY,
             VK_COMPONENT_SWIZZLE_IDENTITY
         };
-
         viewInfo.subresourceRange.aspectMask = aspectFlags;
-        viewInfo.subresourceRange.baseMipLevel = 0;  
-        viewInfo.subresourceRange.levelCount = mipLevels;
+        viewInfo.subresourceRange.baseMipLevel = baseMipLevel;  
+        viewInfo.subresourceRange.levelCount = levelCount;
         viewInfo.subresourceRange.baseArrayLayer = baseArrayLayer;
         viewInfo.subresourceRange.layerCount = layerCount;
 
@@ -586,7 +584,7 @@ namespace StarryEngine {
             memoryUsage, allocFlags, imageFlags, mipLevels, arrayLayers);
 
         VkImageView view = createImageView(image.image, format, aspectFlags,
-            viewType, mipLevels, 0, arrayLayers);
+            viewType,0, mipLevels, 0, arrayLayers);
 
         return { image.image, view, image.allocation };
     }
