@@ -9,6 +9,7 @@ layout(push_constant) uniform PC {
     int   face;
     float faceSize;
     float roughness;
+    float sourceResolution;
 } pc;
 
 const float PI = 3.14159265359;
@@ -80,9 +81,7 @@ void main() {
     vec3 N = FaceToDirection(pc.face, float(px), float(py), pc.faceSize);
     vec3 V = N;
 
-    // 源 cubemap 每面分辨率（必须与 equirectToCubemapCS 的 faceSize 一致）
-    const float ENV_RESOLUTION = 512.0;
-    float saTexel = 4.0 * PI / (6.0 * ENV_RESOLUTION * ENV_RESOLUTION);
+    float saTexel = 4.0 * PI / (6.0 * pc.sourceResolution * pc.sourceResolution);
 
     float r = max(pc.roughness, 0.001);
 
@@ -113,8 +112,6 @@ void main() {
         }
     }
     prefilteredColor = prefilteredColor / max(totalWeight, 0.001);
-
-    prefilteredColor/=(prefilteredColor+1);
 
     imageStore(uOutputFace, ivec2(px, py), vec4(prefilteredColor, 1.0));
 }

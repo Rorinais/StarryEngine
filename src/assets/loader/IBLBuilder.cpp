@@ -459,7 +459,7 @@ namespace StarryEngine::Assets {
 
         RHI::PipelineLayoutDesc plDesc;
         plDesc.descriptorSetLayouts = { descLayout };
-        plDesc.pushConstants = { {RHI::ShaderStage::Fragment, 0, 12} };
+        plDesc.pushConstants = { {RHI::ShaderStage::Fragment, 0, 16} };
         auto plLayout = m_resMgr->createPipelineLayout(plDesc);
 
         RHI::DescriptorPoolDesc poolDesc;
@@ -534,8 +534,8 @@ namespace StarryEngine::Assets {
                     cmd->beginRenderPass(rpBegin, RHI::SubpassContents::Inline);
                     cmd->bindPipeline(ppl);
                     cmd->bindDescriptorSets(RHI::PipelineBindPoint::Graphics, plo, 0, { descSet }, {});
-                    struct { int face; float faceSize; float roughness; } pc;
-                    pc.face = face; pc.faceSize = float(mipSize); pc.roughness = roughness;
+                    struct { int face; float faceSize; float roughness; float sourceResolution; } pc;
+                    pc.face = face; pc.faceSize = float(mipSize); pc.roughness = roughness; pc.sourceResolution = float(baseSize);
                     cmd->pushConstants(plo, RHI::ShaderStage::Fragment, 0, sizeof(pc), &pc);
                     cmd->setViewport({ 0.0f, 0.0f, float(mipSize), float(mipSize), 0.0f, 1.0f });
                     cmd->setScissor({ {0, 0}, {mipSize, mipSize} });
@@ -795,7 +795,10 @@ namespace StarryEngine::Assets {
         Assets::ShaderLoader loader(m_resMgr);
         auto csInfo = loader.loadFromFile(
             "assets/shaders/ibl/irradiance_convolution.comp", RHI::ShaderStage::Compute);
-        if (!csInfo) return RHI::TextureHandle::Null();
+        if (!csInfo) {
+            LOG_ERROR("IBL: Failed to load irradiance_convolution.comp");
+            return RHI::TextureHandle::Null();
+        }
         auto cs = csInfo->module;
 
         // ── 创建 DescriptorSetLayout ──
@@ -957,7 +960,10 @@ namespace StarryEngine::Assets {
         Assets::ShaderLoader loader(m_resMgr);
         auto csInfo = loader.loadFromFile(
             "assets/shaders/ibl/prefilter_envmap.comp", RHI::ShaderStage::Compute);
-        if (!csInfo) return RHI::TextureHandle::Null();
+        if (!csInfo) {
+            LOG_ERROR("IBL: Failed to load prefilter_envmap.comp");
+            return RHI::TextureHandle::Null();
+        }
         auto cs = csInfo->module;
 
         // ── 创建 DescriptorSetLayout ──
@@ -971,7 +977,7 @@ namespace StarryEngine::Assets {
         // ── 创建 PipelineLayout ──
         RHI::PipelineLayoutDesc plDesc;
         plDesc.descriptorSetLayouts = { descLayout };
-        plDesc.pushConstants = { { RHI::ShaderStage::Compute, 0, 12 } };
+        plDesc.pushConstants = { { RHI::ShaderStage::Compute, 0, 16 } };
         auto plLayout = m_resMgr->createPipelineLayout(plDesc);
 
         // ── 创建 ComputePipeline ──
@@ -1097,10 +1103,11 @@ namespace StarryEngine::Assets {
                         m_resMgr->getPipelineLayout(plLayout), 0,
                         { allDescSets[setIdx] }, {});
 
-                    struct { int face; float faceSize; float roughness; } pc;
+                    struct { int face; float faceSize; float roughness; float sourceResolution; } pc;
                     pc.face = face;
                     pc.faceSize = float(mipSize);
                     pc.roughness = roughness;
+                    pc.sourceResolution = float(baseSize);
                     cmd->pushConstants(m_resMgr->getPipelineLayout(plLayout),
                         RHI::ShaderStage::Compute, 0, sizeof(pc), &pc);
 
