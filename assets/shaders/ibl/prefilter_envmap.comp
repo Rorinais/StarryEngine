@@ -9,11 +9,11 @@ layout(push_constant) uniform PC {
     int   face;
     float faceSize;
     float roughness;
-    float sourceResolution;
+    float envResolution;   // 源 cubemap 每面分辨率（用于 mip 选择）
 } pc;
 
 const float PI = 3.14159265359;
-const uint  SAMPLE_COUNT = 1024u;
+const uint  SAMPLE_COUNT = 4096u;
 
 // ── Hammersley ──
 float RadicalInverse_VdC(uint bits) {
@@ -27,14 +27,6 @@ float RadicalInverse_VdC(uint bits) {
 
 vec2 Hammersley(uint i, uint N) {
     return vec2(float(i) / float(N), RadicalInverse_VdC(i));
-}
-
-// ── GGX NDF ──
-float DistributionGGX(float NdotH, float roughness) {
-    float a = roughness * roughness;
-    float a2 = a * a;
-    float denom = NdotH * NdotH * (a2 - 1.0) + 1.0;
-    return a2 / (PI * denom * denom);
 }
 
 // ── GGX 重要性采样 ──
@@ -81,12 +73,26 @@ void main() {
     vec3 N = FaceToDirection(pc.face, float(px), float(py), pc.faceSize);
     vec3 V = N;
 
-    float saTexel = 4.0 * PI / (6.0 * pc.sourceResolution * pc.sourceResolution);
+    // 源 cubemap 最大 mip 层级（log2 分辨率）
+    float maxSourceMip = log2(pc.envResolution);
 
     float r = max(pc.roughness, 0.001);
 
+    // 低粗糙度时 GGX lobe 极窄，采样难以收敛 → 直接从源 mip 0 读取
+    if (r < 0.05) {
+        vec3 mirrorColor = textureLod(uEnvironmentMap, N, 0.0).rgb;
+        imageStore(uOutputFace, ivec2(px, py), vec4(mirrorColor, 1.0));
+        return;
+    }
+
+    // ── 粗糙度压缩映射 mip level ──
+    //    mix(0.25, 0.75, r): 把 [0,1] 压到 [0.25, 0.75]
+    //    低粗糙度抬升（更多模糊消亮斑），高粗糙度压低（更少模糊防暗沉）
+    //    r=0 → mip 1.75  r=0.25 → mip 2.63  r=0.5 → mip 3.5  r=0.75 → 4.38  r=1 → 5.25
+    float remapped = mix(0.25, 0.75, r);
+    float mipLevel = remapped * maxSourceMip;
+
     vec3 prefilteredColor = vec3(0.0);
-    float totalWeight = 0.0;
 
     for (uint i = 0u; i < SAMPLE_COUNT; ++i) {
         vec2 Xi = Hammersley(i, SAMPLE_COUNT);
@@ -94,24 +100,12 @@ void main() {
         vec3 L  = normalize(2.0 * dot(V, H) * H - V);
 
         float NdotL = max(dot(N, L), 0.0);
-        float NdotH = max(dot(N, H), 0.0);
-        float HdotV = max(dot(V, H), 0.0);
 
         if (NdotL > 0.0) {
-            // PDF → 仅用于计算 mip level
-            float D   = DistributionGGX(NdotH, r);
-            float pdf = D * NdotH / (4.0 * HdotV);
-
-            float saSample = 1.0 / (float(SAMPLE_COUNT) * pdf);
-            float mipLevel = 0.5 * log2(saSample / saTexel);
-            mipLevel = max(mipLevel, 0.0);
-
-            // 权重 = NdotL（不做 PDF 除法）
             prefilteredColor += textureLod(uEnvironmentMap, L, mipLevel).rgb;
-            totalWeight      += NdotL;
         }
     }
-    prefilteredColor = prefilteredColor / max(totalWeight, 0.001);
+    prefilteredColor /= float(SAMPLE_COUNT);
 
     imageStore(uOutputFace, ivec2(px, py), vec4(prefilteredColor, 1.0));
 }

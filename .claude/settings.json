@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(sed -i 's/{RHI::ShaderStage::Fragment, 0, 12}/{RHI::ShaderStage::Fragment, 0, 16}/' src/assets/loader/IBLBuilder.cpp)",
+      "Bash(sed -i 's/{ RHI::ShaderStage::Compute, 0, 12 }/{ RHI::ShaderStage::Compute, 0, 16 }/' src/assets/loader/IBLBuilder.cpp)",
+      "Bash(sed -i 's/struct { int face; float faceSize; float roughness; } pc;/struct { int face; float faceSize; float roughness; float sourceResolution; } pc;/' src/assets/loader/IBLBuilder.cpp)",
+      "Bash(sed -i 's/pc.face = face; pc.faceSize = float\\(mipSize\\); pc.roughness = roughness;/pc.face = face; pc.faceSize = float\\(mipSize\\); pc.roughness = roughness; pc.sourceResolution = float\\(baseSize\\);/' src/assets/loader/IBLBuilder.cpp)",
+      "Bash(sed -i '/RHI::SamplerDesc sampDesc;/{n;s/sampDesc.minFilter/sampDesc.mipFilter = RHI::SamplerFilter::Linear;\\\\n        sampDesc.minFilter/}' src/assets/loader/IBLBuilder.cpp)",
+      "Bash(sed -i '/sampDesc.addressV = RHI::SamplerAddressMode::ClampToEdge;/{n;s/auto samplerHandle/sampDesc.maxLod = 8.0f;\\\\n        auto samplerHandle/}' src/assets/loader/IBLBuilder.cpp)"
+    ]
+  }
+}

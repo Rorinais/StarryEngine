@@ -45,7 +45,7 @@ void main() {
 
     vec3 irradiance = vec3(0.0);
 
-    float sampleDelta = 0.05;
+    float sampleDelta = 0.01;
     int   phiSteps   = int(2.0 * PI / sampleDelta + 0.5);
     int   thetaSteps = int(0.5 * PI / sampleDelta + 0.5);
     float dPhi       = 2.0 * PI / float(phiSteps);

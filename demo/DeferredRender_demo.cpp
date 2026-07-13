@@ -1,4 +1,3 @@
-#include <iostream>
 #include "../src/renderer/passes/PassWrapper.hpp"
 #include "../src/renderer/passes/GeometrySubpass.hpp"
 #include "../src/renderer/passes/LightSubpass.hpp"
@@ -80,19 +79,13 @@ public:
 
         // 1. 环境 cubemap
         auto envCubemap = m_iblBuilder->buildEnvCubemap("assets/textures/pbr/kloofendal_48d_partly_cloudy_puresky_1k.hdr", 128);
-        std::cout << "[IBL] envCubemap valid: " << envCubemap.isValid() << std::endl;
-
         // 2. Irradiance Map（漫反射）
         auto irradianceMap = m_iblBuilder->generateIrradianceMapCS(envCubemap, 32);
-        std::cout << "[IBL] irradianceMap valid: " << irradianceMap.isValid() << std::endl;
 
         // 3. Prefiltered Map（镜面反射）
         auto prefilteredMap = m_iblBuilder->generatePrefilteredMapCS(envCubemap, 128, 5);
-        std::cout << "[IBL] prefilteredMap valid: " << prefilteredMap.isValid() << std::endl;
-
         // 4. BRDF LUT
         auto brdfLut = m_iblBuilder->generateBrdfLutCS(128);
-        std::cout << "[IBL] brdfLut valid: " << brdfLut.isValid() << std::endl;
 
         RHI::SamplerDesc cubeSampDesc;
         cubeSampDesc.minFilter = RHI::SamplerFilter::Linear;

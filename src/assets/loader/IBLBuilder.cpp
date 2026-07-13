@@ -232,11 +232,18 @@ namespace StarryEngine::Assets {
         RHI::TextureHandle equirectTex,
         uint32_t            faceSize)
     {
+        // ── 计算 mip 层数 ──
+        uint32_t mipLevels = 1;
+        {
+            uint32_t s = faceSize;
+            while (s > 1) { s >>= 1; ++mipLevels; }
+        }
+
         RHI::TextureDesc cubemapDesc;
         cubemapDesc.extent = { faceSize, faceSize, 1 };
         cubemapDesc.format = RHI::Format::RGBA32_Float;
         cubemapDesc.type = RHI::TextureType::TextureCube;
-        cubemapDesc.mipLevels = 1;
+        cubemapDesc.mipLevels = mipLevels;
         cubemapDesc.arrayLayers = 6;
         cubemapDesc.sampleCount = 1;
         cubemapDesc.flags = RHI::ImageCreateFlags::CubeCompatible;
@@ -310,6 +317,150 @@ namespace StarryEngine::Assets {
                 cmd->setScissor({ {0, 0}, {faceSize, faceSize} });
                 cmd->draw(3, 1, 0, 0);
                 cmd->endRenderPass();
+            }
+
+        }
+
+        // ═══════════════════════════════════════════════
+        // 生成源 Cubemap 的 mip 链（图形管线路径）
+        //   渲染完成后 mip 0 处于 ShaderReadOnly，
+        //   用 cubemap_downsample.comp 在 3D 方向空间降采样
+        // ═══════════════════════════════════════════════
+        if (mipLevels > 1) {
+            Assets::ShaderLoader dsLoader(m_resMgr);
+            auto dsInfo = dsLoader.loadFromFile(
+                "assets/shaders/ibl/cubemap_downsample.comp", RHI::ShaderStage::Compute);
+            if (dsInfo) {
+                auto dsShader = dsInfo->module;
+                auto* cubemapObj = m_resMgr->getTexture(cubemap);
+
+                RHI::DescriptorSetLayoutDesc dsLayoutDesc;
+                dsLayoutDesc.bindings = {
+                    { 0, RHI::DescriptorType::CombinedImageSampler, 1, RHI::ShaderStage::Compute },
+                    { 1, RHI::DescriptorType::StorageImage,         1, RHI::ShaderStage::Compute }
+                };
+                auto dsDescLayout = m_resMgr->createDescriptorSetLayout(dsLayoutDesc);
+
+                RHI::PipelineLayoutDesc dsPlDesc;
+                dsPlDesc.descriptorSetLayouts = { dsDescLayout };
+                dsPlDesc.pushConstants = { { RHI::ShaderStage::Compute, 0, 8 } };
+                auto dsPlLayout = m_resMgr->createPipelineLayout(dsPlDesc);
+
+                RHI::ComputePipelineDesc dsCompDesc;
+                dsCompDesc.computeShader = dsShader;
+                dsCompDesc.pipelineLayoutHandle = dsPlLayout;
+                auto dsPipeline = m_resMgr->createComputePipeline(dsCompDesc);
+
+                RHI::SamplerDesc dsSampDesc;
+                dsSampDesc.minFilter = RHI::SamplerFilter::Linear;
+                dsSampDesc.magFilter = RHI::SamplerFilter::Linear;
+                dsSampDesc.addressU = RHI::SamplerAddressMode::ClampToEdge;
+                dsSampDesc.addressV = RHI::SamplerAddressMode::ClampToEdge;
+                dsSampDesc.addressW = RHI::SamplerAddressMode::ClampToEdge;
+                auto dsSampler = m_resMgr->createSampler(dsSampDesc);
+                auto* dsSamplerObj = m_resMgr->getSampler(dsSampler);
+
+                RHI::DescriptorPoolDesc dsPoolDesc;
+                dsPoolDesc.maxSets = 6;
+                dsPoolDesc.poolSizes = {
+                    { RHI::DescriptorType::CombinedImageSampler, 6 },
+                    { RHI::DescriptorType::StorageImage,         6 }
+                };
+                dsPoolDesc.freeDescriptorSet = true;
+                auto dsPool = m_resMgr->createDescriptorPool(dsPoolDesc);
+
+                RHI::ImageSubresourceRange srcOnlyMip0;
+                srcOnlyMip0.aspectMask = RHI::ImageAspect::Color;
+                srcOnlyMip0.baseMipLevel = 0;
+                srcOnlyMip0.levelCount = 1;
+                srcOnlyMip0.baseArrayLayer = 0;
+                srcOnlyMip0.layerCount = 6;
+                void* srcMip0View = cubemapObj->createView(srcOnlyMip0, RHI::ImageViewType::TextureCube);
+                void* srcMip0Native = cubemapObj->getNativeHandleFromView(srcMip0View);
+
+                for (uint32_t mip = 1; mip < mipLevels; ++mip) {
+                    uint32_t srcSize = faceSize >> (mip - 1);
+                    uint32_t dstSize = srcSize / 2;
+                    uint32_t gx = (dstSize + 15) / 16;
+                    uint32_t gy = (dstSize + 15) / 16;
+
+                    // 过渡目标 mip → General（用于 imageStore 写入）
+                    RHI::ImageSubresourceRange mipRange;
+                    mipRange.aspectMask = RHI::ImageAspect::Color;
+                    mipRange.baseMipLevel = mip;
+                    mipRange.levelCount = 1;
+                    mipRange.baseArrayLayer = 0;
+                    mipRange.layerCount = 6;
+                    cubemapObj->transitionLayout(
+                        RHI::ImageLayout::General,
+                        RHI::PipelineStage::TopOfPipe,
+                        RHI::PipelineStage::ComputeShader,
+                        static_cast<RHI::AccessFlags>(0),
+                        static_cast<RHI::AccessFlags>(RHI::AccessFlag::ShaderWrite),
+                        mipRange);
+
+                    std::vector<void*> faceViews;
+                    std::vector<RHI::DescriptorSetHandle> faceDescSets;
+                    for (int f = 0; f < 6; ++f) {
+                        RHI::ImageSubresourceRange faceRange;
+                        faceRange.aspectMask = RHI::ImageAspect::Color;
+                        faceRange.baseMipLevel = mip;
+                        faceRange.levelCount = 1;
+                        faceRange.baseArrayLayer = uint32_t(f);
+                        faceRange.layerCount = 1;
+                        void* vk = cubemapObj->createView(faceRange, RHI::ImageViewType::Texture2D);
+                        void* nv = cubemapObj->getNativeHandleFromView(vk);
+                        faceViews.push_back(vk);
+
+                        RHI::DescriptorSetDesc setDesc;
+                        setDesc.descriptorSetLayout = dsDescLayout;
+                        setDesc.descriptorPool = dsPool;
+                        auto dsSet = m_resMgr->createDescriptorSet(setDesc);
+                        auto* setObj = m_resMgr->getDescriptorSet(dsSet);
+                        setObj->writeTextureCustomView(0, 0, srcMip0Native, dsSamplerObj,
+                            RHI::ImageLayout::ShaderReadOnly);
+                        setObj->writeTextureCustomView(1, 0, nv, nullptr,
+                            RHI::ImageLayout::General);
+                        setObj->update();
+                        faceDescSets.push_back(dsSet);
+                    }
+
+                    {
+                        OneTimeCommandExecutor dsExec(m_rhi.get(), m_resMgr.get());
+                        auto* dsCmd = dsExec.get();
+                        dsCmd->bindComputePipeline(m_resMgr->getPipeline(dsPipeline));
+
+                        for (int f = 0; f < 6; ++f) {
+                            dsCmd->bindDescriptorSets(RHI::PipelineBindPoint::Compute,
+                                m_resMgr->getPipelineLayout(dsPlLayout), 0,
+                                { faceDescSets[f] }, {});
+                            struct { int face; float srcSize; } pc;
+                            pc.face = f; pc.srcSize = float(srcSize);
+                            dsCmd->pushConstants(m_resMgr->getPipelineLayout(dsPlLayout),
+                                RHI::ShaderStage::Compute, 0, sizeof(pc), &pc);
+                            dsCmd->dispatch(gx, gy, 1);
+                        }
+                    }
+
+                    for (auto& set : faceDescSets) m_resMgr->destroy(set);
+                    for (auto* vk : faceViews) cubemapObj->destroyView(vk);
+
+                    cubemapObj->transitionLayout(
+                        RHI::ImageLayout::ShaderReadOnly,
+                        RHI::PipelineStage::ComputeShader,
+                        RHI::PipelineStage::AllCommands,
+                        static_cast<RHI::AccessFlags>(RHI::AccessFlag::ShaderWrite),
+                        static_cast<RHI::AccessFlags>(RHI::AccessFlag::ShaderRead),
+                        mipRange);
+                }
+
+                m_resMgr->destroy(dsPool);
+                m_resMgr->destroy(dsPipeline);
+                m_resMgr->destroy(dsShader);
+                m_resMgr->destroy(dsPlLayout);
+                m_resMgr->destroy(dsDescLayout);
+                m_resMgr->destroy(dsSampler);
+                cubemapObj->destroyView(srcMip0View);
             }
         }
 
@@ -474,6 +625,7 @@ namespace StarryEngine::Assets {
         sampDesc.addressU = RHI::SamplerAddressMode::ClampToEdge;
         sampDesc.addressV = RHI::SamplerAddressMode::ClampToEdge;
         sampDesc.addressW = RHI::SamplerAddressMode::ClampToEdge;
+        sampDesc.maxLod = 32.0f;   // 允许 access 源 cubemap 的全部 mip
         auto sampler = m_resMgr->createSampler(sampDesc);
         auto descSet = createDescriptorSet(envCubemap, sampler, descLayout, pool);
 
@@ -504,6 +656,7 @@ namespace StarryEngine::Assets {
             auto* ppl = m_resMgr->getPipeline(pipeline);
             auto* plo = m_resMgr->getPipelineLayout(plLayout);
 
+            float sourceFaceSize = static_cast<float>(m_resMgr->getTexture(envCubemap)->getExtent().width);
             for (uint32_t mip = 0; mip < mipLevels; ++mip) {
                 uint32_t mipSize = baseSize >> mip;
                 float roughness = float(mip) / float(mipLevels - 1);
@@ -534,8 +687,9 @@ namespace StarryEngine::Assets {
                     cmd->beginRenderPass(rpBegin, RHI::SubpassContents::Inline);
                     cmd->bindPipeline(ppl);
                     cmd->bindDescriptorSets(RHI::PipelineBindPoint::Graphics, plo, 0, { descSet }, {});
-                    struct { int face; float faceSize; float roughness; float sourceResolution; } pc;
-                    pc.face = face; pc.faceSize = float(mipSize); pc.roughness = roughness; pc.sourceResolution = float(baseSize);
+                    struct { int face; float faceSize; float roughness; float envResolution; } pc;
+                    pc.face = face; pc.faceSize = float(mipSize); pc.roughness = roughness;
+                    pc.envResolution = sourceFaceSize;
                     cmd->pushConstants(plo, RHI::ShaderStage::Fragment, 0, sizeof(pc), &pc);
                     cmd->setViewport({ 0.0f, 0.0f, float(mipSize), float(mipSize), 0.0f, 1.0f });
                     cmd->setScissor({ {0, 0}, {mipSize, mipSize} });
@@ -638,12 +792,19 @@ namespace StarryEngine::Assets {
         RHI::TextureHandle equirectTex,
         uint32_t            faceSize)
     {
-        // ── 创建设备端 Cubemap 纹理（6 层，允许 storage）──
+        // ── 计算 mip 层数 ──
+        uint32_t mipLevels = 1;
+        {
+            uint32_t s = faceSize;
+            while (s > 1) { s >>= 1; ++mipLevels; }
+        }
+
+        // ── 创建设备端 Cubemap 纹理（6 层，允许 storage，含完整 mip 链）──
         RHI::TextureDesc cubemapDesc;
         cubemapDesc.extent = { faceSize, faceSize, 1 };
         cubemapDesc.format = RHI::Format::RGBA32_Float;
         cubemapDesc.type = RHI::TextureType::TextureCube;
-        cubemapDesc.mipLevels = 1;
+        cubemapDesc.mipLevels = mipLevels;
         cubemapDesc.arrayLayers = 6;
         cubemapDesc.sampleCount = 1;
         cubemapDesc.flags = RHI::ImageCreateFlags::CubeCompatible;
@@ -688,15 +849,23 @@ namespace StarryEngine::Assets {
         sampDesc.addressV = RHI::SamplerAddressMode::ClampToEdge;
         auto sampler = m_resMgr->createSampler(sampDesc);
 
-        // ── ★ 创建覆盖全部 6 个面的 Cube 视图 ──
+        // ── ★ 创建覆盖全部 6 个面的 Cube 视图（compute shader 只写 mip 0）──
         auto* cubemapObj = m_resMgr->getTexture(cubemap);
-        RHI::ImageSubresourceRange allLayers;
-        allLayers.aspectMask = RHI::ImageAspect::Color;
-        allLayers.baseMipLevel = 0;
-        allLayers.levelCount = 1;
-        allLayers.baseArrayLayer = 0;
-        allLayers.layerCount = 6;
-        void* cubeViewKey = cubemapObj->createView(allLayers, RHI::ImageViewType::TextureCube);
+        RHI::ImageSubresourceRange cubeViewRange;
+        cubeViewRange.aspectMask = RHI::ImageAspect::Color;
+        cubeViewRange.baseMipLevel = 0;
+        cubeViewRange.levelCount = 1;
+        cubeViewRange.baseArrayLayer = 0;
+        cubeViewRange.layerCount = 6;
+        void* cubeViewKey = cubemapObj->createView(cubeViewRange, RHI::ImageViewType::TextureCube);
+
+        // ── ★ 布局转换范围：覆盖全部 mip ──
+        RHI::ImageSubresourceRange allMips;
+        allMips.aspectMask = RHI::ImageAspect::Color;
+        allMips.baseMipLevel = 0;
+        allMips.levelCount = mipLevels;
+        allMips.baseArrayLayer = 0;
+        allMips.layerCount = 6;
         void* nativeView = cubemapObj->getNativeHandleFromView(cubeViewKey);
 
         // ── 创建 DescriptorPool ──
@@ -731,7 +900,7 @@ namespace StarryEngine::Assets {
             RHI::ImageLayout::General);
         setObj->update();
 
-        // ── 过渡整张 Cube 到 General 布局（所有层）──
+        // ── 过渡整张 Cube 到 General 布局（所有 mip / 层）──
         {
             OneTimeCommandExecutor executor(m_rhi.get(), m_resMgr.get());
             auto* cmd = executor.get();
@@ -742,7 +911,7 @@ namespace StarryEngine::Assets {
                 RHI::PipelineStage::ComputeShader,
                 static_cast<RHI::AccessFlags>(0),
                 static_cast<RHI::AccessFlags>(RHI::AccessFlag::ShaderWrite),
-                allLayers);
+                allMips);
 
             cmd->bindComputePipeline(m_resMgr->getPipeline(pipeline));
             cmd->bindDescriptorSets(RHI::PipelineBindPoint::Compute,
@@ -759,14 +928,159 @@ namespace StarryEngine::Assets {
 
         m_rhi->waitIdle();
 
-        // ── 过渡回 ShaderReadOnly ──
-        cubemapObj->transitionLayout(
-            RHI::ImageLayout::ShaderReadOnly,
-            RHI::PipelineStage::ComputeShader,
-            RHI::PipelineStage::AllCommands,
-            static_cast<RHI::AccessFlags>(RHI::AccessFlag::ShaderWrite),
-            static_cast<RHI::AccessFlags>(RHI::AccessFlag::ShaderRead),
-            allLayers);
+        // ── 过渡 mip 0 到 ShaderReadOnly（供 downsampler 读取）──
+        {
+            RHI::ImageSubresourceRange mip0Range;
+            mip0Range.aspectMask = RHI::ImageAspect::Color;
+            mip0Range.baseMipLevel = 0;
+            mip0Range.levelCount = 1;
+            mip0Range.baseArrayLayer = 0;
+            mip0Range.layerCount = 6;
+            cubemapObj->transitionLayout(
+                RHI::ImageLayout::ShaderReadOnly,
+                RHI::PipelineStage::ComputeShader,
+                RHI::PipelineStage::ComputeShader,
+                static_cast<RHI::AccessFlags>(RHI::AccessFlag::ShaderWrite),
+                static_cast<RHI::AccessFlags>(RHI::AccessFlag::ShaderRead),
+                mip0Range);
+        }
+
+        // ═══════════════════════════════════════════════
+        // 生成源 Cubemap 的 mip 链
+        //   用 cubemap_downsample.comp 在 3D 方向空间
+        //   做 2×2 box filter，处理 cubemap 接缝、
+        //   始终从 mip 0 读取避免累积误差
+        // ═══════════════════════════════════════════════
+        if (mipLevels > 1) {
+            Assets::ShaderLoader dsLoader(m_resMgr);
+            auto dsInfo = dsLoader.loadFromFile(
+                "assets/shaders/ibl/cubemap_downsample.comp", RHI::ShaderStage::Compute);
+            if (dsInfo) {
+                auto dsShader = dsInfo->module;
+
+                RHI::DescriptorSetLayoutDesc dsLayoutDesc;
+                dsLayoutDesc.bindings = {
+                    { 0, RHI::DescriptorType::CombinedImageSampler, 1, RHI::ShaderStage::Compute },
+                    { 1, RHI::DescriptorType::StorageImage,         1, RHI::ShaderStage::Compute }
+                };
+                auto dsDescLayout = m_resMgr->createDescriptorSetLayout(dsLayoutDesc);
+
+                RHI::PipelineLayoutDesc dsPlDesc;
+                dsPlDesc.descriptorSetLayouts = { dsDescLayout };
+                dsPlDesc.pushConstants = { { RHI::ShaderStage::Compute, 0, 8 } };
+                auto dsPlLayout = m_resMgr->createPipelineLayout(dsPlDesc);
+
+                RHI::ComputePipelineDesc dsCompDesc;
+                dsCompDesc.computeShader = dsShader;
+                dsCompDesc.pipelineLayoutHandle = dsPlLayout;
+                auto dsPipeline = m_resMgr->createComputePipeline(dsCompDesc);
+
+                RHI::SamplerDesc dsSampDesc;
+                dsSampDesc.minFilter = RHI::SamplerFilter::Linear;
+                dsSampDesc.magFilter = RHI::SamplerFilter::Linear;
+                dsSampDesc.addressU = RHI::SamplerAddressMode::ClampToEdge;
+                dsSampDesc.addressV = RHI::SamplerAddressMode::ClampToEdge;
+                dsSampDesc.addressW = RHI::SamplerAddressMode::ClampToEdge;
+                auto dsSampler = m_resMgr->createSampler(dsSampDesc);
+                auto* dsSamplerObj = m_resMgr->getSampler(dsSampler);
+
+                RHI::DescriptorPoolDesc dsPoolDesc;
+                dsPoolDesc.maxSets = 6;
+                dsPoolDesc.poolSizes = {
+                    { RHI::DescriptorType::CombinedImageSampler, 6 },
+                    { RHI::DescriptorType::StorageImage,         6 }
+                };
+                dsPoolDesc.freeDescriptorSet = true;
+                auto dsPool = m_resMgr->createDescriptorPool(dsPoolDesc);
+
+                // ── 仅含 mip 0 的 Cube 视图 ──
+                //    sampler 视图若覆盖全部 mip，而 mip 1+ 处于 General，
+                //    会与描述符声明的 ShaderReadOnly 冲突
+                RHI::ImageSubresourceRange srcOnlyMip0;
+                srcOnlyMip0.aspectMask = RHI::ImageAspect::Color;
+                srcOnlyMip0.baseMipLevel = 0;
+                srcOnlyMip0.levelCount = 1;
+                srcOnlyMip0.baseArrayLayer = 0;
+                srcOnlyMip0.layerCount = 6;
+                void* srcMip0View = cubemapObj->createView(srcOnlyMip0, RHI::ImageViewType::TextureCube);
+                void* srcMip0Native = cubemapObj->getNativeHandleFromView(srcMip0View);
+
+                for (uint32_t mip = 1; mip < mipLevels; ++mip) {
+                    uint32_t srcSize = faceSize >> (mip - 1);
+                    uint32_t dstSize = srcSize / 2;
+                    uint32_t gx = (dstSize + 15) / 16;
+                    uint32_t gy = (dstSize + 15) / 16;
+
+                    std::vector<void*> faceViews;
+                    std::vector<RHI::DescriptorSetHandle> faceDescSets;
+                    for (int f = 0; f < 6; ++f) {
+                        RHI::ImageSubresourceRange faceRange;
+                        faceRange.aspectMask = RHI::ImageAspect::Color;
+                        faceRange.baseMipLevel = mip;
+                        faceRange.levelCount = 1;
+                        faceRange.baseArrayLayer = uint32_t(f);
+                        faceRange.layerCount = 1;
+                        void* vk = cubemapObj->createView(faceRange, RHI::ImageViewType::Texture2D);
+                        void* nv = cubemapObj->getNativeHandleFromView(vk);
+                        faceViews.push_back(vk);
+
+                        RHI::DescriptorSetDesc setDesc;
+                        setDesc.descriptorSetLayout = dsDescLayout;
+                        setDesc.descriptorPool = dsPool;
+                        auto dsSet = m_resMgr->createDescriptorSet(setDesc);
+                        auto* setObj = m_resMgr->getDescriptorSet(dsSet);
+                        setObj->writeTextureCustomView(0, 0, srcMip0Native, dsSamplerObj,
+                            RHI::ImageLayout::ShaderReadOnly);
+                        setObj->writeTextureCustomView(1, 0, nv, nullptr,
+                            RHI::ImageLayout::General);
+                        setObj->update();
+                        faceDescSets.push_back(dsSet);
+                    }
+
+                    {
+                        OneTimeCommandExecutor dsExec(m_rhi.get(), m_resMgr.get());
+                        auto* dsCmd = dsExec.get();
+                        dsCmd->bindComputePipeline(m_resMgr->getPipeline(dsPipeline));
+
+                        for (int f = 0; f < 6; ++f) {
+                            dsCmd->bindDescriptorSets(RHI::PipelineBindPoint::Compute,
+                                m_resMgr->getPipelineLayout(dsPlLayout), 0,
+                                { faceDescSets[f] }, {});
+                            struct { int face; float srcSize; } pc;
+                            pc.face = f; pc.srcSize = float(srcSize);
+                            dsCmd->pushConstants(m_resMgr->getPipelineLayout(dsPlLayout),
+                                RHI::ShaderStage::Compute, 0, sizeof(pc), &pc);
+                            dsCmd->dispatch(gx, gy, 1);
+                        }
+                    }
+
+                    for (auto& set : faceDescSets) m_resMgr->destroy(set);
+                    for (auto* vk : faceViews) cubemapObj->destroyView(vk);
+
+                    RHI::ImageSubresourceRange mipRange;
+                    mipRange.aspectMask = RHI::ImageAspect::Color;
+                    mipRange.baseMipLevel = mip;
+                    mipRange.levelCount = 1;
+                    mipRange.baseArrayLayer = 0;
+                    mipRange.layerCount = 6;
+                    cubemapObj->transitionLayout(
+                        RHI::ImageLayout::ShaderReadOnly,
+                        RHI::PipelineStage::ComputeShader,
+                        RHI::PipelineStage::AllCommands,
+                        static_cast<RHI::AccessFlags>(RHI::AccessFlag::ShaderWrite),
+                        static_cast<RHI::AccessFlags>(RHI::AccessFlag::ShaderRead),
+                        mipRange);
+                }
+
+                m_resMgr->destroy(dsPool);
+                m_resMgr->destroy(dsPipeline);
+                m_resMgr->destroy(dsShader);
+                m_resMgr->destroy(dsPlLayout);
+                m_resMgr->destroy(dsDescLayout);
+                m_resMgr->destroy(dsSampler);
+                cubemapObj->destroyView(srcMip0View);
+            }
+        }
 
         // ── 清理资源 ──
         cubemapObj->destroyView(cubeViewKey);
@@ -795,10 +1109,7 @@ namespace StarryEngine::Assets {
         Assets::ShaderLoader loader(m_resMgr);
         auto csInfo = loader.loadFromFile(
             "assets/shaders/ibl/irradiance_convolution.comp", RHI::ShaderStage::Compute);
-        if (!csInfo) {
-            LOG_ERROR("IBL: Failed to load irradiance_convolution.comp");
-            return RHI::TextureHandle::Null();
-        }
+        if (!csInfo) return RHI::TextureHandle::Null();
         auto cs = csInfo->module;
 
         // ── 创建 DescriptorSetLayout ──
@@ -960,10 +1271,7 @@ namespace StarryEngine::Assets {
         Assets::ShaderLoader loader(m_resMgr);
         auto csInfo = loader.loadFromFile(
             "assets/shaders/ibl/prefilter_envmap.comp", RHI::ShaderStage::Compute);
-        if (!csInfo) {
-            LOG_ERROR("IBL: Failed to load prefilter_envmap.comp");
-            return RHI::TextureHandle::Null();
-        }
+        if (!csInfo) return RHI::TextureHandle::Null();
         auto cs = csInfo->module;
 
         // ── 创建 DescriptorSetLayout ──
@@ -986,12 +1294,13 @@ namespace StarryEngine::Assets {
         compDesc.pipelineLayoutHandle = plLayout;
         auto pipeline = m_resMgr->createComputePipeline(compDesc);
 
-        // ── 创建采样器 ──
+        // ── 创建采样器（允许访问全部 mip）──
         RHI::SamplerDesc sampDesc;
         sampDesc.minFilter = RHI::SamplerFilter::Linear;
         sampDesc.magFilter = RHI::SamplerFilter::Linear;
         sampDesc.addressU = RHI::SamplerAddressMode::ClampToEdge;
         sampDesc.addressV = RHI::SamplerAddressMode::ClampToEdge;
+        sampDesc.maxLod = 32.0f;   // 允许 access 源 cubemap 的全部 mip
         auto samplerHandle = m_resMgr->createSampler(sampDesc);
 
         // ── 创建输出纹理 ──
@@ -1090,6 +1399,7 @@ namespace StarryEngine::Assets {
                 allMipsAndLayers);
 
             // ── 逐 (mip, face) dispatch ──
+            float sourceFaceSize = static_cast<float>(envTexObj->getExtent().width);
             int setIdx = 0;
             for (uint32_t mip = 0; mip < mipLevels; ++mip) {
                 uint32_t mipSize = baseSize >> mip;
@@ -1103,11 +1413,11 @@ namespace StarryEngine::Assets {
                         m_resMgr->getPipelineLayout(plLayout), 0,
                         { allDescSets[setIdx] }, {});
 
-                    struct { int face; float faceSize; float roughness; float sourceResolution; } pc;
+                    struct { int face; float faceSize; float roughness; float envResolution; } pc;
                     pc.face = face;
                     pc.faceSize = float(mipSize);
                     pc.roughness = roughness;
-                    pc.sourceResolution = float(baseSize);
+                    pc.envResolution = sourceFaceSize;
                     cmd->pushConstants(m_resMgr->getPipelineLayout(plLayout),
                         RHI::ShaderStage::Compute, 0, sizeof(pc), &pc);
 

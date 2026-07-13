@@ -45,8 +45,8 @@ void main() {
     vec3 albedoSample =vec3(1.0);
 
     float ao         = 1.0;     
-    float roughness  = 1.0;              
-    float metallic   = 1.0; 
+    float roughness  = 0.5;              
+    float metallic   = 0.5; 
 
     vec3 N = normalize(fragNormal);
 
@@ -81,33 +81,29 @@ void main() {
     float denominator = max(4.0 * NdotV * NdotL, 0.0001);
     vec3 specular = nominator / denominator;
     
-    //Lo += (kD * albedoSample.rgb / PI + specular) * radiance * NdotL;
-    Lo += (kD * albedoSample.rgb / PI + specular)  * NdotL;
+    Lo += (kD * albedoSample.rgb / PI + specular) * radiance * NdotL;
 
+    // Diffuse IBL
     vec3 irradiance = texture(uIrradianceMap, N).rgb;
-   irradiance /= (irradiance + 1.0);
-    vec3 diffuseIBL = irradiance * albedoSample.rgb;
+    vec3 diffuseIBL = irradiance * albedoSample.rgb / PI;
 
+    // Specular IBL
     vec3 R = reflect(-V, N);
-    float roughnessLevel = roughness * 5.0;  
+    const float MAX_MIP = 4.0; // mipLevels(5) - 1
+    float roughnessLevel = roughness * MAX_MIP;
     vec3 prefilteredColor = textureLod(uPrefilteredMap, R, roughnessLevel).rgb;
-       prefilteredColor /= (prefilteredColor + 1.0);
 
     vec2 brdfParams = texture(uBrdfLut, vec2(NdotV, roughness)).rg;
     vec3 specularIBL = prefilteredColor * (kS * brdfParams.x + brdfParams.y);
-    
+
     vec3 ambientIBL = (diffuseIBL * kD + specularIBL) * ao;
-    
+
     vec3 color = Lo + ambientIBL;
-    
-    vec2 screenPos = gl_FragCoord.xy;
-    vec3 dither = ScreenSpaceDither(screenPos);
-    color += dither;
-    //color =pow(color,vec3(2.2));
 
-    //color /= (color + 1.0);
+    // tone mapping on final output only
+    color = color / (color + vec3(1.0));
 
-    outColor = vec4(ambientIBL, 1.0);
+    outColor = vec4(color, 1.0);
 }
 
 float DistributionGGX(vec3 N, vec3 H, float roughness)
