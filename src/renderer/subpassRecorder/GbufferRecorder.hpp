@@ -24,12 +24,9 @@ namespace StarryEngine {
             m_drawItems.push_back(item);
         }
 
-        void recordCommands(RHI::RHICommandEncoder* encoder,
-            const RenderContext& rctx,
-            const PassContext& pctx,
-            uint32_t subpassIndex) override {
+        void recordCommands(RHI::RHICommandEncoder* encoder,const RenderContext& rctx,const PassContext& pctx,uint32_t subpassIndex) override {
             for (const auto& item : m_drawItems) {
-                // 处理过程式绘制（天空盒等全屏效果）
+                // 处理过程式绘制
                 if (item->type == Scene::DrawItemType::Procedural) {
                     auto it = m_pipelineMapping.find(item->pipelineIndex);
                     if (it == m_pipelineMapping.end()) {
@@ -42,16 +39,12 @@ namespace StarryEngine {
                     for (auto& [set, handle] : item->descriptorSets) {
                         encoder->bindDescriptorSets(RHI::PipelineBindPoint::Graphics, layout, set, { handle }, {});
                     }
-
                     encoder->draw(item->vertexCount, item->instanceCount, item->firstVertex, item->firstInstance);
                 }
 
                 auto obj = item->object.lock();
-                if (!obj) {
-                    LOG_WARN("DrawItem object expired");
-                }
+                if (!obj) LOG_WARN("DrawItem object expired");
 
-                // 通过 pipelineIndex 获取管线句柄
                 auto it = m_pipelineMapping.find(item->pipelineIndex);
                 if (it == m_pipelineMapping.end()) {
                     LOG_ERROR("No pipeline found for index {}", item->pipelineIndex);
@@ -64,14 +57,12 @@ namespace StarryEngine {
 
                 auto pipelineLayout = pctx.getResourceManager()->getPipelineLayout(pipeline->getLayout());
                 for (const auto& [setIndex, setHandle] : item->descriptorSets) {
-                    encoder->bindDescriptorSets(RHI::PipelineBindPoint::Graphics,
-                        pipelineLayout, setIndex, { setHandle }, {});
+                    encoder->bindDescriptorSets(RHI::PipelineBindPoint::Graphics,pipelineLayout, setIndex, { setHandle }, {});
                 }
 
                 // 非实例化时 push 变换矩阵
                 if (!item->isInstanced) {
-                    encoder->pushConstants(pipelineLayout, RHI::ShaderStage::Vertex,
-                        0, sizeof(glm::mat4), &obj->transform);
+                    encoder->pushConstants(pipelineLayout, RHI::ShaderStage::Vertex,0, sizeof(glm::mat4), &obj->transform);
                 }
 
                 // 绑定顶点/索引缓冲
@@ -88,8 +79,7 @@ namespace StarryEngine {
 
                 if (item->isInstanced) {
                     encoder->drawIndexed(item->indexCount, item->instanceCount, item->indexOffset, 0, 0);
-                }
-                else {
+                }else {
                     encoder->drawIndexed(item->indexCount, 1, item->indexOffset, 0, 0);
                 }
             }

@@ -203,25 +203,42 @@ namespace StarryEngine {
 
         // Asset Browser
         if (ImGui::Begin("Code Editor")) {
-            // ═══ 工具栏 ═══
             if (ImGui::Button("Open")) {
-                std::string path = OpenFileDialog();
-                if (!path.empty()) {
-                    openShaderFile(path);
-                }
+                // 1. 创建配置对象
+                IGFD::FileDialogConfig config;
+                config.path = ".";                              // 对话框默认打开的目录
+                config.fileName = "";                          // 默认文件名（可选）
+                config.filePathName = "";                      // 若设置，则覆盖 path 和 fileName
+                config.countSelectionMax = 1;                  // 最多选择1个文件
+                config.flags = ImGuiFileDialogFlags_None;      // 无特殊标志
+
+                // 2. 调用 OpenDialog
+                ImGuiFileDialog::Instance()->OpenDialog(
+                    "ChooseShaderFile",                        // 唯一标识 key
+                    "Open Shader File",                        // 对话框标题
+                    ".vert,.frag,.comp,.glsl,.h,.c,.cpp",      // 过滤器（扩展名，用逗号分隔）
+                    config                                     // 配置结构体
+                );
             }
             ImGui::SameLine();
-
             if (ImGui::Button("Save")) {
                 saveCurrentShaderFile();
             }
             ImGui::SameLine();
-
             ImGui::Text(" %s", m_currentShaderPath.c_str());
 
             ImGui::Separator();
 
-            // ═══ 编辑器主体 ═══
+            // ✅ 显示文件对话框（如果打开）
+            if (ImGuiFileDialog::Instance()->Display("ChooseShaderFile")) {
+                if (ImGuiFileDialog::Instance()->IsOk()) {
+                    std::string filePath = ImGuiFileDialog::Instance()->GetFilePathName();
+                    openShaderFile(filePath);
+                }
+                ImGuiFileDialog::Instance()->Close();
+            }
+
+            // 编辑器主体
             m_shaderEditor.Render("##editor", ImGui::GetContentRegionAvail());
         }
         ImGui::End();
@@ -274,12 +291,12 @@ namespace StarryEngine {
         m_resMgr = m_rhi->getResourceManager();
 
         RHI::DescriptorPoolDesc poolDesc;
-        poolDesc.maxSets = 50;  // ✅ 20 → 50
+        poolDesc.maxSets = 50;  
         poolDesc.poolSizes = {
             { RHI::DescriptorType::UniformBuffer,        20 },
             { RHI::DescriptorType::CombinedImageSampler, 30 },
             { RHI::DescriptorType::InputAttachment,      20 },
-            { RHI::DescriptorType::StorageBuffer,         5 }   // 添加这一项
+            { RHI::DescriptorType::StorageBuffer,         5 }  
         };
         poolDesc.freeDescriptorSet = true;
         poolDesc.debugName = "GlobalDescriptorPool";
@@ -408,8 +425,6 @@ namespace StarryEngine {
 
                 m_renderer->renderFrame(encoder, imageIndex, deltaTime);
                 });
-
-            m_rhi->waitIdle();
 
             //auto* stagingBuf = m_resMgr->getBuffer(m_computeStaging);
             //if (stagingBuf) {

@@ -8,6 +8,10 @@
 # 获取脚本所在目录
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# 在 SCRIPT_DIR 定义之后立即添加：
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+cd "$PROJECT_ROOT" || exit 1
+
 # 设置默认构建类型
 BUILD_TYPE="Debug"
 MAKE_JOBS=4

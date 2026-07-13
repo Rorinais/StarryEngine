@@ -47,7 +47,7 @@ public:
 
         auto material = std::make_shared<Assets::MaterialInstance>(tmpl, m_descriptorPool, m_rhi->getResourceManager().get(), m_descriptorSet);
 
-        auto cubemap = m_iblBuilder->buildEnvCubemap("assets/textures/pbr/rosendal_plains_2_1k.hdr", 512);
+        auto cubemap = m_iblBuilder->buildEnvCubemap("assets/textures/pbr/kloofendal_48d_partly_cloudy_puresky_1k.hdr", 128);
         auto sampler = Assets::TextureLoader(m_rhi->getResourceManager()).createDefaultSampler();
         material->setTexture("uSkybox", cubemap, sampler);
 
@@ -68,24 +68,24 @@ public:
         material->enableDepthTest(true);
         material->enableDepthWrite(true);
 
-        Assets::TextureLoader loader(m_rhi->getResourceManager());
-        auto texResult0 = loader.loadTexture2D("assets/textures/pbr/seaworn_sandstone_brick_arm_1k.png", RHI::Format::RGBA8_UNorm, "arm");
-        auto texResult1 = loader.loadTexture2D("assets/textures/pbr/seaworn_sandstone_brick_diff_1k.png", RHI::Format::RGBA8_UNorm, "diff");
-        auto texResult2 = loader.loadTexture2D("assets/textures/pbr/seaworn_sandstone_brick_nor_dx_1k.png", RHI::Format::RGBA8_UNorm, "nor_dx");
+        //Assets::TextureLoader loader(m_rhi->getResourceManager());
+        //auto texResult0 = loader.loadTexture2D("assets/textures/pbr/seaworn_sandstone_brick_arm_1k.png", RHI::Format::RGBA8_UNorm, "arm");
+        //auto texResult1 = loader.loadTexture2D("assets/textures/pbr/seaworn_sandstone_brick_diff_1k.png", RHI::Format::RGBA8_UNorm, "diff");
+        //auto texResult2 = loader.loadTexture2D("assets/textures/pbr/seaworn_sandstone_brick_nor_dx_1k.png", RHI::Format::RGBA8_UNorm, "nor_dx");
 
-        material->setTexture("armMap", texResult0.texture, texResult0.sampler);
-        material->setTexture("albedoMap", texResult1.texture, texResult1.sampler);
-        material->setTexture("normalMap", texResult2.texture, texResult2.sampler);
+        //material->setTexture("armMap", texResult0.texture, texResult0.sampler);
+        //material->setTexture("albedoMap", texResult1.texture, texResult1.sampler);
+        //material->setTexture("normalMap", texResult2.texture, texResult2.sampler);
 
         // 1. 环境 cubemap
-        auto envCubemap = m_iblBuilder->buildEnvCubemap("assets/textures/pbr/rosendal_plains_2_1k.hdr", 512);
+        auto envCubemap = m_iblBuilder->buildEnvCubemap("assets/textures/pbr/kloofendal_48d_partly_cloudy_puresky_1k.hdr", 128);
         // 2. Irradiance Map（漫反射）
-        auto irradianceMap = m_iblBuilder->generateIrradianceMapCS(envCubemap, 512);
+        auto irradianceMap = m_iblBuilder->generateIrradianceMapCS(envCubemap, 32);
 
         // 3. Prefiltered Map（镜面反射）
         auto prefilteredMap = m_iblBuilder->generatePrefilteredMapCS(envCubemap, 128, 5);
         // 4. BRDF LUT
-        auto brdfLut = m_iblBuilder->generateBrdfLutCS(512);
+        auto brdfLut = m_iblBuilder->generateBrdfLutCS(128);
 
         RHI::SamplerDesc cubeSampDesc;
         cubeSampDesc.minFilter = RHI::SamplerFilter::Linear;

@@ -283,7 +283,7 @@ namespace StarryEngine {
         mHeight = config.windowHeight;
 
         mAcquireFunc = [this](VkSemaphore semaphore, VkFence fence, uint32_t& index) {
-            return mSwapChain->acquireNextImage(semaphore, fence, UINT16_MAX, index);
+            return mSwapChain->acquireNextImage(semaphore, fence, UINT64_MAX, index);
         };
         mPresentFunc = [this](VkQueue queue, uint32_t index, VkSemaphore semaphore) {
             return mSwapChain->present(queue, index, semaphore);

@@ -224,38 +224,29 @@ namespace StarryEngine::RenderGraph {
         return true;
     }
 
-    void PassNode::execute(RHI::RHICommandEncoder* encoder,
-        const RenderContext& context,
-        uint32_t frameIndex,
-        RHI::FramebufferHandle framebuffer) {
-        if (!m_renderPassHandle.isValid()) {
-            throw std::runtime_error("Pass not compiled: " + m_name);
-        }
+    void PassNode::execute(RHI::RHICommandEncoder* encoder,const RenderContext& context,uint32_t frameIndex,RHI::FramebufferHandle framebuffer) {
+        if (!m_renderPassHandle.isValid()) throw std::runtime_error("Pass not compiled: " + m_name);
 
         auto* renderPassObj = m_resMgr->getRenderPass(m_renderPassHandle);
         auto* fbObj = m_resMgr->getFramebuffer(framebuffer);
         if (!renderPassObj || !fbObj) return;
 
-        RHI::RenderPassBeginInfo beginInfo{};
-        beginInfo.renderPass = renderPassObj->getNativeHandle();
-        beginInfo.framebuffer = fbObj->getNativeHandle();
-        beginInfo.renderArea = { {0, 0}, { m_width, m_height } };
-        beginInfo.clearValues = m_clearValues;
+        RHI::RenderPassBeginInfo beginInfo{
+            .renderPass = renderPassObj->getNativeHandle(),
+            .framebuffer = fbObj->getNativeHandle(),
+            .renderArea = { {0, 0}, { m_width, m_height } },
+            .clearValues = m_clearValues
+        };
 
         encoder->beginRenderPass(beginInfo, RHI::SubpassContents::Inline);
 
-        RHI::Viewport viewport{ 0.0f, 0.0f, (float)m_width, (float)m_height, 0.0f, 1.0f };
-        encoder->setViewport(viewport);
-        RHI::Rect2D scissor{ {0, 0}, {m_width, m_height} };
-        encoder->setScissor(scissor);
+        encoder->setViewport({ 0.0f, 0.0f, (float)m_width, (float)m_height, 0.0f, 1.0f });
+        encoder->setScissor({ {0, 0}, {m_width, m_height} });
 
-        PassContext ctx(m_resMgr, frameIndex, framebuffer);
-
-        uint32_t subpassCount = static_cast<uint32_t>(m_subpassRecorders.size());
-        for (uint32_t i = 0; i < subpassCount; ++i) {
+        for (uint32_t i = 0; i < m_subpassRecorders.size(); ++i) {
             if (i > 0) encoder->nextSubpass(RHI::SubpassContents::Inline);
             if (m_subpassRecorders[i]) {
-                m_subpassRecorders[i]->recordCommands(encoder, context, ctx, i);
+                m_subpassRecorders[i]->recordCommands(encoder, context, PassContext(m_resMgr, frameIndex, framebuffer), i);
             }
         }
 

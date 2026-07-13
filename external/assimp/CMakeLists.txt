@@ -26,3 +26,8 @@ elseif(UNIX AND NOT APPLE)
     )
 endif()
 
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(PUGIXML REQUIRED pugixml)
+set_target_properties(assimp PROPERTIES
+    INTERFACE_LINK_LIBRARIES "${PUGIXML_LIBRARIES}"
+)

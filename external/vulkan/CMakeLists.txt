@@ -52,5 +52,16 @@ elseif(UNIX AND NOT APPLE)
         IMPORTED_LOCATION "${VULKAN_LIB_DIR}/shaderc/libshaderc_shared.so.1"
         INTERFACE_INCLUDE_DIRECTORIES "${VULKAN_INC_DIR}"
     )
+
+    set_target_properties(spirv-cross-core PROPERTIES
+        IMPORTED_LOCATION     "${VULKAN_LIB_DIR}/spirv_cross/libspirv-cross-core.a"
+        INTERFACE_INCLUDE_DIRECTORIES "${VULKAN_INC_DIR}"
+    )
+    set_target_properties(spirv-cross-glsl PROPERTIES
+        IMPORTED_LOCATION    "${VULKAN_LIB_DIR}/spirv_cross/libspirv-cross-glsl.a"
+        INTERFACE_INCLUDE_DIRECTORIES "${VULKAN_INC_DIR}"
+    )
+
+
 endif()
 

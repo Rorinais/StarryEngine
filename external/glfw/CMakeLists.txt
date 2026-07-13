@@ -20,7 +20,7 @@ if(WIN32)
 elseif(UNIX AND NOT APPLE)
     set_target_properties(glfw PROPERTIES
         #IMPORTED_IMPLIB "${GLFW_LIB_DIR}/libglfw3dll.a"   
-        IMPORTED_LOCATION "${GLFW_LIB_DIR}/libglfw.so"
+        IMPORTED_LOCATION "${GLFW_LIB_DIR}/libglfw.so.3.4"
         INTERFACE_INCLUDE_DIRECTORIES "${GLFW_LIB_DIR}"
     )
 endif()

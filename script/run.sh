@@ -7,13 +7,15 @@
 # 获取脚本所在目录
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
 # 设置默认构建类型和可执行文件
 BUILD_TYPE="Debug"
 BUILD_NEEDED=0
 BUILD_CLEAN=0
 
 # 可执行文件路径（根据你的CMake配置）
-EXECUTABLE_PATH="$SCRIPT_DIR/build/bin/StarryEngine/StarryEngine"
+EXECUTABLE_PATH="$PROJECT_ROOT/build/bin/DeferredRender_demo"
 
 # 解析命令行参数
 while [[ $# -gt 0 ]]; do
@@ -146,7 +148,7 @@ if [ $BUILD_NEEDED -eq 1 ]; then
     fi
     
     # 调用构建脚本
-    if [ $BUILD_CLEAN -eq 1 ] || [ ! -d "$SCRIPT_DIR/build" ]; then
+    if [ $BUILD_CLEAN -eq 1 ] || [ ! -d "$PROJECT_ROOT/build" ]; then
         echo "执行完整构建..."
         "$SCRIPT_DIR/init.sh" "$BUILD_TYPE"
     else
@@ -167,7 +169,7 @@ if [ ! -f "$EXECUTABLE_PATH" ]; then
     echo "错误: 可执行文件不存在: $EXECUTABLE_PATH"
     echo
     echo "尝试查找可执行文件..."
-    find "$SCRIPT_DIR/build" -name "StarryEngine" -type f 2>/dev/null
+    find "$PROJECT_ROOT/build" -type f \( -name "DeferredRender_demo" -o -name "StarryEngine" \) 2>/dev/null
     echo
     echo "请检查构建输出或 CMakeLists.txt 配置"
     exit 1

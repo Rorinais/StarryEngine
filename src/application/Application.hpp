@@ -6,6 +6,13 @@
 #include <dlfcn.h>
 #endif
 
+#ifdef _WIN32
+    #include <windows.h>
+    #include <commdlg.h>
+    #define GLFW_EXPOSE_NATIVE_WIN32
+    #include <GLFW/glfw3native.h>
+#endif
+
 #include <filesystem>
 #include <chrono>
 
@@ -25,10 +32,8 @@
 #include "../assets/Assets.hpp"
 
 #include "TextEditor.h"
-#include <windows.h>
-#include <commdlg.h>
-#define GLFW_EXPOSE_NATIVE_WIN32   
-#include <GLFW/glfw3native.h>
+#include "ImGuiFileDialog.h"  
+
 
 namespace StarryEngine {
     class Application {
@@ -51,23 +56,23 @@ namespace StarryEngine {
         ImGuiManager* getImGuiManager() { return m_imguiManager.get(); }
         bool isImGuiEnabled() const { return m_imguiEnabled; }
 
-        std::string OpenFileDialog() {
-            OPENFILENAMEA ofn;
-            char szFile[260] = { 0 };
-            ZeroMemory(&ofn, sizeof(ofn));
-            ofn.lStructSize = sizeof(ofn);
-            ofn.hwndOwner = glfwGetWin32Window(m_window->getHandle());
-            ofn.lpstrFile = szFile;
-            ofn.nMaxFile = sizeof(szFile);
-            ofn.lpstrFilter = "Shader Files\0*.vert;*.frag;*.comp;*.glsl\0All\0*.*\0";
-            ofn.nFilterIndex = 1;
-            ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
+        // std::string OpenFileDialog() {
+        //     OPENFILENAMEA ofn;
+        //     char szFile[260] = { 0 };
+        //     ZeroMemory(&ofn, sizeof(ofn));
+        //     ofn.lStructSize = sizeof(ofn);
+        //     ofn.hwndOwner = glfwGetWin32Window(m_window->getHandle());
+        //     ofn.lpstrFile = szFile;
+        //     ofn.nMaxFile = sizeof(szFile);
+        //     ofn.lpstrFilter = "Shader Files\0*.vert;*.frag;*.comp;*.glsl\0All\0*.*\0";
+        //     ofn.nFilterIndex = 1;
+        //     ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST;
 
-            if (GetOpenFileNameA(&ofn) == TRUE) {
-                return std::string(ofn.lpstrFile);
-            }
-            return "";
-        }
+        //     if (GetOpenFileNameA(&ofn) == TRUE) {
+        //         return std::string(ofn.lpstrFile);
+        //     }
+        //     return "";
+        // }
 
         //void initComputePipeline() {
         //    auto* resMgr = m_resMgr.get();

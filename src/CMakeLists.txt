@@ -40,18 +40,18 @@ add_subdirectory(application)
 add_subdirectory(ui)
 
 # 使用封装函数创建可执行文件
-add_engine_executable(
-    TARGET_NAME test1
-    SOURCES ../demo/test1.cpp
-    OUTPUT_DIR ${CMAKE_BINARY_DIR}/bin
-    SHADERS_DIR ${SHADERS_DIR}
-    FONTS_DIR ${FONTS_DIR}
-    MODELS_DIR ${MODELS_DIR}
-    TEXTURES_DIR ${TEXTURES_DIR}
-    ICONS_DIR ${ICONS_DIR}
-    CONFIG_DIR ${CONFIG_DIR}
-    MATERIAL_DIR ${MATERIAL_DIR}
-)
+# add_engine_executable(
+#     TARGET_NAME test1
+#     SOURCES ../demo/test1.cpp
+#     OUTPUT_DIR ${CMAKE_BINARY_DIR}/bin
+#     SHADERS_DIR ${SHADERS_DIR}
+#     FONTS_DIR ${FONTS_DIR}
+#     MODELS_DIR ${MODELS_DIR}
+#     TEXTURES_DIR ${TEXTURES_DIR}
+#     ICONS_DIR ${ICONS_DIR}
+#     CONFIG_DIR ${CONFIG_DIR}
+#     MATERIAL_DIR ${MATERIAL_DIR}
+# )
 
 add_engine_executable(
     TARGET_NAME DeferredRender_demo

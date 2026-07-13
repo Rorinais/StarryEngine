@@ -111,6 +111,10 @@ namespace StarryEngine {
 
         // 处理获取结果
         if (!handleAcquireResult(acquireResult, frameInfo)) {
+            // VK_TIMEOUT / VK_NOT_READY 是瞬时错误，不需要重建 swap chain
+            if (acquireResult != VK_TIMEOUT && acquireResult != VK_NOT_READY) {
+                frameInfo.needsRecreate = true;
+            }
             return frameInfo;
         }
 

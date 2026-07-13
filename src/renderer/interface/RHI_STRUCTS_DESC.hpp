@@ -1022,6 +1022,8 @@ namespace StarryEngine::RHI {
         bool protectedMemory = false;          ///< 受保护内存
         bool sparseBinding = false;            ///< 稀疏绑定
         bool allowInputAttachment = false;
+        bool allowTransferSrc = false;  // 允许作为传输源
+        bool allowTransferDst = false;  // 允许作为传输目标
         std::string debugName;                 ///< 调试名称
 
         bool operator==(const TextureDesc& other) const {

@@ -1,4 +1,3 @@
-// assets/shaders/ibl/prefilter_envmap.comp
 #version 450
 
 layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
@@ -29,6 +28,14 @@ vec2 Hammersley(uint i, uint N) {
     return vec2(float(i) / float(N), RadicalInverse_VdC(i));
 }
 
+// ── GGX NDF ──
+float DistributionGGX(float NdotH, float roughness) {
+    float a = roughness * roughness;
+    float a2 = a * a;
+    float denom = NdotH * NdotH * (a2 - 1.0) + 1.0;
+    return a2 / (PI * denom * denom);
+}
+
 // ── GGX 重要性采样 ──
 vec3 ImportanceSampleGGX(vec2 Xi, vec3 N, float roughness) {
     float a = roughness * roughness;
@@ -41,7 +48,7 @@ vec3 ImportanceSampleGGX(vec2 Xi, vec3 N, float roughness) {
     H.y = sin(phi) * sinTheta;
     H.z = cosTheta;
 
-    vec3 up = abs(N.z) < 0.999 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
+    vec3 up = abs(N.y) < 0.999 ? vec3(0.0, 1.0, 0.0) : vec3(0.0, 0.0, 1.0);
     vec3 tangentX = normalize(cross(up, N));
     vec3 tangentY = cross(N, tangentX);
 
@@ -73,21 +80,41 @@ void main() {
     vec3 N = FaceToDirection(pc.face, float(px), float(py), pc.faceSize);
     vec3 V = N;
 
+    // 源 cubemap 每面分辨率（必须与 equirectToCubemapCS 的 faceSize 一致）
+    const float ENV_RESOLUTION = 512.0;
+    float saTexel = 4.0 * PI / (6.0 * ENV_RESOLUTION * ENV_RESOLUTION);
+
+    float r = max(pc.roughness, 0.001);
+
     vec3 prefilteredColor = vec3(0.0);
     float totalWeight = 0.0;
 
     for (uint i = 0u; i < SAMPLE_COUNT; ++i) {
         vec2 Xi = Hammersley(i, SAMPLE_COUNT);
-        vec3 H  = ImportanceSampleGGX(Xi, N, pc.roughness);
+        vec3 H  = ImportanceSampleGGX(Xi, N, r);
         vec3 L  = normalize(2.0 * dot(V, H) * H - V);
 
         float NdotL = max(dot(N, L), 0.0);
+        float NdotH = max(dot(N, H), 0.0);
+        float HdotV = max(dot(V, H), 0.0);
+
         if (NdotL > 0.0) {
-            prefilteredColor += textureLod(uEnvironmentMap, L, 0.0).rgb * NdotL;
+            // PDF → 仅用于计算 mip level
+            float D   = DistributionGGX(NdotH, r);
+            float pdf = D * NdotH / (4.0 * HdotV);
+
+            float saSample = 1.0 / (float(SAMPLE_COUNT) * pdf);
+            float mipLevel = 0.5 * log2(saSample / saTexel);
+            mipLevel = max(mipLevel, 0.0);
+
+            // 权重 = NdotL（不做 PDF 除法）
+            prefilteredColor += textureLod(uEnvironmentMap, L, mipLevel).rgb;
             totalWeight      += NdotL;
         }
     }
     prefilteredColor = prefilteredColor / max(totalWeight, 0.001);
+
+    prefilteredColor/=(prefilteredColor+1);
 
     imageStore(uOutputFace, ivec2(px, py), vec4(prefilteredColor, 1.0));
 }

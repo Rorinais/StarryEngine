@@ -44,22 +44,28 @@ void main() {
     vec3 up = cross(N, right);
 
     vec3 irradiance = vec3(0.0);
-    float sampleDelta = 0.025;
-    int phiSteps   = int(2.0 * PI / sampleDelta + 0.5);
-    int thetaSteps = int(0.5 * PI / sampleDelta + 0.5);
-    float dPhi   = 2.0 * PI / float(phiSteps);
-    float dTheta = 0.5 * PI / float(thetaSteps);
+
+    float sampleDelta = 0.01;
+    int   phiSteps   = int(2.0 * PI / sampleDelta + 0.5);
+    int   thetaSteps = int(0.5 * PI / sampleDelta + 0.5);
+    float dPhi       = 2.0 * PI / float(phiSteps);
+    float dTheta     = 0.5 * PI / float(thetaSteps);
 
     for (int i = 0; i < phiSteps; ++i) {
         float phi = (float(i) + 0.5) * dPhi;
         for (int j = 0; j < thetaSteps; ++j) {
             float theta = (float(j) + 0.5) * dTheta;
-            vec3 tangentSample = vec3(sin(theta)*cos(phi), sin(theta)*sin(phi), cos(theta));
-            vec3 sampleVec = tangentSample.x*right + tangentSample.y*up + tangentSample.z*N;
+            vec3 tangentSample = vec3(sin(theta) * cos(phi),
+                                      sin(theta) * sin(phi),
+                                      cos(theta));
+            vec3 sampleVec = tangentSample.x * right
+                           + tangentSample.y * up
+                           + tangentSample.z * N;
             irradiance += texture(uEnvironmentMap, sampleVec).rgb
-                          * cos(theta) * sin(theta) * dTheta * dPhi;
+                        * cos(theta) * sin(theta) * dTheta * dPhi;
         }
     }
-    irradiance = irradiance / (irradiance + 1.0);
+
+    // 与 LearnOpenGL 一致：不除 PI
     imageStore(uIrradianceMap, ivec3(px, py, face), vec4(irradiance, 1.0));
 }

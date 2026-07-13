@@ -28,9 +28,12 @@ layout(set = 1, binding = 1) uniform LightingUBO {
     float ambientStrength;
 } lighting;
 
-layout(set = 2, binding = 0) uniform samplerCube uIrradianceMap;
-layout(set = 2, binding = 1) uniform samplerCube uPrefilteredMap;
-layout(set = 2, binding = 2) uniform sampler2D   uBrdfLut;
+layout(set = 2, binding = 0) uniform sampler2D armMap;
+layout(set = 2, binding = 1) uniform sampler2D albedoMap;
+layout(set = 2, binding = 2) uniform sampler2D normalMap;
+layout(set = 2, binding = 3) uniform samplerCube uIrradianceMap;
+layout(set = 2, binding = 4) uniform samplerCube uPrefilteredMap;
+layout(set = 2, binding = 5) uniform sampler2D   uBrdfLut;
 
 const float PI = 3.14159265359;
 
@@ -42,18 +45,27 @@ vec3 FresnelSchlick(float cosTheta, vec3 F0);
 vec3 ScreenSpaceDither(vec2 vScreenPos);
 
 void main() {
-    vec3 albedoSample =vec3(1.0);
+    vec4 albedoSample  = texture(albedoMap, fragTexCoord);
+    vec4 armSample     = texture(armMap,    fragTexCoord);
+    vec4 normalSample  = texture(normalMap, fragTexCoord);
 
-    float ao         = 1.0;     
-    float roughness  = 1.0;              
+    float ao         = armSample.r;        // AO 仍然可以用
+    float roughness  = 0.2;                // 固定光滑度，或仍从 g 通道读：armSample.g
     float metallic   = 1.0; 
 
-    vec3 N = normalize(fragNormal);
+    vec3 tangentNormal = normalSample.rgb * 2.0 - 1.0;
+    vec3 T = normalize(fragTangent);
+    vec3 B = normalize(fragBitangent);
+    vec3 N_world = normalize(fragNormal);
+    mat3 TBN = mat3(T, B, N_world);
+    //vec3 N = normalize(TBN * tangentNormal);
+    vec3 N = N_world;
 
     vec3 V = normalize(global.invView[3].xyz - fragWorldPos);
-    vec3 F0 = mix(vec3(0.04), albedoSample, metallic);
+    vec3 F0 = mix(vec3(0.04), albedoSample.rgb, metallic);
     vec3 Lo = vec3(0.0);
 
+    // 直接光照（单个光源）
     Light light = lighting.lights;
     vec3 L;
     vec3 radiance = light.color.rgb;
@@ -81,18 +93,18 @@ void main() {
     float denominator = max(4.0 * NdotV * NdotL, 0.0001);
     vec3 specular = nominator / denominator;
     
-    //Lo += (kD * albedoSample.rgb / PI + specular) * radiance * NdotL;
-    Lo += (kD * albedoSample.rgb / PI + specular)  * NdotL;
-
+    Lo += (kD * albedoSample.rgb / PI + specular) * radiance * NdotL;
+    
+    // ========== IBL 环境光 ==========
+    // 漫反射 Irradiance
     vec3 irradiance = texture(uIrradianceMap, N).rgb;
-   irradiance /= (irradiance + 1.0);
+    //vec3 irradiance = textureLod(uPrefilteredMap, N, PREFILTER_MAX_LOD - 1.0).rgb;
     vec3 diffuseIBL = irradiance * albedoSample.rgb;
-
+    
+    // 镜面反射 Prefiltered + BRDF LUT
     vec3 R = reflect(-V, N);
-    float roughnessLevel = roughness * 5.0;  
+    float roughnessLevel = roughness * 5.0;   // maxLod = 5
     vec3 prefilteredColor = textureLod(uPrefilteredMap, R, roughnessLevel).rgb;
-       prefilteredColor /= (prefilteredColor + 1.0);
-
     vec2 brdfParams = texture(uBrdfLut, vec2(NdotV, roughness)).rg;
     vec3 specularIBL = prefilteredColor * (kS * brdfParams.x + brdfParams.y);
     
@@ -100,14 +112,16 @@ void main() {
     
     vec3 color = Lo + ambientIBL;
     
+     //if (diffuseIBL.x < 0.0) discard;  
+
+    // 抖动 + 色调映射 + Gamma
     vec2 screenPos = gl_FragCoord.xy;
     vec3 dither = ScreenSpaceDither(screenPos);
     color += dither;
-    //color =pow(color,vec3(2.2));
-
-    //color /= (color + 1.0);
-
-    outColor = vec4(ambientIBL, 1.0);
+    color = color / (color + vec3(1.0));
+    color = pow(color, vec3(1.0/2.2));
+    
+    outColor = vec4(color, 1.0);
 }
 
 float DistributionGGX(vec3 N, vec3 H, float roughness)
@@ -143,6 +157,7 @@ vec3 FresnelSchlick(float cosTheta, vec3 F0) {
 }
 
 vec3 ScreenSpaceDither(vec2 vScreenPos) {
+    // 使用屏幕坐标和时间的点积生成伪随机数
     vec3 vDither = dot(vec2(171.0, 231.0), vScreenPos.xy + global.time).xxx;
     vDither.rgb = fract(vDither.rgb / vec3(103.0, 71.0, 97.0)) - vec3(0.5);
     return (vDither.rgb / 255.0) * 0.375; 

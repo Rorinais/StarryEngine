@@ -4,6 +4,10 @@
 #       增量构建脚本（不删除目录）
 # ========================================
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+cd "$PROJECT_ROOT" || exit 1
+
 # 设置默认构建类型
 BUILD_TYPE="Debug"
 

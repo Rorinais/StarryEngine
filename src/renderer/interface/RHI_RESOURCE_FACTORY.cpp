@@ -745,7 +745,59 @@ namespace StarryEngine::RHI {
         RHITexture* dst,
         ImageLayout dstLayout,
         const std::vector<ImageBlitRegion>& regions,
-        Filter filter) {
+        Filter filter)
+    {
+        // 假设 m_handle 是当前录制的 VkCommandBuffer
+        VkCommandBuffer cmdBuf = getVkCommandBuffer();  // 根据实际情况获取
+
+        // 获取底层 VkImage 对象（需要 RHITexture 提供相应方法）
+        VkImage srcImage = static_cast<VkImage>(src->getImageHandle());   // 假定存在此方法
+        VkImage dstImage = static_cast<VkImage>(dst->getImageHandle());
+
+        // 转换 RHI 布局枚举到 VkImageLayout（假设一一对应或使用转换函数）
+        VkImageLayout vkSrcLayout = FUNC::RHI_TO_VK_ImageLayout(srcLayout);
+        VkImageLayout vkDstLayout = FUNC::RHI_TO_VK_ImageLayout(dstLayout);
+
+        // 转换过滤器
+        VkFilter vkFilter = (filter == Filter::Linear) ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
+
+        // 准备 VkImageBlit 数组
+        std::vector<VkImageBlit> vkRegions;
+        vkRegions.reserve(regions.size());
+
+        for (const auto& reg : regions) {
+            // 转换源子资源范围
+            VkImageSubresourceLayers srcSubresource = {};
+            srcSubresource.aspectMask = FUNC::RHI_TO_VK_ImageAspect(reg.srcSubresource.aspectMask);
+            srcSubresource.mipLevel = reg.srcSubresource.baseMipLevel;
+            srcSubresource.baseArrayLayer = reg.srcSubresource.baseArrayLayer;
+            srcSubresource.layerCount = reg.srcSubresource.layerCount;
+
+            // 转换目标子资源范围
+            VkImageSubresourceLayers dstSubresource = {};
+            dstSubresource.aspectMask = FUNC::RHI_TO_VK_ImageAspect(reg.dstSubresource.aspectMask);
+            dstSubresource.mipLevel = reg.dstSubresource.baseMipLevel;
+            dstSubresource.baseArrayLayer = reg.dstSubresource.baseArrayLayer;
+            dstSubresource.layerCount = reg.dstSubresource.layerCount;
+
+            // 构建 VkImageBlit
+            VkImageBlit blit = {};
+            blit.srcSubresource = srcSubresource;
+            blit.srcOffsets[0] = { reg.srcOffsets[0].x, reg.srcOffsets[0].y, reg.srcOffsets[0].z };
+            blit.srcOffsets[1] = { reg.srcOffsets[1].x, reg.srcOffsets[1].y, reg.srcOffsets[1].z };
+            blit.dstSubresource = dstSubresource;
+            blit.dstOffsets[0] = { reg.dstOffsets[0].x, reg.dstOffsets[0].y, reg.dstOffsets[0].z };
+            blit.dstOffsets[1] = { reg.dstOffsets[1].x, reg.dstOffsets[1].y, reg.dstOffsets[1].z };
+
+            vkRegions.push_back(blit);
+        }
+
+        // 记录 vkCmdBlitImage
+        vkCmdBlitImage(cmdBuf,
+            srcImage, vkSrcLayout,
+            dstImage, vkDstLayout,
+            static_cast<uint32_t>(vkRegions.size()), vkRegions.data(),
+            vkFilter);
     }
 
     // 清除操作

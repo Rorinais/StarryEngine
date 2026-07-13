@@ -1,0 +1,64 @@
+#version 450
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+layout(set = 0, binding = 0) uniform samplerCube uSrcCubemap;
+layout(set = 0, binding = 1, rgba32f) uniform writeonly image2D uDstFace;
+
+layout(push_constant) uniform PC {
+    int   face;
+    float srcSize;   // 源 mip 的分辨率（用于 texel 大小计算）
+} pc;
+
+void main() {
+    uint px = gl_GlobalInvocationID.x;
+    uint py = gl_GlobalInvocationID.y;
+
+    // dstSize = srcSize / 2
+    if (px >= uint(pc.srcSize / 2.0) || py >= uint(pc.srcSize / 2.0)) return;
+
+    // 像素 → 方向（与 equirect_to_cubemap 相同的映射）
+    float dstSize = pc.srcSize / 2.0;
+    float u = (float(px) + 0.5) / dstSize * 2.0 - 1.0;
+    float v = (float(py) + 0.5) / dstSize * 2.0 - 1.0;
+
+    vec3 dir;
+    switch (pc.face) {
+        case 0: dir = vec3( 1.0, -v, -u); break; // +X
+        case 1: dir = vec3(-1.0, -v,  u); break; // -X
+        case 2: dir = vec3( u,  1.0,  v); break; // +Y
+        case 3: dir = vec3( u, -1.0, -v); break; // -Y
+        case 4: dir = vec3( u, -v,  1.0); break; // +Z
+        case 5: dir = vec3(-u, -v, -1.0); break; // -Z
+    }
+    dir = normalize(dir);
+
+    // ── 简单 2×2 box filter（从上一级 mip 的 4 个 texel 平均）──
+    float texelSize = 1.0 / pc.srcSize;
+    float halfTexel = texelSize * 0.5;
+
+    // 在切线空间中采样 2×2 区域
+    vec3 right;
+    if (abs(dir.x) > abs(dir.y)) {
+        right = normalize(vec3(-dir.z, 0.0, dir.x));
+    } else {
+        right = normalize(vec3(0.0, dir.z, -dir.y));
+    }
+    vec3 up = cross(dir, right);
+
+    vec4 color = vec4(0.0);
+    int samples = 0;
+
+    for (int dx = -1; dx <= 1; dx += 2) {
+        for (int dy = -1; dy <= 1; dy += 2) {
+            vec3 offset = normalize(dir
+                + right * float(dx) * halfTexel
+                + up    * float(dy) * halfTexel);
+            color += textureLod(uSrcCubemap, offset, 0.0);  // 始终从源 mip 0 读
+            samples++;
+        }
+    }
+    color /= float(samples);
+
+    imageStore(uDstFace, ivec2(px, py), color);
+}

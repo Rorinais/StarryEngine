@@ -309,7 +309,7 @@ function(add_engine_executable)
         endif()
     elseif(UNIX)
         # 示例：复制 Linux 下的 .so 文件，请根据实际路径调整
-        copy_target_dll(${ARG_TARGET_NAME} "${CMAKE_SOURCE_DIR}/external/glfw/libglfw.so.3.3")
+        copy_target_dll(${ARG_TARGET_NAME} "${CMAKE_SOURCE_DIR}/external/glfw/libglfw.so.3.4")
         copy_target_dll(${ARG_TARGET_NAME} "${CMAKE_SOURCE_DIR}/external/vulkan/lib/libvulkan.so.1.4.304")
         copy_target_dll(${ARG_TARGET_NAME} "${CMAKE_SOURCE_DIR}/external/assimp/assimp/lib/libassimp.so.5.3.0")
         copy_target_dll(${ARG_TARGET_NAME} "${CMAKE_SOURCE_DIR}/external/vulkan/lib/shaderc/libshaderc_shared.so.1")
