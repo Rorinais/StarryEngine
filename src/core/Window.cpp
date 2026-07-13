@@ -1,5 +1,6 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
+#include <cstdlib>
 #include "Window.hpp"
 #include"../event/Events.hpp"
 
@@ -14,6 +15,14 @@ namespace StarryEngine {
         }
 
         Window::Window(const Config& config) : mConfig(config) {
+#ifdef __linux__
+            // Linux Wayland + GNOME 下原生 Wayland 后端窗口装饰有问题，改用 X11 (XWayland)
+            const char* sessionType = std::getenv("XDG_SESSION_TYPE");
+            if (sessionType && std::string(sessionType) == "wayland") {
+                glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);
+            }
+#endif
+
             if (!glfwInit()) {
                 throw std::runtime_error("Failed to initialize GLFW");
             }
@@ -27,8 +36,19 @@ namespace StarryEngine {
 
             GLFWmonitor* monitor = nullptr;
             const GLFWvidmode* mode = nullptr;
-            int width = mConfig.width;
-            int height = mConfig.height;
+            int width = static_cast<int>(mConfig.width);
+            int height = static_cast<int>(mConfig.height);
+
+            // 根据显示器缩放因子调整窗口像素尺寸，使逻辑尺寸匹配预期
+            if (mConfig.scaleToMonitor && !mConfig.fullScreen) {
+                GLFWmonitor* primary = glfwGetPrimaryMonitor();
+                if (primary) {
+                    float xscale = 1.0f, yscale = 1.0f;
+                    glfwGetMonitorContentScale(primary, &xscale, &yscale);
+                    width = static_cast<int>(width * xscale);
+                    height = static_cast<int>(height * yscale);
+                }
+            }
 
             if (mConfig.fullScreen) {
                 int monitorCount;

@@ -47,6 +47,9 @@ namespace StarryEngine {
 
         void shutdown(RHI::ResourceManager* resMgr);
 
+        // 仅关闭 Vulkan 后端（保留 GLFW 上下文），用于 resize 时重建 pipeline
+        void shutdownVulkanBackend();
+
         // ── 每帧 ──
         void beginFrame();
         void endFrame();

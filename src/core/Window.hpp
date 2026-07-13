@@ -12,6 +12,7 @@ namespace StarryEngine {
             int monitorIndex = 0;
             bool fullScreen = false;
             bool highDPI = false;
+            bool scaleToMonitor = true;   // 根据显示器缩放因子调整窗口像素尺寸
             const char* iconPath = nullptr;
         };
 

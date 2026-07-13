@@ -146,6 +146,15 @@ namespace StarryEngine {
         return true;
     }
 
+    void ImGuiManager::shutdownVulkanBackend() {
+        if (m_context && m_vulkanBackendReady) {
+            ImGui::SetCurrentContext(m_context);
+            ImGui_ImplVulkan_Shutdown();
+            m_vulkanBackendReady = false;
+            m_sceneTextureID = 0;
+        }
+    }
+
     void ImGuiManager::shutdown(RHI::ResourceManager* resMgr) {
         if (m_context) {
             ImGui::SetCurrentContext(m_context);

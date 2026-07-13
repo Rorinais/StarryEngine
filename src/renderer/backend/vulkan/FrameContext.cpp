@@ -360,9 +360,8 @@ namespace StarryEngine {
             return true;
 
         case VK_SUBOPTIMAL_KHR:
+            // 图像有效，照常渲染。窗口 resize 回调会触发重建，不阻塞帧循环
             std::cout << "[INFO] Swap chain is suboptimal (acquire)" << std::endl;
-            frameInfo.needsRecreate = true;
-            mNeedsRecreate = true;
             return true;
 
         case VK_ERROR_OUT_OF_DATE_KHR:
@@ -394,9 +393,7 @@ namespace StarryEngine {
 
         case VK_SUBOPTIMAL_KHR:
             std::cout << "[INFO] Swap chain is suboptimal (present)" << std::endl;
-            frameInfo.needsRecreate = true;
-            mNeedsRecreate = true;
-            return true;  
+            return true;
 
         case VK_ERROR_OUT_OF_DATE_KHR:
             notifyRecreateNeeded(frameInfo, "Swap chain out of date (present)");

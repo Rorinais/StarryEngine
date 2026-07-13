@@ -277,7 +277,8 @@ namespace StarryEngine {
             if (!m_imguiManager->isVulkanReady()) {
                 auto it = m_tagToSubpass.find("ImGui");
                 if (it != m_tagToSubpass.end()) {
-                    m_imguiManager->initializeVulkanBackend( m_rhi.get(), m_resMgr.get(),it->second.renderPass, m_imguiImageCount);
+                    m_imguiManager->initializeVulkanBackend(m_rhi.get(), m_resMgr.get(),
+                        it->second.renderPass, m_imguiImageCount);
                 }
             }
             m_imguiManager->setDefaultSampler(m_defaultSampler);
@@ -289,16 +290,15 @@ namespace StarryEngine {
     }
 
     void DeferredRenderPath::rebuildResources(const Scene::AnalysisSceneResult& sceneData) {
-        m_cachedSceneData = std::make_shared<Scene::AnalysisSceneResult>(sceneData);
-
-        // ① 刷新材质纹理依赖（从 RenderGraph 解析到 DescriptorSet）
+        // 先使用 sceneData 完成所有操作，最后再缓存副本
+        // 否则 m_cachedSceneData 赋值会销毁旧数据 → sceneData 引用悬空
         updateMaterialTextures(sceneData);
 
-        // ② 分发 DrawItems 到各个 Recorder
         distributeDrawItems(sceneData);
 
-        // ③ 为所有 DrawItem 预创建管线映射
         prepareAllPipelines(sceneData);
+
+        m_cachedSceneData = std::make_shared<Scene::AnalysisSceneResult>(sceneData);
 
         if (!m_resourceStatsPrinted) {
             m_rhi->printResourceStatistics();

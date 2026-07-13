@@ -177,6 +177,17 @@ namespace StarryEngine {
         auto instanceConfig = ConfigConverter::convertInstanceConfig(config);
         auto deviceConfig = ConfigConverter::convertDeviceConfig(config);
         auto swapChainConfig = ConfigConverter::convertSwapChainConfig(config);
+
+        // 使用实际帧缓冲尺寸（考虑 HiDPI / scaleToMonitor 缩放），而非逻辑窗口尺寸
+        {
+            int fbWidth = 0, fbHeight = 0;
+            GLFWwindow* fbWindow = static_cast<GLFWwindow*>(config.windowHandle);
+            glfwGetFramebufferSize(fbWindow, &fbWidth, &fbHeight);
+            if (fbWidth > 0 && fbHeight > 0) {
+                swapChainConfig.width = static_cast<uint32_t>(fbWidth);
+                swapChainConfig.height = static_cast<uint32_t>(fbHeight);
+            }
+        }
         auto frameContextConfig = ConfigConverter::convertFrameContextConfig(config);
 
         try {
@@ -282,8 +293,8 @@ namespace StarryEngine {
             return false;
         }
 
-        mWidth = config.windowWidth;
-        mHeight = config.windowHeight;
+        mWidth = swapChainConfig.width;
+        mHeight = swapChainConfig.height;
 
         mAcquireFunc = [this](VkSemaphore semaphore, VkFence fence, uint32_t& index) {
             return mSwapChain->acquireNextImage(semaphore, fence, UINT64_MAX, index);
@@ -340,7 +351,7 @@ namespace StarryEngine {
         mFrameContext->endFrame(frameInfo);
 
         VkResult presentResult = mFrameContext->submitFrame(frameInfo, mDevice->getGraphicsQueue(), mPresentFunc);
-        if (presentResult == VK_ERROR_OUT_OF_DATE_KHR || presentResult == VK_SUBOPTIMAL_KHR) mFramebufferResized = true; 
+        if (presentResult == VK_ERROR_OUT_OF_DATE_KHR) mFramebufferResized = true;
         return true;
     }
 

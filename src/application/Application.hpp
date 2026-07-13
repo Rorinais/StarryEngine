@@ -148,8 +148,8 @@ namespace StarryEngine {
 
     private:
         Window::Ptr m_window;
-        uint32_t m_width = 800 * 1.5;
-        uint32_t m_height = 600 * 1.5;
+        uint32_t m_width = 1200;
+        uint32_t m_height = 720;
         const char* m_title = "StarryEngine";
         const char* m_icon_path = "assets/icons/window_icon.png";
         bool m_framebufferResized = false;
@@ -180,6 +180,10 @@ namespace StarryEngine {
         bool m_showSceneGraph = false;
         bool m_showMaterialEditor = false;
         bool m_showDeveloperTools = true;
+        bool m_showSceneView = true;
+        bool m_showInspector = true;
+        bool m_showCodeEditor = true;
+        bool m_showConsole = true;
         void initImGui();
         void drawImGuiPanels(float deltaTime);
 
@@ -187,7 +191,6 @@ namespace StarryEngine {
         // 代码编辑器相关
         TextEditor m_shaderEditor;
         std::string m_currentShaderPath;
-        bool m_showCodeEditor = true;
         // 辅助函数
         void openShaderFile(const std::string& path);
         void saveCurrentShaderFile();

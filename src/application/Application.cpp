@@ -91,6 +91,8 @@ namespace StarryEngine {
     void Application::drawImGuiPanels(float deltaTime) {
         ImGuiManager::SetCurrent(m_imguiManager.get());
 
+        static bool layout_initialized = false;
+
         // ════════════════════════════════════════
         // 主菜单栏
         // ════════════════════════════════════════
@@ -103,6 +105,17 @@ namespace StarryEngine {
                 ImGui::Separator();
                 if (ImGui::MenuItem("Exit", "Esc")) {
                     glfwSetWindowShouldClose(m_window->getHandle(), GLFW_TRUE);
+                }
+                ImGui::EndMenu();
+            }
+            if (ImGui::BeginMenu("View")) {
+                ImGui::MenuItem("Scene View", nullptr, &m_showSceneView);
+                ImGui::MenuItem("Inspector", nullptr, &m_showInspector);
+                ImGui::MenuItem("Code Editor", nullptr, &m_showCodeEditor);
+                ImGui::MenuItem("Console", nullptr, &m_showConsole);
+                ImGui::Separator();
+                if (ImGui::MenuItem("Reset Layout")) {
+                    layout_initialized = false;
                 }
                 ImGui::EndMenu();
             }
@@ -140,7 +153,6 @@ namespace StarryEngine {
         ImGuiID dockspace_id = ImGui::GetID("MainDockSpace");
         ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), ImGuiDockNodeFlags_PassthruCentralNode);
 
-        static bool layout_initialized = false;
         if (!layout_initialized) {
             layout_initialized = true;
 
@@ -174,18 +186,17 @@ namespace StarryEngine {
         // ════════════════════════════════════════
 
         // Scene View — 渲染画面
-        if (ImGui::Begin("Scene View")) {
+        if (m_showSceneView && ImGui::Begin("Scene View", &m_showSceneView)) {
             ImTextureID texID = m_imguiManager->getSceneTextureID();
             if (texID) {
                 ImVec2 avail = ImGui::GetContentRegionAvail();
-                // 保持宽高比（或直接拉伸填充）
                 ImGui::Image(texID, avail);
             }
+            ImGui::End();
         }
-        ImGui::End();
 
         // Inspector
-        if (ImGui::Begin("Inspector")) {
+        if (m_showInspector && ImGui::Begin("Inspector", &m_showInspector)) {
             ImGui::Text("Object Properties");
 
             static float col1[4] = { 1.0f, 0.0f, 0.2f ,1.0f};
@@ -198,26 +209,21 @@ namespace StarryEngine {
                 }
 
             }
+            ImGui::End();
         }
-        ImGui::End();
 
-        // Asset Browser
-        if (ImGui::Begin("Code Editor")) {
+        // Code Editor
+        if (m_showCodeEditor && ImGui::Begin("Code Editor", &m_showCodeEditor)) {
             if (ImGui::Button("Open")) {
-                // 1. 创建配置对象
                 IGFD::FileDialogConfig config;
-                config.path = ".";                              // 对话框默认打开的目录
-                config.fileName = "";                          // 默认文件名（可选）
-                config.filePathName = "";                      // 若设置，则覆盖 path 和 fileName
-                config.countSelectionMax = 1;                  // 最多选择1个文件
-                config.flags = ImGuiFileDialogFlags_None;      // 无特殊标志
-
-                // 2. 调用 OpenDialog
+                config.path = ".";
+                config.countSelectionMax = 1;
+                config.flags = ImGuiFileDialogFlags_None;
                 ImGuiFileDialog::Instance()->OpenDialog(
-                    "ChooseShaderFile",                        // 唯一标识 key
-                    "Open Shader File",                        // 对话框标题
-                    ".vert,.frag,.comp,.glsl,.h,.c,.cpp",      // 过滤器（扩展名，用逗号分隔）
-                    config                                     // 配置结构体
+                    "ChooseShaderFile",
+                    "Open Shader File",
+                    ".vert,.frag,.comp,.glsl,.h,.c,.cpp",
+                    config
                 );
             }
             ImGui::SameLine();
@@ -229,7 +235,6 @@ namespace StarryEngine {
 
             ImGui::Separator();
 
-            // ✅ 显示文件对话框（如果打开）
             if (ImGuiFileDialog::Instance()->Display("ChooseShaderFile")) {
                 if (ImGuiFileDialog::Instance()->IsOk()) {
                     std::string filePath = ImGuiFileDialog::Instance()->GetFilePathName();
@@ -238,14 +243,13 @@ namespace StarryEngine {
                 ImGuiFileDialog::Instance()->Close();
             }
 
-            // 编辑器主体
             m_shaderEditor.Render("##editor", ImGui::GetContentRegionAvail());
+            ImGui::End();
         }
-        ImGui::End();
 
 
         // Console
-        if (ImGui::Begin("Console")) {
+        if (m_showConsole && ImGui::Begin("Console", &m_showConsole)) {
             auto sink = StarryEngine::Logger::getImGuiSink();
             if (!sink) {
                 ImGui::Text("Logger not available.");
@@ -256,7 +260,6 @@ namespace StarryEngine {
                 ImGui::BeginChild("LogRegion", ImVec2(0, 0), false, ImGuiWindowFlags_HorizontalScrollbar);
                 ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
 
-                // 获取日志拷贝（线程安全）
                 auto logs = sink->getLogs();
                 for (const auto& entry : logs) {
                     ImVec4 color;
@@ -272,15 +275,14 @@ namespace StarryEngine {
                     ImGui::TextColored(color, "%s", entry.message.c_str());
                 }
 
-                // 自动滚动到底部（仅当用户已在底部时）
                 if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY())
                     ImGui::SetScrollHereY(1.0f);
 
                 ImGui::PopStyleVar();
                 ImGui::EndChild();
             }
+            ImGui::End();
         }
-        ImGui::End();
 
         //if (m_showDemoWindow) {
         //    ImGui::ShowDemoWindow(&m_showDemoWindow);
@@ -317,6 +319,17 @@ namespace StarryEngine {
 
         initImGui();
         //initComputePipeline();
+
+        // 确保 swap chain 使用实际帧缓冲尺寸（考虑 scaleToMonitor 缩放）
+        {
+            int fbW, fbH;
+            glfwGetFramebufferSize(m_window->getHandle(), &fbW, &fbH);
+            if (fbW > 0 && fbH > 0 && (static_cast<uint32_t>(fbW) != m_width || static_cast<uint32_t>(fbH) != m_height)) {
+                m_width = static_cast<uint32_t>(fbW);
+                m_height = static_cast<uint32_t>(fbH);
+                m_framebufferResized = true;
+            }
+        }
 
         while (!glfwWindowShouldClose(m_window->getHandle())) {
             glfwPollEvents();
@@ -462,9 +475,9 @@ namespace StarryEngine {
 
         // 窗口尺寸变化
         GetEventDispatcher().subscribe(EventType::WindowResize, [this](IEvent& e) {
-            auto& ev = static_cast<WindowResizeEvent&>(e);
-            int newWidth = ev.getWidth();
-            int newHeight = ev.getHeight();
+            // 直接从 GLFW 获取实际帧缓冲尺寸（比回调参数更准确）
+            int newWidth, newHeight;
+            glfwGetFramebufferSize(m_window->getHandle(), &newWidth, &newHeight);
             if (newWidth == 0 || newHeight == 0) {
                 m_width = newWidth;
                 m_height = newHeight;
