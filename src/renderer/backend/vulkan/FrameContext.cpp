@@ -74,8 +74,37 @@ namespace StarryEngine {
         }
 
         mDevice->waitIdle();
-        cleanupFrameData(); 
+        cleanupFrameData();
+        cleanupPerImageSemaphores();
         mDevice->destroyCommandPool(mMainCommandPool);
+    }
+
+    void FrameContext::initializePerImageSemaphores(uint32_t swapChainImageCount) {
+        if (!mDevice) return;
+
+        // 先清理旧的
+        cleanupPerImageSemaphores();
+
+        mSwapChainImageCount = swapChainImageCount;
+        mPerImageRenderFinishedSemaphores.resize(swapChainImageCount);
+
+        for (uint32_t i = 0; i < swapChainImageCount; i++) {
+            mPerImageRenderFinishedSemaphores[i] = mDevice->createSemaphore();
+            std::string name = "Image" + std::to_string(i) + "_RenderFinishedSemaphore";
+            mDevice->setObjectName(
+                reinterpret_cast<uint64_t>(mPerImageRenderFinishedSemaphores[i]),
+                VK_OBJECT_TYPE_SEMAPHORE,
+                name.c_str());
+        }
+    }
+
+    void FrameContext::cleanupPerImageSemaphores() {
+        if (!mDevice) return;
+        for (auto& sem : mPerImageRenderFinishedSemaphores) {
+            mDevice->destroySemaphore(sem);
+        }
+        mPerImageRenderFinishedSemaphores.clear();
+        mSwapChainImageCount = 0;
     }
 
     // ==================== 帧循环接口 ====================
@@ -121,7 +150,9 @@ namespace StarryEngine {
         frameInfo.imageIndex = imageIndex;
         frameInfo.commandBuffer = frameData.commandBuffer;
         frameInfo.imageAvailableSemaphore = frameData.imageAvailableSemaphore;
-        frameInfo.renderFinishedSemaphore = frameData.renderFinishedSemaphore;
+        frameInfo.renderFinishedSemaphore = (imageIndex < mPerImageRenderFinishedSemaphores.size())
+            ? mPerImageRenderFinishedSemaphores[imageIndex]
+            : VK_NULL_HANDLE;
         frameInfo.inFlightFence = frameData.inFlightFence;
 
         // 重置命令缓冲区
@@ -404,7 +435,6 @@ namespace StarryEngine {
             const FrameData& frameData = mFrameData[mCurrentFrameIndex];
             frameInfo.commandBuffer = frameData.commandBuffer;
             frameInfo.imageAvailableSemaphore = frameData.imageAvailableSemaphore;
-            frameInfo.renderFinishedSemaphore = frameData.renderFinishedSemaphore;
             frameInfo.inFlightFence = frameData.inFlightFence;
         }
 
@@ -554,9 +584,8 @@ namespace StarryEngine {
             FrameData& frameData = mFrameData[i];
 
             try {
-                // 创建信号量
+                // 创建信号量（imageAvailable 按 frame 索引，renderFinished 按 image 索引）
                 frameData.imageAvailableSemaphore = mDevice->createSemaphore();
-                frameData.renderFinishedSemaphore = mDevice->createSemaphore();
 
                 // 创建栅栏
                 frameData.inFlightFence = mDevice->createFence(VK_FENCE_CREATE_SIGNALED_BIT);
@@ -564,11 +593,6 @@ namespace StarryEngine {
                 // 设置调试名称
                 std::string semaphoreName = "Frame" + std::to_string(i) + "_ImageAvailableSemaphore";
                 mDevice->setObjectName(reinterpret_cast<uint64_t>(frameData.imageAvailableSemaphore),
-                    VK_OBJECT_TYPE_SEMAPHORE,
-                    semaphoreName.c_str());
-
-                semaphoreName = "Frame" + std::to_string(i) + "_RenderFinishedSemaphore";
-                mDevice->setObjectName(reinterpret_cast<uint64_t>(frameData.renderFinishedSemaphore),
                     VK_OBJECT_TYPE_SEMAPHORE,
                     semaphoreName.c_str());
 
@@ -654,7 +678,6 @@ namespace StarryEngine {
 
         for (auto& frameData : mFrameData) {
             mDevice->destroySemaphore(frameData.imageAvailableSemaphore);
-            mDevice->destroySemaphore(frameData.renderFinishedSemaphore);
             mDevice->destroyFence(frameData.inFlightFence);
 			mDevice->destroyQueryPool(frameData.timestampQueryPool);
             mDevice->destroyCommandPool(frameData.threadCommandPool);
@@ -755,7 +778,6 @@ namespace StarryEngine {
         }
 
         if (frameInfo.imageAvailableSemaphore != frameData.imageAvailableSemaphore ||
-            frameInfo.renderFinishedSemaphore != frameData.renderFinishedSemaphore ||
             frameInfo.inFlightFence != frameData.inFlightFence) {
             throw std::runtime_error("Synchronization objects mismatch");
         }
@@ -813,11 +835,16 @@ namespace StarryEngine {
             std::cout << "  Frame " << i << ":" << std::endl;
             std::cout << "    Command Buffer: " << (frame.commandBuffer ? "Valid" : "Invalid") << std::endl;
             std::cout << "    Image Available Semaphore: " << (frame.imageAvailableSemaphore ? "Valid" : "Invalid") << std::endl;
-            std::cout << "    Render Finished Semaphore: " << (frame.renderFinishedSemaphore ? "Valid" : "Invalid") << std::endl;
             std::cout << "    In Flight Fence: " << (frame.inFlightFence ? "Valid" : "Invalid") << std::endl;
             if (!frame.debugName.empty()) {
                 std::cout << "    Debug Name: " << frame.debugName << std::endl;
             }
+        }
+
+        std::cout << "\n=== Per-Image Render Finished Semaphores ===" << std::endl;
+        for (size_t i = 0; i < mPerImageRenderFinishedSemaphores.size(); i++) {
+            std::cout << "  Image " << i << ": "
+                      << (mPerImageRenderFinishedSemaphores[i] ? "Valid" : "Invalid") << std::endl;
         }
     }
 

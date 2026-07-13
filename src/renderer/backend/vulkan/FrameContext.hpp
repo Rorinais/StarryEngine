@@ -78,6 +78,7 @@ namespace StarryEngine {
 
         // === 生命周期管理 ===
         bool initialize(uint32_t graphicsQueueFamilyIndex);
+        void initializePerImageSemaphores(uint32_t swapChainImageCount);
         void cleanup();
 
         // === 回调设置 ===
@@ -142,7 +143,6 @@ namespace StarryEngine {
         struct FrameData {
             VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
             VkSemaphore imageAvailableSemaphore = VK_NULL_HANDLE;
-            VkSemaphore renderFinishedSemaphore = VK_NULL_HANDLE;
             VkFence inFlightFence = VK_NULL_HANDLE;
 
             // 时间戳查询
@@ -188,8 +188,15 @@ namespace StarryEngine {
         bool m_hasRenderedAnyFrame = false;
         uint32_t m_lastFrameIndex = 0;
 
+        // 每个 swap chain image 独立的 renderFinishedSemaphore
+        // 因为 present 操作会把 semaphore 绑定到特定 image，
+        // 在 image 被重新 acquire 之前不能复用该 semaphore
+        std::vector<VkSemaphore> mPerImageRenderFinishedSemaphores;
+        uint32_t mSwapChainImageCount = 0;
+
     private:
         // 内部创建函数
+        void cleanupPerImageSemaphores();
         bool createSyncObjects();
         bool createCommandBuffers();
         bool createTimestampQueries();

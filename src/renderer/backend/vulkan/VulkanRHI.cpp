@@ -268,6 +268,9 @@ namespace StarryEngine {
             if (!mFrameContext->initialize(queueFamilyIndices.graphicsFamily.value())) {
                 throw std::runtime_error("Failed to initialize frame context!");
             }
+
+            // 为每个 swap chain image 创建独立的 renderFinishedSemaphore
+            mFrameContext->initializePerImageSemaphores(mSwapChain->getImageCount());
         }
         catch (const std::exception& e) {
             std::string errorMsg = std::string("Failed to create frame context: ") + e.what();
@@ -353,6 +356,7 @@ namespace StarryEngine {
         mWidth = width;
         mHeight = height;
         mFrameContext->resetAllFrames();
+        mFrameContext->initializePerImageSemaphores(mSwapChain->getImageCount());
 
         if (mRenderPassHandle.isValid()) {
             destroyFramebufferResources();
