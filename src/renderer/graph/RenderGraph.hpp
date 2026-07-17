@@ -14,6 +14,8 @@
 
 namespace StarryEngine::RenderGraph {
     struct TexturePassInfo {
+        int32_t firstUserIndex = -1;
+        int32_t lastUserIndex  = -1;
         int32_t lastWriterIndex = -1;
         int32_t firstReaderIndex = -1;
         RHI::PipelineStageFlags writeStage = static_cast<RHI::PipelineStageFlags>(0);
@@ -52,7 +54,10 @@ namespace StarryEngine::RenderGraph {
 
         BufferId createVirtualBuffer(const RHI::BufferDesc& desc, const std::string& name = "");
 
-        PassNode* addPassNode(const std::string& name);
+        PassNode* addGraphicsPassNode(const std::string& name);
+
+        // 添加 Compute Pass（复用依赖分析/barrier，无需 RenderPass/Framebuffer）
+        PassNode* addComputePassNode(const std::string& name);
 
         void dependencyAnalysis();
 
@@ -133,6 +138,10 @@ namespace StarryEngine::RenderGraph {
         };
 
         std::vector<uint32_t> topologicalSort(const std::vector<std::vector<uint32_t>>& adj) const;
+
+        // 内存别名（Memory Aliasing）：贪心算法复用生命周期不重叠的 transient 纹理内存
+        void performMemoryAliasing(
+            const std::unordered_map<TextureId, TexturePassInfo>& texPassInfo);
 
     private:
         std::shared_ptr<RHI::IRHI> m_rhi;

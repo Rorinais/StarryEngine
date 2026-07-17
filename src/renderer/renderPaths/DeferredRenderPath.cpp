@@ -63,6 +63,81 @@ namespace StarryEngine {
         std::vector<std::shared_ptr<Scene::DrawItem>> m_empty;
     };
 
+    // ──── 粒子 Compute Recorder ────────────────────────────────────
+    class ParticleCSRecorder : public ISubpassRecorder {
+    public:
+        ParticleCSRecorder(RHI::PipelineLayoutHandle layout, RHI::DescriptorSetHandle descSet,
+                           uint32_t particleCount)
+            : m_layout(layout), m_descSet(descSet), m_particleCount(particleCount) {}
+        void clearDrawItems() override {}
+        void setDrawItems(const std::vector<std::shared_ptr<Scene::DrawItem>>&) override {}
+        const std::vector<std::shared_ptr<Scene::DrawItem>>& getDrawItems() override { return m_empty; }
+        void setPipelineMapping(const std::unordered_map<uint32_t, RHI::PipelineHandle>&) override {}
+        void addDrawItem(std::shared_ptr<Scene::DrawItem>) override {}
+        void recordCommands(RHI::RHICommandEncoder* encoder, const RenderContext& rctx,
+                            const PassContext& pctx, uint32_t) override {
+            auto resMgr = pctx.getResourceManager();
+            auto* plo = resMgr->getPipelineLayout(m_layout);
+            if (plo && m_descSet.isValid())
+                encoder->bindDescriptorSets(RHI::PipelineBindPoint::Compute, plo, 0, {m_descSet}, {});
+            // push deltaTime + particleCount
+            float dt = rctx.deltaTime;
+            uint32_t count = m_particleCount;
+            struct { float dt; uint32_t n; } pc = { dt > 0.0f ? dt : 0.016f, count };
+            encoder->pushConstants(plo, RHI::ShaderStage::Compute, 0, sizeof(pc), &pc);
+        }
+    private:
+        RHI::PipelineLayoutHandle m_layout;
+        RHI::DescriptorSetHandle m_descSet;
+        uint32_t m_particleCount;
+        std::vector<std::shared_ptr<Scene::DrawItem>> m_empty;
+    };
+
+    // ──── 粒子 Render Recorder ─────────────────────────────────────
+    class ParticleRenderRecorder : public ISubpassRecorder {
+    public:
+        ParticleRenderRecorder(RHI::PipelineHandle pipeline, RHI::PipelineLayoutHandle layout,
+                               RHI::DescriptorSetHandle globalSet, RHI::DescriptorSetHandle particleSet,
+                               uint32_t count)
+            : m_pipeline(pipeline), m_layout(layout),
+              m_globalSet(globalSet), m_particleSet(particleSet), m_count(count) {}
+
+        void setPipeline(RHI::PipelineHandle p)       { m_pipeline = p; }
+        void setParticleSet(RHI::DescriptorSetHandle s) { m_particleSet = s; }
+
+        void clearDrawItems() override {}
+        void setDrawItems(const std::vector<std::shared_ptr<Scene::DrawItem>>&) override {}
+        const std::vector<std::shared_ptr<Scene::DrawItem>>& getDrawItems() override { return m_empty; }
+        void setPipelineMapping(const std::unordered_map<uint32_t, RHI::PipelineHandle>&) override {}
+        void addDrawItem(std::shared_ptr<Scene::DrawItem>) override {}
+
+        void recordCommands(RHI::RHICommandEncoder* encoder, const RenderContext&,
+                            const PassContext& pctx, uint32_t) override {
+            // static int frameCount = 0;
+            // if (++frameCount <= 3) LOG_INFO("[ParticleRender] drawing {} points", m_count);
+            if (!m_pipeline.isValid()) return;
+            auto resMgr = pctx.getResourceManager();
+            auto* ppl = resMgr->getPipeline(m_pipeline);
+            if (!ppl) return;
+            encoder->bindPipeline(ppl);
+            auto* plo = resMgr->getPipelineLayout(m_layout);
+            if (plo) {
+                if (m_globalSet.isValid())
+                    encoder->bindDescriptorSets(RHI::PipelineBindPoint::Graphics, plo, 0, {m_globalSet}, {});
+                if (m_particleSet.isValid())
+                    encoder->bindDescriptorSets(RHI::PipelineBindPoint::Graphics, plo, 1, {m_particleSet}, {});
+            }
+            encoder->draw(m_count, 1, 0, 0);
+        }
+
+    private:
+        RHI::PipelineHandle       m_pipeline;
+        RHI::PipelineLayoutHandle m_layout;
+        RHI::DescriptorSetHandle  m_globalSet, m_particleSet;
+        uint32_t                  m_count;
+        std::vector<std::shared_ptr<Scene::DrawItem>> m_empty;
+    };
+
     // ──── DeferredRenderPath 实现 ────
 
     DeferredRenderPath::DeferredRenderPath(std::shared_ptr<RHI::IRHI> rhi, uint32_t width, uint32_t height)
@@ -143,6 +218,12 @@ namespace StarryEngine {
         m_tagToSubpass.clear();
         m_tagToPassNode.clear();
 
+        // 重置 ready 标志：resize 时 render pass / 物理纹理全部重建，
+        // 管线和描述符集必须重新创建
+        m_presentationPipelineReady = false;
+        m_presentSceneColorDescSet = RHI::DescriptorSetHandle{};  // 旧 set 失效
+        m_particleVS = RHI::ShaderHandle{};                       // 触发重新加载
+
         if (m_imguiManager) {
             m_imguiManager->setRenderGraph(nullptr);
         }
@@ -153,7 +234,8 @@ namespace StarryEngine {
 
         auto texIdMap = buildTextureIdMap();
         buildConfigPasses(texIdMap);
-        buildPresentationPasses(texIdMap);  // 有 overlay → 构建 overlay；无 overlay → 构建 Presentation Pass
+        buildPresentationPasses(texIdMap);
+        buildTestComputePass();  // 测试 Compute Pass
         return compileAndFinalize(texIdMap);
     }
 
@@ -186,7 +268,7 @@ namespace StarryEngine {
 
     void DeferredRenderPath::buildConfigPasses(std::unordered_map<std::string, RenderGraph::TextureId>& texIdMap){
         for (const auto& passDesc : m_config) {
-            auto* passNode = m_renderGraph->addPassNode(passDesc.name);
+            auto* passNode = m_renderGraph->addGraphicsPassNode(passDesc.name);
             passNode->setRenderArea(m_width, m_height);
 
             // 用于该 Pass 内附件去重：按纹理 ID + 用途分类存储已注册的 key
@@ -289,7 +371,7 @@ namespace StarryEngine {
         if (!m_overlayPasses.empty()) {
             // ── 有 overlay：构建 overlay passes ──
             for (const auto& overlay : m_overlayPasses) {
-                auto* passNode = m_renderGraph->addPassNode(overlay.tag + "Pass");
+                auto* passNode = m_renderGraph->addGraphicsPassNode(overlay.tag + "Pass");
                 passNode->setRenderArea(m_width, m_height);
 
                 auto& subpassBuilder = passNode->addSubpass(overlay.tag);
@@ -349,7 +431,7 @@ namespace StarryEngine {
     {
         const std::string tag = "Presentation";
 
-        auto* passNode = m_renderGraph->addPassNode("PresentationPass");
+        auto* passNode = m_renderGraph->addGraphicsPassNode("PresentationPass");
         passNode->setRenderArea(m_width, m_height);
 
         auto& subpassBuilder = passNode->addSubpass("PresentBlit");
@@ -549,6 +631,217 @@ namespace StarryEngine {
         LOG_INFO("PresentationPass pipeline ready");
     }
 
+    // ── 粒子系统（Compute + Render，端到端验证）────────────────────
+    void DeferredRenderPath::buildTestComputePass() {
+        if (!m_globalSetLayout.isValid()) return;  // 首次 build 时 descriptor 数据未就绪
+        const uint32_t PARTICLE_COUNT = 1024;
+        Assets::ShaderLoader loader(m_resMgr);
+
+        // ═══ 1. 粒子存储缓冲 ═══
+        RHI::BufferDesc bufDesc;
+        bufDesc.size = PARTICLE_COUNT * sizeof(float) * 4;
+        bufDesc.type = RHI::BufferType::Storage;
+        bufDesc.memoryType = RHI::MemoryType::CPU_To_GPU;  // host 可写，避免 GPU 未初始化值
+        bufDesc.allowUpdate = true;
+        auto bufId = m_renderGraph->createVirtualBuffer(bufDesc, "ParticleBuffer");
+
+        // ═══ 2. Compute Shader + Pipeline ═══
+        auto csInfo = loader.loadFromFile("assets/shaders/test/particle.comp",
+                                          RHI::ShaderStage::Compute);
+        if (!csInfo || !csInfo->module.isValid()) {
+            LOG_WARN("Particle: failed to load particle.comp"); return;
+        }
+        // Layout: set=0 → storage buffer
+        RHI::DescriptorSetLayoutDesc csLayoutDesc;
+        csLayoutDesc.bindings = {{0, RHI::DescriptorType::StorageBuffer, 1, RHI::ShaderStage::Compute}};
+        auto csDescLayout = m_resMgr->createDescriptorSetLayout(csLayoutDesc);
+        RHI::PipelineLayoutDesc csPlDesc;
+        csPlDesc.descriptorSetLayouts = { csDescLayout };
+        csPlDesc.pushConstants = {{RHI::ShaderStage::Compute, 0, 8}};
+        auto csPlLayout = m_resMgr->createPipelineLayout(csPlDesc);
+        RHI::ComputePipelineDesc cpDesc;
+        cpDesc.computeShader = csInfo->module;
+        cpDesc.pipelineLayoutHandle = csPlLayout;
+        auto csPipeline = m_resMgr->createComputePipeline(cpDesc);
+
+        // ═══ 3. Particle Render Shaders + Pipeline ═══
+        auto vsInfo = loader.loadFromFile("assets/shaders/test/particle.vert", RHI::ShaderStage::Vertex);
+        auto fsInfo = loader.loadFromFile("assets/shaders/test/particle.frag", RHI::ShaderStage::Fragment);
+        if (!vsInfo || !fsInfo) { LOG_WARN("Particle: failed to load render shaders"); return; }
+        // Layout: set=0 → 复用全局 GlobalUBO layout（确保与 m_globalDescSet 兼容）
+        //         set=1 → storage buffer（ParticleBuffer）
+        RHI::DescriptorSetLayoutDesc renderLayout1;
+        renderLayout1.bindings = {{0, RHI::DescriptorType::StorageBuffer, 1, RHI::ShaderStage::Vertex}};
+        auto renderLayout1H = m_resMgr->createDescriptorSetLayout(renderLayout1);
+        RHI::PipelineLayoutDesc renderPlDesc;
+        renderPlDesc.descriptorSetLayouts = { m_globalSetLayout, renderLayout1H };
+        auto renderPlLayout = m_resMgr->createPipelineLayout(renderPlDesc);
+
+        // ═══ 4. Compute Pass Node ═══
+        auto* csPass = m_renderGraph->addComputePassNode("ParticleUpdate");
+        csPass->addWriteBuffer(bufId);
+        csPass->setComputePipeline(csPipeline);
+        csPass->setDispatchSize((PARTICLE_COUNT + 255) / 256, 1, 1);
+
+        // ═══ 5. Particle Render Pass Node ═══
+        auto* renderPass = m_renderGraph->addGraphicsPassNode("ParticleRender");
+        renderPass->setRenderArea(m_width, m_height);
+        renderPass->addReadBuffer(bufId);  // 读 Compute 输出 → 依赖分析自动排序
+
+        // 颜色输出到 SceneColor（保留已有场景内容）
+        RenderGraph::AttachmentParams colorParams;
+        colorParams.loadOp        = RHI::AttachmentLoadOp::Load;
+        colorParams.storeOp       = RHI::AttachmentStoreOp::Store;
+        colorParams.initialLayout = RHI::ImageLayout::ShaderReadOnly;
+        colorParams.finalLayout   = RHI::ImageLayout::ShaderReadOnly;
+        auto scId = m_renderGraph->getTextureId("SceneColor");
+        std::string colorKey = renderPass->addColorOutput(scId, colorParams);
+
+        auto& subpass = renderPass->addSubpass("ParticleDraw");
+        subpass.addColorAttachmentRef(colorKey);
+        subpass.setTag("ParticleDraw");
+
+        // 点精灵渲染 pipeline（在 compileAndFinalize 中创建）
+        m_particleVS = vsInfo->module;
+        m_particleFS = fsInfo->module;
+        m_particleRenderLayout = renderPlLayout;
+        m_particleBufferId = bufId;
+        m_particleCount = PARTICLE_COUNT;
+        m_particleCSDescLayout = csDescLayout;
+        m_particleCSLayout = csPlLayout;
+        m_particleCSPipeline = csPipeline;
+
+        // placeho lder recorder（compileAndFinalize 中替换为真实 pipeline）
+        auto dummyRecorder = std::make_shared<CopyToSwapchainRecorder>();
+        subpass.setRecorder(dummyRecorder);
+        m_tagToSubpass["ParticleDraw"] = SubpassTarget{{}, 0, dummyRecorder};
+        m_tagToPassNode["ParticleDraw"] = renderPass;
+
+        LOG_INFO("Particle system built: {} particles, bufId={}, passes={}",
+            PARTICLE_COUNT, bufId.id(), m_renderGraph->getPassCount());
+    }
+
+    // ── 粒子管线创建 ───────────────────────────────────────────────
+    void DeferredRenderPath::prepareParticlePipeline() {
+        // ── Compute Descriptor Set + Buffer Init ──
+        auto physBuf = m_renderGraph->getPhysicalBuffer(m_particleBufferId);
+        if (!physBuf.isValid()) return;
+
+        // 初始化粒子数据（分散生命周期，避免同时喷发）
+        auto* bufObj = m_resMgr->getBuffer(physBuf);
+        if (bufObj) {
+            std::vector<float> init(m_particleCount * 4, 0.0f);
+            for (uint32_t i = 0; i < m_particleCount; ++i) {
+                auto rnd = [](uint32_t s) { return float((s * 2654435761u) & 0xFFFF) / 65535.0f; };
+                init[i*4 + 0] = (rnd(i*3+1) - 0.5f) * 0.8f;
+                init[i*4 + 1] = rnd(i*3+2) * 3.0f - 3.0f;          // y: [-3, 0]
+                init[i*4 + 2] = (rnd(i*3+3) - 0.5f) * 0.8f;
+                init[i*4 + 3] = rnd(i*7+4) * 0.95f;                  // 随机初始寿命
+            }
+            bufObj->update(init.data(), init.size() * sizeof(float), 0);
+        }
+
+        RHI::DescriptorPoolDesc csPoolDesc;
+        csPoolDesc.maxSets = 1;
+        csPoolDesc.poolSizes = {{RHI::DescriptorType::StorageBuffer, 1}};
+        auto csPool = m_resMgr->createDescriptorPool(csPoolDesc);
+        RHI::DescriptorSetDesc csSetDesc;
+        csSetDesc.descriptorSetLayout = m_particleCSDescLayout;
+        csSetDesc.descriptorPool = csPool;
+        auto csDescSet = m_resMgr->createDescriptorSet(csSetDesc);
+        if (csDescSet.isValid()) {
+            auto* ds = m_resMgr->getDescriptorSet(csDescSet);
+            ds->writeBuffer(0, 0, m_resMgr->getBuffer(physBuf), 0,
+                m_particleCount * sizeof(float) * 4);
+            ds->update();
+        }
+
+        // 给 Compute Pass 加 recorder
+        auto& passes = m_renderGraph->getPasses();
+        for (auto& p : passes) {
+            if (p->getName() == "ParticleUpdate") {
+                p->setComputeRecorder(std::make_shared<ParticleCSRecorder>(
+                    m_particleCSLayout, csDescSet, m_particleCount));
+                break;
+            }
+        }
+
+        // ── Particle Render Pipeline ──
+        auto tagIt = m_tagToSubpass.find("ParticleDraw");
+        if (tagIt == m_tagToSubpass.end()) return;
+        RHI::RenderPassHandle rp = tagIt->second.renderPass;
+        if (!rp.isValid()) return;
+
+        Scene::GraphicsPipelineState pso;
+        pso.vertexShader   = m_particleVS;
+        pso.fragmentShader = m_particleFS;
+        pso.layout         = m_particleRenderLayout;
+        pso.cullMode       = RHI::CullMode::None;
+        pso.frontFace      = RHI::FrontFace::CounterClockwise;
+        pso.depthTestEnable  = false;
+        pso.depthWriteEnable = false;
+        pso.topology       = RHI::PrimitiveTopology::PointList;
+        pso.dynamicStates  = { RHI::DynamicState::Viewport, RHI::DynamicState::Scissor };
+        pso.vertexInput    = {};
+        RHI::BlendAttachmentState blend;
+        blend.blendEnable = true;
+        blend.srcColorBlendFactor = RHI::BlendFactor::SrcAlpha;
+        blend.dstColorBlendFactor = RHI::BlendFactor::OneMinusSrcAlpha;
+        blend.colorBlendOp = RHI::BlendOp::Add;
+        pso.attachments = { blend };
+
+        auto renderPipeline = Assets::PipelineCache::getOrCreateGraphicsPipeline(
+            m_resMgr.get(), pso, rp, tagIt->second.subpassIndex);
+        if (!renderPipeline.isValid()) { LOG_ERROR("Particle render pipeline failed"); return; }
+
+        // ── Particle Descriptor Set (set=1: buffer) ──
+        RHI::DescriptorSetHandle particleDescSet;
+        if (physBuf.isValid()) {
+            // set=0 layout for render (uniform buffer)
+            RHI::DescriptorSetLayoutDesc set0Desc;
+            set0Desc.bindings = {{0, RHI::DescriptorType::UniformBuffer, 1, RHI::ShaderStage::Vertex}};
+            auto set0Layout = m_resMgr->createDescriptorSetLayout(set0Desc);
+
+            // set=1 layout (storage buffer)
+            RHI::DescriptorSetLayoutDesc set1Desc;
+            set1Desc.bindings = {{0, RHI::DescriptorType::StorageBuffer, 1, RHI::ShaderStage::Vertex}};
+            auto set1Layout = m_resMgr->createDescriptorSetLayout(set1Desc);
+
+            RHI::DescriptorPoolDesc poolDesc;
+            poolDesc.maxSets = 2;
+            poolDesc.poolSizes = {
+                {RHI::DescriptorType::UniformBuffer, 1},
+                {RHI::DescriptorType::StorageBuffer, 1}};
+            auto pool = m_resMgr->createDescriptorPool(poolDesc);
+
+            RHI::DescriptorSetDesc dsDesc1;
+            dsDesc1.descriptorSetLayout = set1Layout;
+            dsDesc1.descriptorPool = pool;
+            particleDescSet = m_resMgr->createDescriptorSet(dsDesc1);
+            if (particleDescSet.isValid()) {
+                auto* ds = m_resMgr->getDescriptorSet(particleDescSet);
+                if (ds) {
+                    ds->writeBuffer(0, 0, m_resMgr->getBuffer(physBuf), 0,
+                        m_particleCount * sizeof(float) * 4);
+                    ds->update();
+                }
+            }
+        }
+
+        // ── 替换占位 recorder → 真实 particle recorder ──
+        auto rec = std::make_shared<ParticleRenderRecorder>(
+            renderPipeline, m_particleRenderLayout,
+            m_globalDescSet, particleDescSet, m_particleCount);
+        tagIt->second.recorder = rec;
+        // 同时更新 PassNode 内部的 subpassRecorders（execute 实际读取的位置）
+        auto passIt = m_tagToPassNode.find("ParticleDraw");
+        if (passIt != m_tagToPassNode.end()) {
+            passIt->second->setSubpassRecorder(0, rec);
+        }
+
+        LOG_INFO("Particle render pipeline ready ({} points)", m_particleCount);
+    }
+
     bool DeferredRenderPath::compileAndFinalize(std::unordered_map<std::string, RenderGraph::TextureId>& texIdMap){
         if (!m_renderGraph->compile()) {
             LOG_ERROR("Failed to compile RenderGraph");
@@ -578,13 +871,15 @@ namespace StarryEngine {
 
         m_textureIdMap = std::move(texIdMap);
 
-        // 如果 PresentationPass 存在（无 overlay 模式）且全局描述符数据已就绪，
-        // 准备全屏 blit 管线。注意：首次 buildGraph 时 descriptor 数据可能还未传入
-        //（setPresentationDescriptorData 在 setRenderPath 中调用），
-        // 此时跳过；后续 rebuild（如 onResize）时 m_globalSetLayout 已有效，正常创建。
+        // PresentationPass 管线
         if (m_tagToSubpass.count("Presentation") && m_globalSetLayout.isValid()) {
             ensurePresentationShaders();
             preparePresentationPipeline();
+        }
+
+        // 粒子系统管线
+        if (m_tagToSubpass.count("ParticleDraw") && m_particleVS.isValid()) {
+            prepareParticlePipeline();
         }
 
         return true;

@@ -33,22 +33,37 @@ namespace StarryEngine::RenderGraph {
         uint32_t aspectMask;
     };
 
+    enum class PassType { Graphics, Compute };
+
     class PassNode {
     public:
-        explicit PassNode(const std::string& name);
+        explicit PassNode(const std::string& name, PassType type = PassType::Graphics);
         ~PassNode();
 
+        PassType getType() const { return m_type; }
+
+        // ── Graphics Pass 接口 ──
         std::string addColorOutput(TextureId texId, const AttachmentParams& params = AttachmentParams());
         std::string addDepthOutput(TextureId texId, const AttachmentParams& params = AttachmentParams());
         std::string addInput(TextureId texId, const AttachmentParams& params = AttachmentParams());
         std::string addResolve(TextureId texId, const AttachmentParams& params = AttachmentParams());
         std::string addPreserve(TextureId texId);
-
         SubpassBuilder& addSubpass(const std::string& subpassName);
+        void setSubpassRecorder(uint32_t index, std::shared_ptr<StarryEngine::ISubpassRecorder> rec) {
+            if (index < m_subpassRecorders.size()) m_subpassRecorders[index] = std::move(rec);
+        }
         void setRenderArea(uint32_t width, uint32_t height) { m_width = width; m_height = height; }
 
-        // Pass 启用/禁用：禁用的 Pass 在 execute 时跳过执行
-        // 但仍在依赖分析和资源分配中参与（可重建管线的数据完整）
+        // ── Compute Pass 接口 ──
+        void addReadTexture(TextureId t)  { m_readTextures.insert(t); }
+        void addWriteTexture(TextureId t) { m_writeTextures.insert(t); m_computeWriteLayouts[t] = RHI::ImageLayout::General; }
+        void addReadBuffer(BufferId b)    { m_readBuffers.insert(b); }
+        void addWriteBuffer(BufferId b)   { m_writeBuffers.insert(b); }
+        void setComputePipeline(RHI::PipelineHandle p)   { m_computePipeline = p; }
+        void setDispatchSize(uint32_t x, uint32_t y, uint32_t z) { m_dispatchX = x; m_dispatchY = y; m_dispatchZ = z; }
+        void setComputeRecorder(std::shared_ptr<StarryEngine::ISubpassRecorder> r) { m_computeRecorder = std::move(r); }
+
+        // Pass 启用/禁用
         void setEnabled(bool e) { m_enabled = e; }
         bool isEnabled() const { return m_enabled; }
 
@@ -108,9 +123,16 @@ namespace StarryEngine::RenderGraph {
 
         std::unordered_map<TextureId, RHI::ImageLayout> m_finalLayouts;
 
-        bool m_enabled = true;  // Pass 是否启用（默认启用）
+        bool m_enabled = true;
+        PassType m_type = PassType::Graphics;
 
-        
+        // ── Compute 专用 ──
+        RHI::PipelineHandle m_computePipeline;
+        uint32_t m_dispatchX = 1, m_dispatchY = 1, m_dispatchZ = 1;
+        std::shared_ptr<StarryEngine::ISubpassRecorder> m_computeRecorder;
+        std::unordered_map<TextureId, RHI::ImageLayout> m_computeWriteLayouts;
+
+
     };
 
 } // namespace StarryEngine::RenderGraph

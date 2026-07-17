@@ -4,8 +4,8 @@
 
 namespace StarryEngine::RenderGraph {
 
-    PassNode::PassNode(const std::string& name)
-        : m_name(name), m_builder(name) {
+    PassNode::PassNode(const std::string& name, PassType type)
+        : m_name(name), m_builder(name), m_type(type) {
     }
 
     PassNode::~PassNode() {
@@ -91,6 +91,15 @@ namespace StarryEngine::RenderGraph {
         const std::unordered_map<TextureId, RHI::TextureDesc>& texDescMap,
         const std::unordered_map<BufferId, RHI::BufferHandle>& /*bufMap*/) {
         m_resMgr = resMgr;
+
+        // ── Compute Pass：无需 RenderPass/Framebuffer ──
+        if (m_type == PassType::Compute) {
+            m_finalLayouts.clear();
+            for (auto& [texId, layout] : m_computeWriteLayouts) {
+                m_finalLayouts[texId] = layout;
+            }
+            return true;
+        }
 
         const auto& attachmentIndices = m_builder.getAttachmentIndices();
         for (const auto& [key, texId] : m_keyToTexId) {
@@ -225,11 +234,30 @@ namespace StarryEngine::RenderGraph {
     }
 
     void PassNode::execute(RHI::RHICommandEncoder* encoder,const RenderContext& context,uint32_t frameIndex,RHI::FramebufferHandle framebuffer) {
+        if (m_type == PassType::Compute) {
+            // ── Compute Pass ──
+            if (!m_enabled) return;
+            auto* pipeline = m_resMgr->getPipeline(m_computePipeline);
+            if (!pipeline) return;
+            encoder->bindComputePipeline(pipeline);
+            if (m_computeRecorder) {
+                m_computeRecorder->recordCommands(encoder, context,
+                    PassContext(m_resMgr, frameIndex, {}), 0);
+            }
+            encoder->dispatch(m_dispatchX, m_dispatchY, m_dispatchZ);
+            return;
+        }
+
+        // ── Graphics Pass ──
         if (!m_renderPassHandle.isValid()) throw std::runtime_error("Pass not compiled: " + m_name);
 
         auto* renderPassObj = m_resMgr->getRenderPass(m_renderPassHandle);
         auto* fbObj = m_resMgr->getFramebuffer(framebuffer);
-        if (!renderPassObj || !fbObj) return;
+        if (!renderPassObj || !fbObj) {
+            LOG_WARN("[{}] renderPassObj={} fbObj={} — skipping pass",
+                m_name, (void*)renderPassObj, (void*)fbObj);
+            return;
+        }
 
         RHI::RenderPassBeginInfo beginInfo{
             .renderPass = renderPassObj->getNativeHandle(),
@@ -240,7 +268,6 @@ namespace StarryEngine::RenderGraph {
 
         encoder->beginRenderPass(beginInfo, RHI::SubpassContents::Inline);
 
-        // 禁用的 Pass：仍执行空的 RenderPass（维护 barrier/layout 链），但不录制子通道内容
         if (m_enabled) {
             encoder->setViewport({ 0.0f, 0.0f, (float)m_width, (float)m_height, 0.0f, 1.0f });
             encoder->setScissor({ {0, 0}, {m_width, m_height} });
@@ -290,6 +317,18 @@ namespace StarryEngine::RenderGraph {
     }
 
     std::pair<RHI::ImageLayout, RHI::ImageLayout> PassNode::getTextureLayout(TextureId texId) const {
+        // Compute Pass：读 = ShaderReadOnly，写 = 取 m_computeWriteLayouts 中的值
+        if (m_type == PassType::Compute) {
+            if (m_computeWriteLayouts.count(texId)) {
+                return { RHI::ImageLayout::Undefined,         // 写前不需要特定布局
+                         m_computeWriteLayouts.at(texId) };   // 写后 = General
+            }
+            if (m_readTextures.count(texId)) {
+                return { RHI::ImageLayout::ShaderReadOnly, RHI::ImageLayout::ShaderReadOnly };
+            }
+            return { RHI::ImageLayout::Undefined, RHI::ImageLayout::Undefined };
+        }
+
         RHI::ImageLayout initial = RHI::ImageLayout::Undefined;
         RHI::ImageLayout final = RHI::ImageLayout::Undefined;
 

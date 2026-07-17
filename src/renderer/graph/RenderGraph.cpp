@@ -1,5 +1,6 @@
 #include "RenderGraph.hpp"
 #include "../../logging/Logger.hpp"
+#include <algorithm>
 #include <queue>
 #include <stack>
 #include <iostream>
@@ -101,8 +102,15 @@ namespace StarryEngine::RenderGraph {
         return id;
     }
 
-    PassNode* RenderGraph::addPassNode(const std::string& name) {
+    PassNode* RenderGraph::addGraphicsPassNode(const std::string& name) {
         auto pass = std::make_unique<PassNode>(name);
+        PassNode* ptr = pass.get();
+        m_passes.push_back(std::move(pass));
+        return ptr;
+    }
+
+    PassNode* RenderGraph::addComputePassNode(const std::string& name) {
+        auto pass = std::make_unique<PassNode>(name, PassType::Compute);
         PassNode* ptr = pass.get();
         m_passes.push_back(std::move(pass));
         return ptr;
@@ -214,17 +222,6 @@ namespace StarryEngine::RenderGraph {
         // 必须在 dependencyAnalysis() 后、物理资源分配前执行
         cullUnusedPasses();
 
-        struct TexturePassInfo {
-            int32_t lastWriterIndex = -1;
-            int32_t firstReaderIndex = -1;
-            int32_t firstUserIndex = -1;  
-            int32_t lastUserIndex = -1;    
-            RHI::PipelineStageFlags writeStage;     
-            RHI::AccessFlags writeAccess;                 
-            RHI::PipelineStageFlags readStage;          
-            RHI::AccessFlags readAccess;                
-        };
-
         std::unordered_map<TextureId, TexturePassInfo> texPassInfo;
 
         for (int32_t passIdx = 0; passIdx < static_cast<int32_t>(m_sortedPasses.size()); ++passIdx) {
@@ -263,8 +260,11 @@ namespace StarryEngine::RenderGraph {
             }
         }
 
+        // ── Memory Aliasing：贪心复用生命周期不重叠的 transient 纹理内存 ──
+        performMemoryAliasing(texPassInfo);
+
         for (auto& vt : m_virtualTextures) {
-            if (vt.imported) {                                    
+            if (vt.imported) {
                 PhysicalTextureInfo info;
                 info.handle = vt.externalHandle;
                 info.views = vt.externalViews;
@@ -405,6 +405,12 @@ namespace StarryEngine::RenderGraph {
         m_perPassFramebuffers.reserve(m_sortedPasses.size());
 
         for (auto* pass : m_sortedPasses) {
+            // Compute Pass 不需要 Framebuffer
+            if (pass->getType() == PassType::Compute) {
+                m_perPassFramebuffers.push_back({});
+                continue;
+            }
+
             std::vector<RHI::FramebufferHandle> framebuffersForPass;
             framebuffersForPass.reserve(m_swapchainImageCount);
 
@@ -470,7 +476,10 @@ namespace StarryEngine::RenderGraph {
         for (size_t i = 0; i < m_sortedPasses.size(); ++i) {
 
             auto* pass = m_sortedPasses[i];
-            RHI::FramebufferHandle fb = m_perPassFramebuffers[i][frameIndex];
+            // Compute Pass 没有 Framebuffer，传空 handle
+            RHI::FramebufferHandle fb = (pass->getType() == PassType::Compute)
+                ? RHI::FramebufferHandle{}
+                : m_perPassFramebuffers[i][frameIndex];
 
             while (transIt != m_layoutTransitions.end() && transIt->dstPassIdx == i) {
                 const auto& trans = *transIt;
@@ -607,14 +616,24 @@ namespace StarryEngine::RenderGraph {
             }
         }
 
-        // 3. BFS 反向遍历：可达 Pass 的输入纹理 → 找写这些纹理的 Pass
+        // 3. BFS 反向遍历：可达 Pass 的输入 → 找生产者
         while (!queue.empty()) {
             auto* p = queue.front();
             queue.pop();
 
+            // 纹理：读 → 找写者
             for (auto readTex : p->getReadTextures()) {
                 for (auto& other : m_passes) {
                     if (other->getWriteTextures().count(readTex) && !reachable.count(other.get())) {
+                        reachable.insert(other.get());
+                        queue.push(other.get());
+                    }
+                }
+            }
+            // 缓冲：读 → 找写者
+            for (auto readBuf : p->getReadBuffers()) {
+                for (auto& other : m_passes) {
+                    if (other->getWriteBuffers().count(readBuf) && !reachable.count(other.get())) {
                         reachable.insert(other.get());
                         queue.push(other.get());
                     }
@@ -720,6 +739,114 @@ namespace StarryEngine::RenderGraph {
         f << "}\n";
         f.close();
         LOG_INFO("Exported render graph DOT to: {}", filepath);
+    }
+
+    // ──── Memory Aliasing（贪心复用 transient 纹理内存）────────────
+    //
+    // 原理：两个 transient 纹理生命周期不重叠 → 复用同一块 GPU 内存。
+    // 参考 Frostbite 的贪心分配器：
+    //   1. 按首次使用排序所有 transient 纹理
+    //   2. 维护"空闲池"（已过期、格式兼容、尺寸足够的纹理）
+    //   3. 新纹理优先从空闲池复用，无匹配则新建
+    //
+    // Frostbite 数据（Battlefield 4）：
+    //   DX12: 147 MB → 80 MB（节省 46%）
+    void RenderGraph::performMemoryAliasing(
+        const std::unordered_map<TextureId, TexturePassInfo>& texPassInfo)
+    {
+        // 收集 transient 纹理及其生命周期
+        struct Lifetime {
+            TextureId texId;
+            uint32_t firstUse;
+            uint32_t lastUse;
+            uint64_t sizeBytes;
+        };
+        std::vector<Lifetime> lifetimes;
+
+        for (const auto& vt : m_virtualTextures) {
+            if (vt.imported) continue;  // 外部纹理不管
+            auto it = texPassInfo.find(vt.id);
+            if (it == texPassInfo.end() || it->second.firstUserIndex == -1) continue;  // 未使用
+
+            uint64_t size = vt.desc.extent.width * vt.desc.extent.height
+                          * vt.desc.arrayLayers * 8;  // ~RGBA16F×2 上限估计
+            lifetimes.push_back({
+                vt.id,
+                static_cast<uint32_t>(it->second.firstUserIndex),
+                static_cast<uint32_t>(it->second.lastUserIndex),
+                size
+            });
+        }
+
+        if (lifetimes.size() < 2) return;  // 少于 2 个 transient 不用别名
+
+        // 按首次使用排序
+        std::sort(lifetimes.begin(), lifetimes.end(),
+            [](const Lifetime& a, const Lifetime& b) { return a.firstUse < b.firstUse; });
+
+        // 空闲池：{texId, sizeBytes, freedAtPass}
+        struct FreeSlot {
+            TextureId texId;
+            uint64_t sizeBytes;
+            uint32_t freedAtPass;
+        };
+        std::vector<FreeSlot> freePool;
+
+        size_t aliasCount = 0;
+        uint64_t savedBytes = 0;
+
+        for (auto& lt : lifetimes) {
+            // 回收在当前 Pass 之前已过期的纹理到空闲池
+            for (const auto& vt : m_virtualTextures) {
+                if (vt.imported) continue;
+                auto fi = texPassInfo.find(vt.id);
+                if (fi == texPassInfo.end()) continue;
+                if (fi->second.lastUserIndex >= 0 &&
+                    static_cast<uint32_t>(fi->second.lastUserIndex) < lt.firstUse) {
+                    // 检查是否已在池中
+                    bool inPool = false;
+                    for (auto& fs : freePool) {
+                        if (fs.texId == vt.id) { inPool = true; break; }
+                    }
+                    if (!inPool) {
+                        uint64_t sz = vt.desc.extent.width * vt.desc.extent.height
+                                    * vt.desc.arrayLayers * 8;
+                        freePool.push_back({vt.id, sz,
+                            static_cast<uint32_t>(fi->second.lastUserIndex)});
+                    }
+                }
+            }
+
+            // 尝试从空闲池找到尺寸足够大的纹理来别名
+            for (auto& fs : freePool) {
+                if (fs.sizeBytes >= lt.sizeBytes && fs.texId != lt.texId) {
+                    // 别名：令当前纹理复用已过期纹理的物理 handle
+                    auto donorIt = m_textureMap.find(fs.texId);
+                    auto targetIt = m_textureMap.find(lt.texId);
+                    if (donorIt != m_textureMap.end() && targetIt != m_textureMap.end()) {
+                        // 先释放目标纹理的物理资源（还未实际分配时跳过）
+                        if (targetIt->second.handle.isValid() &&
+                            targetIt->second.handle != donorIt->second.handle) {
+                            m_resMgr->destroy(targetIt->second.handle);
+                        }
+                        // 复用 donor 的物理 handle
+                        targetIt->second.handle = donorIt->second.handle;
+                        targetIt->second.views = donorIt->second.views;
+                        aliasCount++;
+                        savedBytes += lt.sizeBytes;
+                    }
+                    // 从池中移除已使用的 slot
+                    fs = freePool.back();
+                    freePool.pop_back();
+                    break;
+                }
+            }
+        }
+
+        if (aliasCount > 0) {
+            LOG_INFO("Memory Aliasing: {} textures aliased, saved ~{:.1f} MB",
+                aliasCount, savedBytes / 1048576.0f);
+        }
     }
 
 } // namespace StarryEngine::RenderGraph

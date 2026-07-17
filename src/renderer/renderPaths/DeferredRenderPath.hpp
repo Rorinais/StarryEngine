@@ -53,10 +53,12 @@ namespace StarryEngine {
         // 构建 PresentationPass（SceneColor → Swapchain），确保 Swapchain 始终有写入者
         void buildPresentationPasses(std::unordered_map<std::string, RenderGraph::TextureId>& texIdMap);
         void buildPresentationPass(std::unordered_map<std::string, RenderGraph::TextureId>& texIdMap);
+        void buildTestComputePass();
 
         // 为 PresentationPass 创建全屏 blit 管线（fullscreen.vert + copy.frag）
         void ensurePresentationShaders();
         void preparePresentationPipeline();
+        void prepareParticlePipeline();
 
         bool compileAndFinalize(std::unordered_map<std::string, RenderGraph::TextureId>& texIdMap);
 
@@ -90,6 +92,15 @@ namespace StarryEngine {
         RHI::DescriptorSetHandle        m_globalDescSet;            // set=0（从 Renderer 传入）
         bool                            m_presentationShadersReady = false;
         bool                            m_presentationPipelineReady = false;
+
+        // ── 粒子系统测试 ──
+        RHI::ShaderHandle        m_particleVS, m_particleFS;
+        RHI::PipelineLayoutHandle m_particleRenderLayout;
+        RenderGraph::BufferId     m_particleBufferId;
+        uint32_t                  m_particleCount = 0;
+        RHI::DescriptorSetLayoutHandle m_particleCSDescLayout;
+        RHI::PipelineLayoutHandle      m_particleCSLayout;
+        RHI::PipelineHandle            m_particleCSPipeline;
 
         std::unordered_map<std::string, SubpassTarget> m_tagToSubpass;   // 标签 → Subpass 物理信息
         std::unordered_map<std::string, RenderGraph::PassNode*> m_tagToPassNode; // 标签 → PassNode

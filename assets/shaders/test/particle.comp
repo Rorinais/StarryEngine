@@ -1,0 +1,54 @@
+#version 450
+
+layout(local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 0, binding = 0) buffer ParticleBuffer {
+    vec4 particles[];  // xyz=position, w=life(0→1)
+} uParticles;
+
+layout(push_constant) uniform PC {
+    float deltaTime;
+    uint  particleCount;
+} pc;
+
+float hash(uint x) {
+    x = (x ^ 61u) ^ (x >> 16u); x *= 9u; x = x ^ (x >> 4u);
+    x *= 0x27d4eb2du; x = x ^ (x >> 15u);
+    return float(x) / float(0xFFFFFFFFu);
+}
+
+void main() {
+    uint idx = gl_GlobalInvocationID.x;
+    if (idx >= pc.particleCount) return;
+
+    vec4 p = uParticles.particles[idx];
+    float life = p.w;
+    float dt = min(pc.deltaTime, 0.05);
+
+    // ── 生命周期 ──
+    life -= dt * 0.35;  // ~3 秒寿命
+
+    if (life <= 0.0) {
+        // 重生：从喷泉口喷出
+        uint seed = idx * 4u + uint(pc.deltaTime * 1000.0) % 10000u;
+        p.x = (hash(seed)   - 0.5) * 0.8;              // 喷口随机偏移
+        p.y = -3.0;                                      // 底部喷出
+        p.z = (hash(seed+1) - 0.5) * 0.8;
+        life = 0.85 + hash(seed+2) * 0.15;              // 初始寿命抖动
+    }
+
+    // ── 物理运动 ──
+    float t = 1.0 - life;  // 归一化时间 0→1
+    float speed = mix(2.5, 0.8, t);                     // 初始快，逐渐减速
+    p.y += speed * dt;
+    p.x += sin(p.y * 2.7 + float(idx) * 0.3) * dt * 0.8;  // 水平摆动
+    p.z += cos(p.y * 3.1 + float(idx) * 0.4) * dt * 0.6;
+    // 顶部扩散
+    if (p.y > 2.0) {
+        p.x += (hash(idx*7u) - 0.5) * dt * 1.5;
+        p.z += (hash(idx*7u+1u) - 0.5) * dt * 1.5;
+    }
+
+    p.w = life;
+    uParticles.particles[idx] = p;
+}
