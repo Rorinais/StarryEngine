@@ -10,18 +10,51 @@ layout(push_constant) uniform PC {
 } pc;
 
 const float PI = 3.14159265359;
+const uint  SAMPLE_COUNT = 4096u;
 
+// 漫反射 IBL 从高 mip 采样（预模糊），消除太阳等小亮斑的离散噪点
+// faceSize=128 → mip chain: 128,64,32,16,8,4,2,1
+// LOD 4 = 8x8 适合户外 HDR；LOD 5 = 4x4 极平滑但丢失方向感
+const float DIFFUSE_LOD = 4.0;
+
+// ── Hammersley 低差异序列 ──────────────────────────────────────────
+float RadicalInverse_VdC(uint bits) {
+    bits = (bits << 16u) | (bits >> 16u);
+    bits = ((bits & 0x55555555u) << 1u) | ((bits & 0xAAAAAAAAu) >> 1u);
+    bits = ((bits & 0x33333333u) << 2u) | ((bits & 0xCCCCCCCCu) >> 2u);
+    bits = ((bits & 0x0F0F0F0Fu) << 4u) | ((bits & 0xF0F0F0F0u) >> 4u);
+    bits = ((bits & 0x00FF00FFu) << 8u) | ((bits & 0xFF00FF00u) >> 8u);
+    return float(bits) * 2.3283064365386963e-10;
+}
+
+vec2 Hammersley(uint i, uint N) {
+    return vec2(float(i) / float(N), RadicalInverse_VdC(i));
+}
+
+// ── 余弦加权半球采样（PDF = cosθ / π）──────────────────────────────
+vec3 CosineSampleHemisphere(vec2 Xi, vec3 N) {
+    float r   = sqrt(Xi.x);
+    float phi = 2.0 * PI * Xi.y;
+    vec3 localDir = vec3(r * cos(phi), r * sin(phi), sqrt(1.0 - Xi.x));
+
+    vec3 up = abs(N.z) < 0.999 ? vec3(0.0, 0.0, 1.0) : vec3(1.0, 0.0, 0.0);
+    vec3 tangent   = normalize(cross(up, N));
+    vec3 bitangent = cross(N, tangent);
+    return tangent * localDir.x + bitangent * localDir.y + N * localDir.z;
+}
+
+// ── 像素 → cubemap 方向 ────────────────────────────────────────────
 vec3 FaceToDirection(int face, float u, float v, float size) {
     float x = (u + 0.5) / size * 2.0 - 1.0;
     float y = (v + 0.5) / size * 2.0 - 1.0;
     vec3 dir;
     switch (face) {
-        case 0: dir = vec3( 1.0, -y, -x); break;
-        case 1: dir = vec3(-1.0, -y,  x); break;
-        case 2: dir = vec3( x,  1.0,  y); break;
-        case 3: dir = vec3( x, -1.0, -y); break;
-        case 4: dir = vec3( x, -y,  1.0); break;
-        case 5: dir = vec3(-x, -y, -1.0); break;
+        case 0: dir = vec3( 1.0, -y, -x); break;  // +X
+        case 1: dir = vec3(-1.0, -y,  x); break;  // -X
+        case 2: dir = vec3( x,  1.0,  y); break;  // +Y
+        case 3: dir = vec3( x, -1.0, -y); break;  // -Y
+        case 4: dir = vec3( x, -y,  1.0); break;  // +Z
+        case 5: dir = vec3(-x, -y, -1.0); break;  // -Z
     }
     return normalize(dir);
 }
@@ -35,37 +68,16 @@ void main() {
 
     vec3 N = FaceToDirection(face, float(px), float(py), float(pc.faceSize));
 
-    vec3 right;
-    if (abs(N.x) > abs(N.y)) {
-        right = normalize(vec3(-N.z, 0.0, N.x));
-    } else {
-        right = normalize(vec3(0.0, N.z, -N.y));
-    }
-    vec3 up = cross(N, right);
-
+    // ── 重要性采样：∫ L_i·cosθ dω ≈ (π/N)·Σ L_i ──
+    // PDF(ω) = cosθ / π
+    // 蒙特卡洛: f(x)/p(x) = (L_i·cosθ) / (cosθ/π) = L_i·π
     vec3 irradiance = vec3(0.0);
-
-    float sampleDelta = 0.01;
-    int   phiSteps   = int(2.0 * PI / sampleDelta + 0.5);
-    int   thetaSteps = int(0.5 * PI / sampleDelta + 0.5);
-    float dPhi       = 2.0 * PI / float(phiSteps);
-    float dTheta     = 0.5 * PI / float(thetaSteps);
-
-    for (int i = 0; i < phiSteps; ++i) {
-        float phi = (float(i) + 0.5) * dPhi;
-        for (int j = 0; j < thetaSteps; ++j) {
-            float theta = (float(j) + 0.5) * dTheta;
-            vec3 tangentSample = vec3(sin(theta) * cos(phi),
-                                      sin(theta) * sin(phi),
-                                      cos(theta));
-            vec3 sampleVec = tangentSample.x * right
-                           + tangentSample.y * up
-                           + tangentSample.z * N;
-            irradiance += texture(uEnvironmentMap, sampleVec).rgb
-                        * cos(theta) * sin(theta) * dTheta * dPhi;
-        }
+    for (uint i = 0u; i < SAMPLE_COUNT; i++) {
+        vec2 Xi = Hammersley(i, SAMPLE_COUNT);
+        vec3 L  = CosineSampleHemisphere(Xi, N);
+        irradiance += textureLod(uEnvironmentMap, L, DIFFUSE_LOD).rgb;
     }
+    irradiance = PI * irradiance / float(SAMPLE_COUNT);
 
-    // 与 LearnOpenGL 一致：不除 PI
     imageStore(uIrradianceMap, ivec3(px, py, face), vec4(irradiance, 1.0));
 }

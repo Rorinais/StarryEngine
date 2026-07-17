@@ -1,5 +1,7 @@
 #pragma once
-#include <any>  
+#include <any>
+#include <typeindex>
+#include <vector>
 #include <unordered_map>
 #include <glm/glm.hpp>
 #include "../../assets/Assets.hpp"
@@ -8,13 +10,50 @@
 #include "../../scene/Scene.hpp"
 #include "../graph/RenderGraph.hpp"
 #include "../backend/RHIFactory.hpp"
-#include"../passes/Subpass.hpp"  
+#include"../passes/Subpass.hpp"
 
 
 namespace StarryEngine {
     struct OverlayPassDesc {
         std::string tag;                              // 标签（用于 SubpassTarget 映射）
         std::shared_ptr<ISubpassRecorder> recorder;   // 录制回调
+    };
+
+    // ── 类型安全的 Blackboard ───────────────────────────────────────
+    // 模块间通过 TYPE 共享数据，不需要知道对方是谁。
+    // 用法：
+    //   struct SSAOData { float radius; TextureHandle kernel; };
+    //   blackboard.put(SSAOData{2.5f, tex});        // SSAO 模块写入
+    //   auto& d = blackboard.get<SSAOData>();         // Tonemap 模块读取
+    //
+    // 对比 Frostbite 的 Blackboard：
+    //   你的 m_customData（字符串 key）→ 打错字返回 nullptr
+    //   RenderBlackboard（类型 key）    → 编译期保证类型正确
+    class RenderBlackboard {
+    public:
+        template<typename T>
+        void put(T value) {
+            m_data[std::type_index(typeid(T))] = std::make_any<T>(std::move(value));
+        }
+
+        template<typename T>
+        T* get() {
+            auto it = m_data.find(std::type_index(typeid(T)));
+            if (it == m_data.end()) return nullptr;
+            return std::any_cast<T>(&it->second);
+        }
+
+        template<typename T>
+        const T* get() const {
+            auto it = m_data.find(std::type_index(typeid(T)));
+            if (it == m_data.end()) return nullptr;
+            return std::any_cast<T>(&it->second);
+        }
+
+        void clear() { m_data.clear(); }
+
+    private:
+        std::unordered_map<std::type_index, std::any> m_data;
     };
 
     class IRenderPath {
@@ -29,10 +68,16 @@ namespace StarryEngine {
         virtual void rebuildResources(const Scene::AnalysisSceneResult& sceneData) = 0;
 
         virtual void addOverlayPass(const OverlayPassDesc& desc) = 0;
+        virtual void removeOverlayPass(const std::string& tag) = 0;
+        virtual void clearOverlayPasses() = 0;
+        virtual const std::vector<OverlayPassDesc>& getOverlayPasses() const = 0;
 
         void addOverlayPass(const std::string& tag,std::shared_ptr<ISubpassRecorder> recorder) {
             addOverlayPass({ tag, std::move(recorder) });
         }
+
+        // 类型安全的跨模块数据共享
+        RenderBlackboard& getBlackboard() { return m_blackboard; }
 
         template<typename T>
         void setCustomData(const std::string& key, const T& data) {
@@ -58,6 +103,7 @@ namespace StarryEngine {
         float m_lastDeltaTime = 0.0f;
 
         std::unordered_map<std::string, std::any> m_customData;
+        RenderBlackboard m_blackboard;
         std::shared_ptr<Scene::AnalysisSceneResult> m_cachedSceneData;
 
         RenderContext buildRenderContext() const {

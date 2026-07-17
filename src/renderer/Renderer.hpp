@@ -32,6 +32,8 @@ namespace StarryEngine {
         void setRenderPath(std::shared_ptr<IRenderPath> newRenderPath);
 
         void addOverlayPass(const std::string& tag, std::shared_ptr<ISubpassRecorder> recorder);
+        void removeOverlayPass(const std::string& tag);
+        void clearOverlayPasses();
 
         RHI::DescriptorSetLayoutHandle getGlobalSetLayout() { return m_globalSetLayout; }
         RHI::DescriptorSetHandle getGlobalDescriptorSet() { return m_globalDescriptorSet; }

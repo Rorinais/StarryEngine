@@ -1,8 +1,69 @@
 #include "DeferredRenderPath.hpp"
 #include "../../logging/Logger.hpp"
 #include "../../ui/ImGuiManager.hpp"
+#include "../../assets/loader/ShaderLoader.hpp"
+#include <algorithm>
 
 namespace StarryEngine {
+
+    // ──── 内置全屏 Blit Recorder（PresentationPass 专用） ──────────────
+    // 画一个覆盖 NDC 的全屏三角形，采样 SceneColor 纹理输出到 Swapchain。
+    // 使用 fullscreen.vert（gl_VertexIndex 驱动）+ copy.frag（sampler2D）。
+    class PresentationRecorder : public ISubpassRecorder {
+    public:
+        PresentationRecorder(RHI::PipelineHandle pipeline,
+                             RHI::PipelineLayoutHandle layout,
+                             RHI::DescriptorSetHandle globalSet,
+                             RHI::DescriptorSetHandle sceneColorSet)
+            : m_pipeline(pipeline), m_layout(layout),
+              m_globalSet(globalSet), m_sceneColorSet(sceneColorSet) {}
+
+        void setPipeline(RHI::PipelineHandle p)   { m_pipeline = p; }
+        void setSceneColorSet(RHI::DescriptorSetHandle s) { m_sceneColorSet = s; }
+        void setLayout(RHI::PipelineLayoutHandle l) { m_layout = l; }
+
+        // ── ISubpassRecorder 接口 ──
+        void clearDrawItems() override {}
+        void setDrawItems(const std::vector<std::shared_ptr<Scene::DrawItem>>&) override {}
+        const std::vector<std::shared_ptr<Scene::DrawItem>>& getDrawItems() override { return m_empty; }
+        void setPipelineMapping(const std::unordered_map<uint32_t, RHI::PipelineHandle>&) override {}
+        void addDrawItem(std::shared_ptr<Scene::DrawItem>) override {}
+
+        void recordCommands(RHI::RHICommandEncoder* encoder,
+                            const RenderContext& /*rctx*/,
+                            const PassContext& pctx,
+                            uint32_t /*subpassIndex*/) override
+        {
+            if (!m_pipeline.isValid()) return;
+
+            auto resMgr = pctx.getResourceManager();
+            auto* pipeline = resMgr->getPipeline(m_pipeline);
+            if (!pipeline) return;
+            encoder->bindPipeline(pipeline);
+
+            auto* playout = resMgr->getPipelineLayout(m_layout);
+            if (playout) {
+                if (m_globalSet.isValid())
+                    encoder->bindDescriptorSets(RHI::PipelineBindPoint::Graphics,
+                        playout, 0, { m_globalSet }, {});
+                if (m_sceneColorSet.isValid())
+                    encoder->bindDescriptorSets(RHI::PipelineBindPoint::Graphics,
+                        playout, 1, { m_sceneColorSet }, {});
+            }
+
+            // 全屏三角形：3 顶点，无顶点缓冲（gl_VertexIndex 驱动）
+            encoder->draw(3, 1, 0, 0);
+        }
+
+    private:
+        RHI::PipelineHandle       m_pipeline;
+        RHI::PipelineLayoutHandle m_layout;
+        RHI::DescriptorSetHandle  m_globalSet;       // set=0: GlobalUniforms
+        RHI::DescriptorSetHandle  m_sceneColorSet;   // set=1: SceneColor sampler
+        std::vector<std::shared_ptr<Scene::DrawItem>> m_empty;
+    };
+
+    // ──── DeferredRenderPath 实现 ────
 
     DeferredRenderPath::DeferredRenderPath(std::shared_ptr<RHI::IRHI> rhi, uint32_t width, uint32_t height)
         : m_rhi(rhi), m_resMgr(rhi->getResourceManager()), m_width(width), m_height(height) {
@@ -92,7 +153,7 @@ namespace StarryEngine {
 
         auto texIdMap = buildTextureIdMap();
         buildConfigPasses(texIdMap);
-        buildOverlayPasses(texIdMap);
+        buildPresentationPasses(texIdMap);  // 有 overlay → 构建 overlay；无 overlay → 构建 Presentation Pass
         return compileAndFinalize(texIdMap);
     }
 
@@ -217,45 +278,275 @@ namespace StarryEngine {
         }
     }
 
-    void DeferredRenderPath::buildOverlayPasses(
+    // ──── 呈现层入口 ────────────────────────────────────────────────
+    // 有 overlay → 构建 overlay passes（现有逻辑）
+    // 无 overlay → 构建 PresentationPass（SceneColor → Swapchain）
+    // 这样做保证了：无论 overlay 存在与否，Swapchain 始终有写入者，
+    // Pass Culling 也有正确的"根"节点可以反向遍历。
+    void DeferredRenderPath::buildPresentationPasses(
         std::unordered_map<std::string, RenderGraph::TextureId>& texIdMap)
     {
-        for (const auto& overlay : m_overlayPasses) {
-            auto* passNode = m_renderGraph->addPassNode(overlay.tag + "Pass");
-            passNode->setRenderArea(m_width, m_height);
+        if (!m_overlayPasses.empty()) {
+            // ── 有 overlay：构建 overlay passes ──
+            for (const auto& overlay : m_overlayPasses) {
+                auto* passNode = m_renderGraph->addPassNode(overlay.tag + "Pass");
+                passNode->setRenderArea(m_width, m_height);
 
-            auto& subpassBuilder = passNode->addSubpass(overlay.tag);
-            subpassBuilder.setTag(overlay.tag);
+                auto& subpassBuilder = passNode->addSubpass(overlay.tag);
+                subpassBuilder.setTag(overlay.tag);
 
-            // ---- Swapchain 颜色附件 ----
-            RenderGraph::AttachmentParams scParams;
-            scParams.loadOp        = RHI::AttachmentLoadOp::Clear;       // 清除背景
-            scParams.storeOp       = RHI::AttachmentStoreOp::Store;
-            scParams.initialLayout = RHI::ImageLayout::Undefined;
-            scParams.finalLayout   = RHI::ImageLayout::PresentSrc;
-            scParams.clearColor    = { 0.08f, 0.08f, 0.10f, 1.0f };
+                // ---- Swapchain 颜色附件 ----
+                RenderGraph::AttachmentParams scParams;
+                scParams.loadOp        = RHI::AttachmentLoadOp::Clear;
+                scParams.storeOp       = RHI::AttachmentStoreOp::Store;
+                scParams.initialLayout = RHI::ImageLayout::Undefined;
+                scParams.finalLayout   = RHI::ImageLayout::PresentSrc;
+                scParams.clearColor    = { 0.08f, 0.08f, 0.10f, 1.0f };
 
-            auto swapchainTexId = texIdMap.at(m_swapchainTextureName);
-            std::string scKey = passNode->addColorOutput(swapchainTexId, scParams);
-            subpassBuilder.addColorAttachmentRef(scKey);
+                auto swapchainTexId = texIdMap.at(m_swapchainTextureName);
+                std::string scKey = passNode->addColorOutput(swapchainTexId, scParams);
+                subpassBuilder.addColorAttachmentRef(scKey);
 
-            // ---- SceneColor 输入附件（制造依赖，确保顺序） ----
-            RenderGraph::AttachmentParams inputParams;
-            inputParams.loadOp        = RHI::AttachmentLoadOp::Load;
-            inputParams.storeOp       = RHI::AttachmentStoreOp::DontCare;
-            inputParams.initialLayout = RHI::ImageLayout::ShaderReadOnly;
-            inputParams.finalLayout   = RHI::ImageLayout::ShaderReadOnly;
+                // ---- SceneColor 输入附件（制造依赖，确保顺序） ----
+                RenderGraph::AttachmentParams inputParams;
+                inputParams.loadOp        = RHI::AttachmentLoadOp::Load;
+                inputParams.storeOp       = RHI::AttachmentStoreOp::DontCare;
+                inputParams.initialLayout = RHI::ImageLayout::ShaderReadOnly;
+                inputParams.finalLayout   = RHI::ImageLayout::ShaderReadOnly;
 
-            auto sceneColorTexId = texIdMap.at("SceneColor");
-            std::string inputKey = passNode->addInput(sceneColorTexId, inputParams);
-            subpassBuilder.addInputAttachmentRef(inputKey);
+                auto sceneColorTexId = texIdMap.at("SceneColor");
+                std::string inputKey = passNode->addInput(sceneColorTexId, inputParams);
+                subpassBuilder.addInputAttachmentRef(inputKey);
 
-            subpassBuilder.setRecorder(overlay.recorder);
+                subpassBuilder.setRecorder(overlay.recorder);
 
-            // 注意：这里的 subpassIndex 始终是 0，因为该 Pass 只有一个子通道
-            m_tagToSubpass[overlay.tag] = SubpassTarget{ {}, 0, overlay.recorder };
-            m_tagToPassNode[overlay.tag] = passNode;
+                m_tagToSubpass[overlay.tag] = SubpassTarget{ {}, 0, overlay.recorder };
+                m_tagToPassNode[overlay.tag] = passNode;
+            }
+        } else {
+            // ── 无 overlay：构建 PresentationPass ──
+            buildPresentationPass(texIdMap);
         }
+    }
+
+    // ──── 内置 Presentation Pass（无 overlay 时的兜底） ──────────────
+    // 职责：将 SceneColor（config passes 的最终输出）"搬运"到 Swapchain，
+    //       使 Swapchain 始终有写入者。
+    //
+    // 当前使用一个占位 recorder——Swapchain 会被 Clear 到背景色。
+    // 要启用完整的 SceneColor → Swapchain 全屏复制，请将已有的
+    //   assets/shaders/deferred/fullscreen.vert
+    //   assets/shaders/deferred/copy.frag
+    // 与 CopyToSwapchainRecorder 组合，替换此处的空 recorder。
+    //
+    // 实现提示：
+    //   1. 用 m_resMgr->createShader(...) 加载两个 shader
+    //   2. 创建 GraphicsPipelineState（depthTest=false, cullMode=None）
+    //   3. 添加 Procedural DrawItem（vertexCount=3）到 recorder
+    //   4. 在 prepareAllPipelines 中为 "Presentation" tag 创建管线
+    void DeferredRenderPath::buildPresentationPass(
+        std::unordered_map<std::string, RenderGraph::TextureId>& texIdMap)
+    {
+        const std::string tag = "Presentation";
+
+        auto* passNode = m_renderGraph->addPassNode("PresentationPass");
+        passNode->setRenderArea(m_width, m_height);
+
+        auto& subpassBuilder = passNode->addSubpass("PresentBlit");
+        subpassBuilder.setTag(tag);
+
+        // ---- Swapchain 颜色附件（最终输出） ----
+        RenderGraph::AttachmentParams scParams;
+        scParams.loadOp        = RHI::AttachmentLoadOp::Clear;      // TODO: 换为 Load 以保留 SceneColor
+        scParams.storeOp       = RHI::AttachmentStoreOp::Store;
+        scParams.initialLayout = RHI::ImageLayout::Undefined;
+        scParams.finalLayout   = RHI::ImageLayout::PresentSrc;
+        scParams.clearColor    = { 0.08f, 0.08f, 0.10f, 1.0f };
+
+        auto swapchainTexId = texIdMap.at(m_swapchainTextureName);
+        std::string scKey = passNode->addColorOutput(swapchainTexId, scParams);
+        subpassBuilder.addColorAttachmentRef(scKey);
+
+        // ---- SceneColor 输入附件（制造依赖，保持 DAG 完整） ----
+        RenderGraph::AttachmentParams inputParams;
+        inputParams.loadOp        = RHI::AttachmentLoadOp::Load;
+        inputParams.storeOp       = RHI::AttachmentStoreOp::DontCare;
+        inputParams.initialLayout = RHI::ImageLayout::ShaderReadOnly;
+        inputParams.finalLayout   = RHI::ImageLayout::ShaderReadOnly;
+
+        auto sceneColorTexId = texIdMap.at("SceneColor");
+        std::string inputKey = passNode->addInput(sceneColorTexId, inputParams);
+        subpassBuilder.addInputAttachmentRef(inputKey);
+
+        // 内置全屏 blit recorder（具体的管线/描述符集 handle 在 preparePresentationPipeline 中设置）
+        auto presentRecorder = std::make_shared<PresentationRecorder>(
+            RHI::PipelineHandle{},
+            RHI::PipelineLayoutHandle{},
+            RHI::DescriptorSetHandle{},
+            RHI::DescriptorSetHandle{}
+        );
+        subpassBuilder.setRecorder(presentRecorder);
+
+        m_tagToSubpass[tag] = SubpassTarget{ {}, 0, presentRecorder };
+        m_tagToPassNode[tag] = passNode;
+
+        LOG_INFO("Built PresentationPass (no overlay — swapchain clear fallback)");
+    }
+
+    // ──── Overlay 动态管理 ──────────────────────────────────────────
+    void DeferredRenderPath::removeOverlayPass(const std::string& tag) {
+        auto it = std::find_if(m_overlayPasses.begin(), m_overlayPasses.end(),
+            [&tag](const OverlayPassDesc& desc) { return desc.tag == tag; });
+        if (it != m_overlayPasses.end()) {
+            m_overlayPasses.erase(it);
+            LOG_INFO("Removed overlay pass: {}", tag);
+        }
+    }
+
+    // ──── 全屏 Blit 管线 ────────────────────────────────────────────
+    void DeferredRenderPath::setPresentationDescriptorData(
+        RHI::DescriptorSetLayoutHandle globalSetLayout,
+        RHI::DescriptorSetHandle globalDescSet)
+    {
+        m_globalSetLayout = globalSetLayout;
+        m_globalDescSet = globalDescSet;
+    }
+
+    void DeferredRenderPath::ensurePresentationShaders() {
+        if (m_presentationShadersReady) return;
+        // 全局描述符集数据必须已通过 setPresentationDescriptorData() 传入
+        if (!m_globalSetLayout.isValid()) return;
+
+        Assets::ShaderLoader loader(m_resMgr);
+
+        // 加载全屏三角形顶点着色器（gl_VertexIndex 驱动，无需顶点缓冲）
+        auto vsInfo = loader.loadFromFile("assets/shaders/deferred/fullscreen.vert",
+                                          RHI::ShaderStage::Vertex);
+        if (!vsInfo || !vsInfo->module.isValid()) {
+            LOG_ERROR("Failed to load fullscreen.vert for PresentationPass");
+            return;
+        }
+        m_fullscreenVert = vsInfo->module;
+
+        // 加载 copy 片段着色器（采样 SceneColor 输出到 Swapchain）
+        auto fsInfo = loader.loadFromFile("assets/shaders/deferred/copy.frag",
+                                          RHI::ShaderStage::Fragment);
+        if (!fsInfo || !fsInfo->module.isValid()) {
+            LOG_ERROR("Failed to load copy.frag for PresentationPass");
+            return;
+        }
+        m_copyFrag = fsInfo->module;
+
+        // set=1 的布局：SceneColor 作为 combined image sampler
+        RHI::DescriptorSetLayoutDesc set1Layout;
+        set1Layout.bindings = {
+            { 0, RHI::DescriptorType::CombinedImageSampler, 1, RHI::ShaderStage::Fragment }
+        };
+        m_presentSceneColorLayout = m_resMgr->createDescriptorSetLayout(set1Layout);
+        if (!m_presentSceneColorLayout.isValid()) {
+            LOG_ERROR("Failed to create SceneColor desc layout for PresentationPass");
+            return;
+        }
+
+        // 管线布局：set=0（全局 UBO）+ set=1（SceneColor sampler）
+        RHI::PipelineLayoutDesc playoutDesc;
+        playoutDesc.descriptorSetLayouts = { m_globalSetLayout, m_presentSceneColorLayout };
+        m_presentPipelineLayout = m_resMgr->createPipelineLayout(playoutDesc);
+        if (!m_presentPipelineLayout.isValid()) {
+            LOG_ERROR("Failed to create pipeline layout for PresentationPass");
+            return;
+        }
+
+        m_presentationShadersReady = true;
+        LOG_INFO("PresentationPass shaders loaded");
+    }
+
+    void DeferredRenderPath::preparePresentationPipeline() {
+        if (!m_presentationShadersReady) ensurePresentationShaders();
+        if (!m_presentationShadersReady) return;
+        if (m_presentationPipelineReady) return;
+
+        // 获取 PresentationPass 的 RenderPass（编译后才存在）
+        auto tagIt = m_tagToSubpass.find("Presentation");
+        if (tagIt == m_tagToSubpass.end()) return;
+
+        RHI::RenderPassHandle rp = tagIt->second.renderPass;
+        if (!rp.isValid()) return;
+
+        // 构建 GraphicsPipelineState
+        Scene::GraphicsPipelineState pso;
+        pso.vertexShader   = m_fullscreenVert;
+        pso.fragmentShader = m_copyFrag;
+        pso.layout         = m_presentPipelineLayout;
+        pso.cullMode       = RHI::CullMode::None;
+        pso.frontFace      = RHI::FrontFace::CounterClockwise;
+        pso.depthTestEnable  = false;
+        pso.depthWriteEnable = false;
+        pso.topology       = RHI::PrimitiveTopology::TriangleList;
+        pso.dynamicStates  = { RHI::DynamicState::Viewport, RHI::DynamicState::Scissor };
+        pso.vertexInput    = {};   // gl_VertexIndex 驱动，无顶点缓冲
+
+        RHI::BlendAttachmentState blend;
+        blend.blendEnable = false;
+        pso.attachments = { blend };
+
+        uint32_t subpassIdx = tagIt->second.subpassIndex;
+        auto pipeline = Assets::PipelineCache::getOrCreateGraphicsPipeline(
+            m_resMgr.get(), pso, rp, subpassIdx);
+
+        if (!pipeline.isValid()) {
+            LOG_ERROR("Failed to create PresentationPass pipeline");
+            return;
+        }
+
+        // 创建 set=1 描述符集：绑定 SceneColor 作为 sampler
+        auto sceneColorIt = m_textureIdMap.find("SceneColor");
+        if (sceneColorIt != m_textureIdMap.end()) {
+            RHI::TextureHandle physHandle =
+                m_renderGraph->getPhysicalTextureHandle(sceneColorIt->second);
+
+            if (physHandle.isValid()) {
+                auto* texObj = m_resMgr->getTexture(physHandle);
+                auto* samplerObj = m_resMgr->getSampler(m_defaultSampler);
+
+                if (texObj && samplerObj) {
+                    RHI::DescriptorPoolDesc poolDesc;
+                    poolDesc.maxSets = 1;
+                    poolDesc.poolSizes = {
+                        { RHI::DescriptorType::CombinedImageSampler, 1 }
+                    };
+                    auto pool = m_resMgr->createDescriptorPool(poolDesc);
+
+                    RHI::DescriptorSetDesc setDesc;
+                    setDesc.descriptorSetLayout = m_presentSceneColorLayout;
+                    setDesc.descriptorPool = pool;
+                    m_presentSceneColorDescSet = m_resMgr->createDescriptorSet(setDesc);
+
+                    if (m_presentSceneColorDescSet.isValid()) {
+                        auto* descSet = m_resMgr->getDescriptorSet(m_presentSceneColorDescSet);
+                        if (descSet) {
+                            descSet->writeTexture(0, 0, texObj, samplerObj,
+                                RHI::ImageLayout::ShaderReadOnly);
+                            descSet->update();
+                        }
+                    }
+                }
+            }
+        }
+
+        // 更新 recorder 中的管线
+        auto recIt = m_tagToSubpass.find("Presentation");
+        if (recIt != m_tagToSubpass.end() && recIt->second.recorder) {
+            auto* rec = dynamic_cast<PresentationRecorder*>(recIt->second.recorder.get());
+            if (rec) {
+                rec->setPipeline(pipeline);
+                rec->setLayout(m_presentPipelineLayout);
+                rec->setSceneColorSet(m_presentSceneColorDescSet);
+            }
+        }
+
+        m_presentationPipelineReady = true;
+        LOG_INFO("PresentationPass pipeline ready");
     }
 
     bool DeferredRenderPath::compileAndFinalize(std::unordered_map<std::string, RenderGraph::TextureId>& texIdMap){
@@ -286,6 +577,16 @@ namespace StarryEngine {
         }
 
         m_textureIdMap = std::move(texIdMap);
+
+        // 如果 PresentationPass 存在（无 overlay 模式）且全局描述符数据已就绪，
+        // 准备全屏 blit 管线。注意：首次 buildGraph 时 descriptor 数据可能还未传入
+        //（setPresentationDescriptorData 在 setRenderPath 中调用），
+        // 此时跳过；后续 rebuild（如 onResize）时 m_globalSetLayout 已有效，正常创建。
+        if (m_tagToSubpass.count("Presentation") && m_globalSetLayout.isValid()) {
+            ensurePresentationShaders();
+            preparePresentationPipeline();
+        }
+
         return true;
     }
 

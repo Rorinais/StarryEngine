@@ -238,6 +238,11 @@ namespace StarryEngine {
         if (!newRenderPath) return;
         destroy();
         m_renderPath = std::move(newRenderPath);
+
+        // 把全局描述符集数据传递给 RenderPath（供内置 PresentationPass 全屏 blit 管线使用）
+        if (auto* dp = dynamic_cast<DeferredRenderPath*>(m_renderPath.get())) {
+            dp->setPresentationDescriptorData(m_globalSetLayout, m_globalDescriptorSet);
+        }
     }
 
     void Renderer::setImGuiManager(ImGuiManager* mgr, uint32_t imageCount) {
@@ -251,6 +256,18 @@ namespace StarryEngine {
     void Renderer::addOverlayPass(const std::string& tag, std::shared_ptr<ISubpassRecorder> recorder) {
         if (m_renderPath) {
             m_renderPath->addOverlayPass(tag, std::move(recorder));
+        }
+    }
+
+    void Renderer::removeOverlayPass(const std::string& tag) {
+        if (m_renderPath) {
+            m_renderPath->removeOverlayPass(tag);
+        }
+    }
+
+    void Renderer::clearOverlayPasses() {
+        if (m_renderPath) {
+            m_renderPath->clearOverlayPasses();
         }
     }
 

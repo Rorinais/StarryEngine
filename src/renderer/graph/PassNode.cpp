@@ -240,13 +240,16 @@ namespace StarryEngine::RenderGraph {
 
         encoder->beginRenderPass(beginInfo, RHI::SubpassContents::Inline);
 
-        encoder->setViewport({ 0.0f, 0.0f, (float)m_width, (float)m_height, 0.0f, 1.0f });
-        encoder->setScissor({ {0, 0}, {m_width, m_height} });
+        // 禁用的 Pass：仍执行空的 RenderPass（维护 barrier/layout 链），但不录制子通道内容
+        if (m_enabled) {
+            encoder->setViewport({ 0.0f, 0.0f, (float)m_width, (float)m_height, 0.0f, 1.0f });
+            encoder->setScissor({ {0, 0}, {m_width, m_height} });
 
-        for (uint32_t i = 0; i < m_subpassRecorders.size(); ++i) {
-            if (i > 0) encoder->nextSubpass(RHI::SubpassContents::Inline);
-            if (m_subpassRecorders[i]) {
-                m_subpassRecorders[i]->recordCommands(encoder, context, PassContext(m_resMgr, frameIndex, framebuffer), i);
+            for (uint32_t i = 0; i < m_subpassRecorders.size(); ++i) {
+                if (i > 0) encoder->nextSubpass(RHI::SubpassContents::Inline);
+                if (m_subpassRecorders[i]) {
+                    m_subpassRecorders[i]->recordCommands(encoder, context, PassContext(m_resMgr, frameIndex, framebuffer), i);
+                }
             }
         }
 

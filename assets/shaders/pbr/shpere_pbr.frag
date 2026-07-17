@@ -26,6 +26,8 @@ layout(set = 1, binding = 1) uniform LightingUBO {
     Light lights;
     uint lightCount;
     float ambientStrength;
+    float roughness;
+    float metallic;
 } lighting;
 
 layout(set = 2, binding = 0) uniform samplerCube uIrradianceMap;
@@ -44,9 +46,9 @@ vec3 ScreenSpaceDither(vec2 vScreenPos);
 void main() {
     vec3 albedoSample =vec3(1.0);
 
-    float ao         = 1.0;     
-    float roughness  = 0.5;              
-    float metallic   = 0.5; 
+    float ao         = 1.0;
+    float roughness  = lighting.roughness;
+    float metallic   = lighting.metallic;
 
     vec3 N = normalize(fragNormal);
 
@@ -85,18 +87,25 @@ void main() {
 
     // Diffuse IBL
     vec3 irradiance = texture(uIrradianceMap, N).rgb;
-    vec3 diffuseIBL = irradiance * albedoSample.rgb / PI;
 
     // Specular IBL
     vec3 R = reflect(-V, N);
-    const float MAX_MIP = 4.0; // mipLevels(5) - 1
+    const float MAX_MIP = 5.0; // mipLevels(6) - 1
     float roughnessLevel = roughness * MAX_MIP;
     vec3 prefilteredColor = textureLod(uPrefilteredMap, R, roughnessLevel).rgb;
 
-    vec2 brdfParams = texture(uBrdfLut, vec2(NdotV, roughness)).rg;
-    vec3 specularIBL = prefilteredColor * (kS * brdfParams.x + brdfParams.y);
+    // IBL 的 Fresnel 用 NdotV（不能复用直射光的 HdotV）。
+    // 带 roughness 衰减 grazing 增亮，避免粗糙表面产生不自然的边缘亮环。
+    vec3 F_ibl = FresnelSchlick(NdotV, F0);
+    F_ibl = mix(F_ibl, F0, roughness);
 
-    vec3 ambientIBL = (diffuseIBL * kD + specularIBL) * ao;
+    vec3 kD_ibl = (vec3(1.0) - F_ibl) * (1.0 - metallic);
+    vec3 diffuseIBL = irradiance * albedoSample.rgb / PI;
+
+    vec2 brdfParams = texture(uBrdfLut, vec2(NdotV, roughness)).rg;
+    vec3 specularIBL = prefilteredColor * (F_ibl * brdfParams.x + brdfParams.y);
+
+    vec3 ambientIBL = (diffuseIBL * kD_ibl + specularIBL) * ao;
 
     vec3 color = Lo + ambientIBL;
 

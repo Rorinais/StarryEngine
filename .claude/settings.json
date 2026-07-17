@@ -6,7 +6,22 @@
       "Bash(sed -i 's/struct { int face; float faceSize; float roughness; } pc;/struct { int face; float faceSize; float roughness; float sourceResolution; } pc;/' src/assets/loader/IBLBuilder.cpp)",
       "Bash(sed -i 's/pc.face = face; pc.faceSize = float\\(mipSize\\); pc.roughness = roughness;/pc.face = face; pc.faceSize = float\\(mipSize\\); pc.roughness = roughness; pc.sourceResolution = float\\(baseSize\\);/' src/assets/loader/IBLBuilder.cpp)",
       "Bash(sed -i '/RHI::SamplerDesc sampDesc;/{n;s/sampDesc.minFilter/sampDesc.mipFilter = RHI::SamplerFilter::Linear;\\\\n        sampDesc.minFilter/}' src/assets/loader/IBLBuilder.cpp)",
-      "Bash(sed -i '/sampDesc.addressV = RHI::SamplerAddressMode::ClampToEdge;/{n;s/auto samplerHandle/sampDesc.maxLod = 8.0f;\\\\n        auto samplerHandle/}' src/assets/loader/IBLBuilder.cpp)"
+      "Bash(sed -i '/sampDesc.addressV = RHI::SamplerAddressMode::ClampToEdge;/{n;s/auto samplerHandle/sampDesc.maxLod = 8.0f;\\\\n        auto samplerHandle/}' src/assets/loader/IBLBuilder.cpp)",
+      "Read(//media/rorinais/PSSD/Notes/计算机图形学/StarryEngine/build/**)",
+      "Bash(timeout 5 ./DeferredRender_demo)",
+      "Bash(echo \"Exit: $?\")",
+      "Read(//tmp/**)",
+      "Bash(grep -E \"RenderPass$|pass.*name|Built Present|built.*pass|tag.*subpass|Subpass\" /tmp/demo_output.txt | head -30)",
+      "Bash(grep \"PassNode\\\\|Attachment\\\\[\" /tmp/demo_output.txt | head -30)",
+      "Bash(grep -n \"present\\\\|Present\\\\|14:54:02\" /tmp/demo_output.txt | head -20)",
+      "Bash(grep -n \"Built\\\\|14:54:02.81[789]\\\\|Pass Culling\" /tmp/demo_output.txt | head -20)",
+      "Bash(sed -n '45,65p' /tmp/demo_output.txt)",
+      "Bash(grep -i \"cull\\\\|Built Present\\\\|swapchain clear\" /tmp/demo_output.txt)",
+      "Bash(cmake --build . -j1)",
+      "Bash(timeout 5 ./bin/DeferredRender_demo)",
+      "Bash(tail -30 /tmp/demo2.txt)",
+      "Bash(echo \"exit=$?\")",
+      "Bash(grep \"Pass Culling\\\\|cull\\\\|Cull\" /tmp/demo3.txt)"
     ]
   }
 }

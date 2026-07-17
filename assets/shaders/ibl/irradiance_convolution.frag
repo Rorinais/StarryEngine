@@ -59,15 +59,17 @@ void main() {
     float v = gl_FragCoord.y - 0.5;
     vec3 N = FaceToDirection(pc.face, u, v, pc.faceSize);
 
+    // ── 余弦加权 Importance Sampling（标准 Cook-Torrance 漫反射 IBL）──
+    // PDF(ω) = cosθ / π
+    // 蒙特卡洛: ∫ L_i·cosθ dω ≈ (1/N)·Σ [L_i·cosθ / PDF]
+    //           L_i·cosθ / (cosθ/π) = L_i·π
+    //           ∴ 积分 = (π/N)·Σ L_i
     vec3 irradiance = vec3(0.0);
     for (uint i = 0u; i < SAMPLE_COUNT; i++) {
         vec2 Xi = Hammersley(i, SAMPLE_COUNT);
-        vec3 L = CosineSampleHemisphere(Xi, N);
-        float NdotL = max(dot(N, L), 0.0);
-        irradiance += texture(uEnvironmentMap, L).rgb * NdotL;
+        vec3 L  = CosineSampleHemisphere(Xi, N);
+        irradiance += texture(uEnvironmentMap, L).rgb;   // 只加 L_i，不乘 cosθ（PDF 已含）
     }
-    // 重要性采样公式：积分值 = (1/N) * sum( f(x)/p(x) )，p(x)=cosθ/π
-    // 这里 f(x) = L_i * cosθ，除以 p(x) = cosθ/π 得到 L_i * π，因此总和乘以 π 再除以 N
     irradiance = PI * irradiance / float(SAMPLE_COUNT);
 
     outColor = vec4(irradiance, 1.0);

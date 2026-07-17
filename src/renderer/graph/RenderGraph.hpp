@@ -56,6 +56,14 @@ namespace StarryEngine::RenderGraph {
 
         void dependencyAnalysis();
 
+        // Pass Culling：从最终输出纹理反向遍历，移除不可达的 Pass 和资源
+        // 必须在 dependencyAnalysis() 之后、物理资源创建之前调用
+        void cullUnusedPasses();
+
+        // 导出 DOT 格式的图结构，可用 Graphviz 渲染为 PNG
+        // 用法: dot -Tpng graph.dot -o graph.png
+        void exportDot(const std::string& filepath) const;
+
         bool compile();
 
         void createFrameBuffer();
@@ -66,6 +74,11 @@ namespace StarryEngine::RenderGraph {
         RHI::BufferHandle getPhysicalBuffer(BufferId id) const;
 
         const std::vector<PassNode*>& getSortedPasses() const { return m_sortedPasses; }
+
+        // 迭代所有 Pass（含未排序的，用于遍历删除）
+        std::vector<std::unique_ptr<PassNode>>& getPasses() { return m_passes; }
+        const std::vector<std::unique_ptr<PassNode>>& getPasses() const { return m_passes; }
+        size_t getPassCount() const { return m_passes.size(); }
 
         TextureId getTextureId(const std::string& name) const;
 

@@ -1,7 +1,9 @@
 #include "RenderGraph.hpp"
+#include "../../logging/Logger.hpp"
 #include <queue>
 #include <stack>
 #include <iostream>
+#include <fstream>
 #include <stdexcept>
 #include <algorithm>
 
@@ -207,6 +209,10 @@ namespace StarryEngine::RenderGraph {
 
     bool RenderGraph::compile() {
         dependencyAnalysis();
+
+        // Pass Culling：从最终输出纹理（Swapchain）反向裁剪不可达 Pass
+        // 必须在 dependencyAnalysis() 后、物理资源分配前执行
+        cullUnusedPasses();
 
         struct TexturePassInfo {
             int32_t lastWriterIndex = -1;
@@ -558,6 +564,162 @@ namespace StarryEngine::RenderGraph {
             return { static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::AllCommands),
                      static_cast<RHI::AccessFlags>(RHI::AccessFlag::MemoryRead | RHI::AccessFlag::MemoryWrite) };
         }
+    }
+
+    // ──── Pass Culling ──────────────────────────────────────────────
+    // 从导入的外部纹理（如 Swapchain）出发，反向 BFS 遍历 DAG，
+    // 标记所有"可达"的 Pass；不可达的 Pass 从 m_passes 移除。
+    // 这允许你"随手声明"调试/条件 Pass — 不需时自动裁剪，无需
+    // 修改管线配置。
+    //
+    // 为什么放在这里：
+    // - 必须在 dependencyAnalysis() 之后（需要 m_sortedPasses）
+    // - 必须在物理资源创建之前（避免为无用 Pass 分配纹理/缓冲）
+    void RenderGraph::cullUnusedPasses() {
+        if (m_passes.empty()) return;
+
+        // 1. 找"根"纹理——被导入的外部纹理（如 Swapchain）
+        //    这些是管线必须输出的目标。
+        std::set<TextureId> rootTexIds;
+        for (const auto& vt : m_virtualTextures) {
+            if (vt.imported) {
+                rootTexIds.insert(vt.id);
+            }
+        }
+
+        if (rootTexIds.empty()) {
+            // 没有任何导入纹理（异常情况），不做裁剪
+            LOG_WARN("cullUnusedPasses: No imported textures found, skipping cull");
+            return;
+        }
+
+        // 2. 找所有写入"根"纹理的 Pass 作为种子
+        std::set<PassNode*> reachable;
+        std::queue<PassNode*> queue;
+
+        for (auto& pass : m_passes) {
+            for (auto texId : rootTexIds) {
+                if (pass->getWriteTextures().count(texId)) {
+                    reachable.insert(pass.get());
+                    queue.push(pass.get());
+                    break;
+                }
+            }
+        }
+
+        // 3. BFS 反向遍历：可达 Pass 的输入纹理 → 找写这些纹理的 Pass
+        while (!queue.empty()) {
+            auto* p = queue.front();
+            queue.pop();
+
+            for (auto readTex : p->getReadTextures()) {
+                for (auto& other : m_passes) {
+                    if (other->getWriteTextures().count(readTex) && !reachable.count(other.get())) {
+                        reachable.insert(other.get());
+                        queue.push(other.get());
+                    }
+                }
+            }
+        }
+
+        // 4. 移除不可达 Pass
+        size_t before = m_passes.size();
+        m_passes.erase(
+            std::remove_if(m_passes.begin(), m_passes.end(),
+                [&reachable](const std::unique_ptr<PassNode>& p) {
+                    return !reachable.count(p.get());
+                }),
+            m_passes.end());
+
+        size_t after = m_passes.size();
+        if (before != after) {
+            LOG_INFO("Pass Culling: removed {} / {} passes ({} remaining)",
+                before - after, before, after);
+        } else {
+            LOG_INFO("Pass Culling: all {} passes reachable, nothing culled", after);
+        }
+
+        // 5. 重建 m_sortedPasses（因为索引变了）
+        dependencyAnalysis();
+    }
+
+    // ──── DOT 可视化导出 ────────────────────────────────────────────
+    // 用法：
+    //   m_renderGraph->exportDot("frame_graph.dot");
+    //   $ dot -Tpng frame_graph.dot -o frame_graph.png
+    //
+    // 图例：
+    //   橙色椭圆 = Pass    绿色边 = 读    红色边 = 写    蓝色矩形 = 纹理
+    void RenderGraph::exportDot(const std::string& filepath) const {
+        std::ofstream f(filepath);
+        if (!f.is_open()) {
+            LOG_ERROR("exportDot: Cannot open file: {}", filepath);
+            return;
+        }
+
+        f << "// RenderGraph visualization\n";
+        f << "// Orange = Pass, Blue = Texture, Green = Read, Red = Write\n";
+        f << "digraph RenderGraph {\n";
+        f << "  rankdir=LR;\n";
+        f << "  node [fontname=\"Helvetica\"];\n";
+        f << "  edge [fontname=\"Helvetica\"];\n\n";
+
+        // 纹理节点（蓝色矩形）
+        for (const auto& vt : m_virtualTextures) {
+            std::string label = vt.name.empty()
+                ? "Tex#" + std::to_string(vt.id.id())
+                : vt.name;
+            std::string shape = vt.imported ? "box, style=filled, fillcolor=lightcyan"
+                                            : "box, style=filled, fillcolor=lightblue";
+            f << "  tex_" << vt.id.id() << " [label=\"" << label
+              << "\", shape=" << shape << "];\n";
+        }
+
+        // 缓冲节点（黄色）
+        for (const auto& vb : m_virtualBuffers) {
+            std::string label = vb.name.empty()
+                ? "Buf#" + std::to_string(vb.id.id())
+                : vb.name;
+            f << "  buf_" << vb.id.id() << " [label=\"" << label
+              << "\", shape=box, style=filled, fillcolor=lightyellow];\n";
+        }
+
+        // Pass 节点（橙色椭圆）+ 数据边
+        for (const auto& pass : m_passes) {
+            std::string passId = "pass_" + pass->getName();
+            f << "  " << passId << " [label=\"" << pass->getName()
+              << "\", shape=ellipse, style=filled, fillcolor=orange";
+
+            if (!pass->isEnabled()) {
+                f << ", fontcolor=gray, color=gray";  // 禁用的 Pass 灰色
+            }
+            f << "];\n";
+
+            // 读边（绿色）
+            for (auto tex : pass->getReadTextures()) {
+                f << "  tex_" << tex.id() << " -> " << passId
+                  << " [color=darkgreen, penwidth=1.5];\n";
+            }
+            // 写边（红色）
+            for (auto tex : pass->getWriteTextures()) {
+                f << "  " << passId << " -> tex_" << tex.id()
+                  << " [color=darkred, penwidth=1.5];\n";
+            }
+            // 缓冲读边（绿色虚线）
+            for (auto buf : pass->getReadBuffers()) {
+                f << "  buf_" << buf.id() << " -> " << passId
+                  << " [color=darkgreen, style=dashed];\n";
+            }
+            // 缓冲写边（红色虚线）
+            for (auto buf : pass->getWriteBuffers()) {
+                f << "  " << passId << " -> buf_" << buf.id()
+                  << " [color=darkred, style=dashed];\n";
+            }
+        }
+
+        f << "}\n";
+        f.close();
+        LOG_INFO("Exported render graph DOT to: {}", filepath);
     }
 
 } // namespace StarryEngine::RenderGraph

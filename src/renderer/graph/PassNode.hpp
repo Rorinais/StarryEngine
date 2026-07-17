@@ -47,6 +47,11 @@ namespace StarryEngine::RenderGraph {
         SubpassBuilder& addSubpass(const std::string& subpassName);
         void setRenderArea(uint32_t width, uint32_t height) { m_width = width; m_height = height; }
 
+        // Pass 启用/禁用：禁用的 Pass 在 execute 时跳过执行
+        // 但仍在依赖分析和资源分配中参与（可重建管线的数据完整）
+        void setEnabled(bool e) { m_enabled = e; }
+        bool isEnabled() const { return m_enabled; }
+
         const std::set<TextureId>& getReadTextures() const { return m_readTextures; }
         const std::set<TextureId>& getWriteTextures() const { return m_writeTextures; }
         const std::set<BufferId>& getReadBuffers() const { return m_readBuffers; }
@@ -102,6 +107,8 @@ namespace StarryEngine::RenderGraph {
         uint32_t m_nextAttachmentKey = 1;
 
         std::unordered_map<TextureId, RHI::ImageLayout> m_finalLayouts;
+
+        bool m_enabled = true;  // Pass 是否启用（默认启用）
 
         
     };

@@ -58,34 +58,12 @@ public:
         return material;
     }
 
-    std::shared_ptr<Assets::MaterialInstance> createPbrMaterial() {
-        auto tmpl = std::make_shared<Assets::DefaultMaterialTemplate>(m_rhi->getResourceManager(), m_descriptorSetLayout);
-        tmpl->loadShaders("assets/shaders/pbr/shpere_pbr.vert", "assets/shaders/pbr/shpere_pbr.frag");
-
-        auto material = std::make_shared<Assets::MaterialInstance>(tmpl, m_descriptorPool, m_rhi->getResourceManager().get(), m_descriptorSet);
-        material->setSubpassTag("Forward_Opaque");
-
-        material->enableDepthTest(true);
-        material->enableDepthWrite(true);
-
-        //Assets::TextureLoader loader(m_rhi->getResourceManager());
-        //auto texResult0 = loader.loadTexture2D("assets/textures/pbr/seaworn_sandstone_brick_arm_1k.png", RHI::Format::RGBA8_UNorm, "arm");
-        //auto texResult1 = loader.loadTexture2D("assets/textures/pbr/seaworn_sandstone_brick_diff_1k.png", RHI::Format::RGBA8_UNorm, "diff");
-        //auto texResult2 = loader.loadTexture2D("assets/textures/pbr/seaworn_sandstone_brick_nor_dx_1k.png", RHI::Format::RGBA8_UNorm, "nor_dx");
-
-        //material->setTexture("armMap", texResult0.texture, texResult0.sampler);
-        //material->setTexture("albedoMap", texResult1.texture, texResult1.sampler);
-        //material->setTexture("normalMap", texResult2.texture, texResult2.sampler);
-
-        // 1. 环境 cubemap
-        auto envCubemap = m_iblBuilder->buildEnvCubemap("assets/textures/pbr/kloofendal_48d_partly_cloudy_puresky_1k.hdr", 128);
-        // 2. Irradiance Map（漫反射）
-        auto irradianceMap = m_iblBuilder->generateIrradianceMapCS(envCubemap, 32);
-
-        // 3. Prefiltered Map（镜面反射）
-        auto prefilteredMap = m_iblBuilder->generatePrefilteredMapCS(envCubemap, 128, 5);
-        // 4. BRDF LUT
-        auto brdfLut = m_iblBuilder->generateBrdfLutCS(128);
+    void initIBL() {
+        // 只创建一次，所有材质共用
+        m_envCubemap      = m_iblBuilder->buildEnvCubemap("assets/textures/pbr/kloofendal_48d_partly_cloudy_puresky_1k.hdr", 128);
+        m_irradianceMap   = m_iblBuilder->generateIrradianceMapCS(m_envCubemap, 64);
+        m_prefilteredMap  = m_iblBuilder->generatePrefilteredMapCS(m_envCubemap, 256, 6);
+        m_brdfLut         = m_iblBuilder->generateBrdfLutCS(128);
 
         RHI::SamplerDesc cubeSampDesc;
         cubeSampDesc.minFilter = RHI::SamplerFilter::Linear;
@@ -94,26 +72,34 @@ public:
         cubeSampDesc.addressV = RHI::SamplerAddressMode::ClampToEdge;
         cubeSampDesc.addressW = RHI::SamplerAddressMode::ClampToEdge;
         cubeSampDesc.maxLod = 1.0f;
-        auto cubeSampler = m_rhi->getResourceManager()->createSampler(cubeSampDesc);
+        m_cubeSampler = m_rhi->getResourceManager()->createSampler(cubeSampDesc);
 
-        // Prefiltered cubemap 采样器
         RHI::SamplerDesc prefilterSampDesc = cubeSampDesc;
         prefilterSampDesc.mipFilter = RHI::SamplerFilter::Linear;
-        prefilterSampDesc.maxLod = 5.0f;
-        auto prefilterSampler = m_rhi->getResourceManager()->createSampler(prefilterSampDesc);
+        prefilterSampDesc.maxLod = 6.0f;
+        m_prefilterSampler = m_rhi->getResourceManager()->createSampler(prefilterSampDesc);
 
-        // 2D 纹理采样器（BRDF LUT）
         RHI::SamplerDesc lutSampDesc;
         lutSampDesc.minFilter = RHI::SamplerFilter::Linear;
         lutSampDesc.magFilter = RHI::SamplerFilter::Linear;
         lutSampDesc.addressU = RHI::SamplerAddressMode::ClampToEdge;
         lutSampDesc.addressV = RHI::SamplerAddressMode::ClampToEdge;
         lutSampDesc.maxLod = 1.0f;
-        auto lutSampler = m_rhi->getResourceManager()->createSampler(lutSampDesc);
+        m_lutSampler = m_rhi->getResourceManager()->createSampler(lutSampDesc);
+    }
 
-        material->setTexture("uIrradianceMap", irradianceMap, cubeSampler);
-        material->setTexture("uPrefilteredMap", prefilteredMap, prefilterSampler);
-        material->setTexture("uBrdfLut", brdfLut, lutSampler);
+    std::shared_ptr<Assets::MaterialInstance> createPbrMaterial(float roughness, float metallic) {
+        auto tmpl = std::make_shared<Assets::DefaultMaterialTemplate>(m_rhi->getResourceManager(), m_descriptorSetLayout);
+        tmpl->loadShaders("assets/shaders/pbr/shpere_pbr.vert", "assets/shaders/pbr/shpere_pbr.frag");
+
+        auto material = std::make_shared<Assets::MaterialInstance>(tmpl, m_descriptorPool, m_rhi->getResourceManager().get(), m_descriptorSet);
+        material->setSubpassTag("Forward_Opaque");
+        material->enableDepthTest(true);
+        material->enableDepthWrite(true);
+
+        material->setTexture("uIrradianceMap", m_irradianceMap, m_cubeSampler);
+        material->setTexture("uPrefilteredMap", m_prefilteredMap, m_prefilterSampler);
+        material->setTexture("uBrdfLut", m_brdfLut, m_lutSampler);
 
         auto* lightBlock = material->getBlock("LightingUBO");
         if (lightBlock) {
@@ -121,8 +107,9 @@ public:
             lightBlock->setVec4("lights.color", glm::vec4(0.9f, 0.1f, 0.5f, 1.0f));
             lightBlock->setFloat("lightCount", 1.0f);
             lightBlock->setFloat("ambientStrength", 0.1f);
+            lightBlock->setFloat("roughness", roughness);
+            lightBlock->setFloat("metallic", metallic);
         }
-
 
         material->applyAllDirtyBlocks();
         return material;
@@ -142,37 +129,50 @@ public:
 
 
     void createScene() {
+        initIBL();  // 只生成一次 IBL 贴图
+
         auto skyboxEffect = std::make_shared<Scene::ProceduralEffect>();
         auto skyboxMaterial = createSkyboxMaterial();
         skyboxEffect->material = skyboxMaterial;
         m_scene->addProceduralEffect(skyboxEffect);
 
-        auto pbr = createPbrMaterial();
+        // ── 6×6 粗糙度 × 金属度矩阵 ──
+        const int GRID_SIZE = 6;
+        const float SPACING = 2.2f;
+        const float GRID_CENTER_X = (GRID_SIZE - 1) * SPACING * 0.5f;
+        const float GRID_CENTER_Y = (GRID_SIZE - 1) * SPACING * 0.5f + 1.0f;
 
-        auto SphereObj = std::make_shared<Scene::RenderObject>();
-        SphereObj->geometry = Assets::GeometryGenerator::createSphere(m_rhi->getResourceManager(), 1.0f);
-        SphereObj->materials = { pbr };
-        SphereObj->transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-        m_scene->addObject(SphereObj);
+        for (int row = 0; row < GRID_SIZE; ++row) {
+            for (int col = 0; col < GRID_SIZE; ++col) {
+                float roughness = float(row) / float(GRID_SIZE - 1);
+                float metallic  = float(col) / float(GRID_SIZE - 1);
 
+                auto mat = createPbrMaterial(roughness, metallic);
+
+                auto sphere = std::make_shared<Scene::RenderObject>();
+                sphere->geometry = Assets::GeometryGenerator::createSphere(m_rhi->getResourceManager(), 1.0f);
+                sphere->materials = { mat };
+
+                float x = col * SPACING - GRID_CENTER_X;
+                float y = GRID_CENTER_Y - row * SPACING;  // roughness 自上而下增大
+                sphere->transform = glm::translate(glm::mat4(1.0f), glm::vec3(x, y+5.0f, -1.0f));
+                m_scene->addObject(sphere);
+            }
+        }
+
+        // 参考地平面
         auto gridObj = std::make_shared<Scene::RenderObject>();
         gridObj->geometry = Assets::GeometryGenerator::createGrid(m_rhi->getResourceManager());
         gridObj->materials = { createGridMaterial() };
-        gridObj->transform = glm::scale(glm::translate(glm::mat4(1.0f), glm::vec3(0, 0, 0)), glm::vec3(5, 5, 5));
+        gridObj->transform = glm::scale(glm::translate(glm::mat4(1.0f), glm::vec3(0, -5.0f, 0)), glm::vec3(10, 10, 10));
         m_scene->addObject(gridObj);
 
-        auto QuadObj = std::make_shared<Scene::RenderObject>();
-        QuadObj->geometry = Assets::GeometryGenerator::createQuad(m_rhi->getResourceManager());
-        QuadObj->materials = { pbr };
-        glm::mat4 scale = glm::scale(glm::mat4(1.0f), glm::vec3(20.0f, 20.0f, 20.0f));
-        glm::mat4 translation = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.01f, 0.0f));
-        glm::mat4 rotation = glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(1.0f, 0.0f, 0.0f)); 
-        QuadObj->transform = translation * rotation * scale;
-        m_scene->addObject(QuadObj);
-
+        // 摄像机拉远看全景
         auto perspectiveCamera = std::make_shared<Scene::PerspectiveCamera>();
         perspectiveCamera->setPerspective(glm::radians(45.0f), (float)m_width / m_height, 0.1f, 100.0f);
-        perspectiveCamera->lookAt(glm::vec3(1.0f, 2.0f, 5.0f), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        perspectiveCamera->lookAt(glm::vec3(0.0f, GRID_CENTER_Y, 15.0f),
+                                  glm::vec3(0.0f, GRID_CENTER_Y, 0.0f),
+                                  glm::vec3(0.0f, 1.0f, 0.0f));
         m_scene->addCamera(perspectiveCamera);
         m_scene->setActiveCamera(perspectiveCamera);
     }
@@ -185,6 +185,15 @@ private:
     std::shared_ptr<RHI::IRHI> m_rhi;
     std::shared_ptr<Renderer> m_renderer;
     std::shared_ptr< Scene::Scene> m_scene;
+
+    // 共享 IBL 资源
+    RHI::TextureHandle m_envCubemap;
+    RHI::TextureHandle m_irradianceMap;
+    RHI::TextureHandle m_prefilteredMap;
+    RHI::TextureHandle m_brdfLut;
+    RHI::SamplerHandle m_cubeSampler;
+    RHI::SamplerHandle m_prefilterSampler;
+    RHI::SamplerHandle m_lutSampler;
 
 
     StarryEngine::RHI::DescriptorSetHandle m_descriptorSet;

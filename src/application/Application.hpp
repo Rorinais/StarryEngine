@@ -174,7 +174,7 @@ namespace StarryEngine {
 
         std::unique_ptr<ImGuiManager>                m_imguiManager;
         std::shared_ptr<ImGuiRecorder>               m_imguiRecorder;
-        bool m_imguiEnabled = true;
+        bool m_imguiEnabled = false;
         bool m_showDemoWindow = true;
         bool m_showPerformancePanel = true;
         bool m_showSceneGraph = false;

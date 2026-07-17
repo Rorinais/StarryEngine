@@ -86,8 +86,6 @@ namespace StarryEngine {
         LOG_INFO("Saved shader: {}", m_currentShaderPath);
     }
 
-
-
     void Application::drawImGuiPanels(float deltaTime) {
         ImGuiManager::SetCurrent(m_imguiManager.get());
 
