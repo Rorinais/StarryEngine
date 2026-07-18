@@ -9,7 +9,7 @@
 		{
 			"name": "SceneColor",
 			"type": "color",
-			"format": "RGBA8_UNorm"
+			"format": "RGBA16_Float"
 		},
 		{
 			"name": "Swapchain",

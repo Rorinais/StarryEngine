@@ -9,6 +9,17 @@ layout(set = 0, binding = 0) buffer ParticleBuffer {
 layout(push_constant) uniform PC {
     float deltaTime;
     uint  particleCount;
+    // ── 可调粒子参数 ──
+    float gravity;       // 重力（负=下落）
+    float speedMin;      // 初始速度下限
+    float speedMax;      // 初始速度上限
+    float lifetime;      // 粒子寿命（秒）
+    float spreadXZ;      // 喷口水平散布半径
+    float swayFreq;      // 水平摆动频率
+    float swayAmp;       // 水平摆动幅度
+    float emitterY;      // 喷口 Y 坐标
+    float topDiffuse;    // 顶部扩散强度
+    float topThreshold;  // 开始扩散的高度阈值
 } pc;
 
 float hash(uint x) {
@@ -26,27 +37,26 @@ void main() {
     float dt = min(pc.deltaTime, 0.05);
 
     // ── 生命周期 ──
-    life -= dt * 0.35;  // ~3 秒寿命
+    life -= dt / pc.lifetime;
 
     if (life <= 0.0) {
-        // 重生：从喷泉口喷出
+        // 重生
         uint seed = idx * 4u + uint(pc.deltaTime * 1000.0) % 10000u;
-        p.x = (hash(seed)   - 0.5) * 0.8;              // 喷口随机偏移
-        p.y = -3.0;                                      // 底部喷出
-        p.z = (hash(seed+1) - 0.5) * 0.8;
-        life = 0.85 + hash(seed+2) * 0.15;              // 初始寿命抖动
+        p.x = (hash(seed)   - 0.5) * pc.spreadXZ * 2.0;
+        p.y = pc.emitterY + (hash(seed+1) - 0.5) * pc.spreadXZ;
+        p.z = (hash(seed+2) - 0.5) * pc.spreadXZ * 2.0;
+        life = 0.85 + hash(seed+3) * 0.15;
     }
 
-    // ── 物理运动 ──
-    float t = 1.0 - life;  // 归一化时间 0→1
-    float speed = mix(2.5, 0.8, t);                     // 初始快，逐渐减速
-    p.y += speed * dt;
-    p.x += sin(p.y * 2.7 + float(idx) * 0.3) * dt * 0.8;  // 水平摆动
-    p.z += cos(p.y * 3.1 + float(idx) * 0.4) * dt * 0.6;
-    // 顶部扩散
-    if (p.y > 2.0) {
-        p.x += (hash(idx*7u) - 0.5) * dt * 1.5;
-        p.z += (hash(idx*7u+1u) - 0.5) * dt * 1.5;
+    // ── 运动 ──
+    float t = 1.0 - life;
+    float speed = mix(pc.speedMax, pc.speedMin, t);
+    p.y += (speed + pc.gravity * t) * dt;
+    p.x += sin(p.y * pc.swayFreq + float(idx) * 0.3) * dt * pc.swayAmp;
+    p.z += cos(p.y * pc.swayFreq * 1.2 + float(idx) * 0.4) * dt * pc.swayAmp * 0.7;
+    if (pc.topDiffuse > 0.0 && p.y > pc.topThreshold) {
+        p.x += (hash(idx*7u) - 0.5) * dt * pc.topDiffuse;
+        p.z += (hash(idx*7u+1u) - 0.5) * dt * pc.topDiffuse;
     }
 
     p.w = life;

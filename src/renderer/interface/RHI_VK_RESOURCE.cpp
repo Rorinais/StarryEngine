@@ -1493,7 +1493,10 @@ namespace StarryEngine::RHI {
         allocInfo.pSetLayouts = vkLayouts.data();
 
         std::vector<VkDescriptorSet> vkSets(vkLayouts.size());
-        if (vkAllocateDescriptorSets(mDevice->getLogicalDevice(), &allocInfo, vkSets.data()) != VK_SUCCESS) {
+        VkResult vr = vkAllocateDescriptorSets(mDevice->getLogicalDevice(), &allocInfo, vkSets.data());
+        if (vr != VK_SUCCESS) {
+            LOG_ERROR("vkAllocateDescriptorSets failed: VkResult={}, count={}, poolMaxSets={}",
+                (int)vr, (int)allocInfo.descriptorSetCount, getMaxSets());
             throw std::runtime_error("Failed to allocate descriptor sets");
         }
 

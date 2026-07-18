@@ -10,6 +10,25 @@
 namespace StarryEngine {
     class ImGuiManager;
 
+    // 可调粒子参数（与 shader push_constant 布局一致）
+    struct ParticleParams {
+        float gravity      = 0.0f;
+        float speedMin     = 0.8f;
+        float speedMax     = 2.5f;
+        float lifetime     = 3.0f;
+        float spreadXZ     = 0.8f;
+        float swayFreq     = 2.7f;
+        float swayAmp      = 0.8f;
+        float emitterY     = -3.0f;
+        float topDiffuse   = 1.5f;
+        float topThreshold = 2.0f;
+        float colorYoung[4]  = {1.0f, 0.95f, 0.5f, 0.0f};
+        float colorMiddle[4] = {1.0f, 0.45f, 0.05f, 0.0f};
+        float colorOld[4]    = {0.7f, 0.1f, 0.02f, 0.0f};
+        float pointSizeMin   = 2.0f;
+        float pointSizeMax   = 8.0f;
+    };
+
     struct SubpassTarget {
         RHI::RenderPassHandle renderPass;
         uint32_t subpassIndex;
@@ -38,6 +57,7 @@ namespace StarryEngine {
                                            RHI::DescriptorSetHandle globalDescSet);
 
         void addOverlayPass(const OverlayPassDesc& desc) override { m_overlayPasses.push_back(desc); }
+        void setParticleParams(const ParticleParams& p) { m_particleParams = p; }
         void removeOverlayPass(const std::string& tag) override;
         void clearOverlayPasses() override { m_overlayPasses.clear(); }
         const std::vector<OverlayPassDesc>& getOverlayPasses() const override { return m_overlayPasses; }
@@ -101,6 +121,7 @@ namespace StarryEngine {
         RHI::DescriptorSetLayoutHandle m_particleCSDescLayout;
         RHI::PipelineLayoutHandle      m_particleCSLayout;
         RHI::PipelineHandle            m_particleCSPipeline;
+        ParticleParams            m_particleParams;  // 可调粒子参数
 
         std::unordered_map<std::string, SubpassTarget> m_tagToSubpass;   // 标签 → Subpass 物理信息
         std::unordered_map<std::string, RenderGraph::PassNode*> m_tagToPassNode; // 标签 → PassNode

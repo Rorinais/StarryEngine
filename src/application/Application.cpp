@@ -291,12 +291,12 @@ namespace StarryEngine {
         m_resMgr = m_rhi->getResourceManager();
 
         RHI::DescriptorPoolDesc poolDesc;
-        poolDesc.maxSets = 50;  
+        poolDesc.maxSets = 200;  
         poolDesc.poolSizes = {
-            { RHI::DescriptorType::UniformBuffer,        20 },
-            { RHI::DescriptorType::CombinedImageSampler, 30 },
-            { RHI::DescriptorType::InputAttachment,      20 },
-            { RHI::DescriptorType::StorageBuffer,         5 }  
+            { RHI::DescriptorType::UniformBuffer,        80 },
+            { RHI::DescriptorType::CombinedImageSampler, 120 },
+            { RHI::DescriptorType::InputAttachment,      40 },
+            { RHI::DescriptorType::StorageBuffer,         10 }  
         };
         poolDesc.freeDescriptorSet = true;
         poolDesc.debugName = "GlobalDescriptorPool";

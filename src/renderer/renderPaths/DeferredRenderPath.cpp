@@ -67,8 +67,9 @@ namespace StarryEngine {
     class ParticleCSRecorder : public ISubpassRecorder {
     public:
         ParticleCSRecorder(RHI::PipelineLayoutHandle layout, RHI::DescriptorSetHandle descSet,
-                           uint32_t particleCount)
-            : m_layout(layout), m_descSet(descSet), m_particleCount(particleCount) {}
+                           uint32_t particleCount, const ParticleParams& params)
+            : m_layout(layout), m_descSet(descSet),
+              m_particleCount(particleCount), m_params(params) {}
         void clearDrawItems() override {}
         void setDrawItems(const std::vector<std::shared_ptr<Scene::DrawItem>>&) override {}
         const std::vector<std::shared_ptr<Scene::DrawItem>>& getDrawItems() override { return m_empty; }
@@ -80,16 +81,20 @@ namespace StarryEngine {
             auto* plo = resMgr->getPipelineLayout(m_layout);
             if (plo && m_descSet.isValid())
                 encoder->bindDescriptorSets(RHI::PipelineBindPoint::Compute, plo, 0, {m_descSet}, {});
-            // push deltaTime + particleCount
-            float dt = rctx.deltaTime;
-            uint32_t count = m_particleCount;
-            struct { float dt; uint32_t n; } pc = { dt > 0.0f ? dt : 0.016f, count };
+            // push 全部 CS 参数（offset 0, 48 bytes）
+            float dt = rctx.deltaTime > 0.0f ? rctx.deltaTime : 0.016f;
+            uint32_t n = m_particleCount;
+            struct CS_PC { float dt; uint32_t n; float g, smin, smax, life, sxz, sf, sa, ey, td, tt; } pc;
+            pc = {dt, n, m_params.gravity, m_params.speedMin, m_params.speedMax,
+                  m_params.lifetime, m_params.spreadXZ, m_params.swayFreq, m_params.swayAmp,
+                  m_params.emitterY, m_params.topDiffuse, m_params.topThreshold};
             encoder->pushConstants(plo, RHI::ShaderStage::Compute, 0, sizeof(pc), &pc);
         }
     private:
         RHI::PipelineLayoutHandle m_layout;
         RHI::DescriptorSetHandle m_descSet;
         uint32_t m_particleCount;
+        ParticleParams m_params;
         std::vector<std::shared_ptr<Scene::DrawItem>> m_empty;
     };
 
@@ -113,8 +118,6 @@ namespace StarryEngine {
 
         void recordCommands(RHI::RHICommandEncoder* encoder, const RenderContext&,
                             const PassContext& pctx, uint32_t) override {
-            // static int frameCount = 0;
-            // if (++frameCount <= 3) LOG_INFO("[ParticleRender] drawing {} points", m_count);
             if (!m_pipeline.isValid()) return;
             auto resMgr = pctx.getResourceManager();
             auto* ppl = resMgr->getPipeline(m_pipeline);
@@ -126,8 +129,25 @@ namespace StarryEngine {
                     encoder->bindDescriptorSets(RHI::PipelineBindPoint::Graphics, plo, 0, {m_globalSet}, {});
                 if (m_particleSet.isValid())
                     encoder->bindDescriptorSets(RHI::PipelineBindPoint::Graphics, plo, 1, {m_particleSet}, {});
+                // push VS 渲染参数（offset 64）
+                encoder->pushConstants(plo, RHI::ShaderStage::Vertex, 64, sizeof(m_vsPC), &m_vsPC);
             }
             encoder->draw(m_count, 1, 0, 0);
+        }
+        // VS push constant data（offset 64+，与 shader layout 一致）
+        struct VS_PC {
+            float colorYoung[4];
+            float colorMiddle[4];
+            float colorOld[4];
+            float pointSizeMin;
+            float pointSizeMax;
+        };
+        void setVSParams(const ParticleParams& p) {
+            memcpy(m_vsPC.colorYoung,  p.colorYoung,  sizeof(m_vsPC.colorYoung));
+            memcpy(m_vsPC.colorMiddle, p.colorMiddle, sizeof(m_vsPC.colorMiddle));
+            memcpy(m_vsPC.colorOld,    p.colorOld,    sizeof(m_vsPC.colorOld));
+            m_vsPC.pointSizeMin = p.pointSizeMin;
+            m_vsPC.pointSizeMax = p.pointSizeMax;
         }
 
     private:
@@ -135,6 +155,7 @@ namespace StarryEngine {
         RHI::PipelineLayoutHandle m_layout;
         RHI::DescriptorSetHandle  m_globalSet, m_particleSet;
         uint32_t                  m_count;
+        VS_PC                     m_vsPC = {};
         std::vector<std::shared_ptr<Scene::DrawItem>> m_empty;
     };
 
@@ -657,7 +678,7 @@ namespace StarryEngine {
         auto csDescLayout = m_resMgr->createDescriptorSetLayout(csLayoutDesc);
         RHI::PipelineLayoutDesc csPlDesc;
         csPlDesc.descriptorSetLayouts = { csDescLayout };
-        csPlDesc.pushConstants = {{RHI::ShaderStage::Compute, 0, 8}};
+        csPlDesc.pushConstants = {{RHI::ShaderStage::Compute, 0, 48}};  // 12 floats
         auto csPlLayout = m_resMgr->createPipelineLayout(csPlDesc);
         RHI::ComputePipelineDesc cpDesc;
         cpDesc.computeShader = csInfo->module;
@@ -675,6 +696,7 @@ namespace StarryEngine {
         auto renderLayout1H = m_resMgr->createDescriptorSetLayout(renderLayout1);
         RHI::PipelineLayoutDesc renderPlDesc;
         renderPlDesc.descriptorSetLayouts = { m_globalSetLayout, renderLayout1H };
+        renderPlDesc.pushConstants = {{RHI::ShaderStage::Vertex, 64, 56}};  // VS 颜色+大小
         auto renderPlLayout = m_resMgr->createPipelineLayout(renderPlDesc);
 
         // ═══ 4. Compute Pass Node ═══
@@ -761,7 +783,7 @@ namespace StarryEngine {
         for (auto& p : passes) {
             if (p->getName() == "ParticleUpdate") {
                 p->setComputeRecorder(std::make_shared<ParticleCSRecorder>(
-                    m_particleCSLayout, csDescSet, m_particleCount));
+                    m_particleCSLayout, csDescSet, m_particleCount, m_particleParams));
                 break;
             }
         }
@@ -832,6 +854,7 @@ namespace StarryEngine {
         auto rec = std::make_shared<ParticleRenderRecorder>(
             renderPipeline, m_particleRenderLayout,
             m_globalDescSet, particleDescSet, m_particleCount);
+        rec->setVSParams(m_particleParams);  // 传入渲染参数（颜色+大小）
         tagIt->second.recorder = rec;
         // 同时更新 PassNode 内部的 subpassRecorders（execute 实际读取的位置）
         auto passIt = m_tagToPassNode.find("ParticleDraw");

@@ -21,7 +21,14 @@
       "Bash(timeout 5 ./bin/DeferredRender_demo)",
       "Bash(tail -30 /tmp/demo2.txt)",
       "Bash(echo \"exit=$?\")",
-      "Bash(grep \"Pass Culling\\\\|cull\\\\|Cull\" /tmp/demo3.txt)"
+      "Bash(grep \"Pass Culling\\\\|cull\\\\|Cull\" /tmp/demo3.txt)",
+      "Bash(git push *)",
+      "Bash(git --no-pager log --oneline -7)",
+      "Bash(GIT_SEQUENCE_EDITOR=\"sed -i 's/^pick dccae9b/reword dccae9b/'\" git rebase -i HEAD~7)",
+      "Bash(echo \"EXIT=$?\")",
+      "Bash(git stash *)",
+      "Bash(GIT_SEQUENCE_EDITOR=\"sed -i 's/^pick dccae9b/reword dccae9b/'\" GIT_EDITOR=\"sed -i 's/2026.3.17/2026.7.17/'\" git rebase -i HEAD~7)",
+      "Bash(cmake --build .)"
     ]
   }
 }

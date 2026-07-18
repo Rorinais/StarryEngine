@@ -361,12 +361,12 @@ namespace StarryEngine::Assets {
                 auto* dsSamplerObj = m_resMgr->getSampler(dsSampler);
 
                 RHI::DescriptorPoolDesc dsPoolDesc;
-                dsPoolDesc.maxSets = 6;
+                dsPoolDesc.maxSets = 64;
                 dsPoolDesc.poolSizes = {
-                    { RHI::DescriptorType::CombinedImageSampler, 6 },
-                    { RHI::DescriptorType::StorageImage,         6 }
+                    { RHI::DescriptorType::CombinedImageSampler, 64 },
+                    { RHI::DescriptorType::StorageImage,         64 }
                 };
-                dsPoolDesc.freeDescriptorSet = true;
+                dsPoolDesc.freeDescriptorSet = false;
                 auto dsPool = m_resMgr->createDescriptorPool(dsPoolDesc);
 
                 RHI::ImageSubresourceRange srcOnlyMip0;
@@ -985,12 +985,12 @@ namespace StarryEngine::Assets {
                 auto* dsSamplerObj = m_resMgr->getSampler(dsSampler);
 
                 RHI::DescriptorPoolDesc dsPoolDesc;
-                dsPoolDesc.maxSets = 6;
+                dsPoolDesc.maxSets = 64;
                 dsPoolDesc.poolSizes = {
-                    { RHI::DescriptorType::CombinedImageSampler, 6 },
-                    { RHI::DescriptorType::StorageImage,         6 }
+                    { RHI::DescriptorType::CombinedImageSampler, 64 },
+                    { RHI::DescriptorType::StorageImage,         64 }
                 };
-                dsPoolDesc.freeDescriptorSet = true;
+                dsPoolDesc.freeDescriptorSet = false;  // 一次性使用，不需要释放
                 auto dsPool = m_resMgr->createDescriptorPool(dsPoolDesc);
 
                 // ── 仅含 mip 0 的 Cube 视图 ──

@@ -11,8 +11,6 @@ using namespace StarryEngine;
 ModelData createModel(std::shared_ptr<RHI::ResourceManager> resMgr, GlobalDescriptorData data);
 ModelData createGrid(std::shared_ptr<RHI::ResourceManager> resMgr, GlobalDescriptorData data);
 DataSet createRenderer(std::shared_ptr<RHI::IRHI> rhi, RHI::DescriptorPoolHandle descriptorPool, uint32_t width, uint32_t height);
-std::shared_ptr<Assets::MaterialInstance> createCopyMaterial(std::shared_ptr<RHI::ResourceManager> resMgr,GlobalDescriptorData data);
-//std::shared_ptr<Assets::MaterialInstance> createSkyboxMaterial(std::shared_ptr<RHI::ResourceManager> resMgr,GlobalDescriptorData data);
 std::shared_ptr<Assets::MaterialInstance> createPbrMaterial(std::shared_ptr<RHI::ResourceManager> resMgr, GlobalDescriptorData data);
 
 
@@ -128,50 +126,71 @@ public:
     }
 
 
+    std::shared_ptr<Assets::MaterialInstance> createTexturedPbrMaterial() {
+        auto tmpl = std::make_shared<Assets::DefaultMaterialTemplate>(m_rhi->getResourceManager(), m_descriptorSetLayout);
+        tmpl->loadShaders("assets/shaders/pbr/shpere_pbr.vert", "assets/shaders/pbr/shpere_pbr (2).frag");
+
+        auto material = std::make_shared<Assets::MaterialInstance>(tmpl, m_descriptorPool, m_rhi->getResourceManager().get(), m_descriptorSet);
+        material->setSubpassTag("Forward_Opaque");
+        material->enableDepthTest(true);
+        material->enableDepthWrite(true);
+
+        Assets::TextureLoader texLoader(m_rhi->getResourceManager());
+        auto armT    = texLoader.loadTexture2D("assets/textures/pbr/seaworn_sandstone_brick_arm_1k.png", RHI::Format::RGBA8_UNorm, "ARM");
+        auto albedoT = texLoader.loadTexture2D("assets/textures/pbr/seaworn_sandstone_brick_diff_1k.png", RHI::Format::RGBA8_sRGB, "Albedo");
+        auto normalT = texLoader.loadTexture2D("assets/textures/pbr/seaworn_sandstone_brick_nor_dx_1k.png", RHI::Format::RGBA8_UNorm, "Normal");
+
+        material->setTexture("armMap", armT.texture, armT.sampler);
+        material->setTexture("albedoMap", albedoT.texture, albedoT.sampler);
+        material->setTexture("normalMap", normalT.texture, normalT.sampler);
+        material->setTexture("uIrradianceMap", m_irradianceMap, m_cubeSampler);
+        material->setTexture("uPrefilteredMap", m_prefilteredMap, m_prefilterSampler);
+        material->setTexture("uBrdfLut", m_brdfLut, m_lutSampler);
+
+        auto* lightBlock = material->getBlock("LightingUBO");
+        if (lightBlock) {
+            lightBlock->setVec4("lights.position", glm::vec4(-0.5f, -1.0f, -0.8f, 0.0f));  // dir light
+            lightBlock->setVec4("lights.color", glm::vec4(3.0f, 2.7f, 2.3f, 1.0f));
+            lightBlock->setFloat("lightCount", 1.0f);
+            lightBlock->setFloat("ambientStrength", 0.15f);
+        }
+        material->applyAllDirtyBlocks();
+        return material;
+    }
+
     void createScene() {
-        initIBL();  // 只生成一次 IBL 贴图
+        initIBL();
 
         auto skyboxEffect = std::make_shared<Scene::ProceduralEffect>();
-        auto skyboxMaterial = createSkyboxMaterial();
-        skyboxEffect->material = skyboxMaterial;
+        skyboxEffect->material = createSkyboxMaterial();
         m_scene->addProceduralEffect(skyboxEffect);
 
-        // ── 6×6 粗糙度 × 金属度矩阵 ──
-        const int GRID_SIZE = 6;
-        const float SPACING = 2.2f;
-        const float GRID_CENTER_X = (GRID_SIZE - 1) * SPACING * 0.5f;
-        const float GRID_CENTER_Y = (GRID_SIZE - 1) * SPACING * 0.5f + 1.0f;
+        // ── 单个 PBR 纹理球 ──
+        auto mat = createTexturedPbrMaterial();
+        auto sphere = std::make_shared<Scene::RenderObject>();
+        sphere->geometry = Assets::GeometryGenerator::createSphere(m_rhi->getResourceManager(), 1.0f);
+        sphere->materials = { mat };
+        sphere->transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.5f, 0.0f));
+        m_scene->addObject(sphere);
 
-        for (int row = 0; row < GRID_SIZE; ++row) {
-            for (int col = 0; col < GRID_SIZE; ++col) {
-                float roughness = float(row) / float(GRID_SIZE - 1);
-                float metallic  = float(col) / float(GRID_SIZE - 1);
+        // // ── 6×6 矩阵（注释）──
+        // const int GRID_SIZE = 6;
+        // ...
 
-                auto mat = createPbrMaterial(roughness, metallic);
 
-                auto sphere = std::make_shared<Scene::RenderObject>();
-                sphere->geometry = Assets::GeometryGenerator::createSphere(m_rhi->getResourceManager(), 1.0f);
-                sphere->materials = { mat };
-
-                float x = col * SPACING - GRID_CENTER_X;
-                float y = GRID_CENTER_Y - row * SPACING;  // roughness 自上而下增大
-                sphere->transform = glm::translate(glm::mat4(1.0f), glm::vec3(x, y+5.0f, -1.0f));
-                m_scene->addObject(sphere);
-            }
-        }
-
-        // 参考地平面
-        auto gridObj = std::make_shared<Scene::RenderObject>();
-        gridObj->geometry = Assets::GeometryGenerator::createGrid(m_rhi->getResourceManager());
-        gridObj->materials = { createGridMaterial() };
-        gridObj->transform = glm::scale(glm::translate(glm::mat4(1.0f), glm::vec3(0, -5.0f, 0)), glm::vec3(10, 10, 10));
-        m_scene->addObject(gridObj);
+        // ── 厚地面（PBR 砖块纹理）──
+        auto groundMat = createTexturedPbrMaterial();
+        auto ground = std::make_shared<Scene::RenderObject>();
+        ground->geometry = Assets::GeometryGenerator::createCube(m_rhi->getResourceManager(), 20.0f, 20.0f, 0.3f);
+        ground->materials = { groundMat };
+        ground->transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -0.15f, 0.0f));
+        m_scene->addObject(ground);
 
         // 摄像机拉远看全景
         auto perspectiveCamera = std::make_shared<Scene::PerspectiveCamera>();
         perspectiveCamera->setPerspective(glm::radians(45.0f), (float)m_width / m_height, 0.1f, 100.0f);
-        perspectiveCamera->lookAt(glm::vec3(0.0f, GRID_CENTER_Y, 15.0f),
-                                  glm::vec3(0.0f, GRID_CENTER_Y, 0.0f),
+        perspectiveCamera->lookAt(glm::vec3(1.0f, 2.0f, 5.0f),
+                                  glm::vec3(0.0f, 1.5f, 0.0f),
                                   glm::vec3(0.0f, 1.0f, 0.0f));
         m_scene->addCamera(perspectiveCamera);
         m_scene->setActiveCamera(perspectiveCamera);
@@ -226,8 +245,6 @@ int main() {
     StarryEngine::Logger::init();
     StarryEngine::Logger::setShowSourceLoc(true);
     StarryEngine::Application app;
-
-    //auto dataset = createRenderer(app.getRenderHardwareInterface(), app.getGlobalDescriptorPool(), app.getWidth(), app.getHeight());
 
     auto demo = std::make_shared<PBRDemo>(app.getRenderHardwareInterface(), app.getGlobalDescriptorPool(), app.getWidth(), app.getHeight());
 
@@ -322,92 +339,6 @@ std::shared_ptr<Assets::MaterialInstance> createCopyMaterial(std::shared_ptr<RHI
     return material;
 }
 
-//std::shared_ptr<Assets::MaterialInstance> createSkyboxMaterial(std::shared_ptr<RHI::ResourceManager> resMgr,GlobalDescriptorData data) {
-//
-//    auto tmpl = std::make_shared<Assets::DefaultMaterialTemplate>(resMgr, data.globalSetLayout);
-//    tmpl->loadShaders("assets/shaders/deferred/skybox.vert", "assets/shaders/deferred/skybox.frag");
-//
-//    auto material = std::make_shared<Assets::MaterialInstance>(tmpl, data.globalDescriptorPool, resMgr.get(), data.globalDescriptorSet);
-//
-//    //std::vector<std::string> skyboxFaces = {
-//    //    "assets/textures/skybox/right.jpg",
-//    //    "assets/textures/skybox/left.jpg",
-//    //    "assets/textures/skybox/top.jpg",
-//    //    "assets/textures/skybox/bottom.jpg",
-//    //    "assets/textures/skybox/front.jpg",
-//    //    "assets/textures/skybox/back.jpg"
-//    //};
-//
-//    auto loader = Assets::TextureLoader(rhi->getResourceManager());
-//
-//    Assets::IBLBuilder iblBuilder(rhi->getResourceManager(), rhi);
-//    auto cubemap = iblBuilder.buildEnvCubemap("assets/textures/pbr/kloofendal_48d_partly_cloudy_puresky_4k.hdr", 1024);
-//    auto sampler = loader.createDefaultSampler();
-//
-//    material->setTexture("uSkybox", cubemap, sampler);
-//    material->setSubpassTag("PostProcess_Skybox");
-//    material->enableDepthTest(true);
-//    material->setDepthCompareOp(RHI::CompareOp::LessOrEqual);
-//
-//    return material;
-//}
-
-ModelData createModel(std::shared_ptr<RHI::ResourceManager> resMgr, GlobalDescriptorData data) {
-    std::vector<RHI::PushConstantRange> pushConstants = {
-        {RHI::ShaderStage::Vertex, 0, sizeof(glm::mat4)}
-    };
-
-    auto geometry = std::make_shared<Assets::Geometry>(resMgr);
-    std::vector<Assets::MaterialParams> params;
-    if (!Assets::ModelLoader::loadFromFile(resMgr, "assets/models/Griseo.obj", *geometry, params)) {
-        LOG_ERROR("Failed to load model");
-    }
-    geometry->uploadToGPU();
-
-    std::vector<std::shared_ptr<Assets::MaterialInstance>> materialInstances;
-
-    for (auto& param : params) {
-        std::string fsPath;
-        if (param.name == "body") fsPath = "assets/shaders/core/shader.frag";
-        else if (param.name == "brow") fsPath = "assets/shaders/core/shader.frag";
-        else if (param.name == "eyes") fsPath = "assets/shaders/core/shader.frag";
-        else if (param.name == "face") fsPath = "assets/shaders/core/face.frag";
-        else fsPath = "assets/shaders/core/hair.frag";
-
-        auto tmpl = std::make_shared<Assets::DefaultMaterialTemplate>(resMgr, data.globalSetLayout);
-        if (!tmpl->loadShaders("assets/shaders/core/shader.vert", fsPath)) {
-            LOG_ERROR("Failed to load shaders for material: {}", param.name);
-            continue;
-        }
-
-        LOG_INFO("createModel:fsPath{}", fsPath);
-        auto instance = std::make_shared<Assets::MaterialInstance>(tmpl, data.globalDescriptorPool, resMgr.get(), data.globalDescriptorSet);
-
-        if (!param.albedoTexture.empty()) {
-            Assets::TextureLoader loader(resMgr);
-            LOG_INFO("createModel:param.albedoTexture{}", param.albedoTexture);
-            auto texResult = loader.loadTexture2D(param.albedoTexture, RHI::Format::RGBA8_UNorm, "Albedo");
-
-            
-            if (texResult.texture.isValid()) {
-                instance->setTexture("texSampler", texResult.texture, texResult.sampler);
-            }
-            else {
-                LOG_ERROR("Failed to load texture: {}", param.albedoTexture);
-            }
-        }
-        else {
-            LOG_WARN("Material {} has no albedo texture", param.name);
-        }
-        instance->setSubpassTag("Forward_Opaque");
-        instance->setDepthTest(true);
-        instance->setDepthWrite(true);
-        materialInstances.push_back(instance);
-    }
-
-    return ModelData(geometry, materialInstances);
-}
-
 std::shared_ptr<Assets::MaterialInstance> createPbrMaterial(std::shared_ptr<RHI::ResourceManager> resMgr, GlobalDescriptorData data) {
     auto tmpl = std::make_shared<Assets::DefaultMaterialTemplate>(resMgr, data.globalSetLayout);
     tmpl->loadShaders("assets/shaders/pbr/shpere_pbr.vert", "assets/shaders/pbr/shpere_pbr.frag");
@@ -436,3 +367,59 @@ std::shared_ptr<Assets::MaterialInstance> createPbrMaterial(std::shared_ptr<RHI:
     material->applyAllDirtyBlocks();
 	return material;
 }
+
+// ModelData createModel(std::shared_ptr<RHI::ResourceManager> resMgr, GlobalDescriptorData data) {
+//     std::vector<RHI::PushConstantRange> pushConstants = {
+//         {RHI::ShaderStage::Vertex, 0, sizeof(glm::mat4)}
+//     };
+
+//     auto geometry = std::make_shared<Assets::Geometry>(resMgr);
+//     std::vector<Assets::MaterialParams> params;
+//     if (!Assets::ModelLoader::loadFromFile(resMgr, "assets/models/Griseo.obj", *geometry, params)) {
+//         LOG_ERROR("Failed to load model");
+//     }
+//     geometry->uploadToGPU();
+
+//     std::vector<std::shared_ptr<Assets::MaterialInstance>> materialInstances;
+
+//     for (auto& param : params) {
+//         std::string fsPath;
+//         if (param.name == "body") fsPath = "assets/shaders/core/shader.frag";
+//         else if (param.name == "brow") fsPath = "assets/shaders/core/shader.frag";
+//         else if (param.name == "eyes") fsPath = "assets/shaders/core/shader.frag";
+//         else if (param.name == "face") fsPath = "assets/shaders/core/face.frag";
+//         else fsPath = "assets/shaders/core/hair.frag";
+
+//         auto tmpl = std::make_shared<Assets::DefaultMaterialTemplate>(resMgr, data.globalSetLayout);
+//         if (!tmpl->loadShaders("assets/shaders/core/shader.vert", fsPath)) {
+//             LOG_ERROR("Failed to load shaders for material: {}", param.name);
+//             continue;
+//         }
+
+//         LOG_INFO("createModel:fsPath{}", fsPath);
+//         auto instance = std::make_shared<Assets::MaterialInstance>(tmpl, data.globalDescriptorPool, resMgr.get(), data.globalDescriptorSet);
+
+//         if (!param.albedoTexture.empty()) {
+//             Assets::TextureLoader loader(resMgr);
+//             LOG_INFO("createModel:param.albedoTexture{}", param.albedoTexture);
+//             auto texResult = loader.loadTexture2D(param.albedoTexture, RHI::Format::RGBA8_UNorm, "Albedo");
+
+            
+//             if (texResult.texture.isValid()) {
+//                 instance->setTexture("texSampler", texResult.texture, texResult.sampler);
+//             }
+//             else {
+//                 LOG_ERROR("Failed to load texture: {}", param.albedoTexture);
+//             }
+//         }
+//         else {
+//             LOG_WARN("Material {} has no albedo texture", param.name);
+//         }
+//         instance->setSubpassTag("Forward_Opaque");
+//         instance->setDepthTest(true);
+//         instance->setDepthWrite(true);
+//         materialInstances.push_back(instance);
+//     }
+
+//     return ModelData(geometry, materialInstances);
+// }

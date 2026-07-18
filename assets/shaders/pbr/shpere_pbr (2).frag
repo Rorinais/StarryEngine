@@ -49,17 +49,17 @@ void main() {
     vec4 armSample     = texture(armMap,    fragTexCoord);
     vec4 normalSample  = texture(normalMap, fragTexCoord);
 
-    float ao         = armSample.r;        // AO 仍然可以用
-    float roughness  = 0.2;                // 固定光滑度，或仍从 g 通道读：armSample.g
-    float metallic   = 1.0; 
+    float ao         = armSample.r;
+    float roughness  = armSample.g;
+    roughness = roughness * roughness;   // Disney 感知 roughness → 线性
+    float metallic   = armSample.b;
 
     vec3 tangentNormal = normalSample.rgb * 2.0 - 1.0;
     vec3 T = normalize(fragTangent);
     vec3 B = normalize(fragBitangent);
     vec3 N_world = normalize(fragNormal);
     mat3 TBN = mat3(T, B, N_world);
-    //vec3 N = normalize(TBN * tangentNormal);
-    vec3 N = N_world;
+    vec3 N = normalize(TBN * tangentNormal);  // 启用法线贴图
 
     vec3 V = normalize(global.invView[3].xyz - fragWorldPos);
     vec3 F0 = mix(vec3(0.04), albedoSample.rgb, metallic);
@@ -99,28 +99,24 @@ void main() {
     // 漫反射 Irradiance
     vec3 irradiance = texture(uIrradianceMap, N).rgb;
     //vec3 irradiance = textureLod(uPrefilteredMap, N, PREFILTER_MAX_LOD - 1.0).rgb;
-    vec3 diffuseIBL = irradiance * albedoSample.rgb;
+    vec3 diffuseIBL = irradiance * albedoSample.rgb / PI;
     
     // 镜面反射 Prefiltered + BRDF LUT
     vec3 R = reflect(-V, N);
-    float roughnessLevel = roughness * 5.0;   // maxLod = 5
+    float roughnessLevel = roughness * 5.0;   // mipLevels(6)-1
     vec3 prefilteredColor = textureLod(uPrefilteredMap, R, roughnessLevel).rgb;
     vec2 brdfParams = texture(uBrdfLut, vec2(NdotV, roughness)).rg;
     vec3 specularIBL = prefilteredColor * (kS * brdfParams.x + brdfParams.y);
     
     vec3 ambientIBL = (diffuseIBL * kD + specularIBL) * ao;
-    
-    vec3 color = Lo + ambientIBL;
-    
-     //if (diffuseIBL.x < 0.0) discard;  
+    ambientIBL *= lighting.ambientStrength;  // 环境光强度（Blender World Strength）
 
-    // 抖动 + 色调映射 + Gamma
-    vec2 screenPos = gl_FragCoord.xy;
-    vec3 dither = ScreenSpaceDither(screenPos);
-    color += dither;
-    color = color / (color + vec3(1.0));
-    color = pow(color, vec3(1.0/2.2));
-    
+    vec3 color = Lo + ambientIBL;
+
+    // ACES filmic tone mapping（比 Reinhard 更接近 Blender Filmic）
+    color *= 1.2;  // exposure
+    color = (color * (2.51 * color + 0.03)) / (color * (2.43 * color + 0.59) + 0.14);
+    color = pow(color, vec3(1.0/2.2));  // linear → sRGB
     outColor = vec4(color, 1.0);
 }
 
