@@ -11,7 +11,6 @@ using namespace StarryEngine;
 ModelData createModel(std::shared_ptr<RHI::ResourceManager> resMgr, GlobalDescriptorData data);
 ModelData createGrid(std::shared_ptr<RHI::ResourceManager> resMgr, GlobalDescriptorData data);
 DataSet createRenderer(std::shared_ptr<RHI::IRHI> rhi, RHI::DescriptorPoolHandle descriptorPool, uint32_t width, uint32_t height);
-std::shared_ptr<Assets::MaterialInstance> createPbrMaterial(std::shared_ptr<RHI::ResourceManager> resMgr, GlobalDescriptorData data);
 
 
 class PBRDemo {
@@ -86,33 +85,6 @@ public:
         m_lutSampler = m_rhi->getResourceManager()->createSampler(lutSampDesc);
     }
 
-    std::shared_ptr<Assets::MaterialInstance> createPbrMaterial(float roughness, float metallic) {
-        auto tmpl = std::make_shared<Assets::DefaultMaterialTemplate>(m_rhi->getResourceManager(), m_descriptorSetLayout);
-        tmpl->loadShaders("assets/shaders/pbr/shpere_pbr.vert", "assets/shaders/pbr/shpere_pbr.frag");
-
-        auto material = std::make_shared<Assets::MaterialInstance>(tmpl, m_descriptorPool, m_rhi->getResourceManager().get(), m_descriptorSet);
-        material->setSubpassTag("Forward_Opaque");
-        material->enableDepthTest(true);
-        material->enableDepthWrite(true);
-
-        material->setTexture("uIrradianceMap", m_irradianceMap, m_cubeSampler);
-        material->setTexture("uPrefilteredMap", m_prefilteredMap, m_prefilterSampler);
-        material->setTexture("uBrdfLut", m_brdfLut, m_lutSampler);
-
-        auto* lightBlock = material->getBlock("LightingUBO");
-        if (lightBlock) {
-            lightBlock->setVec4("lights.position", glm::vec4(0.2f, 0.0f, -1.0f, 0.0f));
-            lightBlock->setVec4("lights.color", glm::vec4(0.9f, 0.1f, 0.5f, 1.0f));
-            lightBlock->setFloat("lightCount", 1.0f);
-            lightBlock->setFloat("ambientStrength", 0.1f);
-            lightBlock->setFloat("roughness", roughness);
-            lightBlock->setFloat("metallic", metallic);
-        }
-
-        material->applyAllDirtyBlocks();
-        return material;
-    }
-
     std::shared_ptr<Assets::MaterialInstance> createGridMaterial() {
         auto gridTmpl = std::make_shared<Assets::DefaultMaterialTemplate>(m_rhi->getResourceManager(), m_descriptorSetLayout);
         gridTmpl->loadShaders("assets/shaders/core/gridShader.vert", "assets/shaders/core/gridShader.frag");
@@ -136,9 +108,9 @@ public:
         material->enableDepthWrite(true);
 
         Assets::TextureLoader texLoader(m_rhi->getResourceManager());
-        auto armT    = texLoader.loadTexture2D("assets/textures/pbr/seaworn_sandstone_brick_arm_1k.png", RHI::Format::RGBA8_UNorm, "ARM");
-        auto albedoT = texLoader.loadTexture2D("assets/textures/pbr/seaworn_sandstone_brick_diff_1k.png", RHI::Format::RGBA8_sRGB, "Albedo");
-        auto normalT = texLoader.loadTexture2D("assets/textures/pbr/seaworn_sandstone_brick_nor_dx_1k.png", RHI::Format::RGBA8_UNorm, "Normal");
+        auto armT    = texLoader.loadTexture2D("assets/textures/pbr/metal_plate_02_arm_1k.png", RHI::Format::RGBA8_UNorm, "ARM");
+        auto albedoT = texLoader.loadTexture2D("assets/textures/pbr/metal_plate_02_diff_1k.png", RHI::Format::RGBA8_sRGB, "Albedo");
+        auto normalT = texLoader.loadTexture2D("assets/textures/pbr/metal_plate_02_nor_dx_1k.png", RHI::Format::RGBA8_UNorm, "Normal");
 
         material->setTexture("armMap", armT.texture, armT.sampler);
         material->setTexture("albedoMap", albedoT.texture, albedoT.sampler);
@@ -290,7 +262,7 @@ DataSet createRenderer(std::shared_ptr<RHI::IRHI> rhi, RHI::DescriptorPoolHandle
 
     auto SphereObj = std::make_shared<Scene::RenderObject>();
     SphereObj->geometry = Assets::GeometryGenerator::createSphere(rhi->getResourceManager(),1.0f);
-    SphereObj->materials = { createPbrMaterial(rhi->getResourceManager(), globalDescriptorData) };
+    SphereObj->materials = {};
     SphereObj->transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.0f, 0.0f));
     scene->addObject(SphereObj);
 
@@ -359,7 +331,7 @@ std::shared_ptr<Assets::MaterialInstance> createPbrMaterial(std::shared_ptr<RHI:
     material->setTexture("normalMap", texResult2.texture, texResult2.sampler);
 
     auto* lightBlock = material->getBlock("LightingUBO");
-    lightBlock->setVec4("lights.position", glm::vec4(0.2f, 0.0f, -1.0f, 0.0f));
+    lightBlock->setVec4("lights.position", glm::vec4(0.2f, 1.0f, 1.0f, 0.0f));
     lightBlock->setVec4("lights.color", glm::vec4(0.9f, 0.1f, 0.5f, 1.0f));
     lightBlock->setFloat("lightCount", 1.0f);
     lightBlock->setFloat("ambientStrength", 0.1f);

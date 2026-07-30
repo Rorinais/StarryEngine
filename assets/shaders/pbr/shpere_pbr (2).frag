@@ -51,7 +51,7 @@ void main() {
 
     float ao         = armSample.r;
     float roughness  = armSample.g;
-    roughness = roughness * roughness;   // Disney 感知 roughness → 线性
+    //roughness = roughness * roughness;   // Disney 感知 roughness → 线性
     float metallic   = armSample.b;
 
     vec3 tangentNormal = normalSample.rgb * 2.0 - 1.0;
