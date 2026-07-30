@@ -13,7 +13,7 @@
 
 namespace StarryEngine::RenderGraph {
 
-    class ISubpassRecorder;
+    class IPassExecutor;
 
     struct PhysicalTextureInfo {
         RHI::TextureHandle handle;
@@ -49,8 +49,8 @@ namespace StarryEngine::RenderGraph {
         std::string addResolve(TextureId texId, const AttachmentParams& params = AttachmentParams());
         std::string addPreserve(TextureId texId);
         SubpassBuilder& addSubpass(const std::string& subpassName);
-        void setSubpassRecorder(uint32_t index, std::shared_ptr<StarryEngine::ISubpassRecorder> rec) {
-            if (index < m_subpassRecorders.size()) m_subpassRecorders[index] = std::move(rec);
+        void setPassExecutor(uint32_t index, std::shared_ptr<StarryEngine::IPassExecutor> rec) {
+            if (index < m_passExecutors.size()) m_passExecutors[index] = std::move(rec);
         }
         void setRenderArea(uint32_t width, uint32_t height) { m_width = width; m_height = height; }
 
@@ -61,7 +61,7 @@ namespace StarryEngine::RenderGraph {
         void addWriteBuffer(BufferId b)   { m_writeBuffers.insert(b); }
         void setComputePipeline(RHI::PipelineHandle p)   { m_computePipeline = p; }
         void setDispatchSize(uint32_t x, uint32_t y, uint32_t z) { m_dispatchX = x; m_dispatchY = y; m_dispatchZ = z; }
-        void setComputeRecorder(std::shared_ptr<StarryEngine::ISubpassRecorder> r) { m_computeRecorder = std::move(r); }
+        void setComputeExecutor(std::shared_ptr<StarryEngine::IPassExecutor> r) { m_computeRecorder = std::move(r); }
 
         // Pass 启用/禁用
         void setEnabled(bool e) { m_enabled = e; }
@@ -115,7 +115,7 @@ namespace StarryEngine::RenderGraph {
 
         RHI::RenderPassHandle m_renderPassHandle;
         std::vector<RHI::ClearValue> m_clearValues;
-        std::vector<std::shared_ptr<StarryEngine::ISubpassRecorder>> m_subpassRecorders;
+        std::vector<std::shared_ptr<StarryEngine::IPassExecutor>> m_passExecutors;
         std::unordered_map<std::string, uint32_t> m_attachmentNameToIndex;
         std::unordered_map<std::string, RHI::ClearValue> m_clearValueMap;
 
@@ -129,7 +129,7 @@ namespace StarryEngine::RenderGraph {
         // ── Compute 专用 ──
         RHI::PipelineHandle m_computePipeline;
         uint32_t m_dispatchX = 1, m_dispatchY = 1, m_dispatchZ = 1;
-        std::shared_ptr<StarryEngine::ISubpassRecorder> m_computeRecorder;
+        std::shared_ptr<StarryEngine::IPassExecutor> m_computeRecorder;
         std::unordered_map<TextureId, RHI::ImageLayout> m_computeWriteLayouts;
 
 

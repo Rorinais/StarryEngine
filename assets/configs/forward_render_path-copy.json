@@ -24,7 +24,7 @@
 				{
 					"name": "OpaqueGeometry",
 					"tag": "Forward_Opaque",
-					"recorder": "MeshDrawRecorder",
+					"executor": "MeshDrawExecutor",
 					"colorAttachments": [
 						{
 							"texture": "SceneColor",
@@ -50,7 +50,7 @@
 				{
 					"name": "Skybox",
 					"tag": "PostProcess_Skybox",
-					"recorder": "SkyboxRecorder",
+					"executor": "SkyboxExecutor",
 					"colorAttachments": [
 						{
 							"texture": "SceneColor",
@@ -71,7 +71,7 @@
 				{
 					"name": "Grid",
 					"tag": "PostProcess_Grid",
-					"recorder": "MeshDrawRecorder",
+					"executor": "MeshDrawExecutor",
 					"colorAttachments": [
 						{
 							"texture": "SceneColor",
@@ -92,7 +92,7 @@
 				{
 					"name": "CopyToSwapchain",
 					"tag": "PostProcess_Copy",
-					"recorder": "CopyToSwapchainRecorder",
+					"executor": "CopyToSwapchainRecorder",
 					"colorAttachments": [
 						{
 							"texture": "Swapchain",

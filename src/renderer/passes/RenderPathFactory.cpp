@@ -60,12 +60,12 @@ namespace StarryEngine {
                     SubpassDesc subpassDesc;
                     subpassDesc.tag = sp.at("tag");                 // ★ 从 JSON 读取标签
 
-                    auto recorder = createRecorder(sp.at("recorder"));
-                    if (!recorder) {
-                        LOG_ERROR("Unknown recorder: {}", sp.at("recorder").get<std::string>());
+                    auto executor = createExecutor(sp.at("executor"));
+                    if (!executor) {
+                        LOG_ERROR("Unknown executor: {}", sp.at("executor").get<std::string>());
                         continue;
                     }
-                    subpassDesc.recorder = recorder;
+                    subpassDesc.executor = executor;
 
                     // 颜色附件
                     for (auto& color : sp.value("colorAttachments", json::array())) {
@@ -181,10 +181,10 @@ namespace StarryEngine {
         throw std::runtime_error("Unknown format: " + s);
     }
 
-    std::shared_ptr<ISubpassRecorder> RenderPathFactory::createRecorder(const std::string& name) {
-        if (name == "MeshDrawRecorder")           return std::make_shared<MeshDrawRecorder>();
-        if (name == "SkyboxRecorder")             return std::make_shared<SkyboxRecorder>();
-        if (name == "CopyToSwapchainRecorder")    return std::make_shared<CopyToSwapchainRecorder>();
+    std::shared_ptr<IPassExecutor> RenderPathFactory::createExecutor(const std::string& name) {
+        if (name == "MeshDrawExecutor")           return std::make_shared<MeshDrawExecutor>();
+        if (name == "SkyboxExecutor")             return std::make_shared<SkyboxExecutor>();
+        if (name == "CopyToSwapchainExecutor")    return std::make_shared<CopyToSwapchainExecutor>();
         return nullptr;
     }
 

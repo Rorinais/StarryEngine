@@ -1,7 +1,7 @@
 #pragma once
 #include "Type.hpp"
-#include "../subpassRecorder/GbufferRecorder.hpp"
-#include "../subpassRecorder/DeferredLightingRecorder.hpp"
+#include "../passExecutor/GbufferExecutor.hpp"
+#include "../passExecutor/DeferredLightingExecutor.hpp"
 
 namespace StarryEngine {
     class Subpass {
@@ -10,14 +10,14 @@ namespace StarryEngine {
         virtual ~Subpass() = default;
 
         Subpass(const std::string& name,
-            std::shared_ptr<ISubpassRecorder> recorder,
+            std::shared_ptr<IPassExecutor> executor,
             const std::vector<SubpassAttachment>& colorAttachments = {},
             const std::vector<SubpassAttachment>& inputAttachments = {},
             std::optional<SubpassAttachment> depthAttachment = std::nullopt,
             const std::vector<SubpassAttachment>& resolveAttachments = {},
             const std::vector<std::string>& preserveAttachments = {}) {
             m_subpass.name = name;
-            m_subpass.recorder = recorder;
+            m_subpass.executor = executor;
             m_subpass.colorAttachments = colorAttachments;
             m_subpass.inputAttachments = inputAttachments;
             m_subpass.depthAttachment = depthAttachment;

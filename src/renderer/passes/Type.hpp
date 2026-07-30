@@ -1,7 +1,7 @@
 #pragma once
 #include "../../renderer/graph/Types.hpp"          
 #include "../../scene/SceneType.hpp"   
-#include "../../renderer/subpassRecorder/ISubpassRecorder.hpp"
+#include "../../renderer/passExecutor/IPassExecutor.hpp"
 
 namespace StarryEngine {
 
@@ -18,7 +18,7 @@ namespace StarryEngine {
     struct SubpassDesc {
         std::string name;
         std::string tag;             
-        std::shared_ptr<ISubpassRecorder> recorder;
+        std::shared_ptr<IPassExecutor> executor;
         std::vector<SubpassAttachment> colorAttachments;
         std::optional<SubpassAttachment> depthAttachment;
         std::vector<SubpassAttachment> inputAttachments;

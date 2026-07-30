@@ -9,7 +9,7 @@
 #include "../interface/RHI_ENUMS.hpp"
 #include "../interface/RHI_HANDLES_SYSTEM.hpp"
 #include "../interface/RHI_STRUCTS_DESC.hpp"
-#include "../subpassRecorder/ISubpassRecorder.hpp"
+#include "../passExecutor/IPassExecutor.hpp"
 
 namespace StarryEngine::RenderGraph {
 
@@ -31,8 +31,8 @@ namespace StarryEngine::RenderGraph {
             RHI::ImageLayout layout = RHI::ImageLayout::DepthStencilAttachment);
         SubpassBuilder& addPreserveAttachmentRef(const std::string& key);
 
-        SubpassBuilder& setRecorder(std::shared_ptr<StarryEngine::ISubpassRecorder> recorder);
-        std::shared_ptr<StarryEngine::ISubpassRecorder> getRecorder() const { return m_recorder; }
+        SubpassBuilder& setExecutor(std::shared_ptr<StarryEngine::IPassExecutor> executor);
+        std::shared_ptr<StarryEngine::IPassExecutor> getExecutor() const { return m_recorder; }
 
         RHI::SubpassDesc buildSubpassDesc(const std::unordered_map<std::string, uint32_t>& keyToIndexMap) const;
 
@@ -58,7 +58,7 @@ namespace StarryEngine::RenderGraph {
         std::vector<std::string> m_preserveAttachmentKeys;
         std::optional<std::string> m_depthStencilAttachmentKey;
 
-        std::shared_ptr<StarryEngine::ISubpassRecorder> m_recorder;
+        std::shared_ptr<StarryEngine::IPassExecutor> m_recorder;
         std::unordered_map<std::string, RHI::ImageLayout> m_attachmentLayouts;
         std::string m_tag;
     };

@@ -8,11 +8,11 @@ namespace StarryEngine {
 
     class ImGuiManager;
 
-    class ImGuiRecorder : public ISubpassRecorder {
+    class ImGuiExecutor : public IPassExecutor {
     public:
-        explicit ImGuiRecorder(ImGuiManager* manager);
+        explicit ImGuiExecutor(ImGuiManager* manager);
 
-        void recordCommands(
+        void execute(
             RHI::RHICommandEncoder* encoder,
             const RenderContext& rctx,
             const PassContext& pctx,

@@ -16,7 +16,7 @@
 namespace StarryEngine {
     struct OverlayPassDesc {
         std::string tag;                              // 标签（用于 SubpassTarget 映射）
-        std::shared_ptr<ISubpassRecorder> recorder;   // 录制回调
+        std::shared_ptr<IPassExecutor> executor;
     };
 
     // ── 类型安全的 Blackboard ───────────────────────────────────────
@@ -72,8 +72,8 @@ namespace StarryEngine {
         virtual void clearOverlayPasses() = 0;
         virtual const std::vector<OverlayPassDesc>& getOverlayPasses() const = 0;
 
-        void addOverlayPass(const std::string& tag,std::shared_ptr<ISubpassRecorder> recorder) {
-            addOverlayPass({ tag, std::move(recorder) });
+        void addOverlayPass(const std::string& tag,std::shared_ptr<IPassExecutor> executor) {
+            addOverlayPass({ tag, std::move(executor) });
         }
 
         // 类型安全的跨模块数据共享

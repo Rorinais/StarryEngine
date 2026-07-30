@@ -7,7 +7,7 @@ namespace StarryEngine {
     public:
         LightSubpass(const std::string& name) {
             m_subpass.name = name;
-            m_subpass.recorder = std::make_shared<DeferredLightingRecorder>();
+            m_subpass.executor = std::make_shared<DeferredLightingExecutor>();
 
             auto lightColor = PassWrapper::createColorAttachment(
                 RHI::ImageLayout::Undefined, RHI::ImageLayout::ColorAttachment,

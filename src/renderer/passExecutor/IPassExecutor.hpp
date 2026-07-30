@@ -53,9 +53,9 @@ namespace StarryEngine{
         RHI::FramebufferHandle mFramebuffer;
     };
 
-    class ISubpassRecorder {
+    class IPassExecutor {
     public:
-        virtual ~ISubpassRecorder() = default;
+        virtual ~IPassExecutor() = default;
 
         virtual void clearDrawItems() = 0;
         virtual void setDrawItems(const std::vector<std::shared_ptr<Scene::DrawItem>>& items) = 0;
@@ -67,7 +67,7 @@ namespace StarryEngine{
 
         virtual void addDrawItem(std::shared_ptr<Scene::DrawItem> item) {}
 
-        virtual void recordCommands(RHI::RHICommandEncoder* encoder,
+        virtual void execute(RHI::RHICommandEncoder* encoder,
             const RenderContext& rctx,
             const PassContext& pctx,
             uint32_t subpassIndex) = 0;

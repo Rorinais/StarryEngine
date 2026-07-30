@@ -112,13 +112,13 @@ namespace StarryEngine {
 
 	SubpassDesc PassWrapper::createGeometrySubpassConfig(
 		const std::string& name,
-		std::shared_ptr<ISubpassRecorder> recorder,
+		std::shared_ptr<IPassExecutor> executor,
 		const std::vector<std::string>& colorTextureNames,
 		const std::string& depthTextureName) {
 
 		SubpassDesc config;
 		config.name = name;
-		config.recorder = recorder;
+		config.executor = executor;
 
 		auto colorAttachParams = createColorAttachment(
 			RHI::ImageLayout::Undefined,
@@ -141,14 +141,14 @@ namespace StarryEngine {
 
 	SubpassDesc PassWrapper::createFullscreenSubpassConfig(
 		const std::string& name,
-		std::shared_ptr<ISubpassRecorder> recorder,
+		std::shared_ptr<IPassExecutor> executor,
 		const std::vector<SubpassAttachment>& colorAttachments,
 		const std::vector<SubpassAttachment>& inputAttachments,
 		std::optional<SubpassAttachment> depthAttachment) {
 
 		SubpassDesc config;
 		config.name = name;
-		config.recorder = recorder;
+		config.executor = executor;
 		config.colorAttachments = colorAttachments;
 		config.inputAttachments = inputAttachments;
 		if (depthAttachment) config.depthAttachment = depthAttachment;

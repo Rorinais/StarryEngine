@@ -239,9 +239,9 @@ namespace StarryEngine {
         destroy();
         m_renderPath = std::move(newRenderPath);
 
-        // 把全局描述符集数据传递给 RenderPath（供内置 PresentationPass 全屏 blit 管线使用）
-        if (auto* dp = dynamic_cast<DeferredRenderPath*>(m_renderPath.get())) {
-            dp->setPresentationDescriptorData(m_globalSetLayout, m_globalDescriptorSet);
+        // 全局描述符集 → BaseRenderPath（供 PresentationPass 使用）
+        if (auto* bp = dynamic_cast<BaseRenderPath*>(m_renderPath.get())) {
+            bp->setPresentationDescriptorData(m_globalSetLayout, m_globalDescriptorSet);
         }
     }
 
@@ -253,9 +253,9 @@ namespace StarryEngine {
         }
     }
 
-    void Renderer::addOverlayPass(const std::string& tag, std::shared_ptr<ISubpassRecorder> recorder) {
+    void Renderer::addOverlayPass(const std::string& tag, std::shared_ptr<IPassExecutor> executor) {
         if (m_renderPath) {
-            m_renderPath->addOverlayPass(tag, std::move(recorder));
+            m_renderPath->addOverlayPass(tag, std::move(executor));
         }
     }
 

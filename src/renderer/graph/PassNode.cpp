@@ -213,7 +213,7 @@ namespace StarryEngine::RenderGraph {
             m_finalLayouts[texId] = att.finalLayout;
         }
 
-        m_subpassRecorders = m_cachedBuildResult->subpassRecorders;
+        m_passExecutors = m_cachedBuildResult->passExecutors;
 
         m_clearValues.clear();
         for (const auto& key : m_cachedBuildResult->attachmentNames) {
@@ -241,7 +241,7 @@ namespace StarryEngine::RenderGraph {
             if (!pipeline) return;
             encoder->bindComputePipeline(pipeline);
             if (m_computeRecorder) {
-                m_computeRecorder->recordCommands(encoder, context,
+                m_computeRecorder->execute(encoder, context,
                     PassContext(m_resMgr, frameIndex, {}), 0);
             }
             encoder->dispatch(m_dispatchX, m_dispatchY, m_dispatchZ);
@@ -272,10 +272,10 @@ namespace StarryEngine::RenderGraph {
             encoder->setViewport({ 0.0f, 0.0f, (float)m_width, (float)m_height, 0.0f, 1.0f });
             encoder->setScissor({ {0, 0}, {m_width, m_height} });
 
-            for (uint32_t i = 0; i < m_subpassRecorders.size(); ++i) {
+            for (uint32_t i = 0; i < m_passExecutors.size(); ++i) {
                 if (i > 0) encoder->nextSubpass(RHI::SubpassContents::Inline);
-                if (m_subpassRecorders[i]) {
-                    m_subpassRecorders[i]->recordCommands(encoder, context, PassContext(m_resMgr, frameIndex, framebuffer), i);
+                if (m_passExecutors[i]) {
+                    m_passExecutors[i]->execute(encoder, context, PassContext(m_resMgr, frameIndex, framebuffer), i);
                 }
             }
         }

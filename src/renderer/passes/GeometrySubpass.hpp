@@ -7,7 +7,7 @@ namespace StarryEngine {
     public:
         GeometrySubpass(const std::string& name) {
             m_subpass.name = name;
-            m_subpass.recorder = std::make_shared<MeshDrawRecorder>();
+            m_subpass.executor = std::make_shared<MeshDrawExecutor>();
 
             auto colorAttach = PassWrapper::createColorAttachment(
                 RHI::ImageLayout::Undefined, RHI::ImageLayout::ColorAttachment,

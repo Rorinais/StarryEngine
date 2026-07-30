@@ -1,15 +1,15 @@
-// MeshDrawRecorder.hpp
+// MeshDrawExecutor.hpp
 #pragma once
-#include "ISubpassRecorder.hpp"
+#include "IPassExecutor.hpp"
 #include "../graph/PassNode.hpp"
 #include "../backend/vulkan/VulkanRHI.hpp"
 #include "../../scene/Scene.hpp"
 #include "../../core/base.hpp"
 
 namespace StarryEngine {
-    class MeshDrawRecorder : public ISubpassRecorder {
+    class MeshDrawExecutor : public IPassExecutor {
     public:
-        MeshDrawRecorder() = default;
+        MeshDrawExecutor() = default;
 
         void clearDrawItems() override { m_drawItems.clear(); }
         const std::vector<std::shared_ptr<Scene::DrawItem>>& getDrawItems() override { return m_drawItems; }
@@ -24,7 +24,7 @@ namespace StarryEngine {
             m_drawItems.push_back(item);
         }
 
-        void recordCommands(RHI::RHICommandEncoder* encoder,const RenderContext& rctx,const PassContext& pctx,uint32_t subpassIndex) override {
+        void execute(RHI::RHICommandEncoder* encoder,const RenderContext& rctx,const PassContext& pctx,uint32_t subpassIndex) override {
             for (const auto& item : m_drawItems) {
                 // 处理过程式绘制
                 if (item->type == Scene::DrawItemType::Procedural) {

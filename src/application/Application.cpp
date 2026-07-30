@@ -41,10 +41,10 @@ namespace StarryEngine {
             return;
         }
 
-        m_imguiRecorder = std::make_shared<ImGuiRecorder>(m_imguiManager.get());
+        m_imguiExecutor = std::make_shared<ImGuiExecutor>(m_imguiManager.get());
 
         if (m_renderer) {
-            m_renderer->addOverlayPass("ImGui", m_imguiRecorder);
+            m_renderer->addOverlayPass("ImGui", m_imguiExecutor);
             m_renderer->setImGuiManager(m_imguiManager.get(), m_flightFrame);
             m_renderer->setNeedRebuildGraph();
         }
@@ -582,7 +582,7 @@ namespace StarryEngine {
             m_imguiManager->shutdown(m_resMgr.get());
         }
         m_imguiManager.reset();
-        m_imguiRecorder.reset();
+        m_imguiExecutor.reset();
 
         // 然后 RHI
         if (m_rhi) m_rhi->waitIdle();

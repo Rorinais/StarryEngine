@@ -31,7 +31,7 @@ namespace StarryEngine {
         void setImGuiManager(ImGuiManager* mgr, uint32_t imageCount);
         void setRenderPath(std::shared_ptr<IRenderPath> newRenderPath);
 
-        void addOverlayPass(const std::string& tag, std::shared_ptr<ISubpassRecorder> recorder);
+        void addOverlayPass(const std::string& tag, std::shared_ptr<IPassExecutor> executor);
         void removeOverlayPass(const std::string& tag);
         void clearOverlayPasses();
 

@@ -1,9 +1,9 @@
 #pragma once
-#include "ISubpassRecorder.hpp"
+#include "IPassExecutor.hpp"
 #include "../../assets/Assets.hpp"
 
 namespace StarryEngine {
-    class SkyboxRecorder : public ISubpassRecorder {
+    class SkyboxExecutor : public IPassExecutor {
     public:
         void clearDrawItems() override { m_drawItems.clear(); }
         void setDrawItems(const std::vector<std::shared_ptr<Scene::DrawItem>>& items) override { m_drawItems = items; }
@@ -17,7 +17,7 @@ namespace StarryEngine {
             m_drawItems.push_back(item);
         }
 
-        void recordCommands(RHI::RHICommandEncoder* encoder,
+        void execute(RHI::RHICommandEncoder* encoder,
             const RenderContext& rctx,
             const PassContext& pctx,
             uint32_t subpassIndex) override {

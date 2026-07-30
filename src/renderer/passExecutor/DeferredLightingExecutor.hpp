@@ -1,10 +1,10 @@
 #pragma once
-#include "ISubpassRecorder.hpp"
+#include "IPassExecutor.hpp"
 #include "../../assets/Assets.hpp"
 
 namespace StarryEngine{
 
-    class DeferredLightingRecorder : public ISubpassRecorder {
+    class DeferredLightingExecutor : public IPassExecutor {
     public:
         void clearDrawItems() override { m_drawItems.clear(); }
         void setDrawItems(const std::vector<std::shared_ptr<Scene::DrawItem>>& items) override { m_drawItems = items; }
@@ -18,7 +18,7 @@ namespace StarryEngine{
             m_drawItems.push_back(item);
         }
 
-        void recordCommands(RHI::RHICommandEncoder* encoder,
+        void execute(RHI::RHICommandEncoder* encoder,
             const RenderContext& rctx,
             const PassContext& pctx,
             uint32_t subpassIndex) override {
@@ -51,7 +51,7 @@ namespace StarryEngine{
         std::unordered_map<uint32_t, RHI::PipelineHandle> m_pipelineMapping;
     };
 
-    class CopyToSwapchainRecorder : public ISubpassRecorder {
+    class CopyToSwapchainExecutor : public IPassExecutor {
     public:
         void clearDrawItems() override { m_drawItems.clear(); }
         void setDrawItems(const std::vector<std::shared_ptr<Scene::DrawItem>>& items) override { m_drawItems = items; }
@@ -65,7 +65,7 @@ namespace StarryEngine{
             m_drawItems.push_back(item);
         }
 
-        void recordCommands(RHI::RHICommandEncoder* encoder,
+        void execute(RHI::RHICommandEncoder* encoder,
             const RenderContext& rctx,
             const PassContext& pctx,
             uint32_t subpassIndex) override {

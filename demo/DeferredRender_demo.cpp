@@ -1,7 +1,7 @@
 #include "../src/renderer/passes/PassWrapper.hpp"
 #include "../src/renderer/passes/GeometrySubpass.hpp"
 #include "../src/renderer/passes/LightSubpass.hpp"
-#include "../src/renderer/subpassRecorder/SkyboxRecorder.hpp"
+#include "../src/renderer/passExecutor/SkyboxExecutor.hpp"
 #include "../src/renderer/passes/RenderPathFactory.hpp"
 
 #include"../src/application/Application.hpp"

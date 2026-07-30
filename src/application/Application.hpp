@@ -25,11 +25,11 @@
 #include "../renderer/backend/RHIFactory.hpp"
 #include "../renderer/interface/RHI_TYPES.hpp"
 #include "../scene/camera/CameraController.hpp"
-#include "../renderer/subpassRecorder/GbufferRecorder.hpp"
-#include "../renderer/subpassRecorder/DeferredLightingRecorder.hpp"
+#include "../renderer/passExecutor/GbufferExecutor.hpp"
+#include "../renderer/passExecutor/DeferredLightingExecutor.hpp"
 
 #include "../ui/ImGuiManager.hpp"
-#include "../ui/ImGuiRecorder.hpp"
+#include "../ui/ImGuiExecutor.hpp"
 #include "../assets/Assets.hpp"
 
 #include "TextEditor.h"
@@ -174,7 +174,7 @@ namespace StarryEngine {
         static constexpr auto kReloadCooldown = std::chrono::milliseconds(1000); // 防抖冷却
 
         std::unique_ptr<ImGuiManager>                m_imguiManager;
-        std::shared_ptr<ImGuiRecorder>               m_imguiRecorder;
+        std::shared_ptr<ImGuiExecutor>               m_imguiExecutor;
         bool m_imguiEnabled = false;
         bool m_showDemoWindow = true;
         bool m_showPerformancePanel = true;

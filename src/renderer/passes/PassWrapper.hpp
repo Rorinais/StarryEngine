@@ -58,13 +58,13 @@ namespace StarryEngine {
         // 新增工厂方法
         static SubpassDesc createGeometrySubpassConfig(
             const std::string& name,
-            std::shared_ptr<ISubpassRecorder> recorder,
+            std::shared_ptr<IPassExecutor> executor,
             const std::vector<std::string>& colorTextureNames,
             const std::string& depthTextureName);
 
         static SubpassDesc createFullscreenSubpassConfig(
             const std::string& name,
-            std::shared_ptr<ISubpassRecorder> recorder,
+            std::shared_ptr<IPassExecutor> executor,
             const std::vector<SubpassAttachment>& colorAttachments,
             const std::vector<SubpassAttachment>& inputAttachments = {},
             std::optional<SubpassAttachment> depthAttachment = std::nullopt);

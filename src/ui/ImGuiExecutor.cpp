@@ -1,13 +1,13 @@
-#include "ImGuiRecorder.hpp"
+#include "ImGuiExecutor.hpp"
 #include "ImGuiManager.hpp"
 
 namespace StarryEngine {
 
-    ImGuiRecorder::ImGuiRecorder(ImGuiManager* manager)
+    ImGuiExecutor::ImGuiExecutor(ImGuiManager* manager)
         : m_manager(manager) {
     }
 
-    void ImGuiRecorder::recordCommands(
+    void ImGuiExecutor::execute(
         RHI::RHICommandEncoder* encoder,
         const RenderContext& rctx,
         const PassContext& pctx,
@@ -18,13 +18,13 @@ namespace StarryEngine {
         }
     }
 
-    void ImGuiRecorder::clearDrawItems() {
+    void ImGuiExecutor::clearDrawItems() {
         m_emptyItems.clear();
     }
 
-    void ImGuiRecorder::addDrawItem(std::shared_ptr<Scene::DrawItem>) {}
+    void ImGuiExecutor::addDrawItem(std::shared_ptr<Scene::DrawItem>) {}
 
-    std::vector<std::shared_ptr<Scene::DrawItem>>& ImGuiRecorder::getDrawItems() {
+    std::vector<std::shared_ptr<Scene::DrawItem>>& ImGuiExecutor::getDrawItems() {
         return m_emptyItems;
     }
 

@@ -148,7 +148,7 @@ namespace StarryEngine::RenderGraph {
         result->renderPassDesc.dependencies = mergeDependencies();
 
         for (const auto& subpassBuilder : m_subpassBuilders) {
-            result->subpassRecorders.push_back(subpassBuilder.getRecorder());
+            result->passExecutors.push_back(subpassBuilder.getExecutor());
         }
 
         return result;

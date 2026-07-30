@@ -54,7 +54,7 @@ namespace StarryEngine {
         void beginFrame();
         void endFrame();
 
-        // ── 渲染（由 ImGuiRecorder 调用）──
+        // ── 渲染（由 ImGuiExecutor 调用）──
         void render(RHI::RHICommandEncoder* encoder, uint32_t frameIndex);
 
         // ── 输入转发 ──
