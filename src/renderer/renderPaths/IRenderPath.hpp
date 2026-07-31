@@ -10,7 +10,7 @@
 #include "../../scene/Scene.hpp"
 #include "../graph/RenderGraph.hpp"
 #include "../backend/RHIFactory.hpp"
-#include"../passes/Subpass.hpp"
+#include "../passes/Type.hpp"
 
 
 namespace StarryEngine {

@@ -3,6 +3,7 @@
 #include "../graph/RenderGraph.hpp"
 #include "../../scene/Scene.hpp"
 #include "../passExecutor/IPassExecutor.hpp"
+#include "../passes/IPass.hpp"
 #include <vector>
 #include <memory>
 #include <unordered_map>
@@ -41,6 +42,7 @@ namespace StarryEngine {
         void clearOverlayPasses() override { m_overlayPasses.clear(); }
         const std::vector<OverlayPassDesc>& getOverlayPasses() const override { return m_overlayPasses; }
 
+        void setPassList(PassList passes) { m_passes = std::move(passes); }
         std::shared_ptr<RenderGraph::RenderGraph> getRenderGraph() { return m_renderGraph; }
 
     protected:
@@ -72,7 +74,8 @@ namespace StarryEngine {
         bool compileAndFinalize(
             std::unordered_map<std::string, RenderGraph::TextureId>& texIdMap);
         void ensurePresentationShaders();
-        void preparePresentationPipeline();
+        void preparePresentationPipeline(
+            std::unordered_map<std::string, RenderGraph::TextureId>& texIdMap);
 
         // ── 子类可访问的数据 ──
         std::shared_ptr<RHI::IRHI> m_rhi;
@@ -96,6 +99,8 @@ namespace StarryEngine {
 
         std::unordered_map<std::string, RHI::TextureDesc> m_textureDescs;
         std::unordered_map<std::string, RenderGraph::TextureId> m_textureIdMap;
+
+        PassList m_passes;
 
     private:
         // ── 呈现层管道 ──

@@ -22,6 +22,8 @@ namespace StarryEngine {
         void execute(RHI::RHICommandEncoder* encoder, const RenderContext& rctx,
                      const PassContext& pctx, uint32_t) override;
 
+        // 设置存储的 layout — 仅用于 pushConstants，descriptor binding 走原生 layout
+
     private:
         RHI::PipelineLayoutHandle m_layout;
         RHI::DescriptorSetHandle m_descSet;

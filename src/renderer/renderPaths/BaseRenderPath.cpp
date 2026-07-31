@@ -43,7 +43,6 @@ namespace StarryEngine {
     // ──── 生命周期 ──────────────────────────────────────────────────
 
     bool BaseRenderPath::initialize() {
-        if (m_config.empty()) { LOG_ERROR("No render config set!"); return false; }
         if (m_textureDescs.empty()) { LOG_ERROR("No texture descs set!"); return false; }
         try { return buildGraph(); }
         catch (const std::exception& e) {
@@ -195,7 +194,7 @@ namespace StarryEngine {
 
         auto rec = std::make_shared<PresentationExecutor>(
             RHI::PipelineHandle{}, RHI::PipelineLayoutHandle{},
-            RHI::DescriptorSetHandle{}, RHI::DescriptorSetHandle{});
+            m_globalDescSet, RHI::DescriptorSetHandle{});
         subpassBuilder.setExecutor(rec);
         m_tagToSubpass[tag] = SubpassTarget{ {}, 0, rec };
         m_tagToPassNode[tag] = passNode;
@@ -216,7 +215,7 @@ namespace StarryEngine {
 
         if (m_tagToSubpass.count("Presentation") && m_globalSetLayout.isValid()) {
             ensurePresentationShaders();
-            preparePresentationPipeline();
+            preparePresentationPipeline(texIdMap);
         }
 
         onAfterCompile();   // 子类扩展（如粒子管线）
@@ -249,7 +248,8 @@ namespace StarryEngine {
         LOG_INFO("PresentationPass shaders loaded");
     }
 
-    void BaseRenderPath::preparePresentationPipeline() {
+    void BaseRenderPath::preparePresentationPipeline(
+        std::unordered_map<std::string, RenderGraph::TextureId>& texIdMap) {
         if (!m_presentationShadersReady) ensurePresentationShaders();
         if (!m_presentationShadersReady || m_presentationPipelineReady) return;
 
@@ -273,8 +273,8 @@ namespace StarryEngine {
             m_resMgr.get(), pso, rp, tagIt->second.subpassIndex);
         if (!pipeline.isValid()) { LOG_ERROR("Presentation pipeline failed"); return; }
 
-        auto sceneColorIt = m_textureIdMap.find("SceneColor");
-        if (sceneColorIt != m_textureIdMap.end()) {
+        auto sceneColorIt = texIdMap.find("SceneColor");
+        if (sceneColorIt != texIdMap.end()) {
             RHI::TextureHandle physHandle = m_renderGraph->getPhysicalTextureHandle(sceneColorIt->second);
             if (physHandle.isValid()) {
                 auto* texObj = m_resMgr->getTexture(physHandle);

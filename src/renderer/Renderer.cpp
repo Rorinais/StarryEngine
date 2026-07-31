@@ -84,6 +84,8 @@ namespace StarryEngine {
             m_renderPath->onResize(width, height);
         }
 
+        // onResize 内部已调用 initialize() 重建 graph，避免后续重复初始化
+        m_needRebuildGraph = false;
         m_lastAnalyzedVersion = UINT32_MAX;
     }
 
@@ -243,6 +245,9 @@ namespace StarryEngine {
         if (auto* bp = dynamic_cast<BaseRenderPath*>(m_renderPath.get())) {
             bp->setPresentationDescriptorData(m_globalSetLayout, m_globalDescriptorSet);
         }
+
+        // 确保至少 rebuild 一次（presentation pipeline 需要 descriptor 数据就绪）
+        m_needRebuildGraph = true;
     }
 
     void Renderer::setImGuiManager(ImGuiManager* mgr, uint32_t imageCount) {
@@ -261,6 +266,7 @@ namespace StarryEngine {
 
     void Renderer::addOverlayPass(const OverlayPassDesc& desc) {
         if (m_renderPath) {
+            LOG_INFO("Renderer: adding overlay '{}', {} color outputs", desc.tag, desc.colorOutputs.size());
             m_renderPath->addOverlayPass(desc);
         }
     }

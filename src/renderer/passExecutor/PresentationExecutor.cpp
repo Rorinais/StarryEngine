@@ -9,7 +9,7 @@ namespace StarryEngine {
         auto* pipeline = resMgr->getPipeline(m_pipeline);
         if (!pipeline) return;
         encoder->bindPipeline(pipeline);
-        auto* playout = resMgr->getPipelineLayout(m_layout);
+        auto* playout = resMgr->getPipelineLayout(pipeline->getLayout());
         if (playout) {
             if (m_globalSet.isValid())
                 encoder->bindDescriptorSets(RHI::PipelineBindPoint::Graphics, playout, 0, {m_globalSet}, {});

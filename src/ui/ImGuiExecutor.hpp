@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../renderer/passes/Subpass.hpp"
+#include "../renderer/passExecutor/IPassExecutor.hpp"
 #include <memory>
 #include <vector>
 
