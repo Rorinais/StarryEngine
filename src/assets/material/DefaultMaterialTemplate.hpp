@@ -4,15 +4,9 @@
 namespace StarryEngine::Assets {
     class DefaultMaterialTemplate : public MaterialTemplate {
     public:
-        DefaultMaterialTemplate(
-            std::shared_ptr<RHI::ResourceManager> resMgr,
-            const std::unordered_map<uint32_t, RHI::DescriptorSetLayoutHandle>& layouts,
-            const std::vector<RHI::PushConstantRange>& pushConstants = {});
+        DefaultMaterialTemplate(std::shared_ptr<RHI::ResourceManager> resMgr,const std::unordered_map<uint32_t, RHI::DescriptorSetLayoutHandle>& layouts,const std::vector<RHI::PushConstantRange>& pushConstants = {});
 
-        DefaultMaterialTemplate(
-            std::shared_ptr<RHI::ResourceManager> resMgr,
-            RHI::DescriptorSetLayoutHandle globalSetLayout,
-            const std::vector<RHI::PushConstantRange>& pushConstants = {});
+        DefaultMaterialTemplate(std::shared_ptr<RHI::ResourceManager> resMgr,RHI::DescriptorSetLayoutHandle globalSetLayout,const std::vector<RHI::PushConstantRange>& pushConstants = {});
 
         ~DefaultMaterialTemplate() = default;
         void invalidate();
@@ -33,9 +27,7 @@ namespace StarryEngine::Assets {
         const RHI::ShaderReflectionInfo& getFSReflection() const override { return m_fsReflection; }
 
     private:
-        void fillMissingLayouts(
-            std::unordered_map<uint32_t, RHI::DescriptorSetLayoutHandle>& layouts,
-            std::shared_ptr<RHI::ResourceManager> resMgr);
+        void fillMissingLayouts(std::unordered_map<uint32_t, RHI::DescriptorSetLayoutHandle>& layouts,std::shared_ptr<RHI::ResourceManager> resMgr);
 
         std::shared_ptr<RHI::ResourceManager> m_resMgr;
 

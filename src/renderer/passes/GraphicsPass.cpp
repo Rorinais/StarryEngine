@@ -11,8 +11,7 @@ namespace StarryEngine {
         m_passNode->setRenderArea(width, height);
 
         // 附件 key 去重（同一纹理只注册一次到 PassNode）
-        std::unordered_map<RenderGraph::TextureId, std::string> colorKeys, depthKeys,
-                                                                     inputKeys, resolveKeys, preserveKeys;
+        std::unordered_map<RenderGraph::TextureId, std::string> colorKeys, depthKeys,inputKeys, resolveKeys, preserveKeys;
 
         for (size_t idx = 0; idx < m_subpasses.size(); ++idx) {
             const auto& sp = m_subpasses[idx];

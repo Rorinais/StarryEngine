@@ -58,7 +58,7 @@ namespace std {
         }
     };
 
-    // 枚举特化（放在 namespace std 内，与其他特化一起）
+    // 枚举特化
     template<> struct hash<StarryEngine::RHI::ShaderStage> {
         size_t operator()(StarryEngine::RHI::ShaderStage val) const noexcept {
             return static_cast<size_t>(val);
@@ -137,7 +137,6 @@ namespace std {
         }
     };
 
-    // 可选：BufferHandle 和 DescriptorSetHandle
     template<> struct hash<StarryEngine::RHI::BufferHandle> {
         size_t operator()(const StarryEngine::RHI::BufferHandle& handle) const noexcept {
             return typename StarryEngine::RHI::BufferHandle::Hash{}(handle);

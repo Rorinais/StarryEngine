@@ -9,23 +9,18 @@ namespace StarryEngine::Scene {
     struct RenderObject;
 
     enum class DrawItemType {
-        Mesh,        // 普通网格（可含实例化）
-        Procedural   // 无网格，直接绘制顶点（全屏三角形等）
+        Mesh,        // 普通网格
+        Procedural   // 无网格，直接绘制顶点
     };
 
     struct DrawItem {
         DrawItemType type = DrawItemType::Mesh;
 
         std::string passTag;
-
-        // ---------- 通用字段 ----------
         std::unordered_map<uint32_t, RHI::DescriptorSetHandle> descriptorSets;
         uint32_t pipelineIndex = 0;
-
-        // 对象引用（用于获取变换矩阵）
         std::weak_ptr<RenderObject> object;
 
-        // ---------- 网格相关（仅当 type == Mesh 时有效）----------
         RHI::BufferHandle vertexBuffer;
         RHI::BufferHandle indexBuffer;
         uint32_t indexOffset = 0;
@@ -36,7 +31,6 @@ namespace StarryEngine::Scene {
         RHI::BufferHandle instanceBuffer;
         uint32_t instanceBufferStride = 0;
 
-        // ---------- 过程式绘制相关（仅当 type == Procedural 时有效）----------
         uint32_t vertexCount = 0;
         uint32_t firstVertex = 0;
         uint32_t firstInstance = 0;
@@ -56,7 +50,7 @@ namespace StarryEngine::Scene {
         RHI::ShaderHandle fragmentShader;
 
         RHI::RenderPassHandle renderPass;
-        uint32_t subpassIndex = -1;   // -1 表示由 RenderGraph 自动绑定
+        uint32_t subpassIndex = -1;   
 
         RHI::VertexInputState vertexInput;
 

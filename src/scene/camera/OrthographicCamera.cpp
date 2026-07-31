@@ -35,7 +35,6 @@ namespace StarryEngine::Scene {
     }
 
     void OrthographicCamera::updateViewMatrix() {
-        // 对于正交相机，视图矩阵通常也是由 lookAt 生成，保持与透视相机一致
         m_viewMatrix = glm::lookAt(m_position, m_target, m_up);
         m_viewDirty = false;
     }

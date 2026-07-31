@@ -178,11 +178,6 @@ namespace StarryEngine {
 
         ImGui::End(); // MainDockSpace
 
-        // ════════════════════════════════════════
-        // 具体的面板窗口
-        //   （必须在 DockSpace End() 之后）
-        // ════════════════════════════════════════
-
         // Scene View — 渲染画面
         if (m_showSceneView && ImGui::Begin("Scene View", &m_showSceneView)) {
             ImTextureID texID = m_imguiManager->getSceneTextureID();
@@ -318,7 +313,6 @@ namespace StarryEngine {
         initImGui();
         //initComputePipeline();
 
-        // 确保 swap chain 使用实际帧缓冲尺寸（考虑 scaleToMonitor 缩放）
         {
             int fbW, fbH;
             glfwGetFramebufferSize(m_window->getHandle(), &fbW, &fbH);
@@ -479,7 +473,7 @@ namespace StarryEngine {
 
         // 窗口尺寸变化
         GetEventDispatcher().subscribe(EventType::WindowResize, [this](IEvent& e) {
-            // 直接从 GLFW 获取实际帧缓冲尺寸（比回调参数更准确）
+            // 直接从 GLFW 获取实际帧缓冲尺寸
             int newWidth, newHeight;
             glfwGetFramebufferSize(m_window->getHandle(), &newWidth, &newHeight);
             if (newWidth == 0 || newHeight == 0) {
@@ -583,14 +577,12 @@ namespace StarryEngine {
     }
 
     Application::~Application() {
-        // ✅ 先关闭 ImGui
         if (m_imguiManager) {
             m_imguiManager->shutdown(m_resMgr.get());
         }
         m_imguiManager.reset();
         m_imguiExecutor.reset();
 
-        // 然后 RHI
         if (m_rhi) m_rhi->waitIdle();
         m_rhi.reset();
         m_window.reset();

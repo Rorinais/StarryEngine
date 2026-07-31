@@ -130,8 +130,7 @@ namespace StarryEngine {
 
     // ──── 呈现层 ────────────────────────────────────────────────────
 
-    void BaseRenderPath::buildPresentationPasses(
-        std::unordered_map<std::string, RenderGraph::TextureId>& texIdMap) {
+    void BaseRenderPath::buildPresentationPasses(std::unordered_map<std::string, RenderGraph::TextureId>& texIdMap) {
         if (!m_overlayPasses.empty()) {
             for (const auto& overlay : m_overlayPasses) {
                 auto* passNode = m_renderGraph->addGraphicsPassNode(overlay.tag + "Pass");
@@ -165,8 +164,7 @@ namespace StarryEngine {
         }
     }
 
-    void BaseRenderPath::buildPresentationPass(
-        std::unordered_map<std::string, RenderGraph::TextureId>& texIdMap) {
+    void BaseRenderPath::buildPresentationPass(std::unordered_map<std::string, RenderGraph::TextureId>& texIdMap) {
         const std::string tag = "Presentation";
         auto* passNode = m_renderGraph->addGraphicsPassNode("PresentationPass");
         passNode->setRenderArea(m_width, m_height);
@@ -203,8 +201,7 @@ namespace StarryEngine {
 
     // ──── 编译 + 内建管道 ──────────────────────────────────────────
 
-    bool BaseRenderPath::compileAndFinalize(
-        std::unordered_map<std::string, RenderGraph::TextureId>& texIdMap) {
+    bool BaseRenderPath::compileAndFinalize(std::unordered_map<std::string, RenderGraph::TextureId>& texIdMap) {
         if (!m_renderGraph->compile()) { LOG_ERROR("RenderGraph compile failed"); return false; }
 
         for (auto& [tag, target] : m_tagToSubpass) {
@@ -248,8 +245,7 @@ namespace StarryEngine {
         LOG_INFO("PresentationPass shaders loaded");
     }
 
-    void BaseRenderPath::preparePresentationPipeline(
-        std::unordered_map<std::string, RenderGraph::TextureId>& texIdMap) {
+    void BaseRenderPath::preparePresentationPipeline(std::unordered_map<std::string, RenderGraph::TextureId>& texIdMap) {
         if (!m_presentationShadersReady) ensurePresentationShaders();
         if (!m_presentationShadersReady || m_presentationPipelineReady) return;
 

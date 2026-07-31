@@ -29,8 +29,8 @@ namespace StarryEngine::Assets {
     };
 
     struct LightData {
-        glm::vec4 position;      // 点光源位置，方向光则存方向（w=0.0）
-        glm::vec4 color;         // rgb 颜色，a 存强度
+        glm::vec4 position;      
+        glm::vec4 color;        
     };
 
     struct LightingUniforms {
@@ -116,9 +116,9 @@ namespace StarryEngine::Assets {
     };
 
     struct InstancingAttribute {
-        uint32_t location;      // 着色器中的 location
-        RHI::Format format;     // 数据类型（如 RGBA32_Float）
-        uint32_t offset;        // 在实例缓冲区中的偏移（字节）
+        uint32_t location;      
+        RHI::Format format;     
+        uint32_t offset;      
     };
 
     struct InstancingLayout {
@@ -137,15 +137,12 @@ namespace StarryEngine::Assets {
 
         RHI::VertexInputState toVertexInputState() const {
             RHI::VertexInputState state;
-
-            // 显式构造 VertexBinding
             RHI::VertexBinding vb;
             vb.binding = binding;
             vb.stride = stride;
             vb.inputRate = RHI::VertexInputRate::PerInstance;
             state.bindings.push_back(vb);
 
-            // 显式构造每个 VertexAttribute
             for (const auto& attr : attributes) {
                 RHI::VertexAttribute va;
                 va.location = attr.location;

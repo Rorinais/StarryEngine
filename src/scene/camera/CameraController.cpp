@@ -26,8 +26,8 @@ namespace StarryEngine {
         if (m_keyStates[GLFW_KEY_S]) moveDir -= getForward();
         if (m_keyStates[GLFW_KEY_A]) moveDir -= getRight();
         if (m_keyStates[GLFW_KEY_D]) moveDir += getRight();
-        if (m_keyStates[GLFW_KEY_Q]) moveDir -= glm::vec3(0, 1, 0); // 下降
-        if (m_keyStates[GLFW_KEY_E]) moveDir += glm::vec3(0, 1, 0); // 上升
+        if (m_keyStates[GLFW_KEY_Q]) moveDir -= glm::vec3(0, 1, 0); 
+        if (m_keyStates[GLFW_KEY_E]) moveDir += glm::vec3(0, 1, 0); 
 
         if (glm::length(moveDir) > 0.001f) {
             moveDir = glm::normalize(moveDir);
@@ -58,7 +58,7 @@ namespace StarryEngine {
         }
 
         double xOffset = x - m_lastX;
-        double yOffset = m_lastY - y; // 反转 Y 轴
+        double yOffset = m_lastY - y;
         m_lastX = x;
         m_lastY = y;
 
@@ -86,15 +86,10 @@ namespace StarryEngine {
         auto perspCam = std::dynamic_pointer_cast<Scene::PerspectiveCamera>(m_camera);
         if (!perspCam) return;
 
-        // 当前 FOV（弧度）转为度数
         float currentFovDeg = glm::degrees(perspCam->getFov());
-        // 调整度数，限制在合理范围
         float newFovDeg = glm::clamp(currentFovDeg + delta, 30.0f, 120.0f);
-        // 转回弧度并设置
-        perspCam->setPerspective(glm::radians(newFovDeg),
-            perspCam->getAspect(),
-            perspCam->getNear(),
-            perspCam->getFar());
+
+        perspCam->setPerspective(glm::radians(newFovDeg),perspCam->getAspect(),perspCam->getNear(),perspCam->getFar());
         perspCam->updateProjection();
     }
 
@@ -126,20 +121,16 @@ namespace StarryEngine {
         const glm::vec3& currentPos) {
         if (!newCamera) return;
         m_camera = newCamera;
-        m_position = currentPos;  // 保持位置不变
+        m_position = currentPos; 
 
-        // 从当前视图矩阵提取方向
         glm::vec3 forward = -glm::normalize(glm::vec3(currentView[2]));
         glm::vec3 up = glm::vec3(currentView[1]);
 
-        // 计算 yaw 和 pitch
         m_yaw = glm::degrees(atan2(forward.z, forward.x));
         m_pitch = glm::degrees(asin(forward.y));
-
-        // 直接设置新相机的视图（通过 lookAt 更新其内部状态）
+        
         m_camera->lookAt(m_position, m_position + forward, up);
 
-        // 立即更新控制器的视图矩阵（以便后续 update 使用）
         updateViewMatrix();
     }
 

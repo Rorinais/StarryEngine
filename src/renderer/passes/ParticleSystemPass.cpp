@@ -101,7 +101,7 @@ namespace StarryEngine {
         createComputeResources(resMgr);
         createRenderPipelineLayout(resMgr, globalSetLayout);
 
-        // 粒子存储 buffer（名称为 {name}_Buffer，支持多实例）
+        // 粒子存储 buffer
         std::string bufName = m_desc.name + "_Buffer";
         RHI::BufferDesc bufDesc;
         bufDesc.size = m_desc.particleCount * m_desc.perParticleFloats * sizeof(float);
@@ -189,7 +189,6 @@ namespace StarryEngine {
             ds->update();
         }
 
-        // 注册 compute executor
         std::string csPassName = m_desc.name + "_Update";
         for (auto& p : renderGraph->getPasses()) {
             if (p->getName() == csPassName) {
@@ -199,11 +198,9 @@ namespace StarryEngine {
             }
         }
 
-        // 获取 render pass handle
         RHI::RenderPassHandle rp = m_renderPassNode->getRenderPassHandle();
         if (!rp.isValid()) return;
 
-        // 创建 graphics pipeline
         Scene::GraphicsPipelineState pso;
         pso.vertexShader = m_particleVS;
         pso.fragmentShader = m_particleFS;

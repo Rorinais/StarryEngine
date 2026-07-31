@@ -120,7 +120,6 @@ namespace StarryEngine {
                 return false;
             }
 
-            // 存储数据以确保生命周期
             mIconData.assign(data, data + width * height * 4);
             stbi_image_free(data);
 
@@ -145,7 +144,6 @@ namespace StarryEngine {
                     }
                 }
                 else if (channels == 3) {
-                    // RGB转RGBA
                     for (int i = 0; i < width * height; ++i) {
                         rgbaData[i * 4] = data[i * 3];
                         rgbaData[i * 4 + 1] = data[i * 3 + 1];

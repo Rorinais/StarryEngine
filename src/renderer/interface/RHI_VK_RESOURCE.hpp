@@ -284,7 +284,7 @@ namespace StarryEngine::RHI {
         RHI_VK_ComputePipeline(
             Device::Ptr device,
             const ComputePipelineDesc& desc,
-            VkPipelineShaderStageCreateInfo shaderStage,   // 计算管线只需一个阶段
+            VkPipelineShaderStageCreateInfo shaderStage,   
             VkPipelineLayout pipelineLayout
         );
 

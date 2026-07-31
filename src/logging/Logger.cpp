@@ -63,13 +63,10 @@ namespace StarryEngine {
     void Logger::updatePatterns() {
         if (!s_logger) return;
 
-        // 基础格式
         std::string basePattern = "[%Y-%m-%d %H:%M:%S.%e] [%^%l%$]";
-        // 根据开关决定是否添加源位置
         std::string sourcePart = s_showSourceLoc ? " [%s:%#]" : "";
         std::string fullPattern = basePattern + sourcePart + " %v";
 
-        // 应用到所有 sink
         for (auto& sink : s_logger->sinks()) {
             sink->set_pattern(fullPattern);
         }

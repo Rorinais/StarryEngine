@@ -16,30 +16,18 @@ namespace StarryEngine::Assets {
         ShaderLoader(std::shared_ptr<RHI::ResourceManager> resMgr);
         ~ShaderLoader() = default;
 
-        // 从文件加载单个阶段，返回创建信息
-        std::optional<ShaderCreateInfo> loadFromFile(const std::string& path, RHI::ShaderStage stage,
-            const std::unordered_map<std::string, std::string>& macros = {});
+        std::optional<ShaderCreateInfo> loadFromFile(const std::string& path, RHI::ShaderStage stage,const std::unordered_map<std::string, std::string>& macros = {});
 
-        // 从源码加载单个阶段
-        std::optional<ShaderCreateInfo> loadFromSource(const std::string& source,
-            RHI::ShaderStage stage,
-            const std::string& name = "",
-            const std::unordered_map<std::string, std::string>& macros = {});
+        std::optional<ShaderCreateInfo> loadFromSource(const std::string& source,RHI::ShaderStage stage,const std::string& name = "",const std::unordered_map<std::string, std::string>& macros = {});
 
         void clearCache();
 
     private:
         std::shared_ptr<RHI::ResourceManager> m_resMgr;
 
-        // 编译 GLSL 到 SPIR-V
-        std::vector<uint32_t> compileToSpirv(const std::string& source,
-            RHI::ShaderStage stage,
-            const std::string& name,
-            const std::unordered_map<std::string, std::string>& macros = {});
+        std::vector<uint32_t> compileToSpirv(const std::string& source,RHI::ShaderStage stage,const std::string& name,const std::unordered_map<std::string, std::string>& macros = {});
 
-        // 反射 SPIR-V，提取资源绑定和输入布局，并创建描述符集布局
-        bool reflectAndCreateLayouts(const std::vector<uint32_t>& spirv,
-            ShaderCreateInfo& outInfo);
+        bool reflectAndCreateLayouts(const std::vector<uint32_t>& spirv,ShaderCreateInfo& outInfo);
         void fillTextureInfo(const spirv_cross::SPIRType& type,RHI::ResourceBinding::TextureInfo& info);
 
         void flattenUBOMembers(

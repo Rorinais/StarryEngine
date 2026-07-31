@@ -7,17 +7,13 @@
 
 namespace StarryEngine::Assets {
 
-    // ═══════════════════════════════════════════════
-    // 内部辅助类与函数
-    // ═══════════════════════════════════════════════
-
     static RHI::RenderPassHandle createSimpleColorRenderPass(
         RHI::ResourceManager* resMgr,
         RHI::Format colorFormat,
         RHI::AttachmentLoadOp loadOp = RHI::AttachmentLoadOp::DontCare,
         RHI::AttachmentStoreOp storeOp = RHI::AttachmentStoreOp::Store,
-        RHI::ImageLayout finalLayout = RHI::ImageLayout::ShaderReadOnly)
-    {
+        RHI::ImageLayout finalLayout = RHI::ImageLayout::ShaderReadOnly){
+
         RHI::RenderPassDesc rpDesc;
         RHI::AttachmentDesc colorAtt;
         colorAtt.format = colorFormat;
@@ -46,9 +42,8 @@ namespace StarryEngine::Assets {
         RHI::PipelineLayoutHandle pipelineLayout,
         RHI::RenderPassHandle     renderPass,
         uint32_t                  subpass = 0,
-        const std::vector<RHI::DynamicState>& dynamicStates =
-        { RHI::DynamicState::Viewport, RHI::DynamicState::Scissor })
-    {
+        const std::vector<RHI::DynamicState>& dynamicStates ={ RHI::DynamicState::Viewport, RHI::DynamicState::Scissor }){
+
         RHI::GraphicsPipelineDesc gPipeline;
         gPipeline.vertexShader = vertShader;
         gPipeline.fragmentShader = fragShader;
@@ -77,6 +72,7 @@ namespace StarryEngine::Assets {
     public:
         OneTimeCommandExecutor(RHI::IRHI* rhi, RHI::ResourceManager* resMgr)
             : m_rhi(rhi), m_resMgr(resMgr), m_submitted(false) {
+
             VkDevice vkDevice = static_cast<VkDevice>(m_rhi->getDevice());
             VkCommandPoolCreateInfo poolCI{};
             poolCI.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -95,7 +91,9 @@ namespace StarryEngine::Assets {
             vkBeginCommandBuffer(m_cmdBuf, &beginBI);
             m_encoder = m_rhi->getCommandEncoder(m_cmdBuf);
         }
+
         ~OneTimeCommandExecutor() {
+
             if (m_encoder && !m_submitted) {
                 m_encoder->end();
                 VkSubmitInfo submitInfo{};
@@ -121,29 +119,20 @@ namespace StarryEngine::Assets {
         bool m_submitted = false;
     };
 
-    // ═══════════════════════════════════════════════
-    // 构造 & 析构
-    // ═══════════════════════════════════════════════
+    IBLBuilder::IBLBuilder(std::shared_ptr<RHI::ResourceManager> resMgr,std::shared_ptr<RHI::IRHI> rhi)
+        : m_resMgr(std::move(resMgr)), m_rhi(std::move(rhi)){
 
-    IBLBuilder::IBLBuilder(std::shared_ptr<RHI::ResourceManager> resMgr,
-        std::shared_ptr<RHI::IRHI> rhi)
-        : m_resMgr(std::move(resMgr)), m_rhi(std::move(rhi))
-    {
-        // ── 加载图形管线共用的全屏三角形 Shader ──
         Assets::ShaderLoader shaderLoader(m_resMgr);
-        auto vsInfo = shaderLoader.loadFromFile(
-            "assets/shaders/ibl/equirect_to_cubemap.vert", RHI::ShaderStage::Vertex);
-        auto fsInfo = shaderLoader.loadFromFile(
-            "assets/shaders/ibl/equirect_to_cubemap.frag", RHI::ShaderStage::Fragment);
+        auto vsInfo = shaderLoader.loadFromFile("assets/shaders/ibl/equirect_to_cubemap.vert", RHI::ShaderStage::Vertex);
+        auto fsInfo = shaderLoader.loadFromFile("assets/shaders/ibl/equirect_to_cubemap.frag", RHI::ShaderStage::Fragment);
+
         if (vsInfo && fsInfo) {
             m_vs = vsInfo->module;
             m_fs = fsInfo->module;
-        }
-        else {
+        } else {
             LOG_WARN("IBLBuilder: default fullscreen shaders not loaded");
         }
 
-        // ── 创建图形管线共用的 DescriptorSetLayout ──
         RHI::DescriptorSetLayoutDesc layoutDesc;
         layoutDesc.bindings = {
             { 0, RHI::DescriptorType::CombinedImageSampler, 1,
@@ -151,7 +140,6 @@ namespace StarryEngine::Assets {
         };
         m_descLayout = m_resMgr->createDescriptorSetLayout(layoutDesc);
 
-        // ── 创建图形管线共用的 PipelineLayout ──
         RHI::PipelineLayoutDesc plDesc;
         plDesc.descriptorSetLayouts = { m_descLayout };
         plDesc.pushConstants = {
@@ -167,19 +155,15 @@ namespace StarryEngine::Assets {
         if (m_fs.isValid())             m_resMgr->destroy(m_fs);
     }
 
-    // ═══════════════════════════════════════════════
-    // 图形管线：内部辅助
-    // ═══════════════════════════════════════════════
-
     RHI::DescriptorSetHandle IBLBuilder::createDescriptorSet(
         RHI::TextureHandle      texture,
         RHI::SamplerHandle      sampler,
         RHI::DescriptorSetLayoutHandle layout,
-        RHI::DescriptorPoolHandle      pool)
-    {
+        RHI::DescriptorPoolHandle      pool){
         RHI::DescriptorSetDesc setDesc;
         setDesc.descriptorSetLayout = layout;
         setDesc.descriptorPool = pool;
+
         auto descSet = m_resMgr->createDescriptorSet(setDesc);
         if (!descSet.isValid()) return descSet;
 
@@ -187,16 +171,10 @@ namespace StarryEngine::Assets {
         auto* texObj = m_resMgr->getTexture(texture);
         auto* samplerObj = m_resMgr->getSampler(sampler);
         if (setObj && texObj && samplerObj) {
-            setObj->writeTexture(0, 0, texObj, samplerObj,
-                RHI::ImageLayout::ShaderReadOnly);
-            setObj->update();
+            setObj->writeTexture(0, 0, texObj, samplerObj,RHI::ImageLayout::ShaderReadOnly);setObj->update();
         }
         return descSet;
     }
-
-    // ═══════════════════════════════════════════════
-    // 计算管线：内部辅助
-    // ═══════════════════════════════════════════════
 
     RHI::DescriptorSetHandle IBLBuilder::createComputeDescriptorSet(
         RHI::TextureHandle      inputTex,
@@ -204,8 +182,8 @@ namespace StarryEngine::Assets {
         RHI::TextureHandle      outputTex,
         RHI::DescriptorSetLayoutHandle layout,
         RHI::DescriptorPoolHandle      pool,
-        RHI::ImageLayout        outputLayout)
-    {
+        RHI::ImageLayout        outputLayout){
+
         RHI::DescriptorSetDesc setDesc;
         setDesc.descriptorSetLayout = layout;
         setDesc.descriptorPool = pool;
@@ -213,26 +191,13 @@ namespace StarryEngine::Assets {
         if (!descSet.isValid()) return descSet;
 
         auto* setObj = m_resMgr->getDescriptorSet(descSet);
-        setObj->writeTexture(0, 0,
-            m_resMgr->getTexture(inputTex),
-            m_resMgr->getSampler(sampler),
-            RHI::ImageLayout::ShaderReadOnly);
-        setObj->writeTexture(1, 0,
-            m_resMgr->getTexture(outputTex),
-            nullptr,
-            outputLayout);
+        setObj->writeTexture(0, 0,m_resMgr->getTexture(inputTex),m_resMgr->getSampler(sampler),RHI::ImageLayout::ShaderReadOnly);
+        setObj->writeTexture(1, 0,m_resMgr->getTexture(outputTex),nullptr,outputLayout);
         return descSet;
     }
 
-    // ═══════════════════════════════════════════════
-    // 图形管线：equirect → cubemap
-    // ═══════════════════════════════════════════════
+    RHI::TextureHandle IBLBuilder::equirectToCubemap(RHI::TextureHandle equirectTex,uint32_t faceSize){
 
-    RHI::TextureHandle IBLBuilder::equirectToCubemap(
-        RHI::TextureHandle equirectTex,
-        uint32_t            faceSize)
-    {
-        // ── 计算 mip 层数 ──
         uint32_t mipLevels = 1;
         {
             uint32_t s = faceSize;
@@ -321,11 +286,6 @@ namespace StarryEngine::Assets {
 
         }
 
-        // ═══════════════════════════════════════════════
-        // 生成源 Cubemap 的 mip 链（图形管线路径）
-        //   渲染完成后 mip 0 处于 ShaderReadOnly，
-        //   用 cubemap_downsample.comp 在 3D 方向空间降采样
-        // ═══════════════════════════════════════════════
         if (mipLevels > 1) {
             Assets::ShaderLoader dsLoader(m_resMgr);
             auto dsInfo = dsLoader.loadFromFile(
@@ -473,14 +433,7 @@ namespace StarryEngine::Assets {
         return cubemap;
     }
 
-    // ═══════════════════════════════════════════════
-    // 图形管线：Irradiance Map
-    // ═══════════════════════════════════════════════
-
-    RHI::TextureHandle IBLBuilder::generateIrradianceMap(
-        RHI::TextureHandle envCubemap,
-        uint32_t            outputSize)
-    {
+    RHI::TextureHandle IBLBuilder::generateIrradianceMap(RHI::TextureHandle envCubemap,uint32_t outputSize){
 
         if (!envCubemap.isValid()) return RHI::TextureHandle::Null();
 
@@ -587,15 +540,11 @@ namespace StarryEngine::Assets {
         return irradMap;
     }
 
-    // ═══════════════════════════════════════════════
-    // 图形管线：Prefiltered Map
-    // ═══════════════════════════════════════════════
-
     RHI::TextureHandle IBLBuilder::generatePrefilteredMap(
         RHI::TextureHandle envCubemap,
         uint32_t            baseSize,
-        uint32_t            mipLevels)
-    {
+        uint32_t            mipLevels){
+
         if (!envCubemap.isValid()) return RHI::TextureHandle::Null();
 
         Assets::ShaderLoader loader(m_resMgr);
@@ -714,11 +663,8 @@ namespace StarryEngine::Assets {
         return prefilteredMap;
     }
 
-    // ═══════════════════════════════════════════════
-    // 图形管线：BRDF LUT
-    // ═══════════════════════════════════════════════
-
     RHI::TextureHandle IBLBuilder::generateBrdfLut(uint32_t size) {
+
         Assets::ShaderLoader loader(m_resMgr);
         auto vsInfo = loader.loadFromFile("assets/shaders/ibl/brdf_lut.vert", RHI::ShaderStage::Vertex);
         auto fsInfo = loader.loadFromFile("assets/shaders/ibl/brdf_lut.frag", RHI::ShaderStage::Fragment);
@@ -784,22 +730,14 @@ namespace StarryEngine::Assets {
         return brdfLut;
     }
 
-    // ═══════════════════════════════════════════════
-    // 计算管线：equirect → cubemap
-    // ═══════════════════════════════════════════════
+    RHI::TextureHandle IBLBuilder::equirectToCubemapCS(RHI::TextureHandle equirectTex,uint32_t faceSize){
 
-    RHI::TextureHandle IBLBuilder::equirectToCubemapCS(
-        RHI::TextureHandle equirectTex,
-        uint32_t            faceSize)
-    {
-        // ── 计算 mip 层数 ──
         uint32_t mipLevels = 1;
         {
             uint32_t s = faceSize;
             while (s > 1) { s >>= 1; ++mipLevels; }
         }
 
-        // ── 创建设备端 Cubemap 纹理（6 层，允许 storage，含完整 mip 链）──
         RHI::TextureDesc cubemapDesc;
         cubemapDesc.extent = { faceSize, faceSize, 1 };
         cubemapDesc.format = RHI::Format::RGBA32_Float;
@@ -816,12 +754,10 @@ namespace StarryEngine::Assets {
 
         // ── 加载 Compute Shader ──
         Assets::ShaderLoader shaderLoader(m_resMgr);
-        auto csInfo = shaderLoader.loadFromFile(
-            "assets/shaders/ibl/equirect_to_cubemap.comp", RHI::ShaderStage::Compute);
+        auto csInfo = shaderLoader.loadFromFile("assets/shaders/ibl/equirect_to_cubemap.comp", RHI::ShaderStage::Compute);
         if (!csInfo) return RHI::TextureHandle::Null();
         auto computeShader = csInfo->module;
 
-        // ── 创建 DescriptorSetLayout ──
         RHI::DescriptorSetLayoutDesc layoutDesc;
         layoutDesc.bindings = {
             { 0, RHI::DescriptorType::CombinedImageSampler, 1, RHI::ShaderStage::Compute },
@@ -829,19 +765,16 @@ namespace StarryEngine::Assets {
         };
         auto descLayout = m_resMgr->createDescriptorSetLayout(layoutDesc);
 
-        // ── 创建 PipelineLayout (push constant 传 faceSize) ──
         RHI::PipelineLayoutDesc plDesc;
         plDesc.descriptorSetLayouts = { descLayout };
         plDesc.pushConstants = { { RHI::ShaderStage::Compute, 0, sizeof(uint32_t) } };
         auto plLayout = m_resMgr->createPipelineLayout(plDesc);
 
-        // ── 创建 ComputePipeline ──
         RHI::ComputePipelineDesc compDesc;
         compDesc.computeShader = computeShader;
         compDesc.pipelineLayoutHandle = plLayout;
         auto pipeline = m_resMgr->createComputePipeline(compDesc);
 
-        // ── 创建采样器 ──
         RHI::SamplerDesc sampDesc;
         sampDesc.minFilter = RHI::SamplerFilter::Linear;
         sampDesc.magFilter = RHI::SamplerFilter::Linear;
@@ -849,7 +782,6 @@ namespace StarryEngine::Assets {
         sampDesc.addressV = RHI::SamplerAddressMode::ClampToEdge;
         auto sampler = m_resMgr->createSampler(sampDesc);
 
-        // ── ★ 创建覆盖全部 6 个面的 Cube 视图（compute shader 只写 mip 0）──
         auto* cubemapObj = m_resMgr->getTexture(cubemap);
         RHI::ImageSubresourceRange cubeViewRange;
         cubeViewRange.aspectMask = RHI::ImageAspect::Color;
@@ -859,7 +791,6 @@ namespace StarryEngine::Assets {
         cubeViewRange.layerCount = 6;
         void* cubeViewKey = cubemapObj->createView(cubeViewRange, RHI::ImageViewType::TextureCube);
 
-        // ── ★ 布局转换范围：覆盖全部 mip ──
         RHI::ImageSubresourceRange allMips;
         allMips.aspectMask = RHI::ImageAspect::Color;
         allMips.baseMipLevel = 0;
@@ -868,7 +799,6 @@ namespace StarryEngine::Assets {
         allMips.layerCount = 6;
         void* nativeView = cubemapObj->getNativeHandleFromView(cubeViewKey);
 
-        // ── 创建 DescriptorPool ──
         RHI::DescriptorPoolDesc poolDesc;
         poolDesc.maxSets = 1;
         poolDesc.poolSizes = {
@@ -878,7 +808,6 @@ namespace StarryEngine::Assets {
         poolDesc.freeDescriptorSet = true;
         auto pool = m_resMgr->createDescriptorPool(poolDesc);
 
-        // ── 创建 DescriptorSet 并绑定资源 ──
         RHI::DescriptorSetDesc setDesc;
         setDesc.descriptorSetLayout = descLayout;
         setDesc.descriptorPool = pool;
@@ -889,18 +818,10 @@ namespace StarryEngine::Assets {
         }
 
         auto* setObj = m_resMgr->getDescriptorSet(descSet);
-        // binding 0: equirect 贴图 + 采样器
-        setObj->writeTexture(0, 0,
-            m_resMgr->getTexture(equirectTex),
-            m_resMgr->getSampler(sampler),
-            RHI::ImageLayout::ShaderReadOnly);
-        // binding 1: 输出 cubemap，使用全层视图
-        setObj->writeTextureCustomView(1, 0,
-            nativeView, nullptr,
-            RHI::ImageLayout::General);
+        setObj->writeTexture(0, 0,m_resMgr->getTexture(equirectTex),m_resMgr->getSampler(sampler),RHI::ImageLayout::ShaderReadOnly);
+        setObj->writeTextureCustomView(1, 0,nativeView, nullptr,RHI::ImageLayout::General);
         setObj->update();
 
-        // ── 过渡整张 Cube 到 General 布局（所有 mip / 层）──
         {
             OneTimeCommandExecutor executor(m_rhi.get(), m_resMgr.get());
             auto* cmd = executor.get();
@@ -923,12 +844,11 @@ namespace StarryEngine::Assets {
 
             uint32_t gx = (faceSize + 15) / 16;
             uint32_t gy = (faceSize + 15) / 16;
-            cmd->dispatch(gx, gy, 6);      // 同时处理 6 个面
+            cmd->dispatch(gx, gy, 6);     
         }
 
         m_rhi->waitIdle();
 
-        // ── 过渡 mip 0 到 ShaderReadOnly（供 downsampler 读取）──
         {
             RHI::ImageSubresourceRange mip0Range;
             mip0Range.aspectMask = RHI::ImageAspect::Color;
@@ -945,12 +865,6 @@ namespace StarryEngine::Assets {
                 mip0Range);
         }
 
-        // ═══════════════════════════════════════════════
-        // 生成源 Cubemap 的 mip 链
-        //   用 cubemap_downsample.comp 在 3D 方向空间
-        //   做 2×2 box filter，处理 cubemap 接缝、
-        //   始终从 mip 0 读取避免累积误差
-        // ═══════════════════════════════════════════════
         if (mipLevels > 1) {
             Assets::ShaderLoader dsLoader(m_resMgr);
             auto dsInfo = dsLoader.loadFromFile(
@@ -990,12 +904,9 @@ namespace StarryEngine::Assets {
                     { RHI::DescriptorType::CombinedImageSampler, 64 },
                     { RHI::DescriptorType::StorageImage,         64 }
                 };
-                dsPoolDesc.freeDescriptorSet = false;  // 一次性使用，不需要释放
+                dsPoolDesc.freeDescriptorSet = false; 
                 auto dsPool = m_resMgr->createDescriptorPool(dsPoolDesc);
 
-                // ── 仅含 mip 0 的 Cube 视图 ──
-                //    sampler 视图若覆盖全部 mip，而 mip 1+ 处于 General，
-                //    会与描述符声明的 ShaderReadOnly 冲突
                 RHI::ImageSubresourceRange srcOnlyMip0;
                 srcOnlyMip0.aspectMask = RHI::ImageAspect::Color;
                 srcOnlyMip0.baseMipLevel = 0;
@@ -1082,7 +993,6 @@ namespace StarryEngine::Assets {
             }
         }
 
-        // ── 清理资源 ──
         cubemapObj->destroyView(cubeViewKey);
         m_resMgr->destroy(descSet);
         m_resMgr->destroy(pool);
@@ -1095,24 +1005,16 @@ namespace StarryEngine::Assets {
         return cubemap;
     }
 
-    // ═══════════════════════════════════════════════
-    // 计算管线：Irradiance Map
-    // ═══════════════════════════════════════════════
+    RHI::TextureHandle IBLBuilder::generateIrradianceMapCS(RHI::TextureHandle envCubemap,uint32_t outputSize){
 
-    RHI::TextureHandle IBLBuilder::generateIrradianceMapCS(
-        RHI::TextureHandle envCubemap,
-        uint32_t            outputSize)
-    {
         if (!envCubemap.isValid()) return RHI::TextureHandle::Null();
 
-        // ── 加载 Shader ──
         Assets::ShaderLoader loader(m_resMgr);
         auto csInfo = loader.loadFromFile(
             "assets/shaders/ibl/irradiance_convolution.comp", RHI::ShaderStage::Compute);
         if (!csInfo) return RHI::TextureHandle::Null();
         auto cs = csInfo->module;
 
-        // ── 创建 DescriptorSetLayout ──
         RHI::DescriptorSetLayoutDesc layoutDesc;
         layoutDesc.bindings = {
             { 0, RHI::DescriptorType::CombinedImageSampler, 1, RHI::ShaderStage::Compute },
@@ -1120,19 +1022,16 @@ namespace StarryEngine::Assets {
         };
         auto descLayout = m_resMgr->createDescriptorSetLayout(layoutDesc);
 
-        // ── 创建 PipelineLayout ──
         RHI::PipelineLayoutDesc plDesc;
         plDesc.descriptorSetLayouts = { descLayout };
         plDesc.pushConstants = { { RHI::ShaderStage::Compute, 0, sizeof(uint32_t) } };
         auto plLayout = m_resMgr->createPipelineLayout(plDesc);
 
-        // ── 创建 ComputePipeline ──
         RHI::ComputePipelineDesc compDesc;
         compDesc.computeShader = cs;
         compDesc.pipelineLayoutHandle = plLayout;
         auto pipeline = m_resMgr->createComputePipeline(compDesc);
 
-        // ── 创建采样器 ──
         RHI::SamplerDesc sampDesc;
         sampDesc.minFilter = RHI::SamplerFilter::Linear;
         sampDesc.magFilter = RHI::SamplerFilter::Linear;
@@ -1140,7 +1039,6 @@ namespace StarryEngine::Assets {
         sampDesc.addressV = RHI::SamplerAddressMode::ClampToEdge;
         auto sampler = m_resMgr->createSampler(sampDesc);
 
-        // ── 创建输出纹理（Cube，6 层，storage 标记）──
         RHI::TextureDesc irradDesc;
         irradDesc.extent = { outputSize, outputSize, 1 };
         irradDesc.format = RHI::Format::RGBA32_Float;
@@ -1155,7 +1053,6 @@ namespace StarryEngine::Assets {
         auto irradMap = m_resMgr->createTexture(irradDesc);
         if (!irradMap.isValid()) return irradMap;
 
-        // ── 创建覆盖全部 6 个面的 Cube 视图 ──
         auto* irradObj = m_resMgr->getTexture(irradMap);
         RHI::ImageSubresourceRange allLayers;
         allLayers.aspectMask = RHI::ImageAspect::Color;
@@ -1166,7 +1063,6 @@ namespace StarryEngine::Assets {
         void* cubeViewKey = irradObj->createView(allLayers, RHI::ImageViewType::TextureCube);
         void* nativeView = irradObj->getNativeHandleFromView(cubeViewKey);
 
-        // ── 创建 DescriptorPool ──
         RHI::DescriptorPoolDesc poolDesc;
         poolDesc.maxSets = 1;
         poolDesc.poolSizes = {
@@ -1176,7 +1072,6 @@ namespace StarryEngine::Assets {
         poolDesc.freeDescriptorSet = true;
         auto pool = m_resMgr->createDescriptorPool(poolDesc);
 
-        // ── 创建 DescriptorSet 并手动绑定两个资源 ──
         RHI::DescriptorSetDesc setDesc;
         setDesc.descriptorSetLayout = descLayout;
         setDesc.descriptorPool = pool;
@@ -1187,18 +1082,10 @@ namespace StarryEngine::Assets {
         }
 
         auto* setObj = m_resMgr->getDescriptorSet(descSet);
-        // binding 0: 输入环境贴图 + 采样器
-        setObj->writeTexture(0, 0,
-            m_resMgr->getTexture(envCubemap),
-            m_resMgr->getSampler(sampler),
-            RHI::ImageLayout::ShaderReadOnly);
-        // binding 1: 输出辐照度贴图，使用全层视图
-        setObj->writeTextureCustomView(1, 0,
-            nativeView, nullptr,
-            RHI::ImageLayout::General);
+        setObj->writeTexture(0, 0,m_resMgr->getTexture(envCubemap),m_resMgr->getSampler(sampler),RHI::ImageLayout::ShaderReadOnly);
+        setObj->writeTextureCustomView(1, 0,nativeView, nullptr,RHI::ImageLayout::General);
         setObj->update();
 
-        // ── 过渡整张 Cube 到 General 布局 ──
         RHI::ImageSubresourceRange range{};
         range.aspectMask = RHI::ImageAspect::Color;
         range.baseMipLevel = 0;
@@ -1215,34 +1102,28 @@ namespace StarryEngine::Assets {
                 RHI::PipelineStage::TopOfPipe,
                 RHI::PipelineStage::ComputeShader,
                 static_cast<RHI::AccessFlags>(0),
-                static_cast<RHI::AccessFlags>(RHI::AccessFlag::ShaderWrite),
-                range);
+                static_cast<RHI::AccessFlags>(RHI::AccessFlag::ShaderWrite),range);
 
             cmd->bindComputePipeline(m_resMgr->getPipeline(pipeline));
-            cmd->bindDescriptorSets(RHI::PipelineBindPoint::Compute,
-                m_resMgr->getPipelineLayout(plLayout), 0, { descSet }, {});
+            cmd->bindDescriptorSets(RHI::PipelineBindPoint::Compute,m_resMgr->getPipelineLayout(plLayout), 0, { descSet }, {});
 
             uint32_t fs = outputSize;
-            cmd->pushConstants(m_resMgr->getPipelineLayout(plLayout),
-                RHI::ShaderStage::Compute, 0, sizeof(uint32_t), &fs);
+            cmd->pushConstants(m_resMgr->getPipelineLayout(plLayout),RHI::ShaderStage::Compute, 0, sizeof(uint32_t), &fs);
 
             uint32_t gx = (outputSize + 15) / 16;
             uint32_t gy = (outputSize + 15) / 16;
-            cmd->dispatch(gx, gy, 6);  // 同时处理 6 个面
+            cmd->dispatch(gx, gy, 6);  
         }
 
         m_rhi->waitIdle();
 
-        // ── 过渡回 ShaderReadOnly ──
         irradObj->transitionLayout(
             RHI::ImageLayout::ShaderReadOnly,
             RHI::PipelineStage::ComputeShader,
             RHI::PipelineStage::AllCommands,
             static_cast<RHI::AccessFlags>(RHI::AccessFlag::ShaderWrite),
-            static_cast<RHI::AccessFlags>(RHI::AccessFlag::ShaderRead),
-            range);
+            static_cast<RHI::AccessFlags>(RHI::AccessFlag::ShaderRead),range);
 
-        // ── 清理资源 ──
         irradObj->destroyView(cubeViewKey);
         m_resMgr->destroy(descSet);
         m_resMgr->destroy(pool);
@@ -1256,25 +1137,19 @@ namespace StarryEngine::Assets {
         return irradMap;
     }
 
-    // ═══════════════════════════════════════════════
-    // 计算管线：Prefiltered Map
-    // ═══════════════════════════════════════════════
-
     RHI::TextureHandle IBLBuilder::generatePrefilteredMapCS(
         RHI::TextureHandle envCubemap,
         uint32_t            baseSize,
-        uint32_t            mipLevels)
-    {
+        uint32_t            mipLevels){
+
         if (!envCubemap.isValid()) return RHI::TextureHandle::Null();
 
-        // ── 加载 Shader ──
         Assets::ShaderLoader loader(m_resMgr);
         auto csInfo = loader.loadFromFile(
             "assets/shaders/ibl/prefilter_envmap.comp", RHI::ShaderStage::Compute);
         if (!csInfo) return RHI::TextureHandle::Null();
         auto cs = csInfo->module;
 
-        // ── 创建 DescriptorSetLayout ──
         RHI::DescriptorSetLayoutDesc layoutDesc;
         layoutDesc.bindings = {
             { 0, RHI::DescriptorType::CombinedImageSampler, 1, RHI::ShaderStage::Compute },
@@ -1282,19 +1157,16 @@ namespace StarryEngine::Assets {
         };
         auto descLayout = m_resMgr->createDescriptorSetLayout(layoutDesc);
 
-        // ── 创建 PipelineLayout ──
         RHI::PipelineLayoutDesc plDesc;
         plDesc.descriptorSetLayouts = { descLayout };
         plDesc.pushConstants = { { RHI::ShaderStage::Compute, 0, 16 } };
         auto plLayout = m_resMgr->createPipelineLayout(plDesc);
 
-        // ── 创建 ComputePipeline ──
         RHI::ComputePipelineDesc compDesc;
         compDesc.computeShader = cs;
         compDesc.pipelineLayoutHandle = plLayout;
         auto pipeline = m_resMgr->createComputePipeline(compDesc);
 
-        // ── 创建采样器（允许访问全部 mip）──
         RHI::SamplerDesc sampDesc;
         sampDesc.minFilter = RHI::SamplerFilter::Linear;
         sampDesc.magFilter = RHI::SamplerFilter::Linear;
@@ -1303,7 +1175,6 @@ namespace StarryEngine::Assets {
         sampDesc.maxLod = 32.0f;   // 允许 access 源 cubemap 的全部 mip
         auto samplerHandle = m_resMgr->createSampler(sampDesc);
 
-        // ── 创建输出纹理 ──
         RHI::TextureDesc prefDesc;
         prefDesc.extent = { baseSize, baseSize, 1 };
         prefDesc.format = RHI::Format::RGBA16_Float;
@@ -1318,7 +1189,6 @@ namespace StarryEngine::Assets {
         auto prefilteredMap = m_resMgr->createTexture(prefDesc);
         if (!prefilteredMap.isValid()) return prefilteredMap;
 
-        // ── 预分配 DescriptorPool（30 个 set）──
         uint32_t totalFaces = mipLevels * 6;
         RHI::DescriptorPoolDesc poolDesc;
         poolDesc.maxSets = totalFaces;
@@ -1329,12 +1199,10 @@ namespace StarryEngine::Assets {
         poolDesc.freeDescriptorSet = true;
         auto pool = m_resMgr->createDescriptorPool(poolDesc);
 
-        // ── 获取对象指针 ──
         auto* envTexObj = m_resMgr->getTexture(envCubemap);
         auto* samplerObj = m_resMgr->getSampler(samplerHandle);
         auto* prefObj = m_resMgr->getTexture(prefilteredMap);
 
-        // ── 预创建所有临时 View 和 DescriptorSet ──
         std::vector<void*>                     allTempViews;
         std::vector<RHI::DescriptorSetHandle>  allDescSets;
 
@@ -1374,7 +1242,6 @@ namespace StarryEngine::Assets {
             }
         }
 
-        // ── 准备 transition 范围 ──
         RHI::ImageSubresourceRange allMipsAndLayers{};
         allMipsAndLayers.aspectMask = RHI::ImageAspect::Color;
         allMipsAndLayers.baseMipLevel = 0;
@@ -1382,14 +1249,10 @@ namespace StarryEngine::Assets {
         allMipsAndLayers.baseArrayLayer = 0;
         allMipsAndLayers.layerCount = 6;
 
-        // ═══════════════════════════════════════
-        // 一次性命令
-        // ═══════════════════════════════════════
         {
             OneTimeCommandExecutor executor(m_rhi.get(), m_resMgr.get());
             auto* cmd = executor.get();
 
-            // ── 过渡所有 mips 到 General ──
             prefObj->transitionLayout(
                 RHI::ImageLayout::General,
                 RHI::PipelineStage::TopOfPipe,
@@ -1398,7 +1261,6 @@ namespace StarryEngine::Assets {
                 static_cast<RHI::AccessFlags>(RHI::AccessFlag::ShaderWrite),
                 allMipsAndLayers);
 
-            // ── 逐 (mip, face) dispatch ──
             float sourceFaceSize = static_cast<float>(envTexObj->getExtent().width);
             int setIdx = 0;
             for (uint32_t mip = 0; mip < mipLevels; ++mip) {
@@ -1426,9 +1288,7 @@ namespace StarryEngine::Assets {
                 }
             }
         }
-        // ✅ executor 析构 → 提交 + wait
 
-        // ✅ 清理临时资源
         m_rhi->waitIdle();
         for (auto* vk : allTempViews) {
             prefObj->destroyView(vk);
@@ -1440,7 +1300,6 @@ namespace StarryEngine::Assets {
         }
         allDescSets.clear();
 
-        // ── 过渡回 ShaderReadOnly ──
         prefObj->transitionLayout(
             RHI::ImageLayout::ShaderReadOnly,
             RHI::PipelineStage::ComputeShader,
@@ -1449,7 +1308,6 @@ namespace StarryEngine::Assets {
             static_cast<RHI::AccessFlags>(RHI::AccessFlag::ShaderRead),
             allMipsAndLayers);
 
-        // ── 清理 ──
         m_resMgr->destroy(pool);
         m_resMgr->destroy(pipeline);
         m_resMgr->destroy(cs);
@@ -1461,14 +1319,11 @@ namespace StarryEngine::Assets {
         return prefilteredMap;
     }
 
-    // ═══════════════════════════════════════════════
-    // 计算管线：BRDF LUT
-    // ═══════════════════════════════════════════════
-
     RHI::TextureHandle IBLBuilder::generateBrdfLutCS(uint32_t size) {
+
         Assets::ShaderLoader loader(m_resMgr);
-        auto csInfo = loader.loadFromFile(
-            "assets/shaders/ibl/brdf_lut.comp", RHI::ShaderStage::Compute);
+        auto csInfo = loader.loadFromFile("assets/shaders/ibl/brdf_lut.comp", RHI::ShaderStage::Compute);
+
         if (!csInfo) return RHI::TextureHandle::Null();
         auto cs = csInfo->module;
 
@@ -1562,22 +1417,13 @@ namespace StarryEngine::Assets {
         return brdfLut;
     }
 
-    // ═══════════════════════════════════════════════
-    // 便捷方法
-    // ═══════════════════════════════════════════════
+    RHI::TextureHandle IBLBuilder::buildEnvCubemap(const std::string& hdrPath,uint32_t faceSize){
 
-    RHI::TextureHandle IBLBuilder::buildEnvCubemap(
-        const std::string& hdrPath,
-        uint32_t            faceSize)
-    {
-        return buildEnvCubemap(hdrPath, faceSize, true);  // 默认用计算管线
+        return buildEnvCubemap(hdrPath, faceSize, true);  
     }
 
-    RHI::TextureHandle IBLBuilder::buildEnvCubemap(
-        const std::string& hdrPath,
-        uint32_t            faceSize,
-        bool                useComputeShader)
-    {
+    RHI::TextureHandle IBLBuilder::buildEnvCubemap(const std::string& hdrPath,uint32_t faceSize,bool useComputeShader){
+        
         int w, h, c;
         float* pixels = stbi_loadf(hdrPath.c_str(), &w, &h, &c, STBI_rgb_alpha);
         if (!pixels) {

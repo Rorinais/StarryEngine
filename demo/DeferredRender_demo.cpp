@@ -30,10 +30,8 @@ public:
         m_descriptorSetLayout = m_renderer->getGlobalSetLayout();
         m_descriptorSet = m_renderer->getGlobalDescriptorSet();
 
-        // ── 创建 RenderPath（不再依赖 JSON）──
         auto renderPath = std::make_shared<DeferredRenderPath>(m_rhi, m_width, m_height);
 
-        // 纹理描述
         auto colorDesc = PassWrapper::createColorTextureDesc({m_width, m_height, 1}, RHI::Format::RGBA16_Float);
         auto depthDesc = PassWrapper::createDepthTextureDesc({m_width, m_height, 1}, RHI::Format::D32_Float);
         auto swapDesc   = PassWrapper::createColorTextureDesc({m_width, m_height, 1}, RHI::Format::BGRA8_sRGB);
@@ -41,7 +39,6 @@ public:
         renderPath->addTextureDesc("Depth",       depthDesc);
         renderPath->addTextureDesc("Swapchain",   swapDesc);
 
-        // ── 手动构建 Pass 列表 ──
         {
             PassList passes;
 
@@ -51,6 +48,7 @@ public:
                 SubpassDesc sp;
                 sp.name = "OpaqueGeometry"; sp.tag = "Forward_Opaque";
                 sp.executor = std::make_shared<MeshDrawExecutor>();
+
                 RenderGraph::AttachmentParams color;
                 color.initialLayout = RHI::ImageLayout::Undefined;
                 color.finalLayout   = RHI::ImageLayout::ShaderReadOnly;
@@ -99,7 +97,6 @@ public:
             }
             passes.push_back(postPass);
 
-            // ── ParticleSystem: 火焰粒子（主发射器）──
             {
                 ParticleSystemDesc desc;
                 desc.name            = "Fire";
@@ -126,7 +123,6 @@ public:
                 passes.push_back(std::make_shared<ParticleSystemPass>(desc));
             }
 
-            // ── ParticleSystem: 蓝色火花 ──
             {
                 ParticleSystemDesc desc;
                 desc.name            = "Sparks";
@@ -162,26 +158,7 @@ public:
         m_renderer->setRenderPath(std::move(renderPath));
     }
 
-    std::shared_ptr<Assets::MaterialInstance> createSkyboxMaterial() {
-
-        auto tmpl = std::make_shared<Assets::DefaultMaterialTemplate>(m_rhi->getResourceManager(), m_descriptorSetLayout);
-        tmpl->loadShaders("assets/shaders/deferred/skybox.vert", "assets/shaders/deferred/skybox.frag");
-
-        auto material = std::make_shared<Assets::MaterialInstance>(tmpl, m_descriptorPool, m_rhi->getResourceManager().get(), m_descriptorSet);
-
-        auto cubemap = m_iblBuilder->buildEnvCubemap("assets/textures/pbr/kloofendal_48d_partly_cloudy_puresky_1k.hdr", 128);
-        auto sampler = Assets::TextureLoader(m_rhi->getResourceManager()).createDefaultSampler();
-        material->setTexture("uSkybox", cubemap, sampler);
-
-        material->setSubpassTag("PostProcess_Skybox");
-        material->enableDepthTest(true);
-        material->setDepthCompareOp(RHI::CompareOp::LessOrEqual);
-
-        return material;
-    }
-
     void initIBL() {
-        // 只创建一次，所有材质共用
         m_envCubemap      = m_iblBuilder->buildEnvCubemap("assets/textures/pbr/kloofendal_48d_partly_cloudy_puresky_1k.hdr", 128);
         m_irradianceMap   = m_iblBuilder->generateIrradianceMapCS(m_envCubemap, 64);
         m_prefilteredMap  = m_iblBuilder->generatePrefilteredMapCS(m_envCubemap, 256, 6);
@@ -210,13 +187,27 @@ public:
         m_lutSampler = m_rhi->getResourceManager()->createSampler(lutSampDesc);
     }
 
+    std::shared_ptr<Assets::MaterialInstance> createSkyboxMaterial() {
+
+        auto tmpl = std::make_shared<Assets::DefaultMaterialTemplate>(m_rhi->getResourceManager(), m_descriptorSetLayout);
+        tmpl->loadShaders("assets/shaders/deferred/skybox.vert", "assets/shaders/deferred/skybox.frag");
+
+        auto material = std::make_shared<Assets::MaterialInstance>(tmpl, m_descriptorPool, m_rhi->getResourceManager().get(), m_descriptorSet);
+
+        material->setTexture("uSkybox", m_envCubemap, m_cubeSampler);
+        material->setSubpassTag("PostProcess_Skybox");
+        material->enableDepthTest(true);
+        material->setDepthCompareOp(RHI::CompareOp::LessOrEqual);
+
+        return material;
+    }
+
     std::shared_ptr<Assets::MaterialInstance> createGridMaterial() {
         auto gridTmpl = std::make_shared<Assets::DefaultMaterialTemplate>(m_rhi->getResourceManager(), m_descriptorSetLayout);
         gridTmpl->loadShaders("assets/shaders/core/gridShader.vert", "assets/shaders/core/gridShader.frag");
 
         auto gridMaterialInst = std::make_shared<Assets::MaterialInstance>(gridTmpl, m_descriptorPool, m_rhi->getResourceManager().get(), m_descriptorSet);
         gridMaterialInst->enableDepthTest(true);
-
         gridMaterialInst->setSubpassTag("PostProcess_Grid");
 
         return gridMaterialInst;
@@ -246,7 +237,7 @@ public:
 
         auto* lightBlock = material->getBlock("LightingUBO");
         if (lightBlock) {
-            lightBlock->setVec4("lights.position", glm::vec4(-0.5f, -1.0f, -0.8f, 0.0f));  // dir light
+            lightBlock->setVec4("lights.position", glm::vec4(-0.5f, -1.0f, -0.8f, 0.0f));  
             lightBlock->setVec4("lights.color", glm::vec4(3.0f, 2.7f, 2.3f, 1.0f));
             lightBlock->setFloat("lightCount", 1.0f);
             lightBlock->setFloat("ambientStrength", 0.15f);
@@ -262,7 +253,6 @@ public:
         skyboxEffect->material = createSkyboxMaterial();
         m_scene->addProceduralEffect(skyboxEffect);
 
-        // ── 单个 PBR 纹理球 ──
         auto mat = createTexturedPbrMaterial();
         auto sphere = std::make_shared<Scene::RenderObject>();
         sphere->geometry = Assets::GeometryGenerator::createSphere(m_rhi->getResourceManager(), 1.0f);
@@ -270,12 +260,7 @@ public:
         sphere->transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.5f, 0.0f));
         m_scene->addObject(sphere);
 
-        // // ── 6×6 矩阵（注释）──
-        // const int GRID_SIZE = 6;
-        // ...
 
-
-        // ── 厚地面（PBR 砖块纹理）──
         auto groundMat = createTexturedPbrMaterial();
         auto ground = std::make_shared<Scene::RenderObject>();
         ground->geometry = Assets::GeometryGenerator::createCube(m_rhi->getResourceManager(), 20.0f, 20.0f, 0.3f);
@@ -283,12 +268,10 @@ public:
         ground->transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -0.15f, 0.0f));
         m_scene->addObject(ground);
 
-        // 摄像机拉远看全景
+
         auto perspectiveCamera = std::make_shared<Scene::PerspectiveCamera>();
         perspectiveCamera->setPerspective(glm::radians(45.0f), (float)m_width / m_height, 0.1f, 100.0f);
-        perspectiveCamera->lookAt(glm::vec3(1.0f, 2.0f, 5.0f),
-                                  glm::vec3(0.0f, 1.5f, 0.0f),
-                                  glm::vec3(0.0f, 1.0f, 0.0f));
+        perspectiveCamera->lookAt(glm::vec3(1.0f, 2.0f, 5.0f),glm::vec3(0.0f, 1.5f, 0.0f),glm::vec3(0.0f, 1.0f, 0.0f));
         m_scene->addCamera(perspectiveCamera);
         m_scene->setActiveCamera(perspectiveCamera);
     }
@@ -302,7 +285,7 @@ private:
     std::shared_ptr<Renderer> m_renderer;
     std::shared_ptr< Scene::Scene> m_scene;
 
-    // 共享 IBL 资源
+    // IBL
     RHI::TextureHandle m_envCubemap;
     RHI::TextureHandle m_irradianceMap;
     RHI::TextureHandle m_prefilteredMap;
@@ -310,7 +293,6 @@ private:
     RHI::SamplerHandle m_cubeSampler;
     RHI::SamplerHandle m_prefilterSampler;
     RHI::SamplerHandle m_lutSampler;
-
 
     StarryEngine::RHI::DescriptorSetHandle m_descriptorSet;
     StarryEngine::RHI::DescriptorPoolHandle m_descriptorPool;

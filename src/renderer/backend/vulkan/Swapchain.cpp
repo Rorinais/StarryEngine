@@ -282,10 +282,7 @@ namespace StarryEngine {
         return mConfig.presentMode;
     }
 
-    VkExtent2D SwapChain::chooseExtent(const VkSurfaceCapabilitiesKHR& capabilities,
-        uint32_t width, uint32_t height) const {
-        // 优先用传入的 framebuffer 尺寸（来自 glfwGetFramebufferSize），
-        // capabilities.currentExtent 在 resize 后可能未及时更新导致 SUBOPTIMAL
+    VkExtent2D SwapChain::chooseExtent(const VkSurfaceCapabilitiesKHR& capabilities,uint32_t width, uint32_t height) const {
         VkExtent2D actualExtent = { width, height };
 
         actualExtent.width = std::clamp(actualExtent.width,

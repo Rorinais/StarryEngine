@@ -32,7 +32,7 @@ namespace StarryEngine::Scene {
     }
 
     void Scene::update(float deltaTime) {
-        // 可以添加动画更新等逻辑，暂时为空
+
     }
 
     void Scene::updateObjectClassification(std::shared_ptr<RenderObject> object) {

@@ -32,7 +32,6 @@ namespace StarryEngine::RenderGraph {
         RenderGraph(const RenderGraph&) = delete;
         RenderGraph& operator=(const RenderGraph&) = delete;
 
-        // 设置交换链图像数量（必须在 compile 前调用）
         void setSwapchainImageCount(uint32_t count);
 
         RHI::TextureDesc createBaseTextureDesc(
@@ -45,7 +44,7 @@ namespace StarryEngine::RenderGraph {
 
         TextureId createVirtualTexture(const RHI::TextureDesc& desc, const std::string& name = "");
 
-        // 导入外部纹理（支持多视图，如交换链）
+        // 导入外部纹理
         TextureId importExternalTexture(RHI::TextureHandle externalHandle,
             const std::vector<void*>& imageViews,
             const RHI::TextureDesc& desc,
@@ -55,18 +54,10 @@ namespace StarryEngine::RenderGraph {
         BufferId createVirtualBuffer(const RHI::BufferDesc& desc, const std::string& name = "");
 
         PassNode* addGraphicsPassNode(const std::string& name);
-
-        // 添加 Compute Pass（复用依赖分析/barrier，无需 RenderPass/Framebuffer）
         PassNode* addComputePassNode(const std::string& name);
 
         void dependencyAnalysis();
-
-        // Pass Culling：从最终输出纹理反向遍历，移除不可达的 Pass 和资源
-        // 必须在 dependencyAnalysis() 之后、物理资源创建之前调用
         void cullUnusedPasses();
-
-        // 导出 DOT 格式的图结构，可用 Graphviz 渲染为 PNG
-        // 用法: dot -Tpng graph.dot -o graph.png
         void exportDot(const std::string& filepath) const;
 
         bool compile();
@@ -80,7 +71,6 @@ namespace StarryEngine::RenderGraph {
 
         const std::vector<PassNode*>& getSortedPasses() const { return m_sortedPasses; }
 
-        // 迭代所有 Pass（含未排序的，用于遍历删除）
         std::vector<std::unique_ptr<PassNode>>& getPasses() { return m_passes; }
         const std::vector<std::unique_ptr<PassNode>>& getPasses() const { return m_passes; }
         size_t getPassCount() const { return m_passes.size(); }
@@ -139,9 +129,7 @@ namespace StarryEngine::RenderGraph {
 
         std::vector<uint32_t> topologicalSort(const std::vector<std::vector<uint32_t>>& adj) const;
 
-        // 内存别名（Memory Aliasing）：贪心算法复用生命周期不重叠的 transient 纹理内存
-        void performMemoryAliasing(
-            const std::unordered_map<TextureId, TexturePassInfo>& texPassInfo);
+        void performMemoryAliasing(const std::unordered_map<TextureId, TexturePassInfo>& texPassInfo);
 
     private:
         std::shared_ptr<RHI::IRHI> m_rhi;

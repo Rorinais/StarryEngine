@@ -11,7 +11,6 @@ struct fmt::formatter<glm::vec3> {
         return ctx.begin();
     }
 
-    // 必须添加 const 限定符
     template <typename FormatContext>
     auto format(const glm::vec3& v, FormatContext& ctx) const {
         return fmt::format_to(ctx.out(), "({:.2f}, {:.2f}, {:.2f})", v.x, v.y, v.z);
@@ -82,7 +81,6 @@ struct fmt::formatter<StarryEngine::RHI::LogicOp> : fmt::formatter<std::string_v
         switch (op) {
         case StarryEngine::RHI::LogicOp::Copy:  name = "Copy"; break;
         case StarryEngine::RHI::LogicOp::Clear: name = "Clear"; break;
-            // 添加其他枚举值
         }
         return fmt::formatter<std::string_view>::format(name, ctx);
     }
@@ -112,12 +110,10 @@ struct fmt::formatter<StarryEngine::RHI::CompareOp> : fmt::formatter<std::string
 // 为 MaterialParams 特化 fmt::formatter
 template <>
 struct fmt::formatter<StarryEngine::Assets::MaterialParams> {
-    // 解析格式字符串（此处忽略，直接使用默认）
     constexpr auto parse(format_parse_context& ctx) {
         return ctx.begin();
     }
 
-    // 格式化函数
     template <typename FormatContext>
     auto format(const StarryEngine::Assets::MaterialParams& p, FormatContext& ctx) const {
         return fmt::format_to(ctx.out(),
@@ -300,7 +296,6 @@ struct fmt::formatter<StarryEngine::RHI::ShaderStageFlags> {
     template <typename FormatContext>
     auto format(const StarryEngine::RHI::ShaderStageFlags& flags, FormatContext& ctx) const {
         std::vector<std::string> stages;
-        // 检查每个已知阶段
         auto tryAdd = [&](StarryEngine::RHI::ShaderStage s, const char* name) {
             if (flags.Has(s)) stages.push_back(name);
             };
@@ -434,7 +429,7 @@ struct fmt::formatter<StarryEngine::RHI::SpecConstant> {
     }
 };
 
-// ──── InputAttribute / OutputAttribute (如果希望单独打印) ────
+// ──── InputAttribute / OutputAttribute ────
 template <>
 struct fmt::formatter<StarryEngine::RHI::InputAttribute> {
     constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
@@ -447,7 +442,6 @@ struct fmt::formatter<StarryEngine::RHI::InputAttribute> {
 
 template <>
 struct fmt::formatter<StarryEngine::RHI::OutputAttribute> {
-    // 与 InputAttribute 几乎一样，也可复用
     constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
     template <typename FormatContext>

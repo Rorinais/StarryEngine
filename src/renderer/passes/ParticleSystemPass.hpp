@@ -8,20 +8,15 @@
 
 namespace StarryEngine {
 
-    // ParticleSystemDesc — 描述一个粒子系统的所有可配置项
     struct ParticleSystemDesc {
-        // 名称前缀：buffer / pass node / subpass tag 都由此派生
-        // 例如 name="Fire" → buffer="Fire_Buffer", csPass="Fire_Update",
-        //                     renderPass="Fire_Render", tag="Fire_Draw"
         std::string name = "ParticleSystem";
 
-        // Shader 路径（不同粒子类型用不同 shader）
         std::string computeShader  = "assets/shaders/test/particle.comp";
         std::string vertexShader   = "assets/shaders/test/particle.vert";
         std::string fragmentShader = "assets/shaders/test/particle.frag";
 
         uint32_t particleCount     = 1024;
-        uint32_t perParticleFloats = 4;    // 每个粒子的 float 数量
+        uint32_t perParticleFloats = 4;    
         ParticleParams params;
 
         // 初始数据生成器：对每个粒子调用 (index, outFloatData[perParticleFloats])
@@ -29,8 +24,6 @@ namespace StarryEngine {
         std::function<void(uint32_t index, float* outData)> initParticle;
     };
 
-    // ParticleSystemPass — 粒子系统（Compute + Graphics 双 Pass）
-    // 每个实例对应一种粒子类型，可在 PassList 中添加多个实例
     class ParticleSystemPass : public IPass {
     public:
         explicit ParticleSystemPass(const ParticleSystemDesc& desc);

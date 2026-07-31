@@ -168,7 +168,6 @@ namespace StarryEngine::RHI {
     }
 
     bool  RHI_VK_Buffer::updateDataViaDirectMapping(const void* data, uint64_t size, uint64_t offset) {
-        // 如果已经持久映射，直接使用现有指针
         if (mPersistentlyMapped && mIsMapped) {
             memcpy(static_cast<uint8_t*>(mMappedPointer) + offset, data, size);
             flush(offset, size);
@@ -177,14 +176,9 @@ namespace StarryEngine::RHI {
         
         // 否则使用RAII包装器进行临时映射
         if (mUsingVMA) {
-            // 使用Device的uploadDataToVmaBuffer
             mDevice->uploadDataToVmaBuffer(mBuffer, mVmaAllocation, data, size, offset);
         } else {
-            // 判断内存一致性
-            bool hostCoherent = (FUNC::RHI_TO_VK_MemoryProperties(mDesc.memoryType) & 
-                            VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != 0;
-            
-            // 使用Device的统一上传函数
+            bool hostCoherent = (FUNC::RHI_TO_VK_MemoryProperties(mDesc.memoryType) & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) != 0;
             mDevice->uploadDataToTraditionalMemory(mTraditionalMemory, data, size, offset, hostCoherent);
         }
 
@@ -1209,9 +1203,7 @@ namespace StarryEngine::RHI {
     void RHI_VK_Texture::createTexture() {
         VkFormat vkFormat;
         if (mDesc.allowDepthStencil) {
-            // 获取设备支持的深度格式
             vkFormat = mDevice->findDepthFormat();
-            // 将 VkFormat 转换为 RHI::Format（需要实现反向转换函数）
             mActualFormat = FUNC::VK_TO_RHI_Format(vkFormat);
         }
         else {
@@ -1565,7 +1557,6 @@ namespace StarryEngine::RHI {
         imageInfo.imageLayout = FUNC::RHI_TO_VK_ImageLayout(layout);
         mImageInfos.push_back(imageInfo);
 
-        // ✅ 只保存参数，不保存指针
         PendingTextureWrite pending;
         pending.binding = binding;
         pending.arrayElement = arrayElement;
@@ -1579,8 +1570,6 @@ namespace StarryEngine::RHI {
 
         VkDescriptorImageInfo info{};
         info.sampler = static_cast<VkSampler>(sampler->getNativeHandle());
-        // imageView 和 imageLayout 保持默认（nullptr/0），驱动会忽略
-
         uint32_t idx = static_cast<uint32_t>(mImageInfos.size());
         mImageInfos.push_back(info);
 
@@ -1629,7 +1618,6 @@ namespace StarryEngine::RHI {
 
         mDevice->updateDescriptorSet(mSet, vkWrites);
 
-        // 清理
         mBufferInfos.clear();
         mImageInfos.clear();
         mPendingBufferWrites.clear();
@@ -1658,7 +1646,6 @@ namespace StarryEngine::RHI {
     void RHI_VK_DescriptorSet::copyFrom(const RHIDescriptorSet* src, const std::vector<DescriptorCopy>& copies) {
         std::vector<VkCopyDescriptorSet> vkCopies;
         for (const auto& copy : copies) {
-            // 需要从 src 句柄获取 VkDescriptorSet（通过 dynamic_cast）
             auto* vkSrc = dynamic_cast<const RHI_VK_DescriptorSet*>(src);
             if (!vkSrc) continue;
 

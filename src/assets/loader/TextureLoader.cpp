@@ -63,23 +63,14 @@ namespace {
         return glm::mix(glm::mix(c00, c10, tx), glm::mix(c01, c11, tx), ty);
     }
 
-} // anonymous namespace
+} 
 
 namespace StarryEngine::Assets {
 
-    TextureLoader::TextureLoader(std::shared_ptr<RHI::ResourceManager> resMgr)
-        : m_resMgr(std::move(resMgr)) {
-    }
+    TextureLoader::TextureLoader(std::shared_ptr<RHI::ResourceManager> resMgr): m_resMgr(std::move(resMgr)) {}
 
-    // ===== 上传像素数据辅助函数 =====
-    bool TextureLoader::uploadPixels(
-        const RHI::TextureHandle& texHandle,
-        const void* data,
-        size_t dataSize,
-        uint32_t width,
-        uint32_t height,
-        uint32_t layer)
-    {
+    bool TextureLoader::uploadPixels(const RHI::TextureHandle& texHandle,const void* data,size_t dataSize,uint32_t width,uint32_t height,uint32_t layer){
+
         auto* texture = m_resMgr->getTexture(texHandle);
         if (!texture) return false;
 
@@ -92,10 +83,8 @@ namespace StarryEngine::Assets {
             .layerCount = 1
         };
 
-        // 更新纹理数据
         texture->update(data, dataSize, range);
  
-
         texture->transitionLayout(
             RHI::ImageLayout::ShaderReadOnly,
             RHI::PipelineStage::Transfer,
@@ -106,7 +95,6 @@ namespace StarryEngine::Assets {
         return true;
     }
 
-    // ===== 创建默认采样器 =====
     RHI::SamplerHandle TextureLoader::createDefaultSampler(const std::string& debugName) {
         RHI::SamplerDesc desc;
         desc.magFilter = RHI::SamplerFilter::Linear;
@@ -123,14 +111,13 @@ namespace StarryEngine::Assets {
         return m_resMgr->createSampler(desc);
     }
 
-    // 可增加参数化版本，以适应不同需求
     RHI::SamplerHandle TextureLoader::createSampler(
         RHI::SamplerFilter filter,
         RHI::SamplerAddressMode addressMode,
         float maxAnisotropy,
         float maxLod,
-        const std::string& debugName)
-    {
+        const std::string& debugName){
+
         RHI::SamplerDesc desc;
         desc.magFilter = filter;
         desc.minFilter = filter;
@@ -146,12 +133,7 @@ namespace StarryEngine::Assets {
         return m_resMgr->createSampler(desc);
     }
 
-    // ===== 加载 2D 纹理 =====
-    TextureLoadResult TextureLoader::loadTexture2D(
-        const std::string& filepath,
-        RHI::Format format,
-        const std::string& debugName)
-    {
+    TextureLoadResult TextureLoader::loadTexture2D(const std::string& filepath,RHI::Format format,const std::string& debugName){
         TextureLoadResult result{ RHI::TextureHandle::Null(), RHI::SamplerHandle::Null() };
 
         int width, height, channels;
@@ -161,7 +143,6 @@ namespace StarryEngine::Assets {
             return result;
         }
 
-        // 创建纹理描述
         RHI::TextureDesc texDesc;
         texDesc.extent = { static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1 };
         texDesc.format = format;
@@ -180,7 +161,6 @@ namespace StarryEngine::Assets {
             return result;
         }
 
-        // 上传数据
         size_t dataSize = width * height * 4; 
         if (!uploadPixels(result.texture, pixels, dataSize, width, height, 0)) {
             m_resMgr->destroy(result.texture);
@@ -191,18 +171,12 @@ namespace StarryEngine::Assets {
 
         stbi_image_free(pixels);
 
-        // 创建采样器
         result.sampler = createDefaultSampler(debugName + "_Sampler");
         return result;
     }
 
-    TextureLoadResult TextureLoader::loadTextureFromMemory(
-        const void* data,
-        uint32_t width,
-        uint32_t height,
-        RHI::Format format,
-        const std::string& debugName)
-    {
+    TextureLoadResult TextureLoader::loadTextureFromMemory(const void* data,uint32_t width,uint32_t height,RHI::Format format,const std::string& debugName){
+
         TextureLoadResult result{ RHI::TextureHandle::Null(), RHI::SamplerHandle::Null() };
 
         if (!data || width == 0 || height == 0) {
@@ -210,7 +184,6 @@ namespace StarryEngine::Assets {
             return result;
         }
 
-        // 创建纹理描述
         RHI::TextureDesc texDesc;
         texDesc.extent = { width, height, 1 };
         texDesc.format = format;
@@ -229,7 +202,6 @@ namespace StarryEngine::Assets {
             return result;
         }
 
-        // 上传数据（假设像素为 RGBA8，dataSize = width * height * 4）
         size_t dataSize = width * height * 4;
         if (!uploadPixels(result.texture, data, dataSize, width, height, 0)) {
             m_resMgr->destroy(result.texture);
@@ -237,17 +209,12 @@ namespace StarryEngine::Assets {
             return result;
         }
 
-        // 创建默认采样器
         result.sampler = createDefaultSampler(debugName + "_Sampler");
         return result;
     }
 
-    // ===== 加载立方体贴图 =====
-    TextureLoadResult TextureLoader::loadTextureCube(
-        const std::vector<std::string>& faceFilepaths,
-        RHI::Format format,
-        const std::string& debugName)
-    {
+    TextureLoadResult TextureLoader::loadTextureCube(const std::vector<std::string>& faceFilepaths,RHI::Format format,const std::string& debugName){
+
         TextureLoadResult result{ RHI::TextureHandle::Null(), RHI::SamplerHandle::Null() };
 
         if (faceFilepaths.size() != 6) {
@@ -255,7 +222,6 @@ namespace StarryEngine::Assets {
             return result;
         }
 
-        // 加载第一个面以获取尺寸，并验证所有面尺寸一致
         int width = 0, height = 0, channels;
         std::vector<stbi_uc*> facePixels(6, nullptr);
         bool success = true;
@@ -286,7 +252,6 @@ namespace StarryEngine::Assets {
             return result;
         }
 
-        // 创建立方体贴图纹理
         RHI::TextureDesc texDesc;
         texDesc.flags = RHI::ImageCreateFlags::CubeCompatible;
         texDesc.extent = { static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1 };
@@ -306,7 +271,6 @@ namespace StarryEngine::Assets {
             return result;
         }
 
-        // 逐个面上传
         size_t faceSize = width * height * 4;
         for (int i = 0; i < 6; ++i) {
             if (!uploadPixels(result.texture, facePixels[i], faceSize, width, height, i)) {
@@ -317,7 +281,6 @@ namespace StarryEngine::Assets {
             }
         }
 
-        // 释放像素内存
         for (auto* p : facePixels) stbi_image_free(p);
 
         if (!result.texture.isValid()) {
@@ -328,11 +291,7 @@ namespace StarryEngine::Assets {
         return result;
     }
 
-    // ===== 保存纹理到文件 =====
-    bool TextureLoader::saveTextureToFile(
-        const RHI::TextureHandle& texture,
-        const std::string& filepath)
-    {
+    bool TextureLoader::saveTextureToFile(const RHI::TextureHandle& texture,const std::string& filepath){
         auto* tex = m_resMgr->getTexture(texture);
         if (!tex) {
             LOG_ERROR("Invalid texture handle");
@@ -344,13 +303,13 @@ namespace StarryEngine::Assets {
             return false;
         }
 
-        // 1. 创建 staging buffer（CPU 可见）
+        // 1. 创建 staging buffer
         auto extent = tex->getExtent();
-        size_t dataSize = extent.width * extent.height * 4; // RGBA8 每像素 4 字节
+        size_t dataSize = extent.width * extent.height * 4; 
         RHI::BufferDesc stagingDesc;
         stagingDesc.size = dataSize;
-        stagingDesc.type = RHI::BufferType::Staging;          // 使用 type 而非 usage
-        stagingDesc.memoryType = RHI::MemoryType::CPU_To_GPU; // CPU 可见
+        stagingDesc.type = RHI::BufferType::Staging;   
+        stagingDesc.memoryType = RHI::MemoryType::CPU_To_GPU;
         stagingDesc.debugName = "StagingBuffer_TextureSave";
 
         auto stagingBuffer = m_resMgr->createBuffer(stagingDesc);
@@ -359,7 +318,7 @@ namespace StarryEngine::Assets {
             return false;
         }
 
-        // 2. 定义子资源范围（单个 mip 级别，单个层）
+        // 2. 定义子资源范围
         RHI::ImageSubresourceRange range{
             .aspectMask = RHI::ImageAspect::Color,
             .baseMipLevel = 0,
@@ -380,16 +339,15 @@ namespace StarryEngine::Assets {
         // 4. 执行拷贝：纹理 → staging buffer
         RHI::BufferImageCopyRegion copyRegion;
         copyRegion.bufferOffset = 0;
-        copyRegion.bufferRowLength = 0;        // 0 表示紧密打包
+        copyRegion.bufferRowLength = 0;      
         copyRegion.bufferImageHeight = 0;
         copyRegion.imageSubresource = range;
         copyRegion.imageOffset = { 0, 0, 0 };
         copyRegion.imageExtent = extent;
 
-        // 关键修正：通过 ResourceManager 获取 RHIBuffer*，而不是调用 get()
         tex->copyToBuffer(m_resMgr->getBuffer(stagingBuffer), { copyRegion });
 
-        // 5. 等待拷贝完成（假设 copyToBuffer 内部已同步）
+        // 5. 等待拷贝完成
 
         // 6. 映射 staging buffer 读取数据
         auto* buffer = m_resMgr->getBuffer(stagingBuffer);
@@ -437,10 +395,8 @@ namespace StarryEngine::Assets {
         return true;
     }
 
-    TextureLoadResult TextureLoader::loadTextureHDR(
-        const std::string& filepath,
-        const std::string& debugName)
-    {
+    TextureLoadResult TextureLoader::loadTextureHDR(const std::string& filepath,const std::string& debugName){
+
         TextureLoadResult result{ RHI::TextureHandle::Null(), RHI::SamplerHandle::Null() };
 
         int width, height, channels;
@@ -450,7 +406,6 @@ namespace StarryEngine::Assets {
             return result;
         }
 
-        // ✅ 直接用 RGBA32_Float，和 float* 数据一致
         RHI::TextureDesc texDesc;
         texDesc.extent = { static_cast<uint32_t>(width), static_cast<uint32_t>(height), 1 };
         texDesc.format = RHI::Format::RGBA32_Float;
@@ -466,18 +421,14 @@ namespace StarryEngine::Assets {
             return result;
         }
 
-        // ✅ 上传 float 数据
         size_t dataSize = width * height * 4 * sizeof(float);
         uploadPixels(result.texture, hdrPixels, dataSize, width, height, 0);
 
-        // ✅ 转换为 cubemap
-        auto cubemapTex = convertEquirectToCubemap(
-            hdrPixels, width, height, 512, "EnvironmentCubemap");
+        auto cubemapTex = convertEquirectToCubemap(hdrPixels, width, height, 512, "EnvironmentCubemap");
         stbi_image_free(hdrPixels);
 
         result.texture = cubemapTex;
 
-        // ✅ 采样器：cubemap 用 ClampToEdge
         result.sampler = createSampler(
             RHI::SamplerFilter::Linear,
             RHI::SamplerAddressMode::ClampToEdge,
@@ -492,12 +443,11 @@ namespace StarryEngine::Assets {
         uint32_t      hdrWidth,
         uint32_t      hdrHeight,
         uint32_t      faceSize,
-        const std::string& debugName)
-    {
-        // 1. 创建空的 cubemap
+        const std::string& debugName){
+
         RHI::TextureDesc cubemapDesc;
         cubemapDesc.extent = { faceSize, faceSize, 1 };
-        cubemapDesc.format = RHI::Format::RGBA32_Float;   // 半精度浮点即可
+        cubemapDesc.format = RHI::Format::RGBA32_Float;   
         cubemapDesc.type = RHI::TextureType::TextureCube;
         cubemapDesc.mipLevels = 1;
         cubemapDesc.arrayLayers = 6;
@@ -516,7 +466,7 @@ namespace StarryEngine::Assets {
 
         // 2. 逐面生成像素并上传
         size_t facePixelCount = faceSize * faceSize;
-        std::vector<float> faceData(facePixelCount * 4); // RGBA
+        std::vector<float> faceData(facePixelCount * 4); 
 
         for (uint32_t face = 0; face < 6; ++face) {
             float* dst = faceData.data();
@@ -533,7 +483,6 @@ namespace StarryEngine::Assets {
                 }
             }
 
-            // 上传到 cubemap 的当前面
             size_t dataSize = facePixelCount * 4 * sizeof(float);
             if (!uploadPixels(cubemapHandle, faceData.data(), dataSize, faceSize, faceSize, face)) {
                 LOG_ERROR("Failed to upload cubemap face {}", face);
@@ -546,11 +495,7 @@ namespace StarryEngine::Assets {
         return cubemapHandle;
     }
 
-    RHI::TextureHandle TextureLoader::createRenderableCubemap(
-        uint32_t faceSize,
-        RHI::Format format,
-        const std::string& debugName)
-    {
+    RHI::TextureHandle TextureLoader::createRenderableCubemap(uint32_t faceSize,RHI::Format format, const std::string& debugName){
         RHI::TextureDesc desc;
         desc.extent = { faceSize, faceSize, 1 };
         desc.format = format;

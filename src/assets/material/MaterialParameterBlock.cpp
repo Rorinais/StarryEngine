@@ -9,13 +9,12 @@ namespace StarryEngine::Assets {
             m_members[m.name] = { m.offset, m.size };
         }
         m_data.resize(totalSize, 0);
-        m_dirty = true;   // 新创建时视为脏，以便第一次 apply
+        m_dirty = true;  
     }
 
-    // ---------- 常用 setter ----------
     void MaterialParameterBlock::setFloat(const std::string& name, float value) {
         auto it = m_members.find(name);
-        if (it == m_members.end()) { return; }   // 实际使用时可以打印错误
+        if (it == m_members.end()) { return; }   
         std::memcpy(m_data.data() + it->second.offset, &value, sizeof(float));
         m_dirty = true;
     }
@@ -58,13 +57,10 @@ namespace StarryEngine::Assets {
     void MaterialParameterBlock::setMat4(const std::string& name, const glm::mat4& m) {
         auto it = m_members.find(name);
         if (it == m_members.end()) { return; }
-        // 注意 UBO 中 mat4 通常是按列存储的列主序，与 glm::mat4 内存布局一致
         std::memcpy(m_data.data() + it->second.offset, glm::value_ptr(m), sizeof(glm::mat4));
         m_dirty = true;
     }
 
-    // ---------- 批量操作 ----------
-    // 直接写入原始数据到给定偏移（跳过名称查找）
     void MaterialParameterBlock::writeRaw(uint32_t offset, const void* data, size_t size) {
         if (offset + size > m_data.size()) { return; }
         std::memcpy(m_data.data() + offset, data, size);

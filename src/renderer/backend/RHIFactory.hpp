@@ -49,7 +49,6 @@ namespace StarryEngine {
             rhiConfig.debugCallback = [](RHI::MessageSeverity severity,
                 RHI::MessageSource source,
                 const std::string& message) {
-                    // 使用 ConfigConverter 将 source 转为字符串（需要包含 VulkanRHI.hpp）
                     const char* sourceStr = ConfigConverter::messageSourceToString(source);
                     switch (severity) {
                     case RHI::MessageSeverity::Verbose:

@@ -102,8 +102,6 @@ namespace StarryEngine::Assets {
         virtual std::unordered_map<uint32_t, RHI::DescriptorSetLayoutHandle> getLayouts() const = 0;
 
     private:
-        //全局渲染管线布局缓存，将管线描述hash，作为键，因为管线描述之和描述符布局与常量推送布局有关系
-        //如果以创建相同的管线布局，则使用缓存中的布局，否则通过描述符布局生成创建新的管线布局
         static std::unordered_map<size_t, RHI::PipelineLayoutHandle> s_layoutCache;
         bool m_hasCustomLayout = false;
         std::string m_debugName = " ";

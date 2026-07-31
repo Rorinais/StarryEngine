@@ -11,26 +11,21 @@ namespace StarryEngine::Assets {
         : m_template(tmpl), m_resMgr(resMgr) {
         
         RHI::DescriptorPoolDesc poolDesc;
-        poolDesc.maxSets = 16;  // ✅ 8 → 16
+        poolDesc.maxSets = 16; 
         poolDesc.poolSizes = {
-            { RHI::DescriptorType::UniformBuffer,         8  },  // ✅ 4 → 8
-            { RHI::DescriptorType::CombinedImageSampler, 16 },  // ✅ 8 → 16
-            { RHI::DescriptorType::InputAttachment,       8  }   // ✅ 4 → 8
+            { RHI::DescriptorType::UniformBuffer,         8  }, 
+            { RHI::DescriptorType::CombinedImageSampler, 16 },  
+            { RHI::DescriptorType::InputAttachment,       8  }  
         };
         poolDesc.freeDescriptorSet = true;
         poolDesc.debugName = "MaterialPool";
         m_pool = m_resMgr->createDescriptorPool(poolDesc);
-        // ───────────────────────────
-
-        // 获取布局映射
         m_layouts = tmpl->getLayouts();
 
-        // 存储全局描述符集
         if (globalSet.isValid()) {
             m_sets[0] = globalSet;
         }
 
-        // 从模板拷贝默认渲染状态
         if (m_template) {
             m_cullMode = m_template->getCullMode();
             m_frontFace = m_template->getFrontFace();
@@ -164,7 +159,6 @@ namespace StarryEngine::Assets {
         auto* tmpl = dynamic_cast<DefaultMaterialTemplate*>(m_template.get());
         if (!tmpl) return;
 
-        // ── 辅助：从反射获取最终使用的布局（反射优先）──
         auto getEffectiveBinding = [&](const RHI::ResourceBinding& reflected) -> const RHI::ResourceBinding& {
             auto manualIt = m_blockLayouts.find(reflected.name);
             if (manualIt != m_blockLayouts.end()) {
@@ -172,10 +166,9 @@ namespace StarryEngine::Assets {
                     "ignoring incomplete manual registration",
                     reflected.name, reflected.members.size());
             }
-            return reflected;  // ← 反射优先
+            return reflected; 
             };
 
-        // ── 辅助：创建 block 和 GPU buffer ──
         auto createBlockIfNeeded = [&](const RHI::ResourceBinding& binding) {
             if (binding.set == 0) return;
 
@@ -222,12 +215,10 @@ namespace StarryEngine::Assets {
         process(tmpl->getVSReflection());
         process(tmpl->getFSReflection());
 
-        // ── 补充：手动注册过、但当前 shader 中不存在的 block ──
         for (const auto& [name, layout] : m_blockLayouts) {
             if (m_blocks.find(name) == m_blocks.end()) {
                 m_blocks.emplace(name, MaterialParameterBlock(layout));
                 m_blockBindings[name] = { layout.set, layout.binding };
-                // 不创建 GPU buffer，当前 pipeline layout 不需要它
                 LOG_INFO("Block '{}' registered but not in current shader, data preserved", name);
             }
         }
@@ -241,7 +232,6 @@ namespace StarryEngine::Assets {
             return &it->second;
         }
 
-        // ── Fallback：手动注册的 block（当前 shader 中不存在）──
         auto layoutIt = m_blockLayouts.find(blockName);
         if (layoutIt == m_blockLayouts.end()) {
             LOG_WARN("Block '{}' never registered and not in shader reflection", blockName);
@@ -252,12 +242,8 @@ namespace StarryEngine::Assets {
         uint32_t setIdx = res.set;
         uint32_t binding = res.binding;
 
-        // 创建 MaterialParameterBlock
         auto [insertedIt, _] = m_blocks.emplace(blockName, MaterialParameterBlock(res));
         m_blockBindings[blockName] = { setIdx, binding };
-
-        // ⚠️ 不创建 GPU buffer（当前 shader 中该 binding 不存在）
-        //   数据保留在 block 中，等待热重载后 binding 出现时再创建 buffer
 
         LOG_INFO("Block '{}' created from manual layout (set={}, binding={}), no GPU buffer yet",
             blockName, setIdx, binding);
@@ -276,7 +262,6 @@ namespace StarryEngine::Assets {
 
         auto it = m_samplerBindings.find(name);
         if (it == m_samplerBindings.end()) {
-            // Shader 中暂时没有这个采样器 → 只缓存，不更新描述符集
             LOG_WARN("Sampler '{}' not found in current shader, caching for future use", name);
             m_cachedTextures[name] = { UINT32_MAX, UINT32_MAX, texture, sampler };
             return;
@@ -285,10 +270,8 @@ namespace StarryEngine::Assets {
         uint32_t set = it->second.first;
         uint32_t binding = it->second.second;
 
-        // 记录完整绑定信息
         m_cachedTextures[name] = { set, binding, texture, sampler };
 
-        // 立即写入描述符集
         setTexture(set, binding, texture, sampler);
     }
 
@@ -296,7 +279,6 @@ namespace StarryEngine::Assets {
         const std::string& rgTextureName,
         ResourceDependencyType type) {
         buildReflectionCache();
-        // 根据类型查找对应的绑定信息
         std::pair<uint32_t, uint32_t> bind = {};
         if (type == ResourceDependencyType::Sampler) {
             auto it = m_samplerBindings.find(shaderVarName);
@@ -323,7 +305,7 @@ namespace StarryEngine::Assets {
 
             auto layoutIt = m_layouts.find(setIdx);
             if (layoutIt == m_layouts.end()) {
-                block.clearDirty();  // set 不存在，保留数据但不再重试
+                block.clearDirty(); 
                 continue;
             }
 
@@ -335,12 +317,10 @@ namespace StarryEngine::Assets {
                 LOG_INFO("Uploaded block '{}' ({} bytes)", name, block.size());
             }
             else {
-                // ✅ binding 在当前 shader 中不存在，保留 dirty 等待下次热重载
                 LOG_INFO("Binding not present for block '{}', deferring upload (data preserved)", name);
             }
         }
 
-        // 持久化备份所有块数据
         for (auto& [name, block] : m_blocks) {
             m_savedBlockData[name] = std::vector<uint8_t>(block.data(), block.data() + block.size());
         }
@@ -390,52 +370,37 @@ namespace StarryEngine::Assets {
     }
 
     void MaterialInstance::recreateDescriptorSets() {
-        // 备份 uniform 块数据（以便后续恢复）
         backupBlockValues();
 
-        // ─── 销毁旧描述符池（连同它分配的所有描述符集）───
-        // 注意：外部已经通过 waitIdle 确保 GPU 空闲，此时销毁池安全
         m_resMgr->destroy(m_pool);
 
-        // 创建新池（配置与构造函数相同）
         RHI::DescriptorPoolDesc poolDesc;
-        poolDesc.maxSets = 16;  // ✅ 8 → 16
+        poolDesc.maxSets = 16;  
         poolDesc.poolSizes = {
-            { RHI::DescriptorType::UniformBuffer,         8  },  // ✅ 4 → 8
-            { RHI::DescriptorType::CombinedImageSampler, 16 },  // ✅ 8 → 16
-            { RHI::DescriptorType::InputAttachment,       8  }   // ✅ 4 → 8
+            { RHI::DescriptorType::UniformBuffer,         8  }, 
+            { RHI::DescriptorType::CombinedImageSampler, 16 }, 
+            { RHI::DescriptorType::InputAttachment,       8  }  
         };
         poolDesc.freeDescriptorSet = true;
         poolDesc.debugName = "MaterialPool";
         m_pool = m_resMgr->createDescriptorPool(poolDesc);
-        // ────────────────────────────────────────────────
 
-        // 清空描述符集映射（旧句柄已随池失效）
         RHI::DescriptorSetHandle globalSet;
         if (auto it = m_sets.find(0); it != m_sets.end())
             globalSet = it->second;
         m_sets.clear();
         if (globalSet.isValid()) m_sets[0] = globalSet;
 
-        // 更新布局引用（模板可能已变）
         m_layouts = m_template->getLayouts();
 
-        // 重建反射缓存（会重新创建 UBO、纹理绑定等）
         invalidateReflectionCache();
         buildReflectionCache();
-
-        // 恢复之前备份的 uniform 值
         restoreBlockValues();
-
-        // 恢复之前缓存的纹理绑定（即使当前 Shader 中不存在，也会在后续检测到后自动绑定）
         restoreCachedBindings();
-
-        // 上传所有脏块到新描述符集
         applyAllDirtyBlocks();
     }
 
     void MaterialInstance::invalidateReflectionCache() {
-        // 延迟销毁所有旧的 UBO 缓冲
         for (auto& [key, bufRes] : m_buffers) {
             m_resMgr->scheduleDestroy([buf = bufRes.buffer, resMgr = m_resMgr]() {
                 resMgr->destroy(buf);
@@ -447,11 +412,6 @@ namespace StarryEngine::Assets {
         m_samplerBindings.clear();
         m_inputAttachmentBindings.clear();
         m_reflectionCached = false;
-
-        // ⚠️ 注意：以下两项是持久数据，绝对不能清理！
-        //   - m_savedBlockData   → uniform 数据持久层
-        //   - m_blockLayouts     → 手动注册的布局持久层
-        // 它们在 recreateDescriptorSets() 的 backupBlockValues() / getBlock() 中维护
     }
 
     void MaterialInstance::backupBlockValues() {
@@ -510,7 +470,6 @@ namespace StarryEngine::Assets {
 
         uint64_t key = ((uint64_t)setIdx << 32) | binding;
 
-        // 已存在则不重复创建
         if (m_buffers.find(key) != m_buffers.end()) return;
 
         RHI::BufferDesc bufDesc;
@@ -533,7 +492,6 @@ namespace StarryEngine::Assets {
         void* mapped = bufferObj->map();
         m_buffers[key] = { buffer, mapped, blockSize };
 
-        // 绑定到描述符集
         auto set = getOrCreateSet(setIdx);
         auto* setObj = m_resMgr->getDescriptorSet(set);
         if (setObj) {

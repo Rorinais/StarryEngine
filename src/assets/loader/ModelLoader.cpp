@@ -29,15 +29,11 @@ namespace StarryEngine::Assets {
             return false;
         }
 
-        // 临时存储：所有顶点数据
         std::vector<float> vertices;
         std::vector<uint32_t> indices;
         std::vector<Submesh> submeshes;
-
-        // 顶点布局构建器
         VertexLayout layout;
 
-        // 收集所有网格中出现的属性，构建统一布局
         bool hasPos = false, hasNormal = false, hasUV = false, hasTangent = false;
         for (unsigned int i = 0; i < scene->mNumMeshes; ++i) {
             aiMesh* mesh = scene->mMeshes[i];
@@ -93,7 +89,6 @@ namespace StarryEngine::Assets {
             };
         processNode(scene->mRootNode, glm::mat4(1.0f));
 
-        // 提取原始材质参数
         extractMaterials(scene, outMaterials, resMgr);
 
         std::vector<MaterialParams> filteredMaterials;
@@ -130,7 +125,6 @@ namespace StarryEngine::Assets {
         }
         outMaterials = std::move(filteredMaterials);
 
-        // --- 一次性将最终数据设置到 outGeometry ---
         outGeometry.setVertices(vertices);
         outGeometry.setIndices(indices);
         outGeometry.setSubmeshes(submeshes);
@@ -139,7 +133,6 @@ namespace StarryEngine::Assets {
         return true;
     }
 
-    // 辅助函数：处理单个网格，填充顶点/索引，并创建 Submesh
     void ModelLoader::processMesh(aiMesh* mesh,
         std::vector<float>& outVertices,
         std::vector<uint32_t>& outIndices,
@@ -211,7 +204,6 @@ namespace StarryEngine::Assets {
         outSubmeshes.push_back(submesh);
     }
 
-    // 辅助函数：提取材质参数
     void ModelLoader::extractMaterials(const aiScene* scene,
         std::vector<MaterialParams>& outMaterials, 
         std::shared_ptr<RHI::ResourceManager> resMgr) {
@@ -315,7 +307,6 @@ namespace StarryEngine::Assets {
 
     TextureLoadResult ModelLoader::loadEmbeddedTexture(TextureLoader& loader, aiTexture* tex, const std::string& debugName) {
         if (tex->mHeight == 0) {
-            // 压缩格式（如 PNG、JPG）
             int width, height, channels;
             stbi_uc* pixels = stbi_load_from_memory(
                 reinterpret_cast<stbi_uc*>(tex->pcData),
@@ -333,7 +324,6 @@ namespace StarryEngine::Assets {
             return result;
         }
         else {
-            // 原始 RGBA 格式
             return loader.loadTextureFromMemory(tex->pcData, tex->mWidth, tex->mHeight,
                 RHI::Format::RGBA8_UNorm,
                 debugName);

@@ -84,7 +84,6 @@ namespace StarryEngine {
             m_renderPath->onResize(width, height);
         }
 
-        // onResize 内部已调用 initialize() 重建 graph，避免后续重复初始化
         m_needRebuildGraph = false;
         m_lastAnalyzedVersion = UINT32_MAX;
     }

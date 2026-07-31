@@ -17,7 +17,6 @@ namespace StarryEngine {
 
     class ImGuiLogSink : public spdlog::sinks::base_sink<std::mutex> {
     public:
-        // 线程安全地返回日志拷贝
         std::vector<LogEntry> getLogs() const {
             std::lock_guard<std::mutex> lock(m_mutex);
             return m_logs;
@@ -44,8 +43,8 @@ namespace StarryEngine {
         void flush_() override {}
 
     private:
-        std::vector<LogEntry> m_logs;          // 改为 LogEntry
-        mutable std::mutex m_mutex;            // 保护 m_logs 的锁
+        std::vector<LogEntry> m_logs;   
+        mutable std::mutex m_mutex; 
     };
 
     class Logger {

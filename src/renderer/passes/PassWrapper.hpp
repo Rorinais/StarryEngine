@@ -8,7 +8,6 @@ namespace StarryEngine {
         using LoadOp = RHI::AttachmentLoadOp;
         using StoreOp = RHI::AttachmentStoreOp;
 
-        // 原有方法...
         static RHI::TextureDesc createTextureDesc(
             RHI::Extent3D extent,
             RHI::Format format,
@@ -55,7 +54,6 @@ namespace StarryEngine {
             float clearDepth = 1.0f,
             uint32_t clearStencil = 1);
 
-        // 新增工厂方法
         static SubpassDesc createGeometrySubpassConfig(
             const std::string& name,
             std::shared_ptr<IPassExecutor> executor,

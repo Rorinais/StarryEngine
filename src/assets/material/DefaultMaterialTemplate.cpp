@@ -40,7 +40,6 @@ namespace StarryEngine::Assets {
         m_vsReflection = std::move(vertInfo->reflection);
         m_fsReflection = std::move(fragInfo->reflection);
 
-        // 合并除 set0 以外的所有 descriptor set 布局
         auto mergeLayouts = [&](const ShaderCreateInfo& info) {
             for (const auto& [setIdx, desc] : info.layoutDescs) {
                 if (setIdx == 0) continue;
@@ -55,7 +54,6 @@ namespace StarryEngine::Assets {
         mergeLayouts(*vertInfo);
         mergeLayouts(*fragInfo);
 
-        // 推送常量生成（保持原逻辑）
         if (m_pushConstants.empty()) {
             auto addPush = [&](const RHI::ShaderReflectionInfo& refl) {
                 for (const auto& pc : refl.pushConstants) {
@@ -83,7 +81,6 @@ namespace StarryEngine::Assets {
 
         LOG_DEBUG(m_fsReflection);
 
-        // 补全连续 set（只填充实际最大 set 内的空洞，不设上限）
         fillMissingLayouts(m_layouts, m_resMgr);
 
         MaterialTemplate::clearCache();
@@ -109,7 +106,6 @@ namespace StarryEngine::Assets {
         auto vertInfo = loader.loadFromFile(vsPath, RHI::ShaderStage::Vertex);
         auto fragInfo = loader.loadFromFile(fsPath, RHI::ShaderStage::Fragment);
         if (!vertInfo || !fragInfo) {
-            // 失败回退
             m_vertexShader = oldVert;
             m_fragmentShader = oldFrag;
             m_layouts = oldLayouts;
@@ -142,7 +138,6 @@ namespace StarryEngine::Assets {
         mergeLayouts(*vertInfo);
         mergeLayouts(*fragInfo);
 
-        // 推据常量
         if (oldPushConstants.empty()) {
             m_pushConstants.clear();
             auto addPush = [&](const RHI::ShaderReflectionInfo& refl) {

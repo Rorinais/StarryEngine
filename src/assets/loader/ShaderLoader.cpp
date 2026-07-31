@@ -6,17 +6,9 @@
 
 namespace StarryEngine::Assets {
 
-    // ======================= 构造函数 =========================
-    ShaderLoader::ShaderLoader(std::shared_ptr<RHI::ResourceManager> resMgr)
-        : m_resMgr(std::move(resMgr)) {
-    }
+    ShaderLoader::ShaderLoader(std::shared_ptr<RHI::ResourceManager> resMgr): m_resMgr(std::move(resMgr)) {}
 
-    // ======================= 文件加载 =========================
-    std::optional<ShaderCreateInfo> ShaderLoader::loadFromFile(
-        const std::string& path,
-        RHI::ShaderStage stage,
-        const std::unordered_map<std::string, std::string>& macros)
-    {
+    std::optional<ShaderCreateInfo> ShaderLoader::loadFromFile(const std::string& path,RHI::ShaderStage stage,const std::unordered_map<std::string, std::string>& macros){
         auto content = Utils::FileUtils::readTextFile(path);
         if (content.empty()) {
             LOG_ERROR("Failed to read shader file: {}", path);
@@ -25,14 +17,8 @@ namespace StarryEngine::Assets {
         return loadFromSource(content, stage, path, macros);
     }
 
-    // ======================= 源码加载 =========================
-    std::optional<ShaderCreateInfo> ShaderLoader::loadFromSource(
-        const std::string& source,
-        RHI::ShaderStage stage,
-        const std::string& name,
-        const std::unordered_map<std::string, std::string>& macros)
-    {
-        // 将宏定义拼接到 source 中以生成唯一哈希，保证不同变体独立缓存
+    std::optional<ShaderCreateInfo> ShaderLoader::loadFromSource(const std::string& source,RHI::ShaderStage stage,const std::string& name,const std::unordered_map<std::string, std::string>& macros){
+
         std::string combined = source;
         for (const auto& [k, v] : macros) {
             combined += k + "=" + v + ";";
@@ -75,13 +61,7 @@ namespace StarryEngine::Assets {
         return info;
     }
 
-    // ======================= 编译到 SPIR-V =========================
-    std::vector<uint32_t> ShaderLoader::compileToSpirv(
-        const std::string& source,
-        RHI::ShaderStage stage,
-        const std::string& name,
-        const std::unordered_map<std::string, std::string>& macros)
-    {
+    std::vector<uint32_t> ShaderLoader::compileToSpirv(const std::string& source,RHI::ShaderStage stage,const std::string& name,const std::unordered_map<std::string, std::string>& macros){
         shaderc_shader_kind kind;
         switch (stage) {
         case RHI::ShaderStage::Vertex:   kind = shaderc_vertex_shader; break;
@@ -101,11 +81,7 @@ namespace StarryEngine::Assets {
         }
     }
 
-    // ======================= 反射与创建布局 =========================
-    bool ShaderLoader::reflectAndCreateLayouts(
-        const std::vector<uint32_t>& spirv,
-        ShaderCreateInfo& outInfo)
-    {
+    bool ShaderLoader::reflectAndCreateLayouts(const std::vector<uint32_t>& spirv,ShaderCreateInfo& outInfo){
         try {
             auto compiler = std::make_unique<spirv_cross::CompilerGLSL>(spirv);
             auto resources = std::move(compiler->get_shader_resources());
@@ -113,10 +89,8 @@ namespace StarryEngine::Assets {
             RHI::ShaderReflectionInfo& refl = outInfo.reflection;
             refl.shaderStage = getShaderStageFromSpirv(*compiler);
 
-            // ---- 1. 描述符集布局 ----
             auto setBindings = std::make_unique<std::unordered_map<uint32_t, std::vector<RHI::DescriptorSetLayoutBinding>>>();
 
-            // 辅助函数：处理统一资源绑定（Uniform/Storage Buffer，纹理等）
             auto processBuffer = [&](const spirv_cross::Resource& res,
                 RHI::DescriptorType descType,
                 RHI::ResourceBinding& resBind) {
@@ -131,7 +105,6 @@ namespace StarryEngine::Assets {
                     resBind.count = 1;
                     resBind.stageFlags = static_cast<RHI::ShaderStageFlags>(stage);
 
-                    // 填充布局
                     RHI::DescriptorSetLayoutBinding lb;
                     lb.binding = binding;
                     lb.type = descType;
@@ -139,17 +112,13 @@ namespace StarryEngine::Assets {
                     lb.count = 1;
                     (*setBindings)[set].push_back(lb);
 
-                    // 如果是缓冲区，提取内部成员
                     if (descType == RHI::DescriptorType::UniformBuffer ||
                         descType == RHI::DescriptorType::StorageBuffer) {
                         const spirv_cross::SPIRType& type = compiler->get_type(res.base_type_id);
                         if (type.basetype == spirv_cross::SPIRType::Struct) {
-                            // 使用递归展开，将数组成员和嵌套结构体打平为叶子成员
                             flattenUBOMembers(*compiler, type, 0, "", resBind.members);
                         }
-                    }
-                    // 如果是纹理/存储图像，填充纹理元信息
-                    else if (descType == RHI::DescriptorType::CombinedImageSampler ||
+                    }else if (descType == RHI::DescriptorType::CombinedImageSampler ||
                         descType == RHI::DescriptorType::SampledImage ||
                         descType == RHI::DescriptorType::StorageImage) {
                         const spirv_cross::SPIRType& type = compiler->get_type(res.type_id);
@@ -159,35 +128,35 @@ namespace StarryEngine::Assets {
                     }
                 };
 
-            // 1.1 Uniform Buffers
+            // Uniform Buffers
             for (auto& res : resources.uniform_buffers) {
                 RHI::ResourceBinding binding;
                 processBuffer(res, RHI::DescriptorType::UniformBuffer, binding);
                 refl.resourceBindings.push_back(std::move(binding));
             }
 
-            // 1.2 Storage Buffers
+            // Storage Buffers
             for (auto& res : resources.storage_buffers) {
                 RHI::ResourceBinding binding;
                 processBuffer(res, RHI::DescriptorType::StorageBuffer, binding);
                 refl.resourceBindings.push_back(std::move(binding));
             }
 
-            // 1.3 Sampled Images (Combined Image Samplers)
+            // Sampled Images
             for (auto& res : resources.sampled_images) {
                 RHI::ResourceBinding binding;
                 processBuffer(res, RHI::DescriptorType::CombinedImageSampler, binding);
                 refl.resourceBindings.push_back(std::move(binding));
             }
 
-            // 1.4 Separate Images
+            // Separate Images
             for (auto& res : resources.separate_images) {
                 RHI::ResourceBinding binding;
                 processBuffer(res, RHI::DescriptorType::SampledImage, binding);
                 refl.resourceBindings.push_back(std::move(binding));
             }
 
-            // 1.5 Separate Samplers (仅采样器，不包含纹理)
+            // Separate Samplers
             for (auto& res : resources.separate_samplers) {
                 uint32_t set = compiler->get_decoration(res.id, spv::DecorationDescriptorSet);
                 uint32_t binding = compiler->get_decoration(res.id, spv::DecorationBinding);
@@ -210,14 +179,14 @@ namespace StarryEngine::Assets {
                 refl.resourceBindings.push_back(resBind);
             }
 
-            // 1.6 Storage Images
+            // Storage Images
             for (auto& res : resources.storage_images) {
                 RHI::ResourceBinding binding;
                 processBuffer(res, RHI::DescriptorType::StorageImage, binding);
                 refl.resourceBindings.push_back(std::move(binding));
             }
 
-            // 1.7 Subpass Inputs
+            // Subpass Inputs
             for (auto& res : resources.subpass_inputs) {
                 uint32_t set = compiler->get_decoration(res.id, spv::DecorationDescriptorSet);
                 uint32_t binding = compiler->get_decoration(res.id, spv::DecorationBinding);
@@ -240,7 +209,6 @@ namespace StarryEngine::Assets {
                 refl.resourceBindings.push_back(resBind);
             }
 
-            // ---- 创建所有 DescriptorSetLayout ----
             for (auto& [setIndex, bindings] : (*setBindings)) {
                 RHI::DescriptorSetLayoutDesc desc;
                 desc.bindings = bindings;
@@ -248,13 +216,12 @@ namespace StarryEngine::Assets {
                 outInfo.layoutDescs[setIndex] = std::move(desc);
             }
 
-            // ---- 2. 顶点输入属性 ----
+            // 顶点输入属性
             for (auto& res : resources.stage_inputs) {
                 uint32_t loc = compiler->get_decoration(res.id, spv::DecorationLocation);
                 spirv_cross::SPIRType type = compiler->get_type(res.type_id);
                 RHI::Format fmt = spirvTypeToFormat(type);
 
-                // 兼容旧的 vertexAttributes 列表
                 RHI::VertexAttribute attr;
                 attr.location = loc;
                 attr.binding = 0;
@@ -269,7 +236,7 @@ namespace StarryEngine::Assets {
                 refl.inputAttributes.push_back(input);
             }
 
-            // ---- 3. 输出属性 ----
+            // 输出属性
             for (auto& res : resources.stage_outputs) {
                 uint32_t loc = compiler->get_decoration(res.id, spv::DecorationLocation);
                 spirv_cross::SPIRType type = compiler->get_type(res.type_id);
@@ -281,7 +248,7 @@ namespace StarryEngine::Assets {
                 refl.outputAttributes.push_back(output);
             }
 
-            // ---- 4. Push Constants ----
+            // Push Constants
             for (auto& res : resources.push_constant_buffers) {
                 const spirv_cross::SPIRType& pcType = compiler->get_type(res.base_type_id);
                 RHI::PushConstant pc;
@@ -290,7 +257,6 @@ namespace StarryEngine::Assets {
                 pc.size = compiler->get_declared_struct_size(pcType);
                 pc.stageFlags = static_cast<RHI::ShaderStageFlags>(getShaderStageFromSpirv(*compiler));
 
-                // 提取推送常量内的成员
                 if (pcType.basetype == spirv_cross::SPIRType::Struct) {
                     for (uint32_t i = 0; i < pcType.member_types.size(); ++i) {
                         RHI::BufferMember member;
@@ -305,7 +271,7 @@ namespace StarryEngine::Assets {
                 refl.pushConstants.push_back(pc);
             }
 
-            // ---- 5. Specialization Constants ----
+            // Specialization Constants
             auto specConstants = compiler->get_specialization_constants();
             for (auto& sc : specConstants) {
                 RHI::SpecConstant spec;
@@ -320,7 +286,7 @@ namespace StarryEngine::Assets {
                 refl.specConstants.push_back(spec);
             }
 
-            // ---- 6. Compute 工作组大小 ----
+            // Compute 工作组大小
             if (compiler->get_execution_model() == spv::ExecutionModelGLCompute) {
                 refl.workGroupSizeX = compiler->get_execution_mode_argument(spv::ExecutionModeLocalSize, 0);
                 refl.workGroupSizeY = compiler->get_execution_mode_argument(spv::ExecutionModeLocalSize, 1);
@@ -335,21 +301,20 @@ namespace StarryEngine::Assets {
         }
     }
 
-    // ======================= 辅助函数实现 =========================
     void ShaderLoader::flattenUBOMembers(
         const spirv_cross::CompilerGLSL& compiler,
         const spirv_cross::SPIRType& type,
         uint32_t baseOffset,
         const std::string& baseName,
-        std::vector<RHI::BufferMember>& flatMembers)
-    {
+        std::vector<RHI::BufferMember>& flatMembers){
+            
         for (uint32_t i = 0; i < type.member_types.size(); ++i) {
             std::string memberName = compiler.get_member_name(type.self, i);
             if (memberName.empty()) memberName = "_" + std::to_string(i);
             uint32_t offset = baseOffset + compiler.type_struct_member_offset(type, i);
             const spirv_cross::SPIRType& memberType = compiler.get_type(type.member_types[i]);
 
-            // 1. 优先处理数组（无论元素是标量还是结构体）
+            // 1. 优先处理数组
             if (!memberType.array.empty()) {
                 uint32_t arraySize = memberType.array[0];
                 if (arraySize == 0) {
@@ -360,7 +325,7 @@ namespace StarryEngine::Assets {
 
                 for (uint32_t j = 0; j < arraySize; ++j) {
                     std::string elemName = baseName + memberName + "[" + std::to_string(j) + "]";
-                    const spirv_cross::SPIRType& elemType = memberType; // 数组元素的类型（已去掉外层数组）
+                    const spirv_cross::SPIRType& elemType = memberType;
 
                     if (elemType.basetype == spirv_cross::SPIRType::Struct) {
                         // 元素仍是结构体，递归展开
@@ -455,13 +420,13 @@ namespace StarryEngine::Assets {
             switch (type.vecsize) {
             case 1: return RHI::Format::R16_Float;
             case 2: return RHI::Format::RG16_Float;
-            case 3: return RHI::Format::RGBA16_Float; // 使用 RGBA16_Float 近似
+            case 3: return RHI::Format::RGBA16_Float; 
             case 4: return RHI::Format::RGBA16_Float;
             }
             break;
         case spirv_cross::SPIRType::Double:
             switch (type.vecsize) {
-            case 1: return RHI::Format::R32_Float; // placeholder
+            case 1: return RHI::Format::R32_Float; 
             case 2: return RHI::Format::RG32_Float;
             case 3: return RHI::Format::RGB32_Float;
             case 4: return RHI::Format::RGBA32_Float;
@@ -496,8 +461,7 @@ namespace StarryEngine::Assets {
         }
     }
 
-    void ShaderLoader::fillTextureInfo(const spirv_cross::SPIRType& type,
-        RHI::ResourceBinding::TextureInfo& info) {
+    void ShaderLoader::fillTextureInfo(const spirv_cross::SPIRType& type,RHI::ResourceBinding::TextureInfo& info) {
         switch (type.image.dim) {
         case spv::Dim1D:     info.dimension = RHI::TextureDimension::Tex1D; break;
         case spv::Dim2D:     info.dimension = RHI::TextureDimension::Tex2D; break;

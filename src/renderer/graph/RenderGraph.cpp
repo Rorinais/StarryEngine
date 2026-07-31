@@ -116,7 +116,6 @@ namespace StarryEngine::RenderGraph {
         return ptr;
     }
 
-    //注：ai注释
     // 拓扑排序函数，根据邻接表返回节点的执行顺序，若存在环则抛出异常
     std::vector<uint32_t> RenderGraph::topologicalSort(const std::vector<std::vector<uint32_t>>& adj) const {
         size_t n = adj.size();
@@ -576,14 +575,6 @@ namespace StarryEngine::RenderGraph {
     }
 
     // ──── Pass Culling ──────────────────────────────────────────────
-    // 从导入的外部纹理（如 Swapchain）出发，反向 BFS 遍历 DAG，
-    // 标记所有"可达"的 Pass；不可达的 Pass 从 m_passes 移除。
-    // 这允许你"随手声明"调试/条件 Pass — 不需时自动裁剪，无需
-    // 修改管线配置。
-    //
-    // 为什么放在这里：
-    // - 必须在 dependencyAnalysis() 之后（需要 m_sortedPasses）
-    // - 必须在物理资源创建之前（避免为无用 Pass 分配纹理/缓冲）
     void RenderGraph::cullUnusedPasses() {
         if (m_passes.empty()) return;
 
@@ -663,12 +654,6 @@ namespace StarryEngine::RenderGraph {
     }
 
     // ──── DOT 可视化导出 ────────────────────────────────────────────
-    // 用法：
-    //   m_renderGraph->exportDot("frame_graph.dot");
-    //   $ dot -Tpng frame_graph.dot -o frame_graph.png
-    //
-    // 图例：
-    //   橙色椭圆 = Pass    绿色边 = 读    红色边 = 写    蓝色矩形 = 纹理
     void RenderGraph::exportDot(const std::string& filepath) const {
         std::ofstream f(filepath);
         if (!f.is_open()) {
@@ -741,16 +726,7 @@ namespace StarryEngine::RenderGraph {
         LOG_INFO("Exported render graph DOT to: {}", filepath);
     }
 
-    // ──── Memory Aliasing（贪心复用 transient 纹理内存）────────────
-    //
-    // 原理：两个 transient 纹理生命周期不重叠 → 复用同一块 GPU 内存。
-    // 参考 Frostbite 的贪心分配器：
-    //   1. 按首次使用排序所有 transient 纹理
-    //   2. 维护"空闲池"（已过期、格式兼容、尺寸足够的纹理）
-    //   3. 新纹理优先从空闲池复用，无匹配则新建
-    //
-    // Frostbite 数据（Battlefield 4）：
-    //   DX12: 147 MB → 80 MB（节省 46%）
+    // ──── Memory Aliasing────────────
     void RenderGraph::performMemoryAliasing(
         const std::unordered_map<TextureId, TexturePassInfo>& texPassInfo)
     {

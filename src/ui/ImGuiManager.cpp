@@ -5,11 +5,6 @@
 #include <cstring>
 
 namespace StarryEngine {
-
-    // ════════════════════════════════════════
-    // 构造 & 析构
-    // ════════════════════════════════════════
-
     ImGuiManager::ImGuiManager() {
         IMGUI_CHECKVERSION();
         m_context = ImGui::CreateContext();
@@ -42,10 +37,6 @@ namespace StarryEngine {
         }
     }
 
-    // ════════════════════════════════════════
-    // 初始化 — 第一阶段：GLFW + DescriptorPool
-    // ════════════════════════════════════════
-
     bool ImGuiManager::initialize(
         RHI::IRHI* rhi,
         RHI::ResourceManager* resMgr,
@@ -66,27 +57,17 @@ namespace StarryEngine {
         m_height = height;
         m_window = window;
 
-        // ── 1. ImGui_ImplGlfw 初始化 ──
         GLFWwindow* glfwWindow = window->getHandle();
         if (!ImGui_ImplGlfw_InitForVulkan(glfwWindow, true)) {
             return false;
         }
         m_glfwInitialized = true;
 
-        // ── 2. 创建 DescriptorPool（Vulkan 后端暂不 init）──
         createDescriptorPool(resMgr, swapchainImageCount);
-
-        // ── 3. 收集原生句柄（为后续 Vulkan init 做准备）──
-        setupVulkanInitInfo(rhi, resMgr, window,
-            width, height, swapchainImageCount,
-            swapchainFormat, globalDescriptorPool);
+        setupVulkanInitInfo(rhi, resMgr, window, width, height, swapchainImageCount,swapchainFormat, globalDescriptorPool);
 
         return true;
     }
-
-    // ════════════════════════════════════════
-    // 初始化 — 第二阶段：Vulkan（需要 RenderPass）
-    // ════════════════════════════════════════
 
     bool ImGuiManager::initializeVulkanBackend(
         RHI::IRHI* rhi,
@@ -112,10 +93,7 @@ namespace StarryEngine {
 
         ImGui::SetCurrentContext(m_context);
 
-        // ── 构建 InitInfo ──
         ImGui_ImplVulkan_InitInfo initInfo{};
-
-        // 基础字段
         initInfo.Instance = instance;
         initInfo.PhysicalDevice = physicalDevice;
         initInfo.Device = m_vkDevice;
@@ -132,11 +110,6 @@ namespace StarryEngine {
         initInfo.PipelineInfoMain.Subpass = 0;
         initInfo.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
 
-        // 如果开启动态渲染，需要额外设置
-        // initInfo.UseDynamicRendering = true;
-        // initInfo.PipelineInfoMain.PipelineRenderingCreateInfo = { ... };
-
-        // ── 调用 ImGui_ImplVulkan_Init（新版本只接受一个参数）──
         if (!ImGui_ImplVulkan_Init(&initInfo)) {
             return false;
         }
@@ -175,10 +148,6 @@ namespace StarryEngine {
         }
     }
 
-    // ════════════════════════════════════════
-    // 内部辅助
-    // ════════════════════════════════════════
-
     void ImGuiManager::setupVulkanInitInfo(
         RHI::IRHI* rhi,
         RHI::ResourceManager* resMgr,
@@ -189,9 +158,6 @@ namespace StarryEngine {
         RHI::Format             swapchainFormat,
         const RHI::DescriptorPoolHandle& globalDescriptorPool)
     {
-        // 这里暂时不需要做任何事
-        // 原生句柄在 initializeVulkanBackend 中获取
-        // 如果 RHI 的原生句柄在整个生命周期内不变，可以在构造函数里存下来
         m_initInfoStored = true;
     }
 
@@ -208,9 +174,6 @@ namespace StarryEngine {
         m_descriptorPool = resMgr->createDescriptorPool(poolDesc);
     }
 
-    // ════════════════════════════════════════
-    // 每帧
-    // ════════════════════════════════════════
 
     void ImGuiManager::beginFrame() {
         if (!m_glfwInitialized || !m_vulkanBackendReady) return;
@@ -228,10 +191,6 @@ namespace StarryEngine {
         ImGui::Render();
     }
 
-    // ════════════════════════════════════════
-    // 渲染
-    // ════════════════════════════════════════
-
     void ImGuiManager::render(RHI::RHICommandEncoder* encoder, uint32_t frameIndex) {
         if (!m_vulkanBackendReady) return;
 
@@ -242,10 +201,6 @@ namespace StarryEngine {
         VkCommandBuffer cmd = static_cast<VkCommandBuffer>(encoder->getCommandBuffer());
         ImGui_ImplVulkan_RenderDrawData(drawData, cmd);
     }
-
-    // ════════════════════════════════════════
-    // 事件转发 — 使用 ImGui 官方的 GLFW 回调
-    // ════════════════════════════════════════
 
     void ImGuiManager::onKeyEvent(int glfwKey, int scancode, int action, int mods) {
         if (!m_glfwInitialized || !m_window) return;
@@ -275,10 +230,6 @@ namespace StarryEngine {
         m_width = width;
         m_height = height;
     }
-
-    // ════════════════════════════════════════
-    // 样式
-    // ════════════════════════════════════════
 
     void ImGuiManager::setDarkTheme() {
         ImGui::StyleColorsDark();
@@ -316,13 +267,11 @@ namespace StarryEngine {
     void ImGuiManager::registerSceneTexture(RHI::ResourceManager* resMgr) {
         if (!m_rdg || !m_vulkanBackendReady || !resMgr) return;
 
-        // 如果已有，先移除
         if (m_sceneTextureID != 0) {
             ImGui_ImplVulkan_RemoveTexture(reinterpret_cast<VkDescriptorSet>(m_sceneTextureID));
             m_sceneTextureID = 0;
         }
 
-        // 获取 SceneColor 纹理
         auto texId = m_rdg->getTextureId("SceneColor");
         RHI::TextureHandle scHandle = m_rdg->getPhysicalTextureHandle(texId);
         if (!scHandle.isValid()) {
@@ -332,7 +281,6 @@ namespace StarryEngine {
         auto* tex = resMgr->getTexture(scHandle);
         VkImageView view = static_cast<VkImageView>(tex->getDefaultView());
 
-        // 获取采样器
         VkSampler sampler = VK_NULL_HANDLE;
         if (m_defaultSampler.isValid()) {
             sampler = static_cast<VkSampler>(resMgr->getSampler(m_defaultSampler)->getNativeHandle());
@@ -342,7 +290,6 @@ namespace StarryEngine {
             return;
         }
 
-        // 注册纹理，并将指针转为 ImTextureID
         VkDescriptorSet descSet = ImGui_ImplVulkan_AddTexture(sampler, view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         m_sceneTextureID = reinterpret_cast<ImTextureID>(descSet);
     }

@@ -16,7 +16,7 @@ namespace StarryEngine {
         ~DeferredRenderPath() = default;
 
         // IRenderPath — deferred-specific overrides
-        void setConfig(const RenderPathConfig&) override;   // deprecated
+        void setConfig(const RenderPathConfig&) override;  
         void setDrawItems(const Scene::AnalysisSceneResult& sceneData) override;
 
         void setImGuiManager(ImGuiManager* mgr, uint32_t imageCount);

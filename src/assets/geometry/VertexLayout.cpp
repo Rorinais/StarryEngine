@@ -23,7 +23,6 @@ namespace StarryEngine::Assets {
         uint32_t size = getFormatSize(format);
         addAttribute(location, binding, format, offset);
 
-        // 更新自动 stride
         if (mBindings[binding].autoStride) {
             mBindingCurrentOffsets[binding] = offset + size;
             mBindings[binding].stride = std::max(mBindings[binding].stride, offset + size);
@@ -50,7 +49,6 @@ namespace StarryEngine::Assets {
 
         m_appAttributes.push_back({ semantic, binding, format, offset });
 
-        // 更新自动 stride
         if (mBindings[binding].autoStride) {
             mBindingCurrentOffsets[binding] = offset + size;
             mBindings[binding].stride = std::max(mBindings[binding].stride, offset + size);

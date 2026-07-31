@@ -5,11 +5,6 @@
 
 namespace StarryEngine {
 
-    //struct StagePassInfo {
-    //    RHI::RenderPassHandle renderPassHandle;
-    //    std::unordered_map<Scene::RenderQueue, uint32_t> queueToSubpass;
-    //};
-
     struct SubpassAttachment {
         std::string textureName;
         RenderGraph::AttachmentParams params;

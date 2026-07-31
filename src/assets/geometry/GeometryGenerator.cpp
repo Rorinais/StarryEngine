@@ -34,7 +34,7 @@ namespace StarryEngine::Assets {
                 float y = radius * cosPhi;
                 float z = radius * sinPhi * sinTheta;
 
-                // 法线（归一化位置）
+                // 法线
                 float nx = sinPhi * cosTheta;
                 float ny = cosPhi;
                 float nz = sinPhi * sinTheta;
@@ -43,20 +43,18 @@ namespace StarryEngine::Assets {
                 float u = (float)j / sectorCount;
                 float v = (float)i / stackCount;
 
-                // ---------- 计算切线 ----------
-                // 切线：沿纬度方向 (theta 增大)
-                float tx = -sinTheta;   // 注意 sinPhi 抵消了
+                // 切线
+                float tx = -sinTheta;  
                 float ty = 0.0f;
                 float tz = cosTheta;
                 glm::vec3 tangent = glm::normalize(glm::vec3(tx, ty, tz));
 
-                // 副切线：沿经度方向 (phi 增大)
+                // 副切
                 float bx = cosPhi * cosTheta;
                 float by = -sinPhi;
                 float bz = cosPhi * sinTheta;
                 glm::vec3 bitangent = glm::normalize(glm::vec3(bx, by, bz));
 
-                // 计算 handedness（通常为 1.0，取决于 UV 方向与叉积结果是否一致）
                 glm::vec3 normal(nx, ny, nz);
                 float handedness = (glm::dot(glm::cross(normal, tangent), bitangent) < 0.0f) ? -1.0f : 1.0f;
 
@@ -69,7 +67,6 @@ namespace StarryEngine::Assets {
             }
         }
 
-        // 索引生成保持不变
         for (uint32_t i = 0; i < stackCount; ++i) {
             uint32_t k1 = i * (sectorCount + 1);
             uint32_t k2 = k1 + sectorCount + 1;
@@ -87,12 +84,11 @@ namespace StarryEngine::Assets {
         geometry->setIndices(indices);
         geometry->setPrimitiveTopology(RHI::PrimitiveTopology::TriangleList);
 
-        // 更新顶点布局：每个顶点现在是 3(pos) + 3(norm) + 2(uv) + 4(tangent) = 12 floats
         VertexLayout layout;
         layout.addBinding(0, 0, RHI::VertexInputRate::PerVertex); 
         layout.addAttribute(VertexSemantic::Position, 0, RHI::Format::RGB32_Float);  // offset 0
         layout.addAttribute(VertexSemantic::Normal, 0, RHI::Format::RGB32_Float);  // offset 12
-        layout.addAttribute(VertexSemantic::TexCoord0, 0, RHI::Format::RG32_Float);   // offset 24
+        layout.addAttribute(VertexSemantic::TexCoord0, 0, RHI::Format::RG32_Float); // offset 24
         layout.addAttribute(VertexSemantic::Tangent, 0, RHI::Format::RGBA32_Float); // offset 32
         geometry->setVertexLayout(layout);
         geometry->setSubmeshes({ {0, (uint32_t)indices.size(), 0} });
@@ -197,7 +193,7 @@ namespace StarryEngine::Assets {
             glm::vec3 normal;
         };
         std::array<Face, 6> faces = { {
-            { {0, 1, 2, 3}, glm::vec3(0,  0, -1) }, // 前? 这里按原代码的顺序，只保证法线正确
+            { {0, 1, 2, 3}, glm::vec3(0,  0, -1) }, 
             { {4, 5, 6, 7}, glm::vec3(0,  0,  1) },
             { {0, 4, 7, 3}, glm::vec3(-1,  0,  0) },
             { {1, 5, 6, 2}, glm::vec3(1,  0,  0) },
@@ -205,20 +201,20 @@ namespace StarryEngine::Assets {
             { {3, 2, 6, 7}, glm::vec3(0,  1,  0) }
         } };
 
-        // 每个面的 UV 坐标（逆时针，与顶点顺序一致）
+        // 每个面的 UV 坐标
         std::array<glm::vec2, 4> uvs = {
             glm::vec2(0, 0), glm::vec2(1, 0),
             glm::vec2(1, 1), glm::vec2(0, 1)
         };
 
-        std::vector<float> vertexData; // 每顶点 12 floats
+        std::vector<float> vertexData; 
         std::vector<uint32_t> indices;
 
         for (int f = 0; f < 6; ++f) {
             const auto& face = faces[f];
             glm::vec3 normal = face.normal;
 
-            // 计算切线和副切线（面平坦，可根据 ddx/ddy 近似）
+            // 计算切线和副切线
             // 取顶点 0 到 1 的边作为切线方向
             glm::vec3 edge1 = positions[face.idx[1]] - positions[face.idx[0]];
             glm::vec3 edge2 = positions[face.idx[3]] - positions[face.idx[0]];
@@ -237,7 +233,6 @@ namespace StarryEngine::Assets {
             bitangent.z = fInv * (-deltaUV2.x * edge1.z + deltaUV1.x * edge2.z);
             bitangent = glm::normalize(bitangent);
 
-            // 计算 handedness
             float handedness = (glm::dot(glm::cross(normal, tangent), bitangent) < 0.0f) ? -1.0f : 1.0f;
 
             for (int i = 0; i < 4; ++i) {
@@ -296,7 +291,7 @@ namespace StarryEngine::Assets {
         glm::vec3 normal = glm::vec3(0, 0, 1);
         glm::vec3 tangent = glm::vec3(1, 0, 0);
         glm::vec3 bitangent = glm::vec3(0, 1, 0);
-        float handedness = 1.0f; // 正交
+        float handedness = 1.0f;
 
         std::vector<float> vertices = {
             // position       normal       uv     tangent + handedness
@@ -343,7 +338,7 @@ namespace StarryEngine::Assets {
         float angleStep = 2.0f * glm::pi<float>() / radialSegments;
         float heightStep = height / heightSegments;
 
-        // 辅助：添加顶点
+        // 添加顶点
         auto addVertex = [&](float x, float y, float z, float nx, float ny, float nz, float u, float v) {
             vertices.push_back(x); vertices.push_back(y); vertices.push_back(z);
             vertices.push_back(nx); vertices.push_back(ny); vertices.push_back(nz);
@@ -351,7 +346,6 @@ namespace StarryEngine::Assets {
             return (vertices.size() / 8) - 1;
             };
 
-        // 存储每一圈的顶点索引
         std::vector<std::vector<uint32_t>> ringIndices(heightSegments + 1);
         for (uint32_t i = 0; i <= heightSegments; ++i) {
             float t = (float)i / heightSegments;
@@ -362,10 +356,10 @@ namespace StarryEngine::Assets {
                 float angle = j * angleStep;
                 float x = r * cos(angle);
                 float z = r * sin(angle);
-                // 法线：径向方向（近似，对于锥体需修正）
+                // 法线：径向方向
                 float nx = cos(angle);
                 float nz = sin(angle);
-                float ny = 0.0f; // 简化，实际需考虑倾斜
+                float ny = 0.0f;
                 float u = (float)j / radialSegments;
                 float v = t;
                 uint32_t idx = addVertex(x, y, z, nx, ny, nz, u, v);
