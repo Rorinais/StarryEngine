@@ -15,9 +15,38 @@
 
 namespace StarryEngine {
     struct OverlayPassDesc {
-        std::string tag;                              // 标签（用于 SubpassTarget 映射）
+        std::string tag;
         std::shared_ptr<IPassExecutor> executor;
+
+        // 颜色输出附件 {纹理名, 附件参数}
+        std::vector<std::pair<std::string, RenderGraph::AttachmentParams>> colorOutputs;
+        // 深度附件（可选）
+        std::optional<std::pair<std::string, RenderGraph::AttachmentParams>> depthOutput;
+        // 输入附件 {纹理名, 附件参数}
+        std::vector<std::pair<std::string, RenderGraph::AttachmentParams>> inputAttachments;
     };
+
+    // 便捷构造：UI overlay（读 SceneColor → 写 Swapchain）
+    inline OverlayPassDesc makeUIOverlay(const std::string& tag,
+                                         std::shared_ptr<IPassExecutor> executor) {
+        OverlayPassDesc desc{tag, executor};
+        RenderGraph::AttachmentParams scParams;
+        scParams.loadOp = RHI::AttachmentLoadOp::Clear;
+        scParams.storeOp = RHI::AttachmentStoreOp::Store;
+        scParams.initialLayout = RHI::ImageLayout::Undefined;
+        scParams.finalLayout = RHI::ImageLayout::PresentSrc;
+        scParams.clearColor = {0.08f, 0.08f, 0.10f, 1.0f};
+        desc.colorOutputs.emplace_back("Swapchain", scParams);
+
+        RenderGraph::AttachmentParams inParams;
+        inParams.loadOp = RHI::AttachmentLoadOp::Load;
+        inParams.storeOp = RHI::AttachmentStoreOp::DontCare;
+        inParams.initialLayout = RHI::ImageLayout::ShaderReadOnly;
+        inParams.finalLayout = RHI::ImageLayout::ShaderReadOnly;
+        desc.inputAttachments.emplace_back("SceneColor", inParams);
+
+        return desc;
+    }
 
     // ── 类型安全的 Blackboard ───────────────────────────────────────
     // 模块间通过 TYPE 共享数据，不需要知道对方是谁。

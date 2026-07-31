@@ -1,53 +1,10 @@
 #include "BaseRenderPath.hpp"
+#include "../passExecutor/PresentationExecutor.hpp"
 #include "../../logging/Logger.hpp"
 #include "../../assets/loader/ShaderLoader.hpp"
 #include <algorithm>
 
 namespace StarryEngine {
-
-    // ──── 内置全屏 Blit Executor ────────────────────────────────────
-    class PresentationExecutor : public IPassExecutor {
-    public:
-        PresentationExecutor(RHI::PipelineHandle pipeline,
-                             RHI::PipelineLayoutHandle layout,
-                             RHI::DescriptorSetHandle globalSet,
-                             RHI::DescriptorSetHandle sceneColorSet)
-            : m_pipeline(pipeline), m_layout(layout),
-              m_globalSet(globalSet), m_sceneColorSet(sceneColorSet) {}
-
-        void setPipeline(RHI::PipelineHandle p)   { m_pipeline = p; }
-        void setSceneColorSet(RHI::DescriptorSetHandle s) { m_sceneColorSet = s; }
-        void setLayout(RHI::PipelineLayoutHandle l) { m_layout = l; }
-
-        void clearDrawItems() override {}
-        void setDrawItems(const std::vector<std::shared_ptr<Scene::DrawItem>>&) override {}
-        const std::vector<std::shared_ptr<Scene::DrawItem>>& getDrawItems() override { return m_empty; }
-        void setPipelineMapping(const std::unordered_map<uint32_t, RHI::PipelineHandle>&) override {}
-        void addDrawItem(std::shared_ptr<Scene::DrawItem>) override {}
-
-        void execute(RHI::RHICommandEncoder* encoder, const RenderContext&,
-                     const PassContext& pctx, uint32_t) override {
-            if (!m_pipeline.isValid()) return;
-            auto resMgr = pctx.getResourceManager();
-            auto* pipeline = resMgr->getPipeline(m_pipeline);
-            if (!pipeline) return;
-            encoder->bindPipeline(pipeline);
-            auto* playout = resMgr->getPipelineLayout(m_layout);
-            if (playout) {
-                if (m_globalSet.isValid())
-                    encoder->bindDescriptorSets(RHI::PipelineBindPoint::Graphics, playout, 0, {m_globalSet}, {});
-                if (m_sceneColorSet.isValid())
-                    encoder->bindDescriptorSets(RHI::PipelineBindPoint::Graphics, playout, 1, {m_sceneColorSet}, {});
-            }
-            encoder->draw(3, 1, 0, 0);
-        }
-
-    private:
-        RHI::PipelineHandle       m_pipeline;
-        RHI::PipelineLayoutHandle m_layout;
-        RHI::DescriptorSetHandle  m_globalSet, m_sceneColorSet;
-        std::vector<std::shared_ptr<Scene::DrawItem>> m_empty;
-    };
 
     // ──── BaseRenderPath ────────────────────────────────────────────
 
@@ -96,6 +53,8 @@ namespace StarryEngine {
     }
 
     void BaseRenderPath::onResize(uint32_t width, uint32_t height) {
+        if (width == m_width && height == m_height) return;  // 尺寸未变，跳过
+        if (width == 0 || height == 0) return;
         m_width = width; m_height = height;
         for (auto& [name, desc] : m_textureDescs) {
             desc.extent.width = width; desc.extent.height = height;
@@ -124,9 +83,19 @@ namespace StarryEngine {
         m_tagToSubpass.clear();
         m_tagToPassNode.clear();
         m_presentationPipelineReady = false;
-        m_presentSceneColorDescSet = RHI::DescriptorSetHandle{};
 
-        m_renderGraph.reset();
+        // 销毁旧的 descriptor pool（presentation pipeline 每帧重建）
+        if (m_presentSceneColorPool.isValid()) {
+            m_resMgr->destroy(m_presentSceneColorPool);
+            m_presentSceneColorPool = RHI::DescriptorPoolHandle{};
+            m_presentSceneColorDescSet = RHI::DescriptorSetHandle{};
+        }
+
+        if (m_renderGraph) {
+            m_rhi->waitIdle();
+            Assets::PipelineCache::invalidateAll(m_resMgr.get());
+            m_renderGraph.reset();
+        }
         m_renderGraph = std::make_shared<RenderGraph::RenderGraph>(m_rhi);
         m_renderGraph->setSwapchainImageCount(m_rhi->getSwapChainImageCount());
 
@@ -171,24 +140,22 @@ namespace StarryEngine {
                 auto& subpassBuilder = passNode->addSubpass(overlay.tag);
                 subpassBuilder.setTag(overlay.tag);
 
-                RenderGraph::AttachmentParams scParams;
-                scParams.loadOp = RHI::AttachmentLoadOp::Clear;
-                scParams.storeOp = RHI::AttachmentStoreOp::Store;
-                scParams.initialLayout = RHI::ImageLayout::Undefined;
-                scParams.finalLayout = RHI::ImageLayout::PresentSrc;
-                scParams.clearColor = { 0.08f, 0.08f, 0.10f, 1.0f };
-                auto swapchainTexId = texIdMap.at(m_swapchainTextureName);
-                std::string scKey = passNode->addColorOutput(swapchainTexId, scParams);
-                subpassBuilder.addColorAttachmentRef(scKey);
-
-                RenderGraph::AttachmentParams inputParams;
-                inputParams.loadOp = RHI::AttachmentLoadOp::Load;
-                inputParams.storeOp = RHI::AttachmentStoreOp::DontCare;
-                inputParams.initialLayout = RHI::ImageLayout::ShaderReadOnly;
-                inputParams.finalLayout = RHI::ImageLayout::ShaderReadOnly;
-                auto sceneColorTexId = texIdMap.at("SceneColor");
-                std::string inputKey = passNode->addInput(sceneColorTexId, inputParams);
-                subpassBuilder.addInputAttachmentRef(inputKey);
+                // 颜色输出（每个 overlay 自己声明）
+                for (auto& [texName, params] : overlay.colorOutputs) {
+                    std::string key = passNode->addColorOutput(texIdMap.at(texName), params);
+                    subpassBuilder.addColorAttachmentRef(key);
+                }
+                // 深度输出（可选）
+                if (overlay.depthOutput) {
+                    std::string key = passNode->addDepthOutput(
+                        texIdMap.at(overlay.depthOutput->first), overlay.depthOutput->second);
+                    subpassBuilder.addDepthStencilAttachmentRef(key);
+                }
+                // 输入附件
+                for (auto& [texName, params] : overlay.inputAttachments) {
+                    std::string key = passNode->addInput(texIdMap.at(texName), params);
+                    subpassBuilder.addInputAttachmentRef(key);
+                }
 
                 subpassBuilder.setExecutor(overlay.executor);
                 m_tagToSubpass[overlay.tag] = SubpassTarget{ {}, 0, overlay.executor };
@@ -252,7 +219,8 @@ namespace StarryEngine {
             preparePresentationPipeline();
         }
 
-        onAfterCompile();  // 子类扩展（如粒子管线）
+        onAfterCompile();   // 子类扩展（如粒子管线）
+        onAfterCompileImGui();  // ImGui 初始化（需要 renderPass handle）
 
         m_textureIdMap = std::move(texIdMap);
         return true;
@@ -315,11 +283,11 @@ namespace StarryEngine {
                     RHI::DescriptorPoolDesc poolDesc;
                     poolDesc.maxSets = 1;
                     poolDesc.poolSizes = {{RHI::DescriptorType::CombinedImageSampler, 1}};
-                    auto pool = m_resMgr->createDescriptorPool(poolDesc);
+                    m_presentSceneColorPool = m_resMgr->createDescriptorPool(poolDesc);
 
                     RHI::DescriptorSetDesc setDesc;
                     setDesc.descriptorSetLayout = m_presentSceneColorLayout;
-                    setDesc.descriptorPool = pool;
+                    setDesc.descriptorPool = m_presentSceneColorPool;
                     m_presentSceneColorDescSet = m_resMgr->createDescriptorSet(setDesc);
                     if (m_presentSceneColorDescSet.isValid()) {
                         auto* descSet = m_resMgr->getDescriptorSet(m_presentSceneColorDescSet);

@@ -44,7 +44,7 @@ namespace StarryEngine {
         m_imguiExecutor = std::make_shared<ImGuiExecutor>(m_imguiManager.get());
 
         if (m_renderer) {
-            m_renderer->addOverlayPass("ImGui", m_imguiExecutor);
+            m_renderer->addOverlayPass(makeUIOverlay("ImGui", m_imguiExecutor));
             m_renderer->setImGuiManager(m_imguiManager.get(), m_flightFrame);
             m_renderer->setNeedRebuildGraph();
         }
@@ -368,6 +368,12 @@ namespace StarryEngine {
 
             // 窗口尺寸变化处理
             if (m_framebufferResized) {
+                static auto lastResize = std::chrono::steady_clock::now();
+                auto now = std::chrono::steady_clock::now();
+                if (now - lastResize < std::chrono::milliseconds(200)) {
+                    m_framebufferResized = true; continue;
+                }
+                lastResize = now;
                 m_rhi->waitIdle();
                 m_framebufferResized = false;
                 if (m_width == 0 || m_height == 0) continue;

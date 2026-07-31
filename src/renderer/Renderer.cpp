@@ -259,6 +259,12 @@ namespace StarryEngine {
         }
     }
 
+    void Renderer::addOverlayPass(const OverlayPassDesc& desc) {
+        if (m_renderPath) {
+            m_renderPath->addOverlayPass(desc);
+        }
+    }
+
     void Renderer::removeOverlayPass(const std::string& tag) {
         if (m_renderPath) {
             m_renderPath->removeOverlayPass(tag);

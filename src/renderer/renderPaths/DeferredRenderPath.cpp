@@ -1,91 +1,13 @@
 #include "DeferredRenderPath.hpp"
+#include "../passExecutor/CopyToSwapchainExecutor.hpp"
+#include "../passExecutor/ParticleCSExecutor.hpp"
+#include "../passExecutor/ParticleRenderExecutor.hpp"
 #include "../../logging/Logger.hpp"
 #include "../../ui/ImGuiManager.hpp"
 #include "../../assets/loader/ShaderLoader.hpp"
 #include <algorithm>
 
 namespace StarryEngine {
-
-    // ──── 粒子 Compute Executor ────────────────────────────────────
-    class ParticleCSExecutor : public IPassExecutor {
-    public:
-        ParticleCSExecutor(RHI::PipelineLayoutHandle layout, RHI::DescriptorSetHandle descSet,
-                           uint32_t particleCount, const ParticleParams& params)
-            : m_layout(layout), m_descSet(descSet),
-              m_particleCount(particleCount), m_params(params) {}
-        void clearDrawItems() override {}
-        void setDrawItems(const std::vector<std::shared_ptr<Scene::DrawItem>>&) override {}
-        const std::vector<std::shared_ptr<Scene::DrawItem>>& getDrawItems() override { return m_empty; }
-        void setPipelineMapping(const std::unordered_map<uint32_t, RHI::PipelineHandle>&) override {}
-        void addDrawItem(std::shared_ptr<Scene::DrawItem>) override {}
-        void execute(RHI::RHICommandEncoder* encoder, const RenderContext& rctx,
-                     const PassContext& pctx, uint32_t) override {
-            auto resMgr = pctx.getResourceManager();
-            auto* plo = resMgr->getPipelineLayout(m_layout);
-            if (plo && m_descSet.isValid())
-                encoder->bindDescriptorSets(RHI::PipelineBindPoint::Compute, plo, 0, {m_descSet}, {});
-            float dt = rctx.deltaTime > 0.0f ? rctx.deltaTime : 0.016f;
-            uint32_t n = m_particleCount;
-            struct CS_PC { float dt; uint32_t n; float g, smin, smax, life, sxz, sf, sa, ey, td, tt; } pc;
-            pc = {dt, n, m_params.gravity, m_params.speedMin, m_params.speedMax,
-                  m_params.lifetime, m_params.spreadXZ, m_params.swayFreq, m_params.swayAmp,
-                  m_params.emitterY, m_params.topDiffuse, m_params.topThreshold};
-            encoder->pushConstants(plo, RHI::ShaderStage::Compute, 0, sizeof(pc), &pc);
-        }
-    private:
-        RHI::PipelineLayoutHandle m_layout;
-        RHI::DescriptorSetHandle m_descSet;
-        uint32_t m_particleCount;
-        ParticleParams m_params;
-        std::vector<std::shared_ptr<Scene::DrawItem>> m_empty;
-    };
-
-    // ──── 粒子 Render Executor ────────────────────────────────────
-    class ParticleRenderExecutor : public IPassExecutor {
-    public:
-        ParticleRenderExecutor(RHI::PipelineHandle pipeline, RHI::PipelineLayoutHandle layout,
-                               RHI::DescriptorSetHandle globalSet, RHI::DescriptorSetHandle particleSet,
-                               uint32_t count)
-            : m_pipeline(pipeline), m_layout(layout),
-              m_globalSet(globalSet), m_particleSet(particleSet), m_count(count) {}
-        void setPipeline(RHI::PipelineHandle p) { m_pipeline = p; }
-        void setParticleSet(RHI::DescriptorSetHandle s) { m_particleSet = s; }
-        void clearDrawItems() override {}
-        void setDrawItems(const std::vector<std::shared_ptr<Scene::DrawItem>>&) override {}
-        const std::vector<std::shared_ptr<Scene::DrawItem>>& getDrawItems() override { return m_empty; }
-        void setPipelineMapping(const std::unordered_map<uint32_t, RHI::PipelineHandle>&) override {}
-        void addDrawItem(std::shared_ptr<Scene::DrawItem>) override {}
-        void execute(RHI::RHICommandEncoder* encoder, const RenderContext&,
-                     const PassContext& pctx, uint32_t) override {
-            if (!m_pipeline.isValid()) return;
-            auto resMgr = pctx.getResourceManager();
-            auto* ppl = resMgr->getPipeline(m_pipeline);
-            if (!ppl) return;
-            encoder->bindPipeline(ppl);
-            auto* plo = resMgr->getPipelineLayout(m_layout);
-            if (plo) {
-                if (m_globalSet.isValid())
-                    encoder->bindDescriptorSets(RHI::PipelineBindPoint::Graphics, plo, 0, {m_globalSet}, {});
-                if (m_particleSet.isValid())
-                    encoder->bindDescriptorSets(RHI::PipelineBindPoint::Graphics, plo, 1, {m_particleSet}, {});
-                encoder->pushConstants(plo, RHI::ShaderStage::Vertex, 64, sizeof(m_vsPC), &m_vsPC);
-            }
-            encoder->draw(m_count, 1, 0, 0);
-        }
-        struct VS_PC { float colorYoung[4], colorMiddle[4], colorOld[4], pointSizeMin, pointSizeMax; };
-        void setVSParams(const ParticleParams& p) {
-            memcpy(m_vsPC.colorYoung, p.colorYoung, sizeof(m_vsPC.colorYoung));
-            memcpy(m_vsPC.colorMiddle, p.colorMiddle, sizeof(m_vsPC.colorMiddle));
-            memcpy(m_vsPC.colorOld, p.colorOld, sizeof(m_vsPC.colorOld));
-            m_vsPC.pointSizeMin = p.pointSizeMin;
-            m_vsPC.pointSizeMax = p.pointSizeMax;
-        }
-    private:
-        RHI::PipelineHandle m_pipeline; RHI::PipelineLayoutHandle m_layout;
-        RHI::DescriptorSetHandle m_globalSet, m_particleSet;
-        uint32_t m_count; VS_PC m_vsPC = {};
-        std::vector<std::shared_ptr<Scene::DrawItem>> m_empty;
-    };
 
     // ──── DeferredRenderPath ──────────────────────────────────────
 
@@ -171,10 +93,8 @@ namespace StarryEngine {
         }
         buildTestComputePass();
 
-        if (m_imguiManager) {
-            m_imguiManager->setRenderGraph(nullptr);
-            m_imguiManager->setRenderGraph(m_renderGraph);
-        }
+        // 清除 ImGuiManager 对旧 RenderGraph 的引用，否则 reset 后旧图仍存活
+        if (m_imguiManager) m_imguiManager->setRenderGraph(nullptr);
     }
 
     // ──── Rebuild ─────────────────────────────────────────────────
@@ -190,13 +110,33 @@ namespace StarryEngine {
             prepareParticlePipeline();
     }
 
+    void DeferredRenderPath::onAfterCompileImGui() {
+        if (!m_imguiManager) return;
+        m_imguiManager->setRenderGraph(m_renderGraph);
+        if (!m_imguiManager->isVulkanReady()) {
+            auto it = m_tagToSubpass.find("ImGui");
+            if (it != m_tagToSubpass.end()) {
+                m_imguiManager->initializeVulkanBackend(m_rhi.get(), m_resMgr.get(),
+                    it->second.renderPass, m_imguiImageCount);
+            }
+        }
+        m_imguiManager->setDefaultSampler(m_defaultSampler);
+        m_imguiManager->registerSceneTexture(m_resMgr.get());
+    }
+
     // ──── Particle System ─────────────────────────────────────────
 
     void DeferredRenderPath::buildTestComputePass() {
         if (!m_globalSetLayout.isValid()) return;
         const uint32_t PARTICLE_COUNT = 1024;
-        Assets::ShaderLoader loader(m_resMgr);
 
+        auto destroyHandle = [this](auto& h) { if (h.isValid()) { m_resMgr->destroy(h); h = {}; } };
+        destroyHandle(m_particleVS); destroyHandle(m_particleFS); destroyHandle(m_particleCS);
+        destroyHandle(m_particleCSDescLayout); destroyHandle(m_particleCSLayout);
+        destroyHandle(m_particleCSPipeline); destroyHandle(m_particleRenderLayout);
+        destroyHandle(m_particleRenderDescLayout);
+
+        Assets::ShaderLoader loader(m_resMgr);
         RHI::BufferDesc bufDesc;
         bufDesc.size = PARTICLE_COUNT * sizeof(float) * 4;
         bufDesc.type = RHI::BufferType::Storage;
@@ -224,9 +164,9 @@ namespace StarryEngine {
 
         RHI::DescriptorSetLayoutDesc renderLayout1;
         renderLayout1.bindings = {{0, RHI::DescriptorType::StorageBuffer, 1, RHI::ShaderStage::Vertex}};
-        auto renderLayout1H = m_resMgr->createDescriptorSetLayout(renderLayout1);
+        m_particleRenderDescLayout = m_resMgr->createDescriptorSetLayout(renderLayout1);
         RHI::PipelineLayoutDesc renderPlDesc;
-        renderPlDesc.descriptorSetLayouts = { m_globalSetLayout, renderLayout1H };
+        renderPlDesc.descriptorSetLayouts = { m_globalSetLayout, m_particleRenderDescLayout };
         renderPlDesc.pushConstants = {{RHI::ShaderStage::Vertex, 64, 56}};
         auto renderPlLayout = m_resMgr->createPipelineLayout(renderPlDesc);
 
@@ -255,7 +195,7 @@ namespace StarryEngine {
         m_tagToSubpass["ParticleDraw"] = SubpassTarget{{}, 0, dummy};
         m_tagToPassNode["ParticleDraw"] = renderPass;
 
-        m_particleVS = vsInfo->module; m_particleFS = fsInfo->module;
+        m_particleVS = vsInfo->module; m_particleFS = fsInfo->module; m_particleCS = csInfo->module;
         m_particleRenderLayout = renderPlLayout; m_particleBufferId = bufId;
         m_particleCount = PARTICLE_COUNT;
         m_particleCSDescLayout = csDescLayout; m_particleCSLayout = csPlLayout;
@@ -265,6 +205,11 @@ namespace StarryEngine {
     }
 
     void DeferredRenderPath::prepareParticlePipeline() {
+        // 销毁旧资源
+        if (m_particleCSPool.isValid())    { m_resMgr->destroy(m_particleCSPool);    m_particleCSPool    = {}; }
+        if (m_particleRenderPool.isValid()) { m_resMgr->destroy(m_particleRenderPool); m_particleRenderPool = {}; }
+        if (m_particleRenderSet1Layout.isValid()) { m_resMgr->destroy(m_particleRenderSet1Layout); m_particleRenderSet1Layout = {}; }
+
         auto physBuf = m_renderGraph->getPhysicalBuffer(m_particleBufferId);
         if (!physBuf.isValid()) return;
 
@@ -283,9 +228,9 @@ namespace StarryEngine {
 
         RHI::DescriptorPoolDesc csPoolDesc;
         csPoolDesc.maxSets = 1; csPoolDesc.poolSizes = {{RHI::DescriptorType::StorageBuffer, 1}};
-        auto csPool = m_resMgr->createDescriptorPool(csPoolDesc);
+        m_particleCSPool = m_resMgr->createDescriptorPool(csPoolDesc);
         RHI::DescriptorSetDesc csSetDesc;
-        csSetDesc.descriptorSetLayout = m_particleCSDescLayout; csSetDesc.descriptorPool = csPool;
+        csSetDesc.descriptorSetLayout = m_particleCSDescLayout; csSetDesc.descriptorPool = m_particleCSPool;
         auto csDescSet = m_resMgr->createDescriptorSet(csSetDesc);
         if (csDescSet.isValid()) {
             auto* ds = m_resMgr->getDescriptorSet(csDescSet);
@@ -327,13 +272,13 @@ namespace StarryEngine {
         if (physBuf.isValid()) {
             RHI::DescriptorSetLayoutDesc set1Desc;
             set1Desc.bindings = {{0, RHI::DescriptorType::StorageBuffer, 1, RHI::ShaderStage::Vertex}};
-            auto set1Layout = m_resMgr->createDescriptorSetLayout(set1Desc);
+            m_particleRenderSet1Layout = m_resMgr->createDescriptorSetLayout(set1Desc);
             RHI::DescriptorPoolDesc poolDesc;
             poolDesc.maxSets = 2;
             poolDesc.poolSizes = {{RHI::DescriptorType::UniformBuffer, 1}, {RHI::DescriptorType::StorageBuffer, 1}};
-            auto pool = m_resMgr->createDescriptorPool(poolDesc);
+            m_particleRenderPool = m_resMgr->createDescriptorPool(poolDesc);
             RHI::DescriptorSetDesc dsDesc1;
-            dsDesc1.descriptorSetLayout = set1Layout; dsDesc1.descriptorPool = pool;
+            dsDesc1.descriptorSetLayout = m_particleRenderSet1Layout; dsDesc1.descriptorPool = m_particleRenderPool;
             particleDescSet = m_resMgr->createDescriptorSet(dsDesc1);
             if (particleDescSet.isValid()) {
                 auto* ds = m_resMgr->getDescriptorSet(particleDescSet);

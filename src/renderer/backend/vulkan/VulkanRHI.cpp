@@ -337,12 +337,9 @@ namespace StarryEngine {
     bool VulkanRHI::renderFrame(const std::function<void(RHI::RHICommandEncoder*, uint32_t)>& drawFunc) {
         FrameContext::FrameInfo frameInfo = mFrameContext->beginFrame(mAcquireFunc);
 
-        if (frameInfo.needsRecreate) {
-            if (!mFrameContext->isRecreationNeeded()) {
-				mDevice->waitIdle();
-                if (!recreateSwapChain(mWidth, mHeight)) return false; 
-            }
-            return true; 
+        if (frameInfo.needsRecreate || frameInfo.acquireResult != VK_SUCCESS) {
+            if (frameInfo.needsRecreate) mFramebufferResized = true;
+            return false;
         }
 
         auto encoder = getCommandEncoder(frameInfo.commandBuffer);

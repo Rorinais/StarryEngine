@@ -55,6 +55,9 @@ namespace StarryEngine {
         // 编译后回调（子类可在此创建自己的内置管线）
         virtual void onAfterCompile() {}
 
+        // ImGui 初始化（需要 renderPass handle，必须在 compile 后调用）
+        virtual void onAfterCompileImGui() {}
+
         // ── 子类可复用 ──
         bool buildGraph();
         std::unordered_map<std::string, RenderGraph::TextureId> buildTextureIdMap();
@@ -101,6 +104,7 @@ namespace StarryEngine {
         RHI::DescriptorSetLayoutHandle  m_presentSceneColorLayout;
         RHI::PipelineLayoutHandle       m_presentPipelineLayout;
         RHI::DescriptorSetHandle        m_presentSceneColorDescSet;
+        RHI::DescriptorPoolHandle       m_presentSceneColorPool;       // 需显式销毁
         bool m_presentationShadersReady = false;
         bool m_presentationPipelineReady = false;
     };

@@ -4,7 +4,7 @@
 
 namespace StarryEngine {
 
-    class DeferredLightingExecutor : public IPassExecutor {
+    class CopyToSwapchainExecutor : public IPassExecutor {
     public:
         void clearDrawItems() override { m_drawItems.clear(); }
         void setDrawItems(const std::vector<std::shared_ptr<Scene::DrawItem>>& items) override { m_drawItems = items; }

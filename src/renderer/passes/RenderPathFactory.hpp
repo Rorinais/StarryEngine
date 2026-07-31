@@ -5,9 +5,10 @@
 #include <nlohmann/json.hpp>
 #include "PassWrapper.hpp"
 #include "../renderPaths/DeferredRenderPath.hpp"
-#include "../passExecutor/GbufferExecutor.hpp"
+#include "../passExecutor/MeshDrawExecutor.hpp"
 #include "../passExecutor/SkyboxExecutor.hpp"
 #include "../passExecutor/DeferredLightingExecutor.hpp"
+#include "../passExecutor/CopyToSwapchainExecutor.hpp"
 using json = nlohmann::json;
 
 namespace StarryEngine {
