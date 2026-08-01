@@ -311,7 +311,6 @@ namespace StarryEngine {
         m_nextAllowedReload = m_lastFileCheck;
 
         initImGui();
-        //initComputePipeline();
 
         {
             int fbW, fbH;
@@ -384,8 +383,12 @@ namespace StarryEngine {
 
             // 每帧逻辑
             float deltaTime = monitor.getDeltaTime();
+            m_clock.advance(deltaTime);          // 推进全局时钟（动画/时间源）
             if (m_cameraController) {
                 m_cameraController->update(deltaTime);
+            }
+            if (m_scene) {
+                m_scene->update(m_clock);        // 场景逻辑（动画等）
             }
 
             // 在主循环中
@@ -395,65 +398,19 @@ namespace StarryEngine {
                 m_imguiManager->endFrame();
             }
 
-            bool success = m_rhi->renderFrame([this, deltaTime](RHI::RHICommandEncoder* encoder, uint32_t imageIndex) {
+            bool success = m_rhi->renderFrame([this](RHI::RHICommandEncoder* encoder, uint32_t imageIndex) {
+                m_renderer->renderFrame(encoder, imageIndex, m_clock);
+            });
 
-                //auto* computePipeline = m_resMgr->getPipeline(m_computePipeline);
-                //auto* computeLayout = m_resMgr->getPipelineLayout(m_computePipelineLayout);
-
-                //// 绑定计算管线
-                //encoder->bindComputePipeline(computePipeline);
-
-                //// 绑定描述符集
-                //encoder->bindDescriptorSets(
-                //    RHI::PipelineBindPoint::Compute,
-                //    computeLayout,
-                //    0,                               // firstSet
-                //    { m_computeDescriptorSet },      // descriptor sets
-                //    {}                               // dynamic offsets
-                //);
-
-                //// 派发工作组 (1024 / 256 = 4 个工作组)
-                //encoder->dispatch(4, 1, 1);
-
-                //RHI::BufferCopyRegion region{ 0, 0, sizeof(float) * 1024 };
-                //encoder->copyBuffer(m_resMgr->getBuffer(m_computeBuffer), m_resMgr->getBuffer(m_computeStaging), { region });
-
-                //// 插入内存屏障：确保计算写入对后续图形阶段可见
-                //RHI::BufferBarrier barrier;
-                //barrier.buffer = m_computeBuffer;
-                //barrier.srcAccessMask = RHI::AccessFlag::ShaderWrite;
-                //barrier.dstAccessMask = RHI::AccessFlag::ShaderRead;
-                //barrier.offset = 0;
-                //barrier.size = VK_WHOLE_SIZE;
-                //encoder->pipelineBarrier(
-                //    static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::ComputeShader),
-                //    static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::VertexShader),   // 假设下一步图形管线读取该 SSBO
-                //    RHI::DependencyFlags{},
-                //    {},         // memory barriers
-                //    { barrier },
-                //    {}          // image barriers
-                //);
-
-                m_renderer->renderFrame(encoder, imageIndex, deltaTime);
-                });
-
-            //auto* stagingBuf = m_resMgr->getBuffer(m_computeStaging);
-            //if (stagingBuf) {
-            //    void* ptr = stagingBuf->map(0, sizeof(float) * 1024);
-            //    if (ptr) {
-            //        std::vector<float> result(1024);
-            //        memcpy(result.data(), ptr, sizeof(float) * 1024);
-            //        stagingBuf->unmap();
-
-            //        // 打印前 10 个元素，避免刷屏
-            //        for (int i = 0; i < 10; ++i) {
-            //            LOG_INFO("Compute result[{}] = {}", i, result[i]);
-            //        }
-            //    }
-            //    else {
-            //        LOG_ERROR("Failed to map staging buffer");
-            //    }
-            //}
+            if (!success) {
+                m_rhi->waitIdle();
+                if (m_rhi->recreateSwapChain(m_width, m_height)) {
+                    m_renderer->onResize(m_width, m_height);
+                } else {
+                    LOG_ERROR("Failed to recreate swap chain after renderFrame");
+                }
+                continue;
+            }
 
             monitor.updateTitle();
 
@@ -523,18 +480,29 @@ namespace StarryEngine {
                     uint32_t index = key - GLFW_KEY_1;
                     GetEventDispatcher().dispatch<CameraSwitchEvent>(index);
                 }
-                // Ctrl 键切换摄像机控制状态
-                if (key == GLFW_KEY_LEFT_CONTROL || key == GLFW_KEY_RIGHT_CONTROL) {
-                    m_controlActive = !m_controlActive;
-                    if (m_controlActive) {
-                        glfwSetInputMode(m_window->getHandle(), GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-                        if (m_cameraController) m_cameraController->setEnabled(true);
-                    }
-                    else {
-                        glfwSetInputMode(m_window->getHandle(), GLFW_CURSOR, GLFW_CURSOR_NORMAL);
-                        if (m_cameraController) m_cameraController->setEnabled(false);
-                    }
+            }
+            });
+
+        // 鼠标右键按住：进入/退出摄像机控制（比 Ctrl 更不易误触）
+        GetEventDispatcher().subscribe(EventType::MouseButtonPressed, [this](IEvent& e) {
+            auto& ev = static_cast<MouseButtonEvent&>(e);
+            if (ev.getButton() != GLFW_MOUSE_BUTTON_RIGHT) return;
+
+            if (ev.getAction() == GLFW_PRESS) {
+                m_controlActive = true;
+                // 先启用 + 重置鼠标基准，再移到中心禁用 ——
+                // 这样 glfwSetCursorPos 触发的第一帧会以中心为基准，视角不跳变
+                if (m_cameraController) {
+                    m_cameraController->setEnabled(true);
+                    m_cameraController->resetMouse();
                 }
+                glfwSetCursorPos(m_window->getHandle(), m_width / 2, m_height / 2);
+                glfwSetInputMode(m_window->getHandle(), GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+            }
+            else if (ev.getAction() == GLFW_RELEASE) {
+                m_controlActive = false;
+                glfwSetInputMode(m_window->getHandle(), GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+                if (m_cameraController) m_cameraController->setEnabled(false);
             }
             });
 

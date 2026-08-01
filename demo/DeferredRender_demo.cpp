@@ -258,6 +258,30 @@ public:
         sphere->geometry = Assets::GeometryGenerator::createSphere(m_rhi->getResourceManager(), 1.0f);
         sphere->materials = { mat };
         sphere->transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.5f, 0.0f));
+
+        // ── 变换动画：球体自转 + 上下浮动 ──
+        {
+            auto clip = std::make_shared<Assets::AnimationClip>();
+            clip->name = "SpinBob";
+            clip->duration = 4.0f;    // 4 秒一圈
+            clip->looping = true;
+            // 每 0.5s 一个关键帧：绕 Y 轴旋转 45°，并上下浮动
+            for (int i = 0; i <= 8; ++i) {
+                float t = i * 0.5f;
+                Assets::TransformKeyframe kf;
+                kf.time = t;
+                kf.position = glm::vec3(0.0f, 1.5f + 0.3f * std::sin(t * glm::pi<float>() / 2.0f), 0.0f);
+                kf.rotation = glm::angleAxis(t * glm::pi<float>() / 2.0f, glm::vec3(0.0f, 1.0f, 0.0f));
+                kf.scale = glm::vec3(1.0f);
+                clip->keyframes.push_back(kf);
+            }
+
+            auto animator = std::make_shared<Scene::Animator>();
+            animator->setClip(clip);
+            animator->setSpeed(1.0f);
+            sphere->animator = animator;
+        }
+
         m_scene->addObject(sphere);
 
 

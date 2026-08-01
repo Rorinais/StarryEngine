@@ -17,8 +17,8 @@ namespace StarryEngine {
 
     void DeferredRenderPath::setConfig(const RenderPathConfig&) {}
 
-    void DeferredRenderPath::setDrawItems(const Scene::AnalysisSceneResult& sceneData) {
-        m_cachedSceneData = std::make_shared<Scene::AnalysisSceneResult>(sceneData);
+    void DeferredRenderPath::setDrawItems(const AnalysisSceneResult& sceneData) {
+        m_cachedSceneData = std::make_shared<AnalysisSceneResult>(sceneData);
         updateMaterialTextures(sceneData);
         distributeDrawItems(sceneData);
     }
@@ -49,7 +49,7 @@ namespace StarryEngine {
 
     // ──── Rebuild ─────────────────────────────────────────────────
 
-    void DeferredRenderPath::doRebuildResources(const Scene::AnalysisSceneResult& sceneData) {
+    void DeferredRenderPath::doRebuildResources(const AnalysisSceneResult& sceneData) {
         updateMaterialTextures(sceneData);
         distributeDrawItems(sceneData);
         prepareAllPipelines(sceneData);
@@ -92,7 +92,7 @@ namespace StarryEngine {
 
     // ──── Draw Item Distribution ──────────────────────────────────
 
-    void DeferredRenderPath::distributeDrawItems(const Scene::AnalysisSceneResult& sceneData) {
+    void DeferredRenderPath::distributeDrawItems(const AnalysisSceneResult& sceneData) {
         for (auto& [tag, target] : m_tagToSubpass) target.executor->clearDrawItems();
 
         std::string defaultTag;
@@ -109,7 +109,7 @@ namespace StarryEngine {
         }
     }
 
-    void DeferredRenderPath::updateMaterialTextures(const Scene::AnalysisSceneResult& sceneData) {
+    void DeferredRenderPath::updateMaterialTextures(const AnalysisSceneResult& sceneData) {
         if (!m_renderGraph || m_textureIdMap.empty()) { LOG_WARN("RG not ready for textures"); return; }
         RHI::TextureHandle swapchainPhys;
         auto it = m_textureIdMap.find("Swapchain");
@@ -133,7 +133,7 @@ namespace StarryEngine {
         }
     }
 
-    void DeferredRenderPath::prepareAllPipelines(const Scene::AnalysisSceneResult& sceneData) {
+    void DeferredRenderPath::prepareAllPipelines(const AnalysisSceneResult& sceneData) {
         for (auto& [tag, target] : m_tagToSubpass) {
             auto& items = target.executor->getDrawItems();
             if (items.empty()) continue;

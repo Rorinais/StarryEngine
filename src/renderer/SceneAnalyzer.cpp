@@ -12,22 +12,22 @@ namespace StarryEngine {
         m_defaultMaterial(defaultMaterial), m_errorMaterial(errorMaterial) {
     }
 
-    std::shared_ptr<Scene::AnalysisSceneResult> SceneAnalyzer::analyze(const Scene::Scene& scene) {
-        Scene::AnalysisSceneResult result;
-        std::unordered_map<Scene::GraphicsPipelineState, uint32_t, std::hash<Scene::GraphicsPipelineState>> pipelineIndexMap;
+    std::shared_ptr<AnalysisSceneResult> SceneAnalyzer::analyze(const Scene::Scene& scene) {
+        AnalysisSceneResult result;
+        std::unordered_map<GraphicsPipelineState, uint32_t, std::hash<GraphicsPipelineState>> pipelineIndexMap;
         std::unordered_set<Assets::MaterialInstance*> uniqueMaterials;
 
         processObjects(scene.getOpaqueObjects(), result, pipelineIndexMap, uniqueMaterials);
         processObjects(scene.getTransparentObjects(), result, pipelineIndexMap, uniqueMaterials);
         processProceduralEffects(scene.getProceduralEffects(), result, pipelineIndexMap, uniqueMaterials);
 
-        return std::make_shared<Scene::AnalysisSceneResult>(std::move(result));
+        return std::make_shared<AnalysisSceneResult>(std::move(result));
     }
 
     void SceneAnalyzer::processObjects(
         const std::vector<std::shared_ptr<Scene::RenderObject>>& objects,
-        Scene::AnalysisSceneResult& result,
-        std::unordered_map<Scene::GraphicsPipelineState, uint32_t, std::hash<Scene::GraphicsPipelineState>>& pipelineIndexMap,
+        AnalysisSceneResult& result,
+        std::unordered_map<GraphicsPipelineState, uint32_t, std::hash<GraphicsPipelineState>>& pipelineIndexMap,
         std::unordered_set<Assets::MaterialInstance*>& uniqueMaterials) {
         for (auto& obj : objects) {
             auto geometry = obj->geometry;
@@ -54,7 +54,7 @@ namespace StarryEngine {
                     }
                 }
 
-                Scene::GraphicsPipelineState pso = buildMeshPSO(mat, geometry, instLayout);
+                GraphicsPipelineState pso = buildMeshPSO(mat, geometry, instLayout);
                 uint32_t idx = getOrAllocatePipelineIndex(pso, result, pipelineIndexMap); 
                 auto descSets = buildDescriptorSetMap(mat);
                 auto item = createMeshDrawItem(obj, submeshes[i], idx, instanced, instLayout, std::move(descSets));
@@ -65,8 +65,8 @@ namespace StarryEngine {
 
     void SceneAnalyzer::processProceduralEffects(
         const std::vector<std::shared_ptr<Scene::ProceduralEffect>>& effects,
-        Scene::AnalysisSceneResult& result,
-        std::unordered_map<Scene::GraphicsPipelineState, uint32_t, std::hash<Scene::GraphicsPipelineState>>& pipelineIndexMap,
+        AnalysisSceneResult& result,
+        std::unordered_map<GraphicsPipelineState, uint32_t, std::hash<GraphicsPipelineState>>& pipelineIndexMap,
         std::unordered_set<Assets::MaterialInstance*>& uniqueMaterials) {
         for (auto& effect : effects) {
             auto material = validateMaterialInstance(effect->material);
@@ -76,7 +76,7 @@ namespace StarryEngine {
                 result.materials.push_back(material);
             }
 
-            Scene::GraphicsPipelineState pso = buildProceduralPSO(material);
+            GraphicsPipelineState pso = buildProceduralPSO(material);
             uint32_t pipelineIdx = getOrAllocatePipelineIndex(pso, result, pipelineIndexMap);
             auto descSets = buildDescriptorSetMap(material);
             auto item = createProceduralDrawItem(effect, pipelineIdx, std::move(descSets));
@@ -118,12 +118,12 @@ namespace StarryEngine {
         return material;
     }
 
-    Scene::GraphicsPipelineState SceneAnalyzer::buildMeshPSO(
+    GraphicsPipelineState SceneAnalyzer::buildMeshPSO(
         const std::shared_ptr<Assets::MaterialInstance>& materialInst,
         const std::shared_ptr<Assets::Geometry>& geometry,
         const Assets::InstancingLayout* instLayout)
     {
-        Scene::GraphicsPipelineState pso;
+        GraphicsPipelineState pso;
         pso.vertexInput = geometry->getVertexInputStateWithInstancing(instLayout);
         pso.topology = geometry->getPrimitiveTopology();
         pso.vertexShader = materialInst->getTemplate()->getVertexShader();
@@ -137,8 +137,8 @@ namespace StarryEngine {
         return pso;
     }
 
-    Scene::GraphicsPipelineState SceneAnalyzer::buildProceduralPSO(const std::shared_ptr<Assets::MaterialInstance>& material){
-        Scene::GraphicsPipelineState pso;
+    GraphicsPipelineState SceneAnalyzer::buildProceduralPSO(const std::shared_ptr<Assets::MaterialInstance>& material){
+        GraphicsPipelineState pso;
         pso.vertexShader = material->getTemplate()->getVertexShader();
         pso.fragmentShader = material->getTemplate()->getFragmentShader();
         pso.layout = material->getTemplate()->getPipelineLayout(m_resMgr);
@@ -164,7 +164,7 @@ namespace StarryEngine {
         return descSets;
     }
 
-    std::shared_ptr<Scene::DrawItem> SceneAnalyzer::createMeshDrawItem(
+    std::shared_ptr<DrawItem> SceneAnalyzer::createMeshDrawItem(
         const std::shared_ptr<Scene::RenderObject>& obj,
         const Assets::Submesh& submesh,
         uint32_t pipelineIdx,
@@ -172,8 +172,8 @@ namespace StarryEngine {
         const Assets::InstancingLayout* instLayout,
         std::unordered_map<uint32_t, RHI::DescriptorSetHandle> descSets)
     {
-        auto item = std::make_shared<Scene::DrawItem>();
-        item->type = Scene::DrawItemType::Mesh;
+        auto item = std::make_shared<DrawItem>();
+        item->type = DrawItemType::Mesh;
         item->object = obj;
         item->vertexBuffer = obj->geometry->getVertexBuffer();
         item->indexBuffer = obj->geometry->getIndexBuffer();
@@ -197,13 +197,13 @@ namespace StarryEngine {
         return item;
     }
 
-    std::shared_ptr<Scene::DrawItem> SceneAnalyzer::createProceduralDrawItem(
+    std::shared_ptr<DrawItem> SceneAnalyzer::createProceduralDrawItem(
         const std::shared_ptr<Scene::ProceduralEffect>& effect,
         uint32_t pipelineIdx,
         std::unordered_map<uint32_t, RHI::DescriptorSetHandle> descSets)
     {
-        auto item = std::make_shared<Scene::DrawItem>();
-        item->type = Scene::DrawItemType::Procedural;
+        auto item = std::make_shared<DrawItem>();
+        item->type = DrawItemType::Procedural;
         item->vertexCount = effect->vertexCount;
         item->instanceCount = effect->instanceCount;
         item->firstVertex = 0;
@@ -229,15 +229,15 @@ namespace StarryEngine {
     }
 
     uint32_t SceneAnalyzer::getOrAllocatePipelineIndex(
-        const Scene::GraphicsPipelineState& pso,
-        Scene::AnalysisSceneResult& result,
-        std::unordered_map<Scene::GraphicsPipelineState, uint32_t, std::hash<Scene::GraphicsPipelineState>>& pipelineIndexMap) {
+        const GraphicsPipelineState& pso,
+        AnalysisSceneResult& result,
+        std::unordered_map<GraphicsPipelineState, uint32_t, std::hash<GraphicsPipelineState>>& pipelineIndexMap) {
         auto it = pipelineIndexMap.find(pso);
         if (it != pipelineIndexMap.end())
             return it->second;
 
         uint32_t idx = static_cast<uint32_t>(result.PSO.size());
-        result.PSO.push_back(std::make_shared<Scene::GraphicsPipelineState>(pso));
+        result.PSO.push_back(std::make_shared<GraphicsPipelineState>(pso));
         pipelineIndexMap[pso] = idx;
         return idx;
     }

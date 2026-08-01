@@ -8,6 +8,7 @@
 #include <any>
 #include "../../assets/Assets.hpp"
 #include "../../scene/Scene.hpp"
+#include "../RenderTypes.hpp"
 #include "../interface/RHI_RESOURCE_FACTORY.hpp"
 #include "../../logging/Logger.hpp"
 
@@ -20,7 +21,7 @@ namespace StarryEngine{
         float deltaTime = 0.0f;
 
         Assets::GlobalUniforms globalUniforms;
-        std::shared_ptr<Scene::AnalysisSceneResult> sceneData;
+        std::shared_ptr<AnalysisSceneResult> sceneData;
         const std::unordered_map<std::string, std::any>& customData;
 
         RenderContext(const std::unordered_map<std::string, std::any>& customDataRef)
@@ -58,14 +59,14 @@ namespace StarryEngine{
         virtual ~IPassExecutor() = default;
 
         virtual void clearDrawItems() = 0;
-        virtual void setDrawItems(const std::vector<std::shared_ptr<Scene::DrawItem>>& items) = 0;
-        virtual const std::vector<std::shared_ptr<Scene::DrawItem>>& getDrawItems() = 0;
+        virtual void setDrawItems(const std::vector<std::shared_ptr<DrawItem>>& items) = 0;
+        virtual const std::vector<std::shared_ptr<DrawItem>>& getDrawItems() = 0;
         virtual void setPipeline(RHI::PipelineHandle pipeline) {}
         virtual void setPipelineMapping(const std::unordered_map<uint32_t, RHI::PipelineHandle>& mapping) = 0;
         virtual std::shared_ptr<Assets::MaterialInstance> getMaterial() const { return nullptr; }
         virtual void setMaterial(std::shared_ptr<Assets::MaterialInstance> material) {}
 
-        virtual void addDrawItem(std::shared_ptr<Scene::DrawItem> item) {}
+        virtual void addDrawItem(std::shared_ptr<DrawItem> item) {}
 
         virtual void execute(RHI::RHICommandEncoder* encoder,
             const RenderContext& rctx,

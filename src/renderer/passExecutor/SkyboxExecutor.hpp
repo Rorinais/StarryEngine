@@ -1,19 +1,20 @@
 #pragma once
 #include "IPassExecutor.hpp"
 #include "../../assets/Assets.hpp"
+#include "../RenderTypes.hpp"
 
 namespace StarryEngine {
     class SkyboxExecutor : public IPassExecutor {
     public:
         void clearDrawItems() override { m_drawItems.clear(); }
-        void setDrawItems(const std::vector<std::shared_ptr<Scene::DrawItem>>& items) override { m_drawItems = items; }
-        const std::vector<std::shared_ptr<Scene::DrawItem>>& getDrawItems() override { return m_drawItems; }
+        void setDrawItems(const std::vector<std::shared_ptr<DrawItem>>& items) override { m_drawItems = items; }
+        const std::vector<std::shared_ptr<DrawItem>>& getDrawItems() override { return m_drawItems; }
 
         void setPipelineMapping(const std::unordered_map<uint32_t, RHI::PipelineHandle>& mapping) override {
             m_pipelineMapping = mapping;
         }
 
-        void addDrawItem(std::shared_ptr<Scene::DrawItem> item) override {
+        void addDrawItem(std::shared_ptr<DrawItem> item) override {
             m_drawItems.push_back(item);
         }
 
@@ -24,7 +25,7 @@ namespace StarryEngine {
 
             for (auto& item : m_drawItems) {
                 // 过程式绘制
-                if (item->type != Scene::DrawItemType::Procedural) continue;
+                if (item->type != DrawItemType::Procedural) continue;
 
                 auto it = m_pipelineMapping.find(item->pipelineIndex);
                 if (it == m_pipelineMapping.end()) {
@@ -46,7 +47,7 @@ namespace StarryEngine {
         }
 
     private:
-        std::vector<std::shared_ptr<Scene::DrawItem>> m_drawItems;
+        std::vector<std::shared_ptr<DrawItem>> m_drawItems;
         std::unordered_map<uint32_t, RHI::PipelineHandle> m_pipelineMapping;
     };
 

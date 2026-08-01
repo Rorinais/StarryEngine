@@ -67,9 +67,9 @@ namespace StarryEngine {
         m_renderGraph->execute(encoder, context, frameIndex);
     }
 
-    void BaseRenderPath::rebuildResources(const Scene::AnalysisSceneResult& sceneData) {
+    void BaseRenderPath::rebuildResources(const AnalysisSceneResult& sceneData) {
         doRebuildResources(sceneData);
-        m_cachedSceneData = std::make_shared<Scene::AnalysisSceneResult>(sceneData);
+        m_cachedSceneData = std::make_shared<AnalysisSceneResult>(sceneData);
         if (!m_resourceStatsPrinted) {
             m_rhi->printResourceStatistics();
             m_resourceStatsPrinted = true;
@@ -254,7 +254,7 @@ namespace StarryEngine {
         RHI::RenderPassHandle rp = tagIt->second.renderPass;
         if (!rp.isValid()) return;
 
-        Scene::GraphicsPipelineState pso;
+        GraphicsPipelineState pso;
         pso.vertexShader = m_fullscreenVert; pso.fragmentShader = m_copyFrag;
         pso.layout = m_presentPipelineLayout;
         pso.cullMode = RHI::CullMode::None;

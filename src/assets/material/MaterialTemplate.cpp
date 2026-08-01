@@ -31,11 +31,11 @@ namespace StarryEngine::Assets {
 
     RHI::PipelineHandle PipelineCache::getOrCreateGraphicsPipeline(
         RHI::ResourceManager* resMgr,
-        const Scene::GraphicsPipelineState& state,
+        const GraphicsPipelineState& state,
         RHI::RenderPassHandle renderPass,
         uint32_t subpassIndex) {
 
-        size_t stateHash = std::hash<Scene::GraphicsPipelineState>{}(state);
+        size_t stateHash = std::hash<GraphicsPipelineState>{}(state);
         Key key{ stateHash, renderPass, subpassIndex };
 
         std::lock_guard<std::mutex> lock(s_mutex);

@@ -22,9 +22,9 @@ namespace StarryEngine {
         m_emptyItems.clear();
     }
 
-    void ImGuiExecutor::addDrawItem(std::shared_ptr<Scene::DrawItem>) {}
+    void ImGuiExecutor::addDrawItem(std::shared_ptr<DrawItem>) {}
 
-    std::vector<std::shared_ptr<Scene::DrawItem>>& ImGuiExecutor::getDrawItems() {
+    std::vector<std::shared_ptr<DrawItem>>& ImGuiExecutor::getDrawItems() {
         return m_emptyItems;
     }
 

@@ -4,9 +4,10 @@
 #include <functional>
 #include <unordered_map>
 #include"../assets/Assets.hpp"
-#include "SceneType.hpp"
+#include "../core/Clock.hpp"
 #include"camera/OrthographicCamera.hpp"
 #include"camera/PerspectiveCamera.hpp"
+#include"animation/Animator.hpp"
 
 
 namespace StarryEngine::Scene {
@@ -15,22 +16,19 @@ namespace StarryEngine::Scene {
         std::shared_ptr<StarryEngine::Assets::Geometry> geometry;
         std::vector<std::shared_ptr<Assets::MaterialInstance>> materials;
 
-        std::vector<glm::mat4> instanceTransforms;  
-        std::shared_ptr<RHI::BufferHandle> instanceBuffer; 
+        std::vector<glm::mat4> instanceTransforms;
+        std::shared_ptr<RHI::BufferHandle> instanceBuffer;
         bool isInstanced = false;
+
+        // 变换动画组件（可选）。由 Scene::update 驱动，改写 transform。
+        std::shared_ptr<Animator> animator;
     };
 
     struct ProceduralEffect {
         std::shared_ptr<Assets::MaterialInstance> material;
-        uint32_t vertexCount = 3;       
-        uint32_t instanceCount = 1;     
-        int order = 0;                 
-    };
-
-    struct AnalysisSceneResult {
-        std::vector<std::shared_ptr<GraphicsPipelineState>> PSO;//用与实时创建管线
-        std::vector<std::shared_ptr<Assets::MaterialInstance>> materials;//用于更新纹理和uniform
-        std::vector<std::shared_ptr<DrawItem>> drawItems;//真正的渲染数据
+        uint32_t vertexCount = 3;
+        uint32_t instanceCount = 1;
+        int order = 0;
     };
 
     class Scene {
@@ -38,7 +36,9 @@ namespace StarryEngine::Scene {
         void addObject(std::shared_ptr<RenderObject> object);
         bool removeObject(std::shared_ptr<RenderObject> object);
         void clearObject();
-        void update(float deltaTime);
+
+        // 每帧推进场景逻辑（动画等）。由 Application 渲染循环调用。
+        void update(const Clock& clock);
 
         void addProceduralEffect(std::shared_ptr<ProceduralEffect> effect);
         bool removeProceduralEffect(std::shared_ptr<ProceduralEffect> effect);

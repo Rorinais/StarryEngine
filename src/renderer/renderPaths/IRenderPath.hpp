@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <glm/glm.hpp>
 #include "../../assets/Assets.hpp"
+#include "../RenderTypes.hpp"
 #include "../../event/Events.hpp"
 #include "../../logging/Logger.hpp"
 #include "../../scene/Scene.hpp"
@@ -78,9 +79,9 @@ namespace StarryEngine {
         virtual bool initialize() = 0;
         virtual void onResize(uint32_t width, uint32_t height) = 0;
         virtual void setConfig(const RenderPathConfig& config) = 0;
-        virtual void setDrawItems(const Scene::AnalysisSceneResult& secneData) = 0;
+        virtual void setDrawItems(const AnalysisSceneResult& secneData) = 0;
         virtual void render(RHI::RHICommandEncoder* encoder, uint32_t frameIndex) = 0;
-        virtual void rebuildResources(const Scene::AnalysisSceneResult& sceneData) = 0;
+        virtual void rebuildResources(const AnalysisSceneResult& sceneData) = 0;
 
         virtual void addOverlayPass(const OverlayPassDesc& desc) = 0;
         virtual void removeOverlayPass(const std::string& tag) = 0;
@@ -118,7 +119,7 @@ namespace StarryEngine {
 
         std::unordered_map<std::string, std::any> m_customData;
         RenderBlackboard m_blackboard;
-        std::shared_ptr<Scene::AnalysisSceneResult> m_cachedSceneData;
+        std::shared_ptr<AnalysisSceneResult> m_cachedSceneData;
 
         RenderContext buildRenderContext() const {
             RenderContext ctx(m_customData);  

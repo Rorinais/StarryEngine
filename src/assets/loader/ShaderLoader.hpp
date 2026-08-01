@@ -35,7 +35,7 @@ namespace StarryEngine::Assets {
             const spirv_cross::SPIRType& type,
             uint32_t baseOffset,
             const std::string& baseName,
-            std::vector<RHI::BufferMember>& flatMembers);
+            std::vector<RHI::BufferMember>& flatMembers,bool isStorageBuffer = false);
 
         RHI::Format spirvImageFormatToRHI(spv::ImageFormat fmt);
 

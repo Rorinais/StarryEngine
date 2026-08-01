@@ -1,25 +1,35 @@
 #pragma once
+
 #include <vector>
 #include <memory>
 #include <functional>
 #include <unordered_map>
 #include "../utils/Hash.hpp"
+#include "interface/RHI_TYPES.hpp"
 
 namespace StarryEngine::Scene {
-    struct RenderObject;
+    struct RenderObject;   
+}
+
+namespace StarryEngine::Assets {
+    class MaterialInstance;   
+}
+
+namespace StarryEngine {
 
     enum class DrawItemType {
         Mesh,        // 普通网格
         Procedural   // 无网格，直接绘制顶点
     };
 
+    // 单次 draw call 的渲染数据。由 SceneAnalyzer 从 RenderObject 生成。
     struct DrawItem {
         DrawItemType type = DrawItemType::Mesh;
 
         std::string passTag;
         std::unordered_map<uint32_t, RHI::DescriptorSetHandle> descriptorSets;
         uint32_t pipelineIndex = 0;
-        std::weak_ptr<RenderObject> object;
+        std::weak_ptr<Scene::RenderObject> object;
 
         RHI::BufferHandle vertexBuffer;
         RHI::BufferHandle indexBuffer;
@@ -50,7 +60,7 @@ namespace StarryEngine::Scene {
         RHI::ShaderHandle fragmentShader;
 
         RHI::RenderPassHandle renderPass;
-        uint32_t subpassIndex = -1;   
+        uint32_t subpassIndex = -1;
 
         RHI::VertexInputState vertexInput;
 
@@ -89,11 +99,19 @@ namespace StarryEngine::Scene {
                 attachments == other.attachments;
         }
     };
-}
+
+    // 场景分析产出：渲染器每帧消费
+    struct AnalysisSceneResult {
+        std::vector<std::shared_ptr<GraphicsPipelineState>> PSO;   // 用于实时创建管线
+        std::vector<std::shared_ptr<Assets::MaterialInstance>> materials; // 更新纹理和 uniform
+        std::vector<std::shared_ptr<DrawItem>> drawItems;          // 真正的渲染数据
+    };
+
+} // namespace StarryEngine
 
 namespace std {
-    template<> struct hash<StarryEngine::Scene::GraphicsPipelineState> {
-        size_t operator()(const StarryEngine::Scene::GraphicsPipelineState& state) const {
+    template<> struct hash<StarryEngine::GraphicsPipelineState> {
+        size_t operator()(const StarryEngine::GraphicsPipelineState& state) const {
             size_t seed = 0;
             StarryEngine::Utils::hash_combine(seed, state.type);
             StarryEngine::Utils::hash_combine(seed, state.layout);
@@ -115,4 +133,4 @@ namespace std {
             return seed;
         }
     };
-}
+} // namespace std

@@ -2,6 +2,7 @@
 #include "IPassExecutor.hpp"
 #include "ParticleParams.hpp"
 #include "../../scene/Scene.hpp"
+#include "../RenderTypes.hpp"
 
 namespace StarryEngine {
 
@@ -20,10 +21,10 @@ namespace StarryEngine {
         void setParticleSet(RHI::DescriptorSetHandle s) { m_particleSet = s; }
 
         void clearDrawItems() override {}
-        void setDrawItems(const std::vector<std::shared_ptr<Scene::DrawItem>>&) override {}
-        const std::vector<std::shared_ptr<Scene::DrawItem>>& getDrawItems() override { return m_empty; }
+        void setDrawItems(const std::vector<std::shared_ptr<DrawItem>>&) override {}
+        const std::vector<std::shared_ptr<DrawItem>>& getDrawItems() override { return m_empty; }
         void setPipelineMapping(const std::unordered_map<uint32_t, RHI::PipelineHandle>&) override {}
-        void addDrawItem(std::shared_ptr<Scene::DrawItem>) override {}
+        void addDrawItem(std::shared_ptr<DrawItem>) override {}
 
         void execute(RHI::RHICommandEncoder* encoder, const RenderContext&,
                      const PassContext& pctx, uint32_t) override;
@@ -36,7 +37,7 @@ namespace StarryEngine {
         RHI::DescriptorSetHandle m_globalSet, m_particleSet;
         uint32_t m_count;
         ParticleVSPC m_vsPC = {};
-        std::vector<std::shared_ptr<Scene::DrawItem>> m_empty;
+        std::vector<std::shared_ptr<DrawItem>> m_empty;
     };
 
 } // namespace StarryEngine

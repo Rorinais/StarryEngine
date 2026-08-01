@@ -116,7 +116,7 @@ namespace StarryEngine::Assets {
                         descType == RHI::DescriptorType::StorageBuffer) {
                         const spirv_cross::SPIRType& type = compiler->get_type(res.base_type_id);
                         if (type.basetype == spirv_cross::SPIRType::Struct) {
-                            flattenUBOMembers(*compiler, type, 0, "", resBind.members);
+                            flattenUBOMembers(*compiler, type, 0, "", resBind.members,descType == RHI::DescriptorType::StorageBuffer);
                         }
                     }else if (descType == RHI::DescriptorType::CombinedImageSampler ||
                         descType == RHI::DescriptorType::SampledImage ||
@@ -306,8 +306,9 @@ namespace StarryEngine::Assets {
         const spirv_cross::SPIRType& type,
         uint32_t baseOffset,
         const std::string& baseName,
-        std::vector<RHI::BufferMember>& flatMembers){
-            
+        std::vector<RHI::BufferMember>& flatMembers,
+        bool isStorageBuffer){
+
         for (uint32_t i = 0; i < type.member_types.size(); ++i) {
             std::string memberName = compiler.get_member_name(type.self, i);
             if (memberName.empty()) memberName = "_" + std::to_string(i);
@@ -318,8 +319,13 @@ namespace StarryEngine::Assets {
             if (!memberType.array.empty()) {
                 uint32_t arraySize = memberType.array[0];
                 if (arraySize == 0) {
-                    LOG_WARN("Array size is 0 (possibly specialization constant). Skipping member: {}", memberName);
-                    continue; 
+                    // SSBO 的运行时数组（如 particles[]）是正常用法，反射无法确定大小，
+                    // 跳过即可（SSBO 整体绑定，不需要逐 member 布局）。
+                    // 只有 UBO 出现无界数组才是真正的错误（UBO 不允许运行时数组）。
+                    if (!isStorageBuffer) {
+                        LOG_WARN("Uniform buffer member '{}' has array size 0 (unsupported in UBO)", memberName);
+                    }
+                    continue;
                 }
                 uint32_t stride = compiler.get_declared_struct_member_size(type, i) / arraySize;
 
@@ -330,7 +336,7 @@ namespace StarryEngine::Assets {
                     if (elemType.basetype == spirv_cross::SPIRType::Struct) {
                         // 元素仍是结构体，递归展开
                         flattenUBOMembers(compiler, elemType, offset + j * stride,
-                            elemName + ".", flatMembers);
+                            elemName + ".", flatMembers, isStorageBuffer);
                     }
                     else {
                         // 元素是标量/向量/矩阵，直接添加叶子
@@ -348,7 +354,7 @@ namespace StarryEngine::Assets {
             // 2. 非数组结构体，递归展开
             if (memberType.basetype == spirv_cross::SPIRType::Struct) {
                 flattenUBOMembers(compiler, memberType, offset,
-                    baseName + memberName + ".", flatMembers);
+                    baseName + memberName + ".", flatMembers, isStorageBuffer);
                 continue;
             }
 

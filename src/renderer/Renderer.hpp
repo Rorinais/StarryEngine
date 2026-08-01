@@ -3,6 +3,8 @@
 #include "../event/Events.hpp"
 #include "../logging/Logger.hpp"
 #include "../scene/Scene.hpp"
+#include "../core/Clock.hpp"
+#include "RenderTypes.hpp"
 #include "SceneAnalyzer.hpp"
 #include "graph/RenderGraph.hpp"
 #include "backend/RHIFactory.hpp"
@@ -25,7 +27,7 @@ namespace StarryEngine {
         void reloadAllShaders();
         void rebuildRenderGraph();
         void reloadShader(const std::string& vertPath, const std::string& fragPath);
-        void renderFrame(RHI::RHICommandEncoder* encoder, uint32_t frameIndex, float deltaTime);
+        void renderFrame(RHI::RHICommandEncoder* encoder, uint32_t frameIndex, const Clock& clock);
 
         void setNeedRebuildGraph() { m_needRebuildGraph = true; }
         void setImGuiManager(ImGuiManager* mgr, uint32_t imageCount);
@@ -41,7 +43,7 @@ namespace StarryEngine {
 
     private:
         void buildSceneResources();
-        void updateDynamicBuffers(float deltaTime);
+        void updateDynamicBuffers(const Clock& clock);
         void updateInstanceBuffers(const std::vector<std::shared_ptr<Scene::RenderObject>>& objects);
 
     private:
@@ -56,7 +58,7 @@ namespace StarryEngine {
 
         std::shared_ptr<Scene::Scene> m_scene;
         std::unique_ptr<SceneAnalyzer> m_sceneAnalyzer;
-        std::shared_ptr<Scene::AnalysisSceneResult> m_analysisSceneResult;
+        std::shared_ptr<AnalysisSceneResult> m_analysisSceneResult;
         uint32_t m_lastAnalyzedVersion = UINT32_MAX;
 
         std::shared_ptr<Assets::MaterialInstance> m_defaultMaterial;

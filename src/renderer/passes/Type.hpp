@@ -1,6 +1,6 @@
 #pragma once
-#include "../../renderer/graph/Types.hpp"          
-#include "../../scene/SceneType.hpp"   
+#include "../../renderer/graph/Types.hpp"
+#include "../RenderTypes.hpp"
 #include "../../renderer/passExecutor/IPassExecutor.hpp"
 
 namespace StarryEngine {

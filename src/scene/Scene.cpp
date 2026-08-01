@@ -31,8 +31,15 @@ namespace StarryEngine::Scene {
         markContentDirty();
     }
 
-    void Scene::update(float deltaTime) {
-
+    void Scene::update(const Clock& clock) {
+        // 驱动所有对象的变换动画。
+        // 只改 transform（走 pushConstants 实时生效），不触发结构重分析。
+        for (auto& obj : m_allObjects) {
+            if (obj->animator) {
+                obj->animator->update(clock);
+                obj->transform = obj->animator->getTransform();
+            }
+        }
     }
 
     void Scene::updateObjectClassification(std::shared_ptr<RenderObject> object) {

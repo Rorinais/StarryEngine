@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../renderer/passExecutor/IPassExecutor.hpp"
+#include "../renderer/RenderTypes.hpp"
 #include <memory>
 #include <vector>
 
@@ -20,17 +21,17 @@ namespace StarryEngine {
 
         void clearDrawItems() override;
 
-        void addDrawItem(std::shared_ptr<Scene::DrawItem> item) override;
+        void addDrawItem(std::shared_ptr<DrawItem> item) override;
 
-        std::vector<std::shared_ptr<Scene::DrawItem>>& getDrawItems() override;
+        std::vector<std::shared_ptr<DrawItem>>& getDrawItems() override;
 
-        void setDrawItems(const std::vector<std::shared_ptr<Scene::DrawItem>>& items) override {}
+        void setDrawItems(const std::vector<std::shared_ptr<DrawItem>>& items) override {}
 
         void setPipelineMapping(const std::unordered_map<uint32_t, RHI::PipelineHandle>& mapping) override {}
 
     private:
         ImGuiManager* m_manager;
-        std::vector<std::shared_ptr<Scene::DrawItem>> m_emptyItems;
+        std::vector<std::shared_ptr<DrawItem>> m_emptyItems;
     };
 
 } // namespace StarryEngine

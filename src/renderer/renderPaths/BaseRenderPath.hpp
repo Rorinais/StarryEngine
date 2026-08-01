@@ -2,6 +2,7 @@
 #include "IRenderPath.hpp"
 #include "../graph/RenderGraph.hpp"
 #include "../../scene/Scene.hpp"
+#include "../RenderTypes.hpp"
 #include "../passExecutor/IPassExecutor.hpp"
 #include "../passes/IPass.hpp"
 #include <vector>
@@ -25,7 +26,7 @@ namespace StarryEngine {
         bool initialize() override;
         void onResize(uint32_t width, uint32_t height) override;
         void render(RHI::RHICommandEncoder* encoder, uint32_t frameIndex) override;
-        void rebuildResources(const Scene::AnalysisSceneResult& sceneData) override;
+        void rebuildResources(const AnalysisSceneResult& sceneData) override;
 
         void addTextureDesc(std::string name, RHI::TextureDesc desc);
         void setTextureDescs(const std::unordered_map<std::string, RHI::TextureDesc>& descs);
@@ -42,7 +43,7 @@ namespace StarryEngine {
     protected:
         virtual void buildConfigPasses(std::unordered_map<std::string, RenderGraph::TextureId>& texIdMap) = 0;
 
-        virtual void doRebuildResources(const Scene::AnalysisSceneResult& sceneData) = 0;
+        virtual void doRebuildResources(const AnalysisSceneResult& sceneData) = 0;
 
         virtual void onAfterCompile() {}
 

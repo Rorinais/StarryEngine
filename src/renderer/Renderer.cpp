@@ -88,13 +88,13 @@ namespace StarryEngine {
         m_lastAnalyzedVersion = UINT32_MAX;
     }
 
-    void Renderer::renderFrame(RHI::RHICommandEncoder* encoder, uint32_t frameIndex, float deltaTime) {
+    void Renderer::renderFrame(RHI::RHICommandEncoder* encoder, uint32_t frameIndex, const Clock& clock) {
         updateInstanceBuffers(m_scene->getOpaqueObjects());
         updateInstanceBuffers(m_scene->getTransparentObjects());
 
         buildSceneResources();
 
-        updateDynamicBuffers(deltaTime);
+        updateDynamicBuffers(clock);
 
         if (m_renderPath) {
             m_renderPath->render(encoder, frameIndex);
@@ -128,16 +128,16 @@ namespace StarryEngine {
         }
     }
 
-    void Renderer::updateDynamicBuffers(float deltaTime) {
+    void Renderer::updateDynamicBuffers(const Clock& clock) {
         auto camera = m_scene->getActiveCamera();
         if (camera) {
-            camera->update(); 
+            camera->update();
             Assets::GlobalUniforms globals;
             globals.view = camera->getViewMatrix();
             globals.proj = camera->getProjMatrix();
             globals.invView = glm::inverse(globals.view);
             globals.invProj = glm::inverse(globals.proj);
-            globals.time = deltaTime; 
+            globals.time = clock.getTime();
 
             auto* buf = m_resMgr->getBuffer(m_globalUniformBuffer);
             if (buf) buf->update(&globals, sizeof(globals), 0);
@@ -152,8 +152,8 @@ namespace StarryEngine {
     }
 
     void Renderer::analysisScene() {
-        Scene::AnalysisSceneResult result;
-        std::unordered_map<Scene::GraphicsPipelineState, uint32_t, std::hash<Scene::GraphicsPipelineState>> pipelineIndexMap;
+        AnalysisSceneResult result;
+        std::unordered_map<GraphicsPipelineState, uint32_t, std::hash<GraphicsPipelineState>> pipelineIndexMap;
         std::unordered_set<Assets::MaterialInstance*> uniqueMaterials; 
         m_sceneAnalyzer = std::make_unique<SceneAnalyzer>(
             m_resMgr.get(),

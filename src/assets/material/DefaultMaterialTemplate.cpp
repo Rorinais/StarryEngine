@@ -79,7 +79,7 @@ namespace StarryEngine::Assets {
             addPush(m_fsReflection);
         }
 
-        LOG_DEBUG(m_fsReflection);
+        //LOG_DEBUG(m_fsReflection);
 
         fillMissingLayouts(m_layouts, m_resMgr);
 

@@ -347,7 +347,10 @@ namespace StarryEngine {
         mFrameContext->endFrame(frameInfo);
 
         VkResult presentResult = mFrameContext->submitFrame(frameInfo, mDevice->getGraphicsQueue(), mPresentFunc);
-        if (presentResult == VK_ERROR_OUT_OF_DATE_KHR) mFramebufferResized = true;
+        if (presentResult == VK_ERROR_OUT_OF_DATE_KHR || presentResult == VK_SUBOPTIMAL_KHR) {
+            mFramebufferResized = true;
+            return false;
+        }
         return true;
     }
 

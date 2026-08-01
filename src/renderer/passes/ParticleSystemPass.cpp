@@ -2,6 +2,7 @@
 #include "../passExecutor/CopyToSwapchainExecutor.hpp"
 #include "../passExecutor/ParticleCSExecutor.hpp"
 #include "../passExecutor/ParticleRenderExecutor.hpp"
+#include "../RenderTypes.hpp"
 #include "../../assets/loader/ShaderLoader.hpp"
 #include "../../assets/material/MaterialTemplate.hpp"
 #include "../../logging/Logger.hpp"
@@ -201,7 +202,7 @@ namespace StarryEngine {
         RHI::RenderPassHandle rp = m_renderPassNode->getRenderPassHandle();
         if (!rp.isValid()) return;
 
-        Scene::GraphicsPipelineState pso;
+        GraphicsPipelineState pso;
         pso.vertexShader = m_particleVS;
         pso.fragmentShader = m_particleFS;
         pso.layout = m_particleRenderLayout;

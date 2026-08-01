@@ -3,7 +3,7 @@
 #include <variant>
 #include <map>
 #include "../AssetType.hpp"
-#include "../../scene/SceneType.hpp"
+#include "../../renderer/RenderTypes.hpp"
 #include "../../assets/loader/ShaderLoader.hpp"
 #include "../../assets/geometry/VertexLayout.hpp"
 
@@ -40,7 +40,7 @@ namespace StarryEngine::Assets {
 
         static RHI::PipelineHandle getOrCreateGraphicsPipeline(
             RHI::ResourceManager* resMgr,
-            const Scene::GraphicsPipelineState& state,
+            const GraphicsPipelineState& state,
             RHI::RenderPassHandle renderPass,
             uint32_t subpassIndex);
 
