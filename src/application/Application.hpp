@@ -16,6 +16,7 @@
 
 #include <filesystem>
 #include <chrono>
+#include <functional>
 
 #include "../event/Events.hpp"
 #include "../logging/Logger.hpp"
@@ -49,6 +50,10 @@ namespace StarryEngine {
         void setRenderer(std::shared_ptr<Renderer> renderer) { m_renderer = renderer; }
         void setScene(std::shared_ptr<Scene::Scene> scene) { m_scene = scene; }
 
+        // 每帧逻辑回调（demo 挂载动画/自定义更新）
+        using UpdateCallback = std::function<void(float deltaTime)>;
+        void setUpdateCallback(UpdateCallback cb) { m_updateCallback = std::move(cb); }
+
         std::shared_ptr<RHI::IRHI> getRenderHardwareInterface() { return m_rhi; }
         std::shared_ptr<RHI::ResourceManager> getResourceManager() { return m_resMgr; }
         RHI::DescriptorPoolHandle getGlobalDescriptorPool() { return m_descriptorPool; }
@@ -69,6 +74,7 @@ namespace StarryEngine {
 
         std::shared_ptr<Scene::Scene> m_scene;
         std::shared_ptr<Renderer> m_renderer;
+        UpdateCallback m_updateCallback;
 
         std::shared_ptr<RHI::IRHI> m_rhi;
         std::shared_ptr<RHI::ResourceManager> m_resMgr;

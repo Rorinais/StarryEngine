@@ -390,6 +390,9 @@ namespace StarryEngine {
             if (m_scene) {
                 m_scene->update(m_clock);        // 场景逻辑（动画等）
             }
+            if (m_updateCallback) {
+                m_updateCallback(deltaTime);     // demo 自定义每帧逻辑（如骨骼动画上传）
+            }
 
             // 在主循环中
             if (m_imguiManager && m_imguiManager->isInitialized()) {

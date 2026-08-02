@@ -22,7 +22,8 @@ namespace StarryEngine::Assets {
             std::vector<uint32_t>& outIndices,
             std::vector<Submesh>& outSubmeshes,
             const VertexLayout& layout,
-            uint32_t stride, const glm::mat4& transform);
+            uint32_t stride, const glm::mat4& transform,
+            const Skeleton* skeleton = nullptr);
 
         static void extractMaterials(const aiScene* scene,
             std::vector<MaterialParams>& outMaterials, std::shared_ptr<RHI::ResourceManager> resMgr);

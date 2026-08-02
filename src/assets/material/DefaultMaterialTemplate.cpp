@@ -40,19 +40,40 @@ namespace StarryEngine::Assets {
         m_vsReflection = std::move(vertInfo->reflection);
         m_fsReflection = std::move(fragInfo->reflection);
 
+        // 合并 VS/FS 同 set 的绑定：先汇总再建 layout，同一 binding 合并 stageFlags。
+        // 避免 VS 声明 set1 的 SSBO 时跳过 FS 的 set1 纹理绑定（layout 缺 binding 0 的 bug）。
+        std::unordered_map<uint32_t, RHI::DescriptorSetLayoutDesc> mergedDescs;
         auto mergeLayouts = [&](const ShaderCreateInfo& info) {
             for (const auto& [setIdx, desc] : info.layoutDescs) {
                 if (setIdx == 0) continue;
-                if (m_layouts.find(setIdx) == m_layouts.end()) {
-                    auto layout = Assets::DescriptorSetLayoutCache::getOrCreateLayout(m_resMgr.get(), desc);
-                    if (layout.isValid()) m_layouts[setIdx] = layout;
-                    else LOG_ERROR("Failed to create descriptor set layout for set {}", setIdx);
+                auto& merged = mergedDescs[setIdx];
+                merged.debugName = "Set" + std::to_string(setIdx);
+                for (const auto& b : desc.bindings) {
+                    bool found = false;
+                    for (auto& mb : merged.bindings) {
+                        if (mb.binding == b.binding) {
+                            mb.stageFlags = static_cast<RHI::ShaderStageFlags>(
+                                static_cast<uint32_t>(mb.stageFlags) | static_cast<uint32_t>(b.stageFlags));
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) merged.bindings.push_back(b);
                 }
-                LOG_INFO("Merge layout set={}, bindingCount={}", setIdx, desc.bindings.size());
             }
             };
         mergeLayouts(*vertInfo);
         mergeLayouts(*fragInfo);
+
+        for (const auto& [setIdx, desc] : mergedDescs) {
+            if (m_layouts.find(setIdx) != m_layouts.end()) continue;  // 保留外部预置 layout（如 set0）
+            auto layout = Assets::DescriptorSetLayoutCache::getOrCreateLayout(m_resMgr.get(), desc);
+            if (layout.isValid()) {
+                m_layouts[setIdx] = layout;
+                LOG_INFO("Merge layout set={}, bindingCount={}", setIdx, desc.bindings.size());
+            }
+            else LOG_ERROR("Failed to create descriptor set layout for set {}", setIdx);
+        }
 
         if (m_pushConstants.empty()) {
             auto addPush = [&](const RHI::ShaderReflectionInfo& refl) {
@@ -126,17 +147,35 @@ namespace StarryEngine::Assets {
         m_layouts.clear();
         if (globalLayout.isValid()) m_layouts[0] = globalLayout;
 
+        // 与 loadShaders 相同：先合并 VS/FS 同 set 绑定再建 layout
+        std::unordered_map<uint32_t, RHI::DescriptorSetLayoutDesc> mergedDescs;
         auto mergeLayouts = [&](const ShaderCreateInfo& info) {
             for (auto& [setIdx, desc] : info.layoutDescs) {
                 if (setIdx == 0) continue;
-                if (m_layouts.find(setIdx) == m_layouts.end()) {
-                    auto layout = Assets::DescriptorSetLayoutCache::getOrCreateLayout(m_resMgr.get(), desc);
-                    if (layout.isValid()) m_layouts[setIdx] = layout;
+                auto& merged = mergedDescs[setIdx];
+                merged.debugName = "Set" + std::to_string(setIdx);
+                for (const auto& b : desc.bindings) {
+                    bool found = false;
+                    for (auto& mb : merged.bindings) {
+                        if (mb.binding == b.binding) {
+                            mb.stageFlags = static_cast<RHI::ShaderStageFlags>(
+                                static_cast<uint32_t>(mb.stageFlags) | static_cast<uint32_t>(b.stageFlags));
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) merged.bindings.push_back(b);
                 }
             }
             };
         mergeLayouts(*vertInfo);
         mergeLayouts(*fragInfo);
+
+        for (const auto& [setIdx, desc] : mergedDescs) {
+            if (m_layouts.find(setIdx) != m_layouts.end()) continue;
+            auto layout = Assets::DescriptorSetLayoutCache::getOrCreateLayout(m_resMgr.get(), desc);
+            if (layout.isValid()) m_layouts[setIdx] = layout;
+        }
 
         if (oldPushConstants.empty()) {
             m_pushConstants.clear();

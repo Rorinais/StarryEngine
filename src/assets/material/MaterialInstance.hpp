@@ -44,6 +44,7 @@ namespace StarryEngine::Assets {
         void applyAllDirtyBlocks();
 
         void setUniform(uint32_t setIndex, uint32_t binding, const void* data, size_t size);
+        void setStorageBuffer(uint32_t setIndex, uint32_t binding, const void* data, size_t size);
         void setTexture(uint32_t setIndex, uint32_t binding, RHI::TextureHandle texture, RHI::SamplerHandle sampler);
         void setInputAttachment(uint32_t setIndex, uint32_t binding, RHI::TextureHandle texture, RHI::ImageLayout layout = RHI::ImageLayout::ShaderReadOnly);
         void addTextureDependency(const std::string& textureName,uint32_t set,uint32_t binding,ResourceDependencyType type = ResourceDependencyType::Sampler) {
@@ -116,6 +117,7 @@ namespace StarryEngine::Assets {
             RHI::BufferHandle buffer;
             void* mappedData;
             size_t size;
+            RHI::BufferType type = RHI::BufferType::Uniform;
         };
         std::unordered_map<uint64_t, BufferResource> m_buffers;
         std::unordered_map<std::string, DependencyInfo> m_textureDependencies;
@@ -147,7 +149,12 @@ namespace StarryEngine::Assets {
         void buildReflectionCache();
         void ensureGPUBufferForBlock(const std::string& blockName,
             uint32_t setIdx, uint32_t binding,
-            size_t blockSize);
+            size_t blockSize, RHI::DescriptorType descriptorType);
+
+        // 统一的 buffer 写入：按 binding 的 descriptor 类型建 UBO/SSBO
+        void setBufferData(uint32_t setIndex, uint32_t binding,
+            const void* data, size_t size, RHI::DescriptorType descriptorType);
+        RHI::DescriptorType resolveBindingDescriptorType(uint32_t setIndex, uint32_t binding) const;
 
         // ---------- 实例独立的渲染状态 ----------
         RHI::CullMode m_cullMode = RHI::CullMode::None;

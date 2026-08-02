@@ -1,10 +1,12 @@
 #include "ModelLoader.hpp"
 #include "../../logging/Logger.hpp"
 #include <glm/glm.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include <stb_image.h>
 #include <assimp/scene.h>
 #include <assimp/Importer.hpp>
 #include <limits>
+#include <cmath>
 #include <assimp/postprocess.h>
 #include <functional>
 #include <unordered_map>
@@ -92,24 +94,8 @@ namespace StarryEngine::Assets {
                 m.a4, m.b4, m.c4, m.d4);
         };
 
-        // 递归处理节点，填充顶点和索引
-        std::function<void(aiNode*, const glm::mat4&)> processNode;
-        processNode = [&](aiNode* node, const glm::mat4& parentTransform) {
-            glm::mat4 nodeTransform = toGlm(node->mTransformation);
-            glm::mat4 globalTransform = parentTransform * nodeTransform;
-
-            for (unsigned int i = 0; i < node->mNumMeshes; ++i) {
-                aiMesh* mesh = scene->mMeshes[node->mMeshes[i]];
-                processMesh(mesh, vertices, indices, submeshes, layout, currentOffset, globalTransform);
-            }
-            // 子节点继承当前节点的全局变换（修复：之前误传 parentTransform，子节点会错位）
-            for (unsigned int i = 0; i < node->mNumChildren; ++i) {
-                processNode(node->mChildren[i], globalTransform);
-            }
-            };
-        processNode(scene->mRootNode, glm::mat4(1.0f));
-
         // ── 构建 Skeleton：节点树层级 + 逆绑定矩阵 ──
+        // 必须在顶点处理之前：processMesh 需要按骨骼名映射到 Skeleton 下标（非 mesh->mBones 数组下标）
         if (outSkeleton && scene->mRootNode) {
             // 递归收集场景节点树 → 骨骼（父索引）。节点 mTransformation = 绑定姿势局部变换
             std::function<void(aiNode*, int)> collect;
@@ -127,18 +113,35 @@ namespace StarryEngine::Assets {
             };
             collect(scene->mRootNode, -1);
 
-            // 按名字把 mesh->mBones 的逆绑定矩阵（mOffsetMatrix）应用到对应骨骼
-            for (unsigned i = 0; i < scene->mNumMeshes; ++i) {
-                aiMesh* mesh = scene->mMeshes[i];
-                for (unsigned b = 0; b < mesh->mNumBones; ++b) {
-                    aiBone* abone = mesh->mBones[b];
-                    uint32_t bidx = outSkeleton->getBoneIndex(abone->mName.C_Str());
-                    if (bidx != UINT32_MAX)
-                        outSkeleton->bones[bidx].inverseBindMatrix = toGlm(abone->mOffsetMatrix);
-                }
+            // 逆绑定矩阵 = 绑定姿势全局变换的逆（由节点层级计算）。
+            // 顶点已按节点层级预变换到全局(root)空间，invBind 与该空间一致 → 绑定姿势蒙皮恒等。
+            for (size_t i = 0; i < outSkeleton->bones.size(); ++i) {
+                auto& bone = outSkeleton->bones[i];
+                glm::mat4 g = (bone.parentIndex >= 0)
+                    ? outSkeleton->bones[bone.parentIndex].globalTransform * bone.bindLocalTransform
+                    : bone.bindLocalTransform;
+                bone.globalTransform = g;
+                bone.inverseBindMatrix = glm::inverse(g);
             }
-            LOG_INFO("[Skeleton] {} bones from node hierarchy ({} skinned with inverse bind)",outSkeleton->bones.size(), outSkeleton->getBoneCount());
+            LOG_INFO("[Skeleton] {} bones from node hierarchy", outSkeleton->bones.size());
         }
+
+        // 递归处理节点，填充顶点和索引
+        std::function<void(aiNode*, const glm::mat4&)> processNode;
+        processNode = [&](aiNode* node, const glm::mat4& parentTransform) {
+            glm::mat4 nodeTransform = toGlm(node->mTransformation);
+            glm::mat4 globalTransform = parentTransform * nodeTransform;
+
+            for (unsigned int i = 0; i < node->mNumMeshes; ++i) {
+                aiMesh* mesh = scene->mMeshes[node->mMeshes[i]];
+                processMesh(mesh, vertices, indices, submeshes, layout, currentOffset, globalTransform, outSkeleton);
+            }
+            // 子节点继承当前节点的全局变换（修复：之前误传 parentTransform，子节点会错位）
+            for (unsigned int i = 0; i < node->mNumChildren; ++i) {
+                processNode(node->mChildren[i], globalTransform);
+            }
+            };
+        processNode(scene->mRootNode, glm::mat4(1.0f));
 
         // ── 读取动画：aiAnimation → AnimationClip（骨骼轨道）──
         if (outClip && scene->mNumAnimations > 0) {
@@ -149,21 +152,96 @@ namespace StarryEngine::Assets {
 
             for (unsigned c = 0; c < anim->mNumChannels; ++c) {
                 aiNodeAnim* chan = anim->mChannels[c];
+                const std::string nodeName = chan->mNodeName.C_Str();
+
+                // 跳过 Blender 叶子骨骼（"_end" 后缀，add leaf bones 产生）的动画轨道：
+                // 叶子骨骼位于手指尖/脖子尖/脚尖，key all bones 会给它们烘焙独立旋转，
+                // 使末端额外甩动 → 手指拉丝/脖子螺旋。跳过轨道让它们保持绑定姿势、跟随父骨骼。
+                if (nodeName.size() >= 4 && nodeName.compare(nodeName.size() - 4, 4, "_end") == 0)
+                    continue;
+
                 BoneTrack track;
                 track.boneIndex = outSkeleton
-                    ? static_cast<int>(outSkeleton->getBoneIndex(chan->mNodeName.C_Str()))
+                    ? static_cast<int>(outSkeleton->getBoneIndex(nodeName))
                     : -1;
 
-                for (unsigned k = 0; k < chan->mNumPositionKeys; ++k)
-                    track.positions.push_back({ static_cast<float>(chan->mPositionKeys[k].mTime),
-                        glm::vec3(chan->mPositionKeys[k].mValue.x, chan->mPositionKeys[k].mValue.y, chan->mPositionKeys[k].mValue.z) });
-                for (unsigned k = 0; k < chan->mNumRotationKeys; ++k)
-                    track.rotations.push_back({ static_cast<float>(chan->mRotationKeys[k].mTime),
-                        glm::quat(chan->mRotationKeys[k].mValue.w, chan->mRotationKeys[k].mValue.x,
-                                  chan->mRotationKeys[k].mValue.y, chan->mRotationKeys[k].mValue.z) });
-                for (unsigned k = 0; k < chan->mNumScalingKeys; ++k)
-                    track.scales.push_back({ static_cast<float>(chan->mScalingKeys[k].mTime),
-                        glm::vec3(chan->mScalingKeys[k].mValue.x, chan->mScalingKeys[k].mValue.y, chan->mScalingKeys[k].mValue.z) });
+                for (unsigned k = 0; k < chan->mNumPositionKeys; ++k) {
+                    const auto& pk = chan->mPositionKeys[k];
+                    glm::vec3 p(pk.mValue.x, pk.mValue.y, pk.mValue.z);
+                    if (!std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.z)) {
+                        LOG_WARN("Skipping NaN/Inf position keyframe (track '{}', key {} time {:.4f})",
+                            chan->mNodeName.C_Str(), k, static_cast<float>(pk.mTime));
+                        continue;
+                    }
+                    track.positions.push_back({ static_cast<float>(pk.mTime), p });
+                }
+                for (unsigned k = 0; k < chan->mNumRotationKeys; ++k) {
+                    const auto& rk = chan->mRotationKeys[k];
+                    // 标准 assimp 读法：aiQuaternion 是 (w, x, y, z)
+                    glm::quat q(rk.mValue.w, rk.mValue.x, rk.mValue.y, rk.mValue.z);
+                    // 跳过 NaN/Inf 和退化四元数（Blender 可能在 t≈0 写 (0,0,0,0) 或 norm 极小的键）。
+                    // slerp 遇退化四元数会产生非单位结果 → mat4_cast 引入缩放 → 网格压扁/翻转。
+                    float n = glm::length(q);
+                    if (!std::isfinite(q.w) || !std::isfinite(q.x) || !std::isfinite(q.y) || !std::isfinite(q.z) ||
+                        n < 0.01f) {
+                        LOG_WARN("Skipping invalid rotation keyframe (track '{}', key {} time {:.4f}, norm={:.6f})",
+                            chan->mNodeName.C_Str(), k, static_cast<float>(rk.mTime), n);
+                        continue;
+                    }
+                    // 归一化：旋转四元数应为单位长度
+                    q = glm::normalize(q);
+                    // 二次检查：归一化后仍退化（NaN/零）的键必须丢弃
+                    float n2 = glm::length(q);
+                    if (!std::isfinite(n2) || n2 < 0.01f) {
+                        LOG_WARN("Skipping degenerate rotation after normalize (track '{}', key {} t={:.4f}, preNorm={:.6f}, postNorm={:.6f})",
+                            chan->mNodeName.C_Str(), k, static_cast<float>(rk.mTime), n, n2);
+                        continue;
+                    }
+                    track.rotations.push_back({ static_cast<float>(rk.mTime), q });
+                }
+                for (unsigned k = 0; k < chan->mNumScalingKeys; ++k) {
+                    const auto& sk = chan->mScalingKeys[k];
+                    glm::vec3 s(sk.mValue.x, sk.mValue.y, sk.mValue.z);
+                    if (!std::isfinite(s.x) || !std::isfinite(s.y) || !std::isfinite(s.z)) {
+                        LOG_WARN("Skipping NaN/Inf scaling keyframe (track '{}', key {} time {:.4f})",
+                            chan->mNodeName.C_Str(), k, static_cast<float>(sk.mTime));
+                        continue;
+                    }
+                    track.scales.push_back({ static_cast<float>(sk.mTime), s });
+                }
+
+                // ── 清理动画键：排序 + 去掉负时间/重复时间 ──
+                // FBX 导出常带乱序、负时间（≈-0）、t=0 处多个重复键，采样会挑中错误键。
+                auto cleanKeys = [](auto& keys) {
+                    std::sort(keys.begin(), keys.end(),
+                        [](const auto& a, const auto& b) { return a.time < b.time; });
+                    size_t w = 0;
+                    float lastTime = -1e9f;
+                    for (size_t r = 0; r < keys.size(); ++r) {
+                        auto& k = keys[r];
+                        if (!std::isfinite(k.time)) continue;      // NaN/Inf 时间键丢弃
+                        if (k.time < 0.0f) continue;              // 负时间键丢弃
+                        // 近重复时间键（t=0 附近常有多键，采样会挑错键）保留第一个
+                        if (std::fabs(k.time - lastTime) < 0.01f) continue;
+                        keys[w++] = std::move(k);
+                        lastTime = k.time;
+                    }
+                    keys.resize(w);
+                };
+                cleanKeys(track.positions);
+                cleanKeys(track.rotations);
+                cleanKeys(track.scales);
+
+                // ── 修复第一帧：frame-0 旋转键是坏的（与绑定差 48-175°，翻跟头），
+                // 但后面所有帧都正确。只把第一个旋转键覆盖成绑定旋转，其余键不动 →
+                // 角色从绑定姿势开始，动画从第二帧起正常播放。
+                if (!track.rotations.empty() && outSkeleton &&
+                    track.boneIndex >= 0 &&
+                    track.boneIndex < static_cast<int>(outSkeleton->bones.size())) {
+                    glm::quat bindRot = glm::normalize(
+                        glm::quat_cast(outSkeleton->bones[track.boneIndex].bindLocalTransform));
+                    track.rotations.front().value = bindRot;
+                }
 
                 outClip->tracks.push_back(std::move(track));
             }
@@ -240,6 +318,17 @@ namespace StarryEngine::Assets {
                         scaleBone(bone.localTransform);
                         scaleBone(bone.inverseBindMatrix);
                     }
+
+                    // 动画轨道位置关键帧同步缩放到米（否则采样出的局部变换是 cm 量级，
+                    // 与缩放后的 bind 姿势尺度不一致，层级传播时全局矩阵爆炸）。
+                    if (outClip) {
+                        for (auto& track : outClip->tracks) {
+                            for (auto& kf : track.positions)
+                                kf.value *= s;
+                        }
+                        LOG_INFO("Scaled {} bone-track position keyframes to meters (s={:.4f})",
+                            outClip->tracks.size(), s);
+                    }
                 }
             }
         }
@@ -257,7 +346,8 @@ namespace StarryEngine::Assets {
         std::vector<uint32_t>& outIndices,
         std::vector<Submesh>& outSubmeshes,
         const VertexLayout& layout,
-        uint32_t stride, const glm::mat4& transform) {
+        uint32_t stride, const glm::mat4& transform,
+        const Skeleton* skeleton) {
         Submesh submesh;
         submesh.indexOffset = static_cast<uint32_t>(outIndices.size());
         submesh.materialIndex = mesh->mMaterialIndex;
@@ -275,6 +365,15 @@ namespace StarryEngine::Assets {
             boneWeights.resize(mesh->mNumVertices, glm::vec4(0.0f));
             for (unsigned b = 0; b < mesh->mNumBones; ++b) {
                 aiBone* bone = mesh->mBones[b];
+
+                // 顶点存的必须是 Skeleton 下标（SSBO 矩阵按它索引），
+                // 不是 mesh->mBones 的数组下标 —— 两者通常不一致（mesh 骨只含蒙皮节点）。
+                int skeletonIndex = skeleton
+                    ? static_cast<int>(skeleton->getBoneIndex(bone->mName.C_Str()))
+                    : static_cast<int>(b);
+                if (skeletonIndex < 0 || static_cast<uint32_t>(skeletonIndex) == UINT32_MAX)
+                    skeletonIndex = 0;   // 找不到的骨骼回退到根，避免越界
+
                 for (unsigned w = 0; w < bone->mNumWeights; ++w) {
                     uint32_t vid = bone->mWeights[w].mVertexId;
                     float wt = bone->mWeights[w].mWeight;
@@ -282,7 +381,7 @@ namespace StarryEngine::Assets {
                     // 填充到第一个空槽（assimp 权重通常已按降序）
                     for (int s = 0; s < 4; ++s) {
                         if (boneWeights[vid][s] == 0.0f) {
-                            boneIndices[vid][s] = static_cast<int>(b);
+                            boneIndices[vid][s] = skeletonIndex;
                             boneWeights[vid][s] = wt;
                             break;
                         }

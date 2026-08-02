@@ -11,11 +11,12 @@ namespace StarryEngine::Assets {
         : m_template(tmpl), m_resMgr(resMgr) {
         
         RHI::DescriptorPoolDesc poolDesc;
-        poolDesc.maxSets = 16; 
+        poolDesc.maxSets = 16;
         poolDesc.poolSizes = {
-            { RHI::DescriptorType::UniformBuffer,         8  }, 
-            { RHI::DescriptorType::CombinedImageSampler, 16 },  
-            { RHI::DescriptorType::InputAttachment,       8  }  
+            { RHI::DescriptorType::UniformBuffer,         8  },
+            { RHI::DescriptorType::StorageBuffer,         4  },
+            { RHI::DescriptorType::CombinedImageSampler, 16 },
+            { RHI::DescriptorType::InputAttachment,       8  }
         };
         poolDesc.freeDescriptorSet = true;
         poolDesc.debugName = "MaterialPool";
@@ -73,19 +74,42 @@ namespace StarryEngine::Assets {
     }
 
     void MaterialInstance::setUniform(uint32_t setIndex, uint32_t binding, const void* data, size_t size) {
+        // 根据 descriptor 布局自动区分 UBO / SSBO（SSBO 用于超 UBO 限制的大块数据，如骨骼矩阵）
+        setBufferData(setIndex, binding, data, size, resolveBindingDescriptorType(setIndex, binding));
+    }
+
+    void MaterialInstance::setStorageBuffer(uint32_t setIndex, uint32_t binding, const void* data, size_t size) {
+        setBufferData(setIndex, binding, data, size, RHI::DescriptorType::StorageBuffer);
+    }
+
+    void MaterialInstance::setBufferData(uint32_t setIndex, uint32_t binding,
+        const void* data, size_t size, RHI::DescriptorType descriptorType) {
         auto set = getOrCreateSet(setIndex);
         if (!set.isValid()) return;
 
+        RHI::BufferType bufferType = (descriptorType == RHI::DescriptorType::StorageBuffer ||
+            descriptorType == RHI::DescriptorType::StorageBufferDynamic)
+            ? RHI::BufferType::Storage : RHI::BufferType::Uniform;
+
         uint64_t key = ((uint64_t)setIndex << 32) | binding;
         auto it = m_buffers.find(key);
+
+        // 已有 buffer 但尺寸不足（如反射预建的 0 尺寸 SSBO），按新尺寸重建
+        if (it != m_buffers.end() && it->second.size < size) {
+            auto old = it->second;
+            m_resMgr->scheduleDestroy([old, resMgr = m_resMgr]() { resMgr->destroy(old.buffer); }, 2);
+            m_buffers.erase(it);
+            it = m_buffers.end();
+        }
+
         if (it == m_buffers.end()) {
             RHI::BufferDesc bufDesc;
             bufDesc.size = size;
-            bufDesc.type = RHI::BufferType::Uniform;
+            bufDesc.type = bufferType;
             bufDesc.memoryType = RHI::MemoryType::CPU_To_GPU;
             bufDesc.allowUpdate = true;
             bufDesc.persistentMapped = true;
-            bufDesc.debugName = "MaterialUBO";
+            bufDesc.debugName = (bufferType == RHI::BufferType::Storage) ? "MaterialSSBO" : "MaterialUBO";
 
             auto buffer = m_resMgr->createBuffer(bufDesc);
             if (!buffer.isValid()) return;
@@ -94,7 +118,7 @@ namespace StarryEngine::Assets {
             if (!bufferObj) return;
             void* mapped = bufferObj->map();
 
-            m_buffers[key] = { buffer, mapped, size };
+            m_buffers[key] = { buffer, mapped, size, bufferType };
 
             auto* setObj = m_resMgr->getDescriptorSet(set);
             if (setObj) {
@@ -108,6 +132,21 @@ namespace StarryEngine::Assets {
         if (it != m_buffers.end()) {
             std::memcpy(it->second.mappedData, data, size);
         }
+    }
+
+    RHI::DescriptorType MaterialInstance::resolveBindingDescriptorType(uint32_t setIndex, uint32_t binding) const {
+        auto layoutIt = m_layouts.find(setIndex);
+        if (layoutIt == m_layouts.end()) return RHI::DescriptorType::UniformBuffer;
+
+        auto* layout = m_resMgr->getDescriptorSetLayout(layoutIt->second);
+        if (!layout) return RHI::DescriptorType::UniformBuffer;
+
+        for (const auto& b : layout->getBindings()) {
+            if (b.binding == binding) {
+                return b.type;
+            }
+        }
+        return RHI::DescriptorType::UniformBuffer;
     }
 
     void MaterialInstance::setTexture(uint32_t setIndex, uint32_t binding,
@@ -185,7 +224,17 @@ namespace StarryEngine::Assets {
             uint64_t key = ((uint64_t)binding.set << 32) | binding.binding;
             if (m_buffers.find(key) == m_buffers.end()) {
                 size_t blockSize = m_blocks[binding.name].size();
-                ensureGPUBufferForBlock(binding.name, binding.set, binding.binding, blockSize);
+                // 运行时数组的 SSBO（如 mat4 bones[]）反射成员为空 → blockSize == 0，
+                // 不预建 buffer，由 setStorageBuffer/setUniform 显式创建真实尺寸。
+                if (blockSize > 0) {
+                    ensureGPUBufferForBlock(binding.name, binding.set, binding.binding,
+                        blockSize, binding.type);
+                }
+                else {
+                    LOG_INFO("Block '{}' has no fixed members (runtime-array SSBO?), "
+                        "deferring buffer creation to explicit setStorageBuffer/setUniform",
+                        binding.name);
+                }
             }
             };
 
@@ -375,11 +424,12 @@ namespace StarryEngine::Assets {
         m_resMgr->destroy(m_pool);
 
         RHI::DescriptorPoolDesc poolDesc;
-        poolDesc.maxSets = 16;  
+        poolDesc.maxSets = 16;
         poolDesc.poolSizes = {
-            { RHI::DescriptorType::UniformBuffer,         8  }, 
-            { RHI::DescriptorType::CombinedImageSampler, 16 }, 
-            { RHI::DescriptorType::InputAttachment,       8  }  
+            { RHI::DescriptorType::UniformBuffer,         8  },
+            { RHI::DescriptorType::StorageBuffer,         4  },
+            { RHI::DescriptorType::CombinedImageSampler, 16 },
+            { RHI::DescriptorType::InputAttachment,       8  }
         };
         poolDesc.freeDescriptorSet = true;
         poolDesc.debugName = "MaterialPool";
@@ -466,15 +516,19 @@ namespace StarryEngine::Assets {
     void MaterialInstance::ensureGPUBufferForBlock(
         const std::string& blockName,
         uint32_t setIdx, uint32_t binding,
-        size_t blockSize) {
+        size_t blockSize, RHI::DescriptorType descriptorType) {
 
         uint64_t key = ((uint64_t)setIdx << 32) | binding;
 
         if (m_buffers.find(key) != m_buffers.end()) return;
 
+        RHI::BufferType bufferType = (descriptorType == RHI::DescriptorType::StorageBuffer ||
+            descriptorType == RHI::DescriptorType::StorageBufferDynamic)
+            ? RHI::BufferType::Storage : RHI::BufferType::Uniform;
+
         RHI::BufferDesc bufDesc;
         bufDesc.size = blockSize;
-        bufDesc.type = RHI::BufferType::Uniform;
+        bufDesc.type = bufferType;
         bufDesc.memoryType = RHI::MemoryType::CPU_To_GPU;
         bufDesc.allowUpdate = true;
         bufDesc.persistentMapped = true;
@@ -490,7 +544,7 @@ namespace StarryEngine::Assets {
         if (!bufferObj) return;
 
         void* mapped = bufferObj->map();
-        m_buffers[key] = { buffer, mapped, blockSize };
+        m_buffers[key] = { buffer, mapped, blockSize, bufferType };
 
         auto set = getOrCreateSet(setIdx);
         auto* setObj = m_resMgr->getDescriptorSet(set);

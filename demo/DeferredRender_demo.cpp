@@ -305,13 +305,22 @@ public:
     std::shared_ptr<Renderer> getRenderer() { return m_renderer; }
 
     std::shared_ptr< Scene::Scene> getScene() { return m_scene; }
+
+    // 每帧骨骼动画更新：推进时间 → 采样 → 上传骨骼矩阵 SSBO
+    void onUpdate(float deltaTime);
 private:
-    bool loadModelGeometry(Assets::Geometry& outGeometry,std::vector<Assets::MaterialParams>& outParams,Assets::Skeleton* outSkeleton = nullptr,Assets::AnimationClip* outClip = nullptr);
-    std::shared_ptr<Assets::MaterialInstance> makeModelMaterial(const Assets::MaterialParams& param);
+    bool loadModelGeometry(Assets::Geometry& outGeometry,std::vector<Assets::MaterialParams>& outParams,Assets::Skeleton* outSkeleton = nullptr);
+    std::shared_ptr<Assets::MaterialInstance> makeModelMaterial(const Assets::MaterialParams& param, bool skinned);
     void addGriseoModel();
 
     Assets::Skeleton m_modelSkeleton;
     Assets::AnimationClip m_modelClip;
+
+    // 骨骼动画运行时状态
+    Scene::Animator m_skeletalAnimator;
+    float m_skeletalTime = 0.0f;
+    bool m_skeletalReady = false;
+    std::vector<std::shared_ptr<Assets::MaterialInstance>> m_skinnedMaterials;
 
     uint32_t m_width, m_height;
     std::shared_ptr<RHI::IRHI> m_rhi;
@@ -334,8 +343,8 @@ private:
     std::shared_ptr<Assets::IBLBuilder> m_iblBuilder;
 };
 
-bool PBRDemo::loadModelGeometry(Assets::Geometry& outGeometry,std::vector<Assets::MaterialParams>& outParams,Assets::Skeleton* outSkeleton,Assets::AnimationClip* outClip) {
-    if (!Assets::ModelLoader::loadFromFile(m_rhi->getResourceManager(),"assets/models/Griseo_Animation.fbx",outGeometry, outParams, outSkeleton, outClip)) {
+bool PBRDemo::loadModelGeometry(Assets::Geometry& outGeometry,std::vector<Assets::MaterialParams>& outParams,Assets::Skeleton* outSkeleton) {
+    if (!Assets::ModelLoader::loadFromFile(m_rhi->getResourceManager(),"assets/models/Griseo_Animation.fbx",outGeometry, outParams, outSkeleton, &m_modelClip)) {
         LOG_ERROR("Failed to load model");
         return false;
     }
@@ -344,7 +353,7 @@ bool PBRDemo::loadModelGeometry(Assets::Geometry& outGeometry,std::vector<Assets
 }
 
 std::shared_ptr<Assets::MaterialInstance> PBRDemo::makeModelMaterial(
-    const Assets::MaterialParams& param) {
+    const Assets::MaterialParams& param, bool skinned) {
     std::string fsPath;
     if (param.name == "body") fsPath = "assets/shaders/core/shader.frag";
     else if (param.name == "brow") fsPath = "assets/shaders/core/shader.frag";
@@ -352,9 +361,13 @@ std::shared_ptr<Assets::MaterialInstance> PBRDemo::makeModelMaterial(
     else if (param.name == "face") fsPath = "assets/shaders/core/face.frag";
     else fsPath = "assets/shaders/core/hair.frag";
 
+    // 有骨骼的模型用蒙皮顶点着色器（loc4/5 骨骼属性 + set1/binding2 骨骼矩阵 SSBO）
+    const char* vsPath = skinned ? "assets/shaders/core/shader_skinned.vert"
+                                 : "assets/shaders/core/shader.vert";
+
     auto tmpl = std::make_shared<Assets::DefaultMaterialTemplate>(
         m_rhi->getResourceManager(), m_descriptorSetLayout);
-    if (!tmpl->loadShaders("assets/shaders/core/shader.vert", fsPath)) {
+    if (!tmpl->loadShaders(vsPath, fsPath)) {
         LOG_ERROR("Failed to load shaders for material: {}", param.name);
         return nullptr;
     }
@@ -389,11 +402,13 @@ std::shared_ptr<Assets::MaterialInstance> PBRDemo::makeModelMaterial(
 void PBRDemo::addGriseoModel() {
     auto geometry = std::make_shared<Assets::Geometry>(m_rhi->getResourceManager());
     std::vector<Assets::MaterialParams> params;
-    if (!loadModelGeometry(*geometry, params, &m_modelSkeleton, &m_modelClip)) return;
+    if (!loadModelGeometry(*geometry, params, &m_modelSkeleton)) return;
+
+    bool skinned = m_modelClip.isSkeletal() && !m_modelSkeleton.bones.empty();
 
     std::vector<std::shared_ptr<Assets::MaterialInstance>> materials;
     for (auto& param : params) {
-        auto inst = makeModelMaterial(param);
+        auto inst = makeModelMaterial(param, skinned);
         if (inst) materials.push_back(inst);
     }
 
@@ -403,39 +418,27 @@ void PBRDemo::addGriseoModel() {
     obj->transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 2.5f));
     m_scene->addObject(obj);
 
-    // ── CPU 验证：采样一帧骨骼动画，确认矩阵计算合理 ──
-    if (m_modelClip.isSkeletal() && !m_modelSkeleton.bones.empty()) {
-        Scene::Animator animator;
-        animator.updateSkeleton(m_modelSkeleton, m_modelClip, m_modelClip.duration * 0.5f);  // 动画中点（ticks）
-        const auto& matrices = animator.getBoneMatrices();
-        LOG_INFO("[Verify] Sampled {} ticks — {} skinning matrices", m_modelClip.duration * 0.5f, matrices.size());
-        // 打印根骨骼（index 0）和一根有动画的骨骼的矩阵
-        if (!matrices.empty()) {
-            const auto& m0 = matrices[0];
-            LOG_INFO("[Verify] bone[0] pos=({:.3f},{:.3f},{:.3f})",
-                m0[3][0], m0[3][1], m0[3][2]);
-        }
-        // 找第一根有动画轨道的骨骼
-        for (const auto& t : m_modelClip.tracks) {
-            if (t.boneIndex >= 0 && t.boneIndex < (int)matrices.size()) {
-                const auto& mt = matrices[t.boneIndex];
-                LOG_INFO("[Verify] animated bone[{}] pos=({:.3f},{:.3f},{:.3f})",
-                    t.boneIndex, mt[3][0], mt[3][1], mt[3][2]);
-                // ── 诊断：定位哪个矩阵分量巨大 ──
-                const auto& bone = m_modelSkeleton.bones[t.boneIndex];
-                LOG_INFO("[Diag] bone[{}] bindLocal pos=({:.3f},{:.3f},{:.3f})", t.boneIndex,
-                    bone.bindLocalTransform[3][0], bone.bindLocalTransform[3][1], bone.bindLocalTransform[3][2]);
-                LOG_INFO("[Diag] bone[{}] invBind  pos=({:.3f},{:.3f},{:.3f})", t.boneIndex,
-                    bone.inverseBindMatrix[3][0], bone.inverseBindMatrix[3][1], bone.inverseBindMatrix[3][2]);
-                LOG_INFO("[Diag] bone[{}] global  pos=({:.3f},{:.3f},{:.3f})", t.boneIndex,
-                    bone.globalTransform[3][0], bone.globalTransform[3][1], bone.globalTransform[3][2]);
-                for (int c = 0; c < 3; ++c) {
-                    float len = glm::length(glm::vec3(bone.inverseBindMatrix[c]));
-                    LOG_INFO("[Diag] bone[{}] invBind col[{}] len={:.3f}", t.boneIndex, c, len);
-                }
-                break;
-            }
-        }
+    // 记录蒙皮材质，每帧上传骨骼矩阵 SSBO（set1/binding2）
+    m_skeletalReady = skinned;
+    if (m_skeletalReady) {
+        m_skinnedMaterials = materials;
+        m_skeletalAnimator.updateSkeleton(m_modelSkeleton, m_modelClip, m_skeletalTime);
+    }
+}
+
+void PBRDemo::onUpdate(float deltaTime) {
+    if (!m_skeletalReady || m_skinnedMaterials.empty()) return;
+
+    // 动画时间是 ticks，deltaTime 是秒 → 乘 ticksPerSecond 换算
+    float tps = (m_modelClip.ticksPerSecond > 0.0f) ? m_modelClip.ticksPerSecond : 25.0f;
+    m_skeletalTime += deltaTime * tps;
+    m_skeletalAnimator.updateSkeleton(m_modelSkeleton, m_modelClip, m_skeletalTime);
+    const auto& matrices = m_skeletalAnimator.getBoneMatrices();
+    if (matrices.empty()) return;
+
+    size_t bytes = matrices.size() * sizeof(glm::mat4);
+    for (auto& mat : m_skinnedMaterials) {
+        if (mat) mat->setStorageBuffer(1, 2, matrices.data(), bytes);
     }
 }
 
@@ -467,6 +470,7 @@ int main() {
 
     app.setRenderer(demo->getRenderer());
     app.setScene(demo->getScene());
+    app.setUpdateCallback([demo](float deltaTime) { demo->onUpdate(deltaTime); });
     app.initEventDispatcher();
     app.run();
     StarryEngine::Logger::shutdown();
