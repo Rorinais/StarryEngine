@@ -306,11 +306,12 @@ public:
 
     std::shared_ptr< Scene::Scene> getScene() { return m_scene; }
 private:
-    bool loadModelGeometry(Assets::Geometry& outGeometry,std::vector<Assets::MaterialParams>& outParams,Assets::Skeleton* outSkeleton = nullptr);
+    bool loadModelGeometry(Assets::Geometry& outGeometry,std::vector<Assets::MaterialParams>& outParams,Assets::Skeleton* outSkeleton = nullptr,Assets::AnimationClip* outClip = nullptr);
     std::shared_ptr<Assets::MaterialInstance> makeModelMaterial(const Assets::MaterialParams& param);
     void addGriseoModel();
 
     Assets::Skeleton m_modelSkeleton;
+    Assets::AnimationClip m_modelClip;
 
     uint32_t m_width, m_height;
     std::shared_ptr<RHI::IRHI> m_rhi;
@@ -333,8 +334,8 @@ private:
     std::shared_ptr<Assets::IBLBuilder> m_iblBuilder;
 };
 
-bool PBRDemo::loadModelGeometry(Assets::Geometry& outGeometry,std::vector<Assets::MaterialParams>& outParams,Assets::Skeleton* outSkeleton) {
-    if (!Assets::ModelLoader::loadFromFile(m_rhi->getResourceManager(),"assets/models/Griseo_Animation.fbx",outGeometry, outParams, outSkeleton)) {
+bool PBRDemo::loadModelGeometry(Assets::Geometry& outGeometry,std::vector<Assets::MaterialParams>& outParams,Assets::Skeleton* outSkeleton,Assets::AnimationClip* outClip) {
+    if (!Assets::ModelLoader::loadFromFile(m_rhi->getResourceManager(),"assets/models/Griseo_Animation.fbx",outGeometry, outParams, outSkeleton, outClip)) {
         LOG_ERROR("Failed to load model");
         return false;
     }
@@ -388,7 +389,7 @@ std::shared_ptr<Assets::MaterialInstance> PBRDemo::makeModelMaterial(
 void PBRDemo::addGriseoModel() {
     auto geometry = std::make_shared<Assets::Geometry>(m_rhi->getResourceManager());
     std::vector<Assets::MaterialParams> params;
-    if (!loadModelGeometry(*geometry, params, &m_modelSkeleton)) return;
+    if (!loadModelGeometry(*geometry, params, &m_modelSkeleton, &m_modelClip)) return;
 
     std::vector<std::shared_ptr<Assets::MaterialInstance>> materials;
     for (auto& param : params) {
@@ -401,6 +402,41 @@ void PBRDemo::addGriseoModel() {
     obj->materials = materials;
     obj->transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 2.5f));
     m_scene->addObject(obj);
+
+    // ── CPU 验证：采样一帧骨骼动画，确认矩阵计算合理 ──
+    if (m_modelClip.isSkeletal() && !m_modelSkeleton.bones.empty()) {
+        Scene::Animator animator;
+        animator.updateSkeleton(m_modelSkeleton, m_modelClip, m_modelClip.duration * 0.5f);  // 动画中点（ticks）
+        const auto& matrices = animator.getBoneMatrices();
+        LOG_INFO("[Verify] Sampled {} ticks — {} skinning matrices", m_modelClip.duration * 0.5f, matrices.size());
+        // 打印根骨骼（index 0）和一根有动画的骨骼的矩阵
+        if (!matrices.empty()) {
+            const auto& m0 = matrices[0];
+            LOG_INFO("[Verify] bone[0] pos=({:.3f},{:.3f},{:.3f})",
+                m0[3][0], m0[3][1], m0[3][2]);
+        }
+        // 找第一根有动画轨道的骨骼
+        for (const auto& t : m_modelClip.tracks) {
+            if (t.boneIndex >= 0 && t.boneIndex < (int)matrices.size()) {
+                const auto& mt = matrices[t.boneIndex];
+                LOG_INFO("[Verify] animated bone[{}] pos=({:.3f},{:.3f},{:.3f})",
+                    t.boneIndex, mt[3][0], mt[3][1], mt[3][2]);
+                // ── 诊断：定位哪个矩阵分量巨大 ──
+                const auto& bone = m_modelSkeleton.bones[t.boneIndex];
+                LOG_INFO("[Diag] bone[{}] bindLocal pos=({:.3f},{:.3f},{:.3f})", t.boneIndex,
+                    bone.bindLocalTransform[3][0], bone.bindLocalTransform[3][1], bone.bindLocalTransform[3][2]);
+                LOG_INFO("[Diag] bone[{}] invBind  pos=({:.3f},{:.3f},{:.3f})", t.boneIndex,
+                    bone.inverseBindMatrix[3][0], bone.inverseBindMatrix[3][1], bone.inverseBindMatrix[3][2]);
+                LOG_INFO("[Diag] bone[{}] global  pos=({:.3f},{:.3f},{:.3f})", t.boneIndex,
+                    bone.globalTransform[3][0], bone.globalTransform[3][1], bone.globalTransform[3][2]);
+                for (int c = 0; c < 3; ++c) {
+                    float len = glm::length(glm::vec3(bone.inverseBindMatrix[c]));
+                    LOG_INFO("[Diag] bone[{}] invBind col[{}] len={:.3f}", t.boneIndex, c, len);
+                }
+                break;
+            }
+        }
+    }
 }
 
 

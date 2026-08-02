@@ -1,6 +1,7 @@
 #pragma once
 #include"../geometry/Geometry.hpp"
 #include "../animation/Skeleton.hpp"
+#include "../animation/AnimationClip.hpp"
 #include "TextureLoader.hpp"
 
 namespace StarryEngine::Assets {
@@ -11,7 +12,8 @@ namespace StarryEngine::Assets {
             std::shared_ptr<RHI::ResourceManager> resMgr,
             const std::string& path,Geometry& outGeometry,
             std::vector<MaterialParams>& outMaterials,
-            Skeleton* outSkeleton = nullptr);
+            Skeleton* outSkeleton = nullptr,
+            AnimationClip* outClip = nullptr);
 
     private:
         static void processMesh(

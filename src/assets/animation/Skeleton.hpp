@@ -12,9 +12,9 @@ namespace StarryEngine::Assets {
         glm::mat4 inverseBindMatrix = glm::mat4(1.0f);  // aiBone::mOffsetMatrix（绑定姿势逆）
         int parentIndex = -1;                            // 父骨骼索引（-1 = 根）
 
-        // 每帧计算（动画采样后填充）
-        glm::mat4 localTransform  = glm::mat4(1.0f);    // 当前帧局部变换
-        glm::mat4 globalTransform = glm::mat4(1.0f);    // 层级传播后的全局变换
+        glm::mat4 bindLocalTransform  = glm::mat4(1.0f);  // 绑定姿势局部变换（来自节点树）
+        glm::mat4 localTransform      = glm::mat4(1.0f);  // 当前帧局部变换（动画采样后）
+        glm::mat4 globalTransform     = glm::mat4(1.0f);  // 层级传播后的全局变换
     };
 
     // 骨骼系统：层级 + 逆绑定矩阵 + 每帧最终蒙皮矩阵

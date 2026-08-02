@@ -15,7 +15,8 @@ namespace StarryEngine::Assets {
         std::shared_ptr<RHI::ResourceManager> resMgr,
         const std::string& path,Geometry& outGeometry,
         std::vector<MaterialParams>& outMaterials,
-        Skeleton* outSkeleton) {
+        Skeleton* outSkeleton,
+        AnimationClip* outClip) {
         Assimp::Importer importer;
         const aiScene* scene = importer.ReadFile(path,
             aiProcess_Triangulate |
@@ -117,7 +118,8 @@ namespace StarryEngine::Assets {
                 Bone bone;
                 bone.name = node->mName.C_Str();
                 bone.parentIndex = parentIndex;
-                bone.localTransform = toGlm(node->mTransformation);
+                bone.bindLocalTransform = toGlm(node->mTransformation);   // 绑定姿势
+                bone.localTransform = bone.bindLocalTransform;
                 outSkeleton->bones.push_back(bone);
                 outSkeleton->nameToIndex[bone.name] = idx;
                 for (unsigned c = 0; c < node->mNumChildren; ++c)
@@ -136,6 +138,37 @@ namespace StarryEngine::Assets {
                 }
             }
             LOG_INFO("[Skeleton] {} bones from node hierarchy ({} skinned with inverse bind)",outSkeleton->bones.size(), outSkeleton->getBoneCount());
+        }
+
+        // ── 读取动画：aiAnimation → AnimationClip（骨骼轨道）──
+        if (outClip && scene->mNumAnimations > 0) {
+            aiAnimation* anim = scene->mAnimations[0];   // 取第一个 clip
+            outClip->name = anim->mName.C_Str();
+            outClip->duration = anim->mDuration;
+            outClip->ticksPerSecond = anim->mTicksPerSecond;
+
+            for (unsigned c = 0; c < anim->mNumChannels; ++c) {
+                aiNodeAnim* chan = anim->mChannels[c];
+                BoneTrack track;
+                track.boneIndex = outSkeleton
+                    ? static_cast<int>(outSkeleton->getBoneIndex(chan->mNodeName.C_Str()))
+                    : -1;
+
+                for (unsigned k = 0; k < chan->mNumPositionKeys; ++k)
+                    track.positions.push_back({ static_cast<float>(chan->mPositionKeys[k].mTime),
+                        glm::vec3(chan->mPositionKeys[k].mValue.x, chan->mPositionKeys[k].mValue.y, chan->mPositionKeys[k].mValue.z) });
+                for (unsigned k = 0; k < chan->mNumRotationKeys; ++k)
+                    track.rotations.push_back({ static_cast<float>(chan->mRotationKeys[k].mTime),
+                        glm::quat(chan->mRotationKeys[k].mValue.w, chan->mRotationKeys[k].mValue.x,
+                                  chan->mRotationKeys[k].mValue.y, chan->mRotationKeys[k].mValue.z) });
+                for (unsigned k = 0; k < chan->mNumScalingKeys; ++k)
+                    track.scales.push_back({ static_cast<float>(chan->mScalingKeys[k].mTime),
+                        glm::vec3(chan->mScalingKeys[k].mValue.x, chan->mScalingKeys[k].mValue.y, chan->mScalingKeys[k].mValue.z) });
+
+                outClip->tracks.push_back(std::move(track));
+            }
+            LOG_INFO("[Clip] Loaded '{}' — {:.2f}s, {} bone tracks", outClip->name,
+                outClip->durationSeconds(), outClip->tracks.size());
         }
 
         extractMaterials(scene, outMaterials, resMgr);
@@ -194,6 +227,20 @@ namespace StarryEngine::Assets {
                     vertices[i + 2] *= s;
                 }
                 LOG_INFO("Model height {:.2f} > 10 units, scaled by {:.4f} → ~1.9m", height, s);
+
+                // 骨骼矩阵同步缩放到米（否则骨骼仍为 cm 尺度，蒙皮矩阵爆炸）。
+                // 只缩平移列；scale 列保持（inverseBindMatrix 的 S⁻¹ 会抵消
+                // globalTransform 的 S，破坏抵消会导致蒙皮矩阵巨大）。
+                if (outSkeleton) {
+                    auto scaleBone = [&](glm::mat4& m) {
+                        m[3][0] *= s; m[3][1] *= s; m[3][2] *= s;
+                    };
+                    for (auto& bone : outSkeleton->bones) {
+                        scaleBone(bone.bindLocalTransform);
+                        scaleBone(bone.localTransform);
+                        scaleBone(bone.inverseBindMatrix);
+                    }
+                }
             }
         }
 

@@ -1,5 +1,6 @@
 #pragma once
 #include "../../assets/animation/AnimationClip.hpp"
+#include "../../assets/animation/Skeleton.hpp"
 #include "../../core/Clock.hpp"
 #include <memory>
 
@@ -31,6 +32,10 @@ namespace StarryEngine::Scene {
         // 采样结果矩阵（Scene::update 用它写回 RenderObject.transform）
         const glm::mat4& getTransform() const { return m_transform; }
 
+        // 骨骼动画：采样 clip → 更新 Skeleton 的每帧矩阵
+        void updateSkeleton(Assets::Skeleton& skeleton, const Assets::AnimationClip& clip, float time);
+        const std::vector<glm::mat4>& getBoneMatrices() const { return m_boneMatrices; }
+
     private:
         std::shared_ptr<Assets::AnimationClip> m_clip;
         float m_time = 0.0f;
@@ -39,6 +44,7 @@ namespace StarryEngine::Scene {
         bool m_looping = true;
         bool m_playing = true;
         glm::mat4 m_transform = glm::mat4(1.0f);
+        std::vector<glm::mat4> m_boneMatrices;
     };
 
 } // namespace StarryEngine::Scene
