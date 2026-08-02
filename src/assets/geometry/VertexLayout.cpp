@@ -57,10 +57,10 @@ namespace StarryEngine::Assets {
     }
 
     uint32_t VertexLayout::getLocationForSemantic(VertexSemantic sem) const {
+        // 自定义映射优先，找不到回退默认 —— 支持"添加"自定义语义而不破坏默认
         if (m_hasCustomMapping) {
             auto it = m_semanticMapping.find(sem);
             if (it != m_semanticMapping.end()) return it->second;
-            return UINT32_MAX;  
         }
 
         auto defIt = DefaultSemanticLocation.find(sem);

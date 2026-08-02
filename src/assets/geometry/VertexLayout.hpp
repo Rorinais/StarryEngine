@@ -45,6 +45,8 @@ namespace StarryEngine::Assets {
         Normal,
         TexCoord0,
         Tangent,
+        BoneIndices,     
+        BoneWeights,     
         Color0,
         TexCoord1,
         InstanceMatrixRow0,

@@ -135,6 +135,15 @@ function(copy_target_resources TARGET_NAME RESOURCES_OUTPUT_DIR)
             "${ARG_MODELS}/*.gltf"
             "${ARG_MODELS}/*.glb"
             "${ARG_MODELS}/*.mtl"
+            # 模型贴图（.mtl 引用的相对路径，如 textures/xxx.png）
+            "${ARG_MODELS}/*.png"
+            "${ARG_MODELS}/*.jpg"
+            "${ARG_MODELS}/*.jpeg"
+            "${ARG_MODELS}/*.hdr"
+            "${ARG_MODELS}/*.tga"
+            "${ARG_MODELS}/*.bmp"
+            "${ARG_MODELS}/*.ktx"
+            "${ARG_MODELS}/*.dds"
         )
         foreach(model_file IN LISTS MODEL_FILES)
             file(RELATIVE_PATH relative_path "${ARG_MODELS}" "${model_file}")

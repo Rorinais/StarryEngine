@@ -186,7 +186,7 @@ namespace StarryEngine {
         item->isInstanced = instanced;
         if (instanced) {
             item->instanceCount = static_cast<uint32_t>(obj->instanceTransforms.size());
-            item->instanceBuffer = *obj->instanceBuffer;
+            item->instanceBuffer = obj->instanceBuffer;
             item->instanceBufferStride = instLayout->stride;
         }
         else {
@@ -216,15 +216,14 @@ namespace StarryEngine {
 
     void SceneAnalyzer::prepareInstanceBuffer(const std::shared_ptr<Scene::RenderObject>& obj) {
         size_t requiredSize = obj->instanceTransforms.size() * sizeof(glm::mat4);
-        if (!obj->instanceBuffer || !obj->instanceBuffer->isValid() ||
-            m_resMgr->getBuffer(*obj->instanceBuffer)->getSize() < requiredSize) {
+        if (!obj->instanceBuffer.isValid() ||
+            m_resMgr->getBuffer(obj->instanceBuffer)->getSize() < requiredSize) {
             RHI::BufferDesc bufDesc;
             bufDesc.size = requiredSize;
             bufDesc.type = RHI::BufferType::Vertex;
             bufDesc.memoryType = RHI::MemoryType::CPU_To_GPU;
             bufDesc.allowUpdate = true;
-            auto newHandle = m_resMgr->createBuffer(bufDesc);
-            obj->instanceBuffer = std::make_shared<RHI::BufferHandle>(newHandle);
+            obj->instanceBuffer = m_resMgr->createBuffer(bufDesc);
         }
     }
 

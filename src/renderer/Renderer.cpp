@@ -103,8 +103,8 @@ namespace StarryEngine {
 
     void Renderer::updateInstanceBuffers(const std::vector<std::shared_ptr<Scene::RenderObject>>& objects) {
         for (auto& obj : objects) {
-            if (obj->isInstanced && obj->instanceBuffer && obj->instanceBuffer->isValid() && !obj->instanceTransforms.empty()) {
-                auto* buf = m_resMgr->getBuffer(*obj->instanceBuffer);
+            if (obj->isInstanced && obj->instanceBuffer.isValid() && !obj->instanceTransforms.empty()) {
+                auto* buf = m_resMgr->getBuffer(obj->instanceBuffer);
                 if (buf) {
                     buf->update(obj->instanceTransforms.data(), obj->instanceTransforms.size() * sizeof(glm::mat4), 0);
                 }

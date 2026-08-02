@@ -246,6 +246,7 @@ public:
         return material;
     }
 
+    
     void createScene() {
         initIBL();
 
@@ -292,6 +293,7 @@ public:
         ground->transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -0.15f, 0.0f));
         m_scene->addObject(ground);
 
+        addGriseoModel();
 
         auto perspectiveCamera = std::make_shared<Scene::PerspectiveCamera>();
         perspectiveCamera->setPerspective(glm::radians(45.0f), (float)m_width / m_height, 0.1f, 100.0f);
@@ -304,6 +306,12 @@ public:
 
     std::shared_ptr< Scene::Scene> getScene() { return m_scene; }
 private:
+    bool loadModelGeometry(Assets::Geometry& outGeometry,std::vector<Assets::MaterialParams>& outParams,Assets::Skeleton* outSkeleton = nullptr);
+    std::shared_ptr<Assets::MaterialInstance> makeModelMaterial(const Assets::MaterialParams& param);
+    void addGriseoModel();
+
+    Assets::Skeleton m_modelSkeleton;
+
     uint32_t m_width, m_height;
     std::shared_ptr<RHI::IRHI> m_rhi;
     std::shared_ptr<Renderer> m_renderer;
@@ -324,6 +332,76 @@ private:
 
     std::shared_ptr<Assets::IBLBuilder> m_iblBuilder;
 };
+
+bool PBRDemo::loadModelGeometry(Assets::Geometry& outGeometry,std::vector<Assets::MaterialParams>& outParams,Assets::Skeleton* outSkeleton) {
+    if (!Assets::ModelLoader::loadFromFile(m_rhi->getResourceManager(),"assets/models/Griseo_Animation.fbx",outGeometry, outParams, outSkeleton)) {
+        LOG_ERROR("Failed to load model");
+        return false;
+    }
+    outGeometry.uploadToGPU();
+    return true;
+}
+
+std::shared_ptr<Assets::MaterialInstance> PBRDemo::makeModelMaterial(
+    const Assets::MaterialParams& param) {
+    std::string fsPath;
+    if (param.name == "body") fsPath = "assets/shaders/core/shader.frag";
+    else if (param.name == "brow") fsPath = "assets/shaders/core/shader.frag";
+    else if (param.name == "eyes") fsPath = "assets/shaders/core/shader.frag";
+    else if (param.name == "face") fsPath = "assets/shaders/core/face.frag";
+    else fsPath = "assets/shaders/core/hair.frag";
+
+    auto tmpl = std::make_shared<Assets::DefaultMaterialTemplate>(
+        m_rhi->getResourceManager(), m_descriptorSetLayout);
+    if (!tmpl->loadShaders("assets/shaders/core/shader.vert", fsPath)) {
+        LOG_ERROR("Failed to load shaders for material: {}", param.name);
+        return nullptr;
+    }
+
+    auto instance = std::make_shared<Assets::MaterialInstance>(
+        tmpl, m_descriptorPool, m_rhi->getResourceManager().get(), m_descriptorSet);
+
+    if (!param.albedoTexture.empty()) {
+        std::string fileName = param.albedoTexture;
+        auto slashPos = fileName.find_last_of("/\\");
+        if (slashPos != std::string::npos) fileName = fileName.substr(slashPos + 1);
+        std::string texPath = "assets/models/textures/" + fileName;
+        Assets::TextureLoader loader(m_rhi->getResourceManager());
+        auto texResult = loader.loadTexture2D(texPath, RHI::Format::RGBA8_UNorm);
+        if (texResult.texture.isValid()) {
+            instance->setTexture("texSampler", texResult.texture, texResult.sampler);
+        }
+        else {
+            LOG_ERROR("Failed to load texture: {}", texPath);
+        }
+    }
+    else {
+        LOG_WARN("Material {} has no albedo texture", param.name);
+    }
+
+    instance->setSubpassTag("Forward_Opaque");
+    instance->setDepthTest(true);
+    instance->setDepthWrite(true);
+    return instance;
+}
+
+void PBRDemo::addGriseoModel() {
+    auto geometry = std::make_shared<Assets::Geometry>(m_rhi->getResourceManager());
+    std::vector<Assets::MaterialParams> params;
+    if (!loadModelGeometry(*geometry, params, &m_modelSkeleton)) return;
+
+    std::vector<std::shared_ptr<Assets::MaterialInstance>> materials;
+    for (auto& param : params) {
+        auto inst = makeModelMaterial(param);
+        if (inst) materials.push_back(inst);
+    }
+
+    auto obj = std::make_shared<Scene::RenderObject>();
+    obj->geometry = geometry;
+    obj->materials = materials;
+    obj->transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 2.5f));
+    m_scene->addObject(obj);
+}
 
 
 int main() {

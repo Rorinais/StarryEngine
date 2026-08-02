@@ -17,7 +17,7 @@ namespace StarryEngine::Scene {
         std::vector<std::shared_ptr<Assets::MaterialInstance>> materials;
 
         std::vector<glm::mat4> instanceTransforms;
-        std::shared_ptr<RHI::BufferHandle> instanceBuffer;
+        RHI::BufferHandle instanceBuffer;   // 轻量句柄，值语义（与 DrawItem 一致）
         bool isInstanced = false;
 
         // 变换动画组件（可选）。由 Scene::update 驱动，改写 transform。
