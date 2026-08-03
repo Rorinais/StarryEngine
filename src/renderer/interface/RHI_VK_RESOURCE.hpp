@@ -35,13 +35,6 @@ namespace StarryEngine::RHI {
         void setIncludePaths(const std::vector<std::string>& includePaths) override{}
         bool recompile(const std::vector<uint8_t>& newBytecode) override { return false; }
 
-        std::vector<uint32_t> compileGLSL(
-            const std::string& source,
-            shaderc_shader_kind kind,
-            const std::vector<std::pair<std::string, std::string>>& macros,
-            const std::string& debugName);
-
-
     private:
         Device::Ptr mDevice;
         ShaderModuleDesc mDesc;

@@ -21,39 +21,6 @@ namespace StarryEngine::RHI {
         mDevice->destroyShaderModule(mShaderModule);
     }
 
-    std::vector<uint32_t> RHI_VK_ShaderModule::compileGLSL(
-        const std::string& source,
-        shaderc_shader_kind kind,
-        const std::vector<std::pair<std::string, std::string>>& macros,
-        const std::string& debugName) {
-        shaderc::CompileOptions options;
-        options.SetTargetEnvironment(
-            shaderc_target_env_vulkan,
-            shaderc_env_version_vulkan_1_2
-        );
-        options.SetOptimizationLevel(shaderc_optimization_level_performance);
-
-        // 添加用户定义的宏
-        for (const auto& [name, value] : macros) {
-            if (value.empty()) {
-                options.AddMacroDefinition(name);
-            }
-            else {
-                options.AddMacroDefinition(name, value);
-            }
-        }
-
-        shaderc::SpvCompilationResult result = mCompiler.CompileGlslToSpv(
-            source, kind, debugName.c_str(), options
-        );
-
-        if (result.GetCompilationStatus() != shaderc_compilation_status_success) {
-            throw std::runtime_error("Shader compile error: " + debugName + "\n" + result.GetErrorMessage());
-        }
-
-        return { result.cbegin(), result.cend() };
-    }
-
     //RHI_VK_Buffer
     // ==================== 构造函数和析构函数 ====================
     RHI_VK_Buffer::RHI_VK_Buffer(std::shared_ptr<Device> device, const BufferDesc& desc)

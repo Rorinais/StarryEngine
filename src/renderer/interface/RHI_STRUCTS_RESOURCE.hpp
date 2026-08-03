@@ -151,6 +151,9 @@ namespace StarryEngine::RHI {
         // 描述符集布局
         virtual uint32_t getDescriptorSetCount() const = 0;
 
+        // 取某个 set 对应的布局句柄（用于从 pipelineLayout 反查 descriptor set layout）
+        virtual DescriptorSetLayoutHandle getLayoutHandle(uint32_t setIndex) const = 0;
+
         // 推送常量
         virtual uint32_t getPushConstantRangeCount() const = 0;
 

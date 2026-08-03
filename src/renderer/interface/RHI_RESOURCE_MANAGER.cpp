@@ -8,8 +8,6 @@ namespace StarryEngine::RHI {
         : factory_(std::move(factory)) {
         assert(factory_ != nullptr && "Resource factory must be provided");
         initStatistics();
-
-        factory_->setResourceManager(this);
     }
 
     ResourceManager::~ResourceManager() {
@@ -80,7 +78,12 @@ namespace StarryEngine::RHI {
     PipelineHandle ResourceManager::createGraphicsPipeline(const GraphicsPipelineDesc& desc,
         const std::string& name,
         const std::string& debugTag) {
-        auto resource = factory_->createPipeline(desc);
+        // 解析句柄 → 实际 RHI 对象，交给工厂（工厂不持有 ResourceManager）
+        auto* layoutObj = getPipelineLayout(desc.pipelineLayoutHandle);
+        auto* vsObj = getShader(desc.vertexShader);
+        auto* fsObj = getShader(desc.fragmentShader);
+        auto* rpObj = getRenderPass(desc.renderPass);
+        auto resource = factory_->createPipeline(desc, layoutObj, vsObj, fsObj, rpObj);
         if (!resource) {
             if (debugMode_) {
                 std::cerr << "[ResourceManager] Failed to create graphics pipeline: " << name << std::endl;
@@ -103,7 +106,9 @@ namespace StarryEngine::RHI {
     PipelineHandle ResourceManager::createComputePipeline(const ComputePipelineDesc& desc,
         const std::string& name,
         const std::string& debugTag) {
-        auto resource = factory_->createComputePipeline(desc);
+        auto* shaderObj = getShader(desc.computeShader);
+        auto* layoutObj = getPipelineLayout(desc.pipelineLayoutHandle);
+        auto resource = factory_->createComputePipeline(desc, shaderObj, layoutObj);
         if (!resource) {
             if (debugMode_) {
                 std::cerr << "[ResourceManager] Failed to create compute pipeline: " << name << std::endl;
@@ -126,7 +131,11 @@ namespace StarryEngine::RHI {
     PipelineLayoutHandle ResourceManager::createPipelineLayout(const PipelineLayoutDesc& desc,
         const std::string& name,
         const std::string& debugTag) {
-        auto resource = factory_->createPipelineLayout(desc);
+        std::vector<RHIDescriptorSetLayout*> layouts;
+        layouts.reserve(desc.descriptorSetLayouts.size());
+        for (auto handle : desc.descriptorSetLayouts)
+            layouts.push_back(getDescriptorSetLayout(handle));
+        auto resource = factory_->createPipelineLayout(desc, layouts);
         if (!resource) {
             if (debugMode_) {
                 std::cerr << "[ResourceManager] Failed to create pipeline layout: " << name << std::endl;
@@ -242,7 +251,16 @@ namespace StarryEngine::RHI {
     DescriptorSetHandle ResourceManager::createDescriptorSet(const DescriptorSetDesc& desc,
         const std::string& name,
         const std::string& debugTag) {
-        auto resource = factory_->createDescriptorSet(desc);
+        // 解析句柄 → 实际 RHI 对象（含 fallback：没有显式 layout 时从 pipelineLayout 取）
+        auto* pool = getDescriptorPool(desc.descriptorPool);
+        RHIDescriptorSetLayout* layout = nullptr;
+        if (desc.descriptorSetLayout.isValid()) {
+            layout = getDescriptorSetLayout(desc.descriptorSetLayout);
+        }
+        else if (auto* pipelineLayout = getPipelineLayout(desc.pipelineLayout)) {
+            layout = getDescriptorSetLayout(pipelineLayout->getLayoutHandle(desc.setIndex));
+        }
+        auto resource = factory_->createDescriptorSet(desc, pool, layout);
         if (!resource) {
             if (debugMode_) {
                 std::cerr << "[ResourceManager] Failed to create descriptor set: " << name << std::endl;

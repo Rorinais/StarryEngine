@@ -12,37 +12,16 @@ namespace StarryEngine::RHI {
         return std::make_unique<RHI_VK_Texture>(mDevice, desc);
     }
 
-    std::unique_ptr<RHIPipeline> VKResourceFactory::createPipeline(const GraphicsPipelineDesc& desc) {
-        // 检查 PipelineLayout
-        auto* layoutObj = mResourceManager->getPipelineLayout(desc.pipelineLayoutHandle);
-        if (!layoutObj) {
-            std::cerr << "[VKResourceFactory] PipelineLayout is null for handle: " << desc.pipelineLayoutHandle.toString() << std::endl;
-            return nullptr;
-        }
+    std::unique_ptr<RHIPipeline> VKResourceFactory::createPipeline(const GraphicsPipelineDesc& desc,
+        RHIPipelineLayout* layoutObj,
+        RHIShaderModule* rhiVertexShader,
+        RHIShaderModule* rhiFragmentShader,
+        RHIRenderPass* renderPassObj) {
+        if (!layoutObj || !rhiVertexShader || !rhiFragmentShader || !renderPassObj) return nullptr;
+
         auto layout = static_cast<VkPipelineLayout>(layoutObj->getNativeHandle());
-
-        // 检查 VertexShader
-        auto* rhiVertexShader = mResourceManager->getShader(desc.vertexShader);
-        if (!rhiVertexShader) {
-            std::cerr << "[VKResourceFactory] VertexShader is null for handle: " << desc.vertexShader.toString() << std::endl;
-            return nullptr;
-        }
         auto vertexShader = static_cast<VkShaderModule>(rhiVertexShader->getNativeHandle());
-
-        // 检查 FragmentShader
-        auto* rhiFragmentShader = mResourceManager->getShader(desc.fragmentShader);
-        if (!rhiFragmentShader) {
-            std::cerr << "[VKResourceFactory] FragmentShader is null for handle: " << desc.fragmentShader.toString() << std::endl;
-            return nullptr;
-        }
         auto fragmentShader = static_cast<VkShaderModule>(rhiFragmentShader->getNativeHandle());
-
-        // 检查 RenderPass
-        auto* renderPassObj = mResourceManager->getRenderPass(desc.renderPass);
-        if (!renderPassObj) {
-            std::cerr << "[VKResourceFactory] RenderPass is null for handle: " << desc.renderPass.toString() << std::endl;
-            return nullptr;
-        }
         auto renderPass = static_cast<VkRenderPass>(renderPassObj->getNativeHandle());
 
         std::vector<VkPipelineShaderStageCreateInfo> shaderStage{
@@ -53,14 +32,12 @@ namespace StarryEngine::RHI {
         return std::make_unique<RHI_VK_Pipeline>(mDevice, desc, shaderStage, layout, renderPass);
     }
 
-    std::unique_ptr<RHIPipeline> VKResourceFactory::createComputePipeline(const ComputePipelineDesc& desc) {
-        auto* rhiShader = mResourceManager->getShader(desc.computeShader);
-        if (!rhiShader) return nullptr;
-        auto shaderModule = static_cast<VkShaderModule>(rhiShader->getNativeHandle());
+    std::unique_ptr<RHIPipeline> VKResourceFactory::createComputePipeline(const ComputePipelineDesc& desc,
+        RHIShaderModule* rhiShader,
+        RHIPipelineLayout* layoutObj) {
+        if (!rhiShader || !layoutObj) return nullptr;
 
-        // 2. 获取管线布局
-        auto* layoutObj = mResourceManager->getPipelineLayout(desc.pipelineLayoutHandle);
-        if (!layoutObj) return nullptr;
+        auto shaderModule = static_cast<VkShaderModule>(rhiShader->getNativeHandle());
         auto layout = static_cast<VkPipelineLayout>(layoutObj->getNativeHandle());
 
         auto shaderStage = mDevice->createShaderStageInfo(shaderModule, FUNC::RHI_TO_VK_ShaderStageFlag(rhiShader->getStage()), rhiShader->getEntryPoint().c_str());
@@ -68,12 +45,14 @@ namespace StarryEngine::RHI {
         return std::make_unique<RHI_VK_ComputePipeline>(mDevice, desc, shaderStage, layout);
     }
 
-    std::unique_ptr<RHIPipelineLayout> VKResourceFactory::createPipelineLayout(const PipelineLayoutDesc& desc) {
+    std::unique_ptr<RHIPipelineLayout> VKResourceFactory::createPipelineLayout(
+        const PipelineLayoutDesc& desc,
+        const std::vector<RHIDescriptorSetLayout*>& descriptorSetLayouts) {
         std::vector<VkDescriptorSetLayout> vkDescSetlayouts{};
-        for (auto desSet : desc.descriptorSetLayouts) {
-			 auto rhiDesSetlayout = mResourceManager->getDescriptorSetLayout(desSet);
-             auto desSetlayout = static_cast<VkDescriptorSetLayout>(rhiDesSetlayout->getNativeHandle());
-			 vkDescSetlayouts.push_back(desSetlayout);
+        vkDescSetlayouts.reserve(descriptorSetLayouts.size());
+        for (auto* rhiDesSetlayout : descriptorSetLayouts) {
+            if (!rhiDesSetlayout) return nullptr;
+            vkDescSetlayouts.push_back(static_cast<VkDescriptorSetLayout>(rhiDesSetlayout->getNativeHandle()));
         }
         return std::make_unique<RHI_VK_PipelineLayout>(mDevice, desc, vkDescSetlayouts);
     }
@@ -94,43 +73,19 @@ namespace StarryEngine::RHI {
 		return std::make_unique<RHI_VK_Framebuffer>(mDevice, desc);
     }
 
-    std::unique_ptr<RHIDescriptorSet> VKResourceFactory::createDescriptorSet(const DescriptorSetDesc& desc) {
-        if (!mResourceManager) {
-            throw std::runtime_error("ResourceManager not set in VKResourceFactory");
+    std::unique_ptr<RHIDescriptorSet> VKResourceFactory::createDescriptorSet(const DescriptorSetDesc& desc,
+        RHIDescriptorPool* poolObj,
+        RHIDescriptorSetLayout* layoutObj) {
+        if (!poolObj || !layoutObj) {
+            throw std::runtime_error("Invalid descriptor pool/layout in VKResourceFactory");
         }
 
-        // 1. 获取描述符池
-        auto* pool = dynamic_cast<RHI_VK_DescriptorPool*>(mResourceManager->getDescriptorPool(desc.descriptorPool));
-        if (!pool) {
-            throw std::runtime_error("Invalid descriptor pool handle");
+        auto* pool = dynamic_cast<RHI_VK_DescriptorPool*>(poolObj);
+        auto* layout = dynamic_cast<RHI_VK_DescriptorSetLayout*>(layoutObj);
+        if (!pool || !layout) {
+            throw std::runtime_error("Descriptor pool/layout is not a Vulkan resource");
         }
 
-        RHI_VK_DescriptorSetLayout* layout = nullptr;
-
-        // 2. 优先使用显式传入的 descriptorSetLayout
-        if (desc.descriptorSetLayout.isValid()) {
-            layout = dynamic_cast<RHI_VK_DescriptorSetLayout*>(mResourceManager->getDescriptorSetLayout(desc.descriptorSetLayout));
-            if (!layout) {
-                throw std::runtime_error("Invalid descriptor set layout handle");
-            }
-        }
-        else {
-            // 回退到通过 pipelineLayout 获取
-            auto* pipelineLayout = dynamic_cast<RHI_VK_PipelineLayout*>(mResourceManager->getPipelineLayout(desc.pipelineLayout));
-            if (!pipelineLayout) {
-                throw std::runtime_error("Invalid pipeline layout handle");
-            }
-            auto layoutHandle = pipelineLayout->getLayoutHandle(desc.setIndex);
-            if (!layoutHandle.isValid()) {
-                throw std::runtime_error("No descriptor set layout at set index " + std::to_string(desc.setIndex));
-            }
-            layout = dynamic_cast<RHI_VK_DescriptorSetLayout*>(mResourceManager->getDescriptorSetLayout(layoutHandle));
-            if (!layout) {
-                throw std::runtime_error("Invalid descriptor set layout handle");
-            }
-        }
-
-        // 3. 分配描述符集
         auto sets = pool->allocateDescriptorSets({ layout });
         if (sets.empty()) {
             throw std::runtime_error("Failed to allocate descriptor set");
@@ -207,20 +162,18 @@ namespace StarryEngine::RHI {
 
     std::vector<std::unique_ptr<RHIDescriptorSet>> VKResourceFactory::createDescriptorSets(
         uint32_t count,
-        const DescriptorSetDesc& desc) {
+        const DescriptorSetDesc& desc,
+        RHIDescriptorPool* pool,
+        RHIDescriptorSetLayout* layout) {
 
         std::vector<std::unique_ptr<RHIDescriptorSet>> sets;
         sets.reserve(count);
 
         for (uint32_t i = 0; i < count; ++i) {
-            sets.push_back(createDescriptorSet(desc));
+            sets.push_back(createDescriptorSet(desc, pool, layout));
         }
 
         return sets;
-    }
-
-    void VKResourceFactory::setResourceManager(ResourceManager* ptr) {
-        mResourceManager = ptr;
     }
 
     // 状态设置
