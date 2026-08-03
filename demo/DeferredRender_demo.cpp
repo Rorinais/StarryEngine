@@ -315,6 +315,7 @@ private:
 
     Assets::Skeleton m_modelSkeleton;
     Assets::AnimationClip m_modelClip;
+    std::string m_modelTextureDir = "fuxuan";   // 模型贴图子目录（assets/models/textures/ 下）
 
     // 骨骼动画运行时状态
     Scene::Animator m_skeletalAnimator;
@@ -344,7 +345,7 @@ private:
 };
 
 bool PBRDemo::loadModelGeometry(Assets::Geometry& outGeometry,std::vector<Assets::MaterialParams>& outParams,Assets::Skeleton* outSkeleton) {
-    if (!Assets::ModelLoader::loadFromFile(m_rhi->getResourceManager(),"assets/models/Griseo_Animation.fbx",outGeometry, outParams, outSkeleton, &m_modelClip)) {
+    if (!Assets::ModelLoader::loadFromFile(m_rhi->getResourceManager(),"assets/models/fuxuan_Animation.fbx",outGeometry, outParams, outSkeleton, &m_modelClip)) {
         LOG_ERROR("Failed to load model");
         return false;
     }
@@ -355,11 +356,10 @@ bool PBRDemo::loadModelGeometry(Assets::Geometry& outGeometry,std::vector<Assets
 std::shared_ptr<Assets::MaterialInstance> PBRDemo::makeModelMaterial(
     const Assets::MaterialParams& param, bool skinned) {
     std::string fsPath;
-    if (param.name == "body") fsPath = "assets/shaders/core/shader.frag";
-    else if (param.name == "brow") fsPath = "assets/shaders/core/shader.frag";
-    else if (param.name == "eyes") fsPath = "assets/shaders/core/shader.frag";
-    else if (param.name == "face") fsPath = "assets/shaders/core/face.frag";
-    else fsPath = "assets/shaders/core/hair.frag";
+    // 材质名 → fragment shader（fuxuan：下裙/裙→shader，脸/表情→face，髪→hair；兼容 Griseo 名）
+    if (param.name == "face" || param.name == "脸" || param.name == "表情") fsPath = "assets/shaders/core/face.frag";
+    else if (param.name == "hair" || param.name == "髪") fsPath = "assets/shaders/core/hair.frag";
+    else fsPath = "assets/shaders/core/shader.frag";
 
     // 有骨骼的模型用蒙皮顶点着色器（loc4/5 骨骼属性 + set1/binding2 骨骼矩阵 SSBO）
     const char* vsPath = skinned ? "assets/shaders/core/shader_skinned.vert"
@@ -375,12 +375,12 @@ std::shared_ptr<Assets::MaterialInstance> PBRDemo::makeModelMaterial(
     auto instance = std::make_shared<Assets::MaterialInstance>(
         tmpl, m_descriptorPool, m_rhi->getResourceManager().get(), m_descriptorSet);
 
+    Assets::TextureLoader loader(m_rhi->getResourceManager());
     if (!param.albedoTexture.empty()) {
         std::string fileName = param.albedoTexture;
         auto slashPos = fileName.find_last_of("/\\");
         if (slashPos != std::string::npos) fileName = fileName.substr(slashPos + 1);
-        std::string texPath = "assets/models/textures/" + fileName;
-        Assets::TextureLoader loader(m_rhi->getResourceManager());
+        std::string texPath = "assets/models/textures/" + m_modelTextureDir + "/" + fileName;
         auto texResult = loader.loadTexture2D(texPath, RHI::Format::RGBA8_UNorm);
         if (texResult.texture.isValid()) {
             instance->setTexture("texSampler", texResult.texture, texResult.sampler);
@@ -390,7 +390,12 @@ std::shared_ptr<Assets::MaterialInstance> PBRDemo::makeModelMaterial(
         }
     }
     else {
-        LOG_WARN("Material {} has no albedo texture", param.name);
+        // 无贴图材质（如 mmd_tools_rigid 物理刚体）：绑 1×1 白色贴图，
+        // 避免 texSampler 描述符从未写入 → 绘制时 validation 报错。
+        static const uint8_t kWhite[4] = { 255, 255, 255, 255 };
+        auto white = loader.loadTextureFromMemory(kWhite, 1, 1, RHI::Format::RGBA8_UNorm, "White");
+        if (white.texture.isValid())
+            instance->setTexture("texSampler", white.texture, white.sampler);
     }
 
     instance->setSubpassTag("Forward_Opaque");
