@@ -345,10 +345,26 @@ private:
 };
 
 bool PBRDemo::loadModelGeometry(Assets::Geometry& outGeometry,std::vector<Assets::MaterialParams>& outParams,Assets::Skeleton* outSkeleton) {
-    if (!Assets::ModelLoader::loadFromFile(m_rhi->getResourceManager(),"assets/models/fuxuan_Animation.fbx",outGeometry, outParams, outSkeleton, &m_modelClip)) {
+    Assets::ModelLoader loader(m_rhi->getResourceManager());
+    if (!loader.open("assets/models/fuxuan_Animation.fbx")) {
         LOG_ERROR("Failed to load model");
         return false;
     }
+
+    auto skeleton = loader.loadSkeleton();
+    auto geometry = loader.loadGeometry();
+    auto clip     = loader.loadClip();
+    auto materials = loader.loadMaterials();
+    if (!skeleton || !geometry || !clip) {
+        LOG_ERROR("Failed to extract model data");
+        return false;
+    }
+
+    *outSkeleton = std::move(*skeleton);
+    m_modelClip = std::move(*clip);
+    outParams = std::move(materials);
+    outGeometry = std::move(*geometry);
+
     outGeometry.uploadToGPU();
     return true;
 }
@@ -463,6 +479,7 @@ int main() {
 #endif
     StarryEngine::Logger::init();
     StarryEngine::Logger::setShowSourceLoc(true);
+    StarryEngine::Logger::setLevel("warn"); 
     StarryEngine::Application app;
 
     auto demo = std::make_shared<PBRDemo>(app.getRenderHardwareInterface(), app.getGlobalDescriptorPool(), app.getWidth(), app.getHeight());

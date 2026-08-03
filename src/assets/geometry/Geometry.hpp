@@ -17,6 +17,11 @@ namespace StarryEngine::Assets {
     public:
         Geometry(std::shared_ptr<RHI::ResourceManager> resMgr);
         ~Geometry();
+        // 移动语义：ModelLoader::Result 按值返回时需要高效移动（析构已声明 → 隐式 move 被抑制）
+        Geometry(Geometry&&) noexcept = default;
+        Geometry& operator=(Geometry&&) noexcept = default;
+        Geometry(const Geometry&) = delete;
+        Geometry& operator=(const Geometry&) = delete;
 
         bool uploadToGPU();
         void releaseGPU();
