@@ -154,9 +154,6 @@ namespace StarryEngine::Assets {
                 aiNodeAnim* chan = anim->mChannels[c];
                 const std::string nodeName = chan->mNodeName.C_Str();
 
-                // 跳过 Blender 叶子骨骼（"_end" 后缀，add leaf bones 产生）的动画轨道：
-                // 叶子骨骼位于手指尖/脖子尖/脚尖，key all bones 会给它们烘焙独立旋转，
-                // 使末端额外甩动 → 手指拉丝/脖子螺旋。跳过轨道让它们保持绑定姿势、跟随父骨骼。
                 if (nodeName.size() >= 4 && nodeName.compare(nodeName.size() - 4, 4, "_end") == 0)
                     continue;
 

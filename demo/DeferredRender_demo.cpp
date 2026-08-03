@@ -315,7 +315,7 @@ private:
 
     Assets::Skeleton m_modelSkeleton;
     Assets::AnimationClip m_modelClip;
-    std::string m_modelTextureDir = "fuxuan";   // 模型贴图子目录（assets/models/textures/ 下）
+    std::string m_modelTextureDir = "fuxuan";  
 
     // 骨骼动画运行时状态
     Scene::Animator m_skeletalAnimator;
@@ -356,14 +356,11 @@ bool PBRDemo::loadModelGeometry(Assets::Geometry& outGeometry,std::vector<Assets
 std::shared_ptr<Assets::MaterialInstance> PBRDemo::makeModelMaterial(
     const Assets::MaterialParams& param, bool skinned) {
     std::string fsPath;
-    // 材质名 → fragment shader（fuxuan：下裙/裙→shader，脸/表情→face，髪→hair；兼容 Griseo 名）
     if (param.name == "face" || param.name == "脸" || param.name == "表情") fsPath = "assets/shaders/core/face.frag";
     else if (param.name == "hair" || param.name == "髪") fsPath = "assets/shaders/core/hair.frag";
     else fsPath = "assets/shaders/core/shader.frag";
 
-    // 有骨骼的模型用蒙皮顶点着色器（loc4/5 骨骼属性 + set1/binding2 骨骼矩阵 SSBO）
-    const char* vsPath = skinned ? "assets/shaders/core/shader_skinned.vert"
-                                 : "assets/shaders/core/shader.vert";
+    const char* vsPath = skinned ? "assets/shaders/core/shader_skinned.vert": "assets/shaders/core/shader.vert";
 
     auto tmpl = std::make_shared<Assets::DefaultMaterialTemplate>(
         m_rhi->getResourceManager(), m_descriptorSetLayout);
@@ -390,8 +387,6 @@ std::shared_ptr<Assets::MaterialInstance> PBRDemo::makeModelMaterial(
         }
     }
     else {
-        // 无贴图材质（如 mmd_tools_rigid 物理刚体）：绑 1×1 白色贴图，
-        // 避免 texSampler 描述符从未写入 → 绘制时 validation 报错。
         static const uint8_t kWhite[4] = { 255, 255, 255, 255 };
         auto white = loader.loadTextureFromMemory(kWhite, 1, 1, RHI::Format::RGBA8_UNorm, "White");
         if (white.texture.isValid())
@@ -423,7 +418,6 @@ void PBRDemo::addGriseoModel() {
     obj->transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 2.5f));
     m_scene->addObject(obj);
 
-    // 记录蒙皮材质，每帧上传骨骼矩阵 SSBO（set1/binding2）
     m_skeletalReady = skinned;
     if (m_skeletalReady) {
         m_skinnedMaterials = materials;
