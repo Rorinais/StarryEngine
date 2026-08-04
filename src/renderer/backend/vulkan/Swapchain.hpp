@@ -79,6 +79,9 @@ namespace StarryEngine {
         VkSurfaceFormatKHR chooseSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& formats) const;
         VkPresentModeKHR choosePresentMode(const std::vector<VkPresentModeKHR>& presentModes) const;
         VkExtent2D chooseExtent(const VkSurfaceCapabilitiesKHR& capabilities, uint32_t width, uint32_t height) const;
+        // 依据表面能力验证/挑选 composite alpha：透明窗口请求 alpha，不支持则回退 OPAQUE
+        VkCompositeAlphaFlagBitsKHR pickCompositeAlpha(
+            VkCompositeAlphaFlagsKHR supported, VkCompositeAlphaFlagBitsKHR requested) const;
 
     private:
         std::shared_ptr<Device> mDevice;

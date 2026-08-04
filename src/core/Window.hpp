@@ -12,8 +12,21 @@ namespace StarryEngine {
             int monitorIndex = 0;
             bool fullScreen = false;
             bool highDPI = false;
-            bool scaleToMonitor = true;  
+            bool scaleToMonitor = true;
             const char* iconPath = nullptr;
+
+            // 透明窗口（桌面角色需要）：窗口支持逐像素 alpha 合成
+            bool transparent = false;
+            bool decorated = true;    // 有边框（透明窗口通常设为 false）
+            bool floating = false;    // 置顶显示
+
+            // 鼠标点击穿透：透明区域不拦截点击，事件落到桌面/下层窗口。
+            // X11/Windows 走 GLFW_MOUSE_PASSTHROUGH；原生 Wayland 手动设空输入区。
+            bool clickThrough = false;
+
+            // Wayland 会话下默认强制 X11 (XWayland)，因其 Vulkan surface 不支持 alpha 合成。
+            // 透明窗口需改走原生 Wayland（无边框时不受当初的装饰问题影响）。
+            bool nativeWayland = false;
         };
 
         using Ptr = std::shared_ptr<Window>;
@@ -35,6 +48,9 @@ namespace StarryEngine {
         bool shouldClose() const;
         void pollEvents() const;
 
+        // 运行时切换鼠标穿透（透明区不挡点击）。返回是否成功生效。
+        bool setClickThrough(bool enable);
+
         float getAspectRatio() const noexcept {
             return static_cast<float>(mConfig.width) / static_cast<float>(mConfig.height);
         }
@@ -43,6 +59,8 @@ namespace StarryEngine {
         static void terminateGLFW();
         bool loadIconFromFile(const char* path, GLFWimage& image);
         bool loadIconFromMemory(const unsigned char* data, int width, int height, int channels, GLFWimage& image);
+        bool applyWaylandClickThrough(bool enable);
+        void reapplyClickThrough();
 
     private:
         GLFWwindow* mWindow = nullptr;

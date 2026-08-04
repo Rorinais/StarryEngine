@@ -189,7 +189,7 @@ namespace StarryEngine {
         }
 
         createInfo.preTransform = support.capabilities.currentTransform;
-        createInfo.compositeAlpha = mConfig.compositeAlpha;
+        createInfo.compositeAlpha = pickCompositeAlpha(support.capabilities.supportedCompositeAlpha, mConfig.compositeAlpha);
         createInfo.presentMode = mPresentMode;
         createInfo.clipped = mConfig.clipped;
         createInfo.oldSwapchain = oldSwapchain;  
@@ -294,6 +294,18 @@ namespace StarryEngine {
             capabilities.maxImageExtent.height);
 
         return actualExtent;
+    }
+
+    VkCompositeAlphaFlagBitsKHR SwapChain::pickCompositeAlpha(
+        VkCompositeAlphaFlagsKHR supported, VkCompositeAlphaFlagBitsKHR requested) const {
+        // 透明窗口请求 alpha 合成：优先 PRE_MULTIPLIED，其次 POST_MULTIPLIED；
+        // 表面不支持 alpha（例如某些平台/合成器关闭）则回退 OPAQUE（规范保证必然支持）
+        if (requested != VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR) {
+            if (supported & VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR) return VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR;
+            if (supported & VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR) return VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR;
+            std::cerr << "[SwapChain] 表面不支持 alpha 合成，透明窗口回退为不透明" << std::endl;
+        }
+        return VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
     }
 
     void SwapChain::printInfo() const {

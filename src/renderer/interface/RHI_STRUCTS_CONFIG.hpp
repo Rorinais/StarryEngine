@@ -206,6 +206,9 @@ namespace StarryEngine::RHI {
             IMMEDIATE   // 立即呈现
         };
 
+        // 透明窗口：请求 swapchain alpha 合成（PRS/POST_MULTIPLIED），让桌面透过来
+        bool requestTransparentSwapchain = false;
+
         PresentMode presentMode = PresentMode::FIFO;
         bool enableMailboxMode = false;
         bool enableImmediateMode = false;

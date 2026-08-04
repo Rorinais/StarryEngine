@@ -2,18 +2,30 @@
 
 
 namespace StarryEngine {
-    Application::Application() {
+    Application::Application() : Application(Config{}) {}
+
+    Application::Application(const Config& cfg) {
+        m_width = cfg.width;
+        m_height = cfg.height;
+        m_title = cfg.title;
+        m_icon_path = cfg.iconPath;
+
         Window::Config config;
         config.width = m_width;
         config.height = m_height;
         config.title = m_title;
         config.iconPath = m_icon_path;
-        config.highDPI = false;
-        config.resizable = true;
+        config.highDPI = cfg.highDPI;
+        config.resizable = cfg.resizable;
         config.fullScreen = false;
+        config.transparent = cfg.transparent;
+        config.decorated = !cfg.borderless;
+        config.floating = cfg.alwaysOnTop;
+        config.clickThrough = cfg.clickThrough;
+        config.nativeWayland = cfg.nativeWayland;   // 仅 Linux 生效，其他平台忽略
         m_window = Window::create(config);
 
-        m_rhi = VulkanRHIFactory::createDefault(RHI::API::Vulkan, m_window, m_width, m_height, m_flightFrame);
+        m_rhi = VulkanRHIFactory::createDefault(RHI::API::Vulkan, m_window, m_width, m_height, m_flightFrame, cfg.transparent);
         if (!m_rhi) LOG_ERROR("Failed to create RHI!");
 
         createDescriptorPool();
@@ -527,9 +539,10 @@ namespace StarryEngine {
                 if (m_cameraController) {
                     m_cameraController->setEnabled(true);
                     m_cameraController->resetMouse();
+                    // 仅在确实有相机控制器时才 warp 指针（Wayland 不支持，无控制器时空转也免了）
+                    glfwSetCursorPos(m_window->getHandle(), m_width / 2, m_height / 2);
+                    glfwSetInputMode(m_window->getHandle(), GLFW_CURSOR, GLFW_CURSOR_DISABLED);
                 }
-                glfwSetCursorPos(m_window->getHandle(), m_width / 2, m_height / 2);
-                glfwSetInputMode(m_window->getHandle(), GLFW_CURSOR, GLFW_CURSOR_DISABLED);
             }
             else if (ev.getAction() == GLFW_RELEASE) {
                 m_controlActive = false;

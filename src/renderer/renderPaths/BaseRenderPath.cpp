@@ -52,7 +52,8 @@ namespace StarryEngine {
     }
 
     void BaseRenderPath::onResize(uint32_t width, uint32_t height) {
-        if (width == m_width && height == m_height) return;  // 尺寸未变，跳过
+        // 注意：swapchain 可能在同尺寸下重建（present 返回 SUBOPTIMAL/OUT_OF_DATE，如 XWayland 首帧），
+        // 此时旧 image views 已被销毁，必须重建渲染图重新导入 —— 不能因为尺寸未变就跳过。
         if (width == 0 || height == 0) return;
         m_width = width; m_height = height;
         for (auto& [name, desc] : m_textureDescs) {
@@ -176,7 +177,7 @@ namespace StarryEngine {
         scParams.storeOp = RHI::AttachmentStoreOp::Store;
         scParams.initialLayout = RHI::ImageLayout::Undefined;
         scParams.finalLayout = RHI::ImageLayout::PresentSrc;
-        scParams.clearColor = { 0.08f, 0.08f, 0.10f, 1.0f };
+        scParams.clearColor = m_presentClearColor;
         auto swapchainTexId = texIdMap.at(m_swapchainTextureName);
         std::string scKey = passNode->addColorOutput(swapchainTexId, scParams);
         subpassBuilder.addColorAttachmentRef(scKey);

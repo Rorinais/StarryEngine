@@ -20,11 +20,13 @@ namespace StarryEngine {
 
         static std::shared_ptr<RHI::IRHI> createDefault(RHI::API api, Window::Ptr window,
             uint32_t width, uint32_t height,
-            uint32_t flightFrame = 2) {
+            uint32_t flightFrame = 2,
+            bool transparent = false) {
             RHI::RHIInitConfig rhiConfig;
             rhiConfig.windowHandle = window->getHandle();
             rhiConfig.windowWidth = width;
             rhiConfig.windowHeight = height;
+            rhiConfig.requestTransparentSwapchain = transparent;
             rhiConfig.appName = "StarryEngine Application";
             rhiConfig.appVersion = { 1, 0, 0 };
             rhiConfig.engineName = "StarryEngine";

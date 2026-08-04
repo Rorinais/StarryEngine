@@ -63,3 +63,14 @@ add_engine_executable(
     TEXTURES_DIR ${TEXTURES_DIR}
     ICONS_DIR ${ICONS_DIR}
 )
+
+add_engine_executable(
+    TARGET_NAME TransparentWindow_demo
+    SOURCES ../demo/TransparentWindow_demo.cpp
+    OUTPUT_DIR ${CMAKE_BINARY_DIR}/bin
+    SHADERS_DIR ${SHADERS_DIR}
+    FONTS_DIR ${FONTS_DIR}
+    MODELS_DIR ${MODELS_DIR}
+    TEXTURES_DIR ${TEXTURES_DIR}
+    ICONS_DIR ${ICONS_DIR}
+)

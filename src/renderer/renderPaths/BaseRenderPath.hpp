@@ -32,6 +32,9 @@ namespace StarryEngine {
         void setTextureDescs(const std::unordered_map<std::string, RHI::TextureDesc>& descs);
         void setPresentationDescriptorData(RHI::DescriptorSetLayoutHandle globalSetLayout,RHI::DescriptorSetHandle globalDescSet);
 
+        // 透明窗口：present 清屏色可配（alpha=0 让桌面透过来）
+        void setPresentClearColor(const RHI::Color& color) { m_presentClearColor = color; }
+
         void addOverlayPass(const OverlayPassDesc& desc) override { m_overlayPasses.push_back(desc); }
         void removeOverlayPass(const std::string& tag) override;
         void clearOverlayPasses() override { m_overlayPasses.clear(); }
@@ -73,6 +76,7 @@ namespace StarryEngine {
         bool m_resourceStatsPrinted = false;
         RHI::SamplerHandle m_defaultSampler;
         std::string m_swapchainTextureName = "Swapchain";
+        RHI::Color m_presentClearColor = { 0.08f, 0.08f, 0.10f, 1.0f };
 
         // 子通道 → PassNode 映射（子类构建 config pass 时填充）
         std::unordered_map<std::string, SubpassTarget> m_tagToSubpass;

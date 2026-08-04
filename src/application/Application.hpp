@@ -41,7 +41,23 @@
 namespace StarryEngine {
     class Application {
     public:
+        // 启动配置：窗口尺寸 / 透明窗口（桌面角色）等
+        struct Config {
+            uint32_t width = 1200;
+            uint32_t height = 720;
+            const char* title = "StarryEngine";
+            const char* iconPath = "assets/icons/window_icon.png";
+            bool resizable = true;
+            bool transparent = false;   // 透明窗口（需 swapchain alpha 合成）
+            bool borderless = false;    // 无边框
+            bool alwaysOnTop = false;   // 置顶
+            bool clickThrough = false;  // 鼠标穿透（透明区不挡点击）
+            bool highDPI = false;
+            bool nativeWayland = false; // Wayland 会话下走原生 Wayland（透明窗口需要，XWayland 不支持 alpha 合成）
+        };
+
         Application();
+        explicit Application(const Config& config);
         ~Application();
 
         void run();
@@ -64,6 +80,7 @@ namespace StarryEngine {
         std::shared_ptr<RHI::IRHI> getRenderHardwareInterface() { return m_rhi; }
         std::shared_ptr<RHI::ResourceManager> getResourceManager() { return m_resMgr; }
         RHI::DescriptorPoolHandle getGlobalDescriptorPool() { return m_descriptorPool; }
+        Window::Ptr getWindow() { return m_window; }
         uint32_t getWidth() { return m_width; }
         uint32_t getHeight() { return m_height; }
 

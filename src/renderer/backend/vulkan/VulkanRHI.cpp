@@ -86,7 +86,10 @@ namespace StarryEngine {
         };
 
         config.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-        config.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+        // 透明窗口请求 alpha 合成；最终是否生效由 SwapChain 依据表面能力验证（不支持则回退 OPAQUE）
+        config.compositeAlpha = rhiConfig.requestTransparentSwapchain
+            ? VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR
+            : VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
         config.clipped = VK_TRUE;
 
         config.enableMailboxMode = rhiConfig.enableMailboxMode;
