@@ -299,8 +299,15 @@ namespace StarryEngine {
     }
 
     void Application::run() {
+        initialize();
+        while (isWindowOpen()) {
+            step();
+        }
+    }
+
+    void Application::initialize() {
         auto frameContext = m_rhi->getFrameContext();
-        FrameMonitor monitor(m_window, frameContext, m_flightFrame);
+        m_monitor = std::make_unique<FrameMonitor>(m_window, frameContext, m_flightFrame);
 
         // 初始化 shader 文件时间戳
         for (const auto& entry : std::filesystem::recursive_directory_iterator("assets/shaders")) {
@@ -322,9 +329,22 @@ namespace StarryEngine {
             }
         }
 
-        while (!glfwWindowShouldClose(m_window->getHandle())) {
-            glfwPollEvents();
-            monitor.tick();
+        // 初始帧缓冲尺寸与交换链不一致时（如 HiDPI）同步重建，避免依赖实时节奏的 200ms 防抖
+        // （否则 Python 步进等高频驱动会一直卡在防抖里，交换链永不重建）
+        if (m_framebufferResized && m_width > 0 && m_height > 0) {
+            if (m_rhi->recreateSwapChain(m_width, m_height)) {
+                if (m_renderer) m_renderer->onResize(m_width, m_height);
+                m_framebufferResized = false;
+            }
+        }
+    }
+
+    void Application::step() {
+        if (!m_monitor) return;
+        if (!isWindowOpen()) return;
+
+        glfwPollEvents();
+        m_monitor->tick();
 
             auto now = std::chrono::steady_clock::now();
             if (now - m_lastFileCheck > std::chrono::milliseconds(500)) {
@@ -364,25 +384,25 @@ namespace StarryEngine {
                 static auto lastResize = std::chrono::steady_clock::now();
                 auto now = std::chrono::steady_clock::now();
                 if (now - lastResize < std::chrono::milliseconds(200)) {
-                    m_framebufferResized = true; continue;
+                    m_framebufferResized = true; return;
                 }
                 lastResize = now;
                 m_rhi->waitIdle();
                 m_framebufferResized = false;
-                if (m_width == 0 || m_height == 0) continue;
+                if (m_width == 0 || m_height == 0) return;
 
                 if (!m_rhi->recreateSwapChain(m_width, m_height)) {
                     std::cerr << "Failed to recreate swap chain!" << std::endl;
-                    continue;
+                    return;
                 }
 
                 m_renderer->onResize(m_width, m_height);
-                continue;
+                return;
             }
-            if (m_width == 0 || m_height == 0) continue;
+            if (m_width == 0 || m_height == 0) return;
 
             // 每帧逻辑
-            float deltaTime = monitor.getDeltaTime();
+            float deltaTime = m_monitor->getDeltaTime();
             m_clock.advance(deltaTime);          // 推进全局时钟（动画/时间源）
             if (m_cameraController) {
                 m_cameraController->update(deltaTime);
@@ -412,14 +432,23 @@ namespace StarryEngine {
                 } else {
                     LOG_ERROR("Failed to recreate swap chain after renderFrame");
                 }
-                continue;
+                return;
             }
 
-            monitor.updateTitle();
+            m_monitor->updateTitle();
 
             // 执行延迟销毁（资源释放队列）
             m_resMgr->tickFrame();
+    }
+
+    void Application::shutdown() {
+        if (m_window) {
+            glfwSetWindowShouldClose(m_window->getHandle(), GLFW_TRUE);
         }
+    }
+
+    bool Application::isWindowOpen() const {
+        return m_window && !glfwWindowShouldClose(m_window->getHandle());
     }
 
     void Application::initEventDispatcher() {

@@ -45,6 +45,13 @@ namespace StarryEngine {
         ~Application();
 
         void run();
+
+        // 分步运行接口：initialize() + 循环 step()，供 Python 绑定逐帧驱动引擎
+        void initialize();
+        void step();
+        void shutdown();
+        bool isWindowOpen() const;
+
         void createDescriptorPool();
         void initEventDispatcher();
         void setRenderer(std::shared_ptr<Renderer> renderer) { m_renderer = renderer; }
@@ -86,6 +93,9 @@ namespace StarryEngine {
 
         // 全局游戏时钟：动画、shader time、场景逻辑的统一时间源
         Clock m_clock;
+
+        // 帧监控器（initialize() 中创建，step() 中推进）
+        std::unique_ptr<FrameMonitor> m_monitor;
 
         // ---------- 自动 Shader 热重载相关 ----------
         std::unordered_map<std::string, std::filesystem::file_time_type> m_shaderTimestamps;

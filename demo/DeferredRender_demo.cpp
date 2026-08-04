@@ -288,7 +288,7 @@ public:
 
         auto groundMat = createTexturedPbrMaterial();
         auto ground = std::make_shared<Scene::RenderObject>();
-        ground->geometry = Assets::GeometryGenerator::createCube(m_rhi->getResourceManager(), 20.0f, 20.0f, 0.3f);
+        ground->geometry = Assets::GeometryGenerator::createCube(m_rhi->getResourceManager(), 20.0f, 0.3f, 20.0f);
         ground->materials = { groundMat };
         ground->transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -0.15f, 0.0f));
         m_scene->addObject(ground);

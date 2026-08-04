@@ -177,14 +177,14 @@ namespace StarryEngine::Assets {
         float halfH = height * 0.5f;  // Y 轴方向
 
         std::array<glm::vec3, 8> positions = {
-            glm::vec3(-halfL, -halfW, -halfH), // 0
-            glm::vec3(halfL, -halfW, -halfH), // 1
-            glm::vec3(halfL,  halfW, -halfH), // 2
-            glm::vec3(-halfL,  halfW, -halfH), // 3
-            glm::vec3(-halfL, -halfW,  halfH), // 4
-            glm::vec3(halfL, -halfW,  halfH), // 5
-            glm::vec3(halfL,  halfW,  halfH), // 6
-            glm::vec3(-halfL,  halfW,  halfH)  // 7
+            glm::vec3(-halfL, -halfH, -halfW), // 0  (X=宽, Y=高, Z=深)
+            glm::vec3(halfL,  -halfH, -halfW), // 1
+            glm::vec3(halfL,   halfH, -halfW), // 2
+            glm::vec3(-halfL,  halfH, -halfW), // 3
+            glm::vec3(-halfL, -halfH,  halfW), // 4
+            glm::vec3(halfL,  -halfH,  halfW), // 5
+            glm::vec3(halfL,   halfH,  halfW), // 6
+            glm::vec3(-halfL,  halfH,  halfW)  // 7
         };
 
         // 面定义：{ 面索引, 顶点顺序（左下、右下、右上、左上），法线 }

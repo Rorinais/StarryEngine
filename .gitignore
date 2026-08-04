@@ -3,4 +3,5 @@ out/
 build/
 external/opencv/
 external/pybind11/
+external/python/
 .VSCodeCounter
