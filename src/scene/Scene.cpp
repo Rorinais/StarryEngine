@@ -82,4 +82,24 @@ namespace StarryEngine::Scene {
         markContentDirty();
     }
 
+    void Scene::addParticleEmitter(std::shared_ptr<ParticleEmitter> emitter) {
+        if (!emitter) return;
+        m_particleEmitters.push_back(emitter);
+        markContentDirty();
+    }
+
+    bool Scene::removeParticleEmitter(std::shared_ptr<ParticleEmitter> emitter) {
+        auto it = std::find(m_particleEmitters.begin(), m_particleEmitters.end(), emitter);
+        if (it == m_particleEmitters.end()) return false;
+        m_particleEmitters.erase(it);
+        markContentDirty();
+        return true;
+    }
+
+    void Scene::clearParticleEmitters() {
+        if (m_particleEmitters.empty()) return;
+        m_particleEmitters.clear();
+        markContentDirty();
+    }
+
 } // namespace StarryEngine::Scene

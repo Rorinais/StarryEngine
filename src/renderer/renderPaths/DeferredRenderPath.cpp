@@ -1,12 +1,12 @@
 #include "DeferredRenderPath.hpp"
 #include "../passes/GraphicsPass.hpp"
-#include "../passExecutor/CopyToSwapchainExecutor.hpp"
-#include "../passExecutor/ParticleCSExecutor.hpp"
+#include "../passes/ParticlePass.hpp"
 #include "../passExecutor/ParticleRenderExecutor.hpp"
 #include "../../logging/Logger.hpp"
 #include "../../ui/ImGuiManager.hpp"
 #include "../../assets/loader/ShaderLoader.hpp"
 #include <algorithm>
+#include <unordered_set>
 
 namespace StarryEngine {
 
@@ -19,8 +19,6 @@ namespace StarryEngine {
 
     void DeferredRenderPath::setDrawItems(const AnalysisSceneResult& sceneData) {
         m_cachedSceneData = std::make_shared<AnalysisSceneResult>(sceneData);
-        updateMaterialTextures(sceneData);
-        distributeDrawItems(sceneData);
     }
 
     void DeferredRenderPath::setImGuiManager(ImGuiManager* mgr, uint32_t imageCount) {
@@ -34,6 +32,9 @@ namespace StarryEngine {
         std::unordered_map<std::string, RenderGraph::TextureId>& texIdMap)
     {
         for (auto& pass : m_passes) {
+            // 数据源自动注入：黑板（含场景等），pass 里按类型读取（demo 无需手动注入）
+            pass->setDataProvider(&m_blackboard);
+
             if (!pass->configure(*m_renderGraph, texIdMap, m_width, m_height, m_resMgr, m_globalSetLayout)) {
                 LOG_ERROR("Pass '{}' configuration failed — skipping", pass->getName());
                 continue;
@@ -44,6 +45,25 @@ namespace StarryEngine {
                 m_tagToPassNode[info.tag] = info.passNode;
             }
         }
+
+        // 校验：emitter 的路由 tag 是否命中某个粒子 pass（否则被静默丢弃——给提示）
+        {
+            std::unordered_set<std::string> particleTags;
+            for (auto& pass : m_passes)
+                if (auto* pp = dynamic_cast<ParticlePass*>(pass.get())) particleTags.insert(pp->getPassTag());
+
+            auto* scene = m_blackboard.get<Scene::Scene*>() ? *m_blackboard.get<Scene::Scene*>() : nullptr;
+            if (scene && !particleTags.empty()) {
+                for (auto& em : scene->getParticleEmitters()) {
+                    std::string tag = ParticlePass::resolveEmitterTag(*em);
+                    if (!particleTags.count(tag)) {
+                        LOG_WARN("[Particle] emitter '{}' 路由 tag '{}' 没匹配任何粒子 pass（现有 {} 个），将被丢弃",
+                                 em->name, tag, particleTags.size());
+                    }
+                }
+            }
+        }
+
         if (m_imguiManager) m_imguiManager->setRenderGraph(nullptr);
     }
 
@@ -51,8 +71,33 @@ namespace StarryEngine {
 
     void DeferredRenderPath::doRebuildResources(const AnalysisSceneResult& sceneData) {
         updateMaterialTextures(sceneData);
-        distributeDrawItems(sceneData);
-        prepareAllPipelines(sceneData);
+
+        // draw item 分发 + 场景相关管线全部委托给各 pass（GraphicsPass 自己处理网格）
+        IPass::CompileContext ctx;
+        ctx.resMgr = m_resMgr;
+        ctx.rhi = m_rhi;
+        ctx.renderGraph = m_renderGraph.get();
+        ctx.globalDescSet = m_globalDescSet;
+        ctx.globalSetLayout = m_globalSetLayout;
+
+        std::string defaultTag;
+        if (!m_passes.empty()) {
+            auto subs = m_passes.front()->getSubpasses();
+            if (!subs.empty()) defaultTag = subs.front().tag;
+        }
+
+        // 诊断：确保每个 draw item 的 tag 都能命中某个 subpass
+        std::unordered_set<std::string> allTags;
+        for (auto& pass : m_passes)
+            for (auto& info : pass->getSubpasses())
+                allTags.insert(info.tag);
+        for (auto& item : sceneData.drawItems) {
+            std::string tag = item->passTag.empty() ? defaultTag : item->passTag;
+            if (!allTags.count(tag)) LOG_ERROR("No subpass for tag '{}'", tag);
+        }
+
+        for (auto& pass : m_passes)
+            pass->onSceneData(sceneData, ctx, defaultTag);
     }
 
     void DeferredRenderPath::onAfterCompile() {
@@ -65,14 +110,6 @@ namespace StarryEngine {
 
         for (auto& pass : m_passes) {
             pass->onAfterCompile(ctx);
-
-            // 重新收集 subpass 信息（pass 可能在 onAfterCompile 中替换了 executor）
-            for (auto& info : pass->getSubpasses()) {
-                auto it = m_tagToSubpass.find(info.tag);
-                if (it != m_tagToSubpass.end()) {
-                    it->second.executor = info.executor;
-                }
-            }
         }
     }
 
@@ -90,24 +127,7 @@ namespace StarryEngine {
         m_imguiManager->registerSceneTexture(m_resMgr.get());
     }
 
-    // ──── Draw Item Distribution ──────────────────────────────────
-
-    void DeferredRenderPath::distributeDrawItems(const AnalysisSceneResult& sceneData) {
-        for (auto& [tag, target] : m_tagToSubpass) target.executor->clearDrawItems();
-
-        std::string defaultTag;
-        if (!m_passes.empty()) {
-            auto subs = m_passes.front()->getSubpasses();
-            if (!subs.empty()) defaultTag = subs.front().tag;
-        }
-
-        for (auto& item : sceneData.drawItems) {
-            std::string tag = item->passTag.empty() ? defaultTag : item->passTag;
-            auto it = m_tagToSubpass.find(tag);
-            if (it != m_tagToSubpass.end()) it->second.executor->addDrawItem(item);
-            else LOG_ERROR("No subpass for tag '{}'", tag);
-        }
-    }
+    // ──── Material Texture Binding ────────────────────────────────
 
     void DeferredRenderPath::updateMaterialTextures(const AnalysisSceneResult& sceneData) {
         if (!m_renderGraph || m_textureIdMap.empty()) { LOG_WARN("RG not ready for textures"); return; }
@@ -130,24 +150,6 @@ namespace StarryEngine {
                     material->setInputAttachment(dep.set, dep.binding, phys, RHI::ImageLayout::ShaderReadOnly); break;
                 }
             }
-        }
-    }
-
-    void DeferredRenderPath::prepareAllPipelines(const AnalysisSceneResult& sceneData) {
-        for (auto& [tag, target] : m_tagToSubpass) {
-            auto& items = target.executor->getDrawItems();
-            if (items.empty()) continue;
-            std::unordered_set<uint32_t> usedIndices;
-            for (auto& item : items)
-                if (item->pipelineIndex < sceneData.PSO.size()) usedIndices.insert(item->pipelineIndex);
-            std::unordered_map<uint32_t, RHI::PipelineHandle> mapping;
-            for (uint32_t idx : usedIndices) {
-                const auto& pso = sceneData.PSO[idx];
-                auto pipeline = Assets::PipelineCache::getOrCreateGraphicsPipeline(
-                    m_resMgr.get(), *pso, target.renderPass, target.subpassIndex);
-                if (pipeline.isValid()) mapping[idx] = pipeline;
-            }
-            target.executor->setPipelineMapping(std::move(mapping));
         }
     }
 

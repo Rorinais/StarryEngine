@@ -5,7 +5,7 @@
 #include "../src/renderer/graph/RenderGraph.hpp"
 #include "../src/renderer/interface/RHI_TYPES.hpp"
 #include "../src/assets/geometry/GeometryGenerator.hpp"
-#include "../src/renderer/passExecutor/MeshDrawExecutor.hpp"
+#include "../src/renderer/passExecutor/SceneDrawExecutor.hpp"
 
 
 struct ModelData {

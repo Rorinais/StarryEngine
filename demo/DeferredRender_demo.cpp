@@ -1,9 +1,10 @@
 #include "../src/renderer/passes/PassWrapper.hpp"
 #include "../src/renderer/passes/GraphicsPass.hpp"
-#include "../src/renderer/passes/ParticleSystemPass.hpp"
+#include "../src/renderer/passes/MeshPass.hpp"
+#include "../src/renderer/passes/ParticlePass.hpp"
+#include "../src/scene/ParticleEmitter.hpp"
 #include "../src/renderer/renderPaths/DeferredRenderPath.hpp"
-#include "../src/renderer/passExecutor/MeshDrawExecutor.hpp"
-#include "../src/renderer/passExecutor/SkyboxExecutor.hpp"
+#include "../src/renderer/passExecutor/SceneDrawExecutor.hpp"
 #include "../src/assets/geometry/GeometryGenerator.hpp"
 
 #include"../src/application/Application.hpp"
@@ -31,6 +32,7 @@ public:
         m_descriptorSet = m_renderer->getGlobalDescriptorSet();
 
         auto renderPath = std::make_shared<DeferredRenderPath>(m_rhi, m_width, m_height);
+        renderPath->setScene(m_scene.get());   // 场景数据源：粒子等 pass 建图时通过 configure 拿到
 
         auto colorDesc = PassWrapper::createColorTextureDesc({m_width, m_height, 1}, RHI::Format::RGBA16_Float);
         auto depthDesc = PassWrapper::createDepthTextureDesc({m_width, m_height, 1}, RHI::Format::D32_Float);
@@ -42,115 +44,30 @@ public:
         {
             PassList passes;
 
-            // ForwardPass: OpaqueGeometry
-            auto forwardPass = std::make_shared<GraphicsPass>("ForwardPass");
-            {
-                SubpassDesc sp;
-                sp.name = "OpaqueGeometry"; sp.tag = "Forward_Opaque";
-                sp.executor = std::make_shared<MeshDrawExecutor>();
+            // ForwardPass: OpaqueGeometry —— MeshPass 封装标准几何 pass（SceneColor+Depth 清屏 + Mesh 绘制）
+            passes.push_back(std::make_shared<MeshPass>("ForwardPass", "Forward_Opaque"));
 
-                RenderGraph::AttachmentParams color;
-                color.initialLayout = RHI::ImageLayout::Undefined;
-                color.finalLayout   = RHI::ImageLayout::ShaderReadOnly;
-                color.loadOp = RHI::AttachmentLoadOp::Clear;
-                color.storeOp = RHI::AttachmentStoreOp::Store;
-                sp.colorAttachments.push_back({"SceneColor", color});
-
-                RenderGraph::AttachmentParams depth;
-                depth.initialLayout = RHI::ImageLayout::Undefined;
-                depth.finalLayout   = RHI::ImageLayout::DepthStencilAttachment;
-                depth.loadOp = RHI::AttachmentLoadOp::Clear;
-                depth.storeOp = RHI::AttachmentStoreOp::Store;
-                sp.depthAttachment = {"Depth", depth};
-
-                forwardPass->addSubpass(sp);
-            }
-            passes.push_back(forwardPass);
-
-            // PostProcessPass: Skybox + Grid
+            // PostProcessPass: Skybox + Grid（后续写者，loadOp/布局由渲染图推断为 Load）
             auto postPass = std::make_shared<GraphicsPass>("PostProcessPass");
             {
                 SubpassDesc sky;
-                sky.name = "Skybox"; sky.tag = "PostProcess_Skybox";
-                sky.executor = std::make_shared<SkyboxExecutor>();
-                RenderGraph::AttachmentParams colorLoad;
-                colorLoad.initialLayout = RHI::ImageLayout::ShaderReadOnly;
-                colorLoad.finalLayout   = RHI::ImageLayout::ShaderReadOnly;
-                colorLoad.loadOp = RHI::AttachmentLoadOp::Load;
-                colorLoad.storeOp = RHI::AttachmentStoreOp::Store;
-                sky.colorAttachments.push_back({"SceneColor", colorLoad});
-
-                RenderGraph::AttachmentParams depthLoad;
-                depthLoad.initialLayout = RHI::ImageLayout::DepthStencilAttachment;
-                depthLoad.finalLayout   = RHI::ImageLayout::DepthStencilAttachment;
-                depthLoad.loadOp = RHI::AttachmentLoadOp::Load;
-                depthLoad.storeOp = RHI::AttachmentStoreOp::DontCare;
-                sky.depthAttachment = {"Depth", depthLoad};
+                sky.tag = "PostProcess_Skybox";
+                sky.executor = std::make_shared<SceneDrawExecutor>();  // 统一：SceneDrawExecutor 处理 procedural（天空盒）
+                sky.colorAttachments.push_back({"SceneColor"});
+                sky.depthAttachment = {"Depth"};
                 postPass->addSubpass(sky);
 
                 SubpassDesc grid;
-                grid.name = "Grid"; grid.tag = "PostProcess_Grid";
-                grid.executor = std::make_shared<MeshDrawExecutor>();
-                grid.colorAttachments.push_back({"SceneColor", colorLoad});
-                grid.depthAttachment = {"Depth", depthLoad};
+                grid.tag = "PostProcess_Grid";
+                grid.executor = std::make_shared<SceneDrawExecutor>();
+                grid.colorAttachments.push_back({"SceneColor"});
+                grid.depthAttachment = {"Depth"};
                 postPass->addSubpass(grid);
             }
             passes.push_back(postPass);
 
-            {
-                ParticleSystemDesc desc;
-                desc.name            = "Fire";
-                desc.particleCount   = 1024;
-                desc.perParticleFloats = 4;
-                desc.computeShader   = "assets/shaders/test/particle.comp";
-                desc.vertexShader    = "assets/shaders/test/particle.vert";
-                desc.fragmentShader  = "assets/shaders/test/particle.frag";
-                desc.params.gravity       = -0.15f;
-                desc.params.speedMin      = 0.5f;
-                desc.params.speedMax      = 2.0f;
-                desc.params.lifetime      = 3.5f;
-                desc.params.spreadXZ      = 1.2f;
-                desc.params.swayFreq      = 2.7f;
-                desc.params.swayAmp       = 0.6f;
-                desc.params.emitterY      = 0.0f;
-                desc.params.topDiffuse    = 1.5f;
-                desc.params.topThreshold  = 2.5f;
-                desc.params.colorYoung[0] = 1.0f; desc.params.colorYoung[1] = 0.9f; desc.params.colorYoung[2] = 0.2f;
-                desc.params.colorMiddle[0]= 1.0f; desc.params.colorMiddle[1]= 0.4f; desc.params.colorMiddle[2]= 0.05f;
-                desc.params.colorOld[0]   = 0.6f; desc.params.colorOld[1]   = 0.1f; desc.params.colorOld[2]   = 0.02f;
-                desc.params.pointSizeMin  = 3.0f;
-                desc.params.pointSizeMax  = 12.0f;
-                passes.push_back(std::make_shared<ParticleSystemPass>(desc));
-            }
-
-            {
-                ParticleSystemDesc desc;
-                desc.name            = "Sparks";
-                desc.particleCount   = 256;
-                desc.perParticleFloats = 4;
-                desc.computeShader   = "assets/shaders/test/particle.comp";
-                desc.vertexShader    = "assets/shaders/test/particle.vert";
-                desc.fragmentShader  = "assets/shaders/test/particle.frag";
-                desc.params.gravity       = -0.05f;
-                desc.params.speedMin      = 0.3f;
-                desc.params.speedMax      = 1.5f;
-                desc.params.lifetime      = 2.0f;
-                desc.params.spreadXZ      = 0.5f;
-                desc.params.swayFreq      = 3.5f;
-                desc.params.swayAmp       = 0.4f;
-                desc.params.emitterY      = 2.5f;
-                desc.params.topDiffuse    = 1.0f;
-                desc.params.topThreshold  = 2.0f;
-                desc.params.colorYoung[0] = 0.0f; desc.params.colorYoung[1] = 1.0f;  // 纯绿，排除颜色问题
-                desc.params.colorYoung[2] = 0.0f;
-                desc.params.colorMiddle[0]= 0.0f; desc.params.colorMiddle[1]= 0.8f;
-                desc.params.colorMiddle[2]= 0.0f;
-                desc.params.colorOld[0]   = 0.0f; desc.params.colorOld[1]   = 0.4f;
-                desc.params.colorOld[2]   = 0.0f;
-                desc.params.pointSizeMin  = 10.0f;   // 巨大点
-                desc.params.pointSizeMax  = 24.0f;
-                passes.push_back(std::make_shared<ParticleSystemPass>(desc));
-            }
+            // 粒子 pass：声明式，场景里 passTag="Particles" 的 emitters 都归它（内容来自场景）
+            passes.push_back(std::make_shared<ParticlePass>("Particles", "Particles"));
 
             renderPath->setPassList(std::move(passes));
         }
@@ -295,11 +212,76 @@ public:
 
         addGriseoModel();
 
+        // 粒子发射器（场景内容，可增删；增删后 renderer->setNeedRebuildGraph()）
+        {
+            auto fire = std::make_shared<Scene::ParticleEmitter>();
+            fire->name = "Fire";
+            fire->particleCount = 1024;
+            fire->computeShader = "assets/shaders/test/particle.comp";
+            fire->material = makeParticleMaterial();
+            fire->params.gravity  = -0.15f;
+            fire->params.speedMin = 0.5f;
+            fire->params.speedMax = 2.0f;
+            fire->params.lifetime = 3.5f;
+            fire->params.spreadXZ = 1.2f;
+            fire->params.swayFreq = 2.7f;
+            fire->params.swayAmp  = 0.6f;
+            fire->params.emitterY = 0.0f;
+            fire->params.topDiffuse   = 1.5f;
+            fire->params.topThreshold = 2.5f;
+            fire->params.colorYoung[0] = 1.0f; fire->params.colorYoung[1] = 0.9f; fire->params.colorYoung[2] = 0.2f;
+            fire->params.colorMiddle[0]= 1.0f; fire->params.colorMiddle[1]= 0.4f; fire->params.colorMiddle[2]= 0.05f;
+            fire->params.colorOld[0]   = 0.6f; fire->params.colorOld[1]   = 0.1f; fire->params.colorOld[2]   = 0.02f;
+            fire->params.pointSizeMin  = 3.0f;
+            fire->params.pointSizeMax  = 12.0f;
+            m_scene->addParticleEmitter(fire);
+
+            auto sparks = std::make_shared<Scene::ParticleEmitter>();
+            sparks->name = "Sparks";
+            sparks->particleCount = 256;
+            sparks->computeShader = "assets/shaders/test/particle.comp";
+            sparks->material = makeParticleMaterial();
+            sparks->params.gravity  = -0.05f;
+            sparks->params.speedMin = 0.3f;
+            sparks->params.speedMax = 1.5f;
+            sparks->params.lifetime = 2.0f;
+            sparks->params.spreadXZ = 0.5f;
+            sparks->params.swayFreq = 3.5f;
+            sparks->params.swayAmp  = 0.4f;
+            sparks->params.emitterY = 2.5f;
+            sparks->params.topDiffuse   = 1.0f;
+            sparks->params.topThreshold = 2.0f;
+            sparks->params.colorYoung[0] = 0.0f; sparks->params.colorYoung[1] = 1.0f; sparks->params.colorYoung[2] = 0.0f;
+            sparks->params.colorMiddle[0]= 0.0f; sparks->params.colorMiddle[1]= 0.8f; sparks->params.colorMiddle[2]= 0.0f;
+            sparks->params.colorOld[0]   = 0.0f; sparks->params.colorOld[1]   = 0.4f; sparks->params.colorOld[2]   = 0.0f;
+            sparks->params.pointSizeMin  = 10.0f;
+            sparks->params.pointSizeMax  = 24.0f;
+            m_scene->addParticleEmitter(sparks);
+        }
+
         auto perspectiveCamera = std::make_shared<Scene::PerspectiveCamera>();
         perspectiveCamera->setPerspective(glm::radians(45.0f), (float)m_width / m_height, 0.1f, 100.0f);
         perspectiveCamera->lookAt(glm::vec3(1.0f, 2.0f, 5.0f),glm::vec3(0.0f, 1.5f, 0.0f),glm::vec3(0.0f, 1.0f, 0.0f));
         m_scene->addCamera(perspectiveCamera);
         m_scene->setActiveCamera(perspectiveCamera);
+    }
+
+    // 粒子渲染材质：particle.vert/frag + alpha 混合（渲染走通用材质）
+    std::shared_ptr<Assets::MaterialInstance> makeParticleMaterial() {
+        auto tmpl = std::make_shared<Assets::DefaultMaterialTemplate>(
+            m_rhi->getResourceManager(), m_descriptorSetLayout);
+        if (!tmpl->loadShaders("assets/shaders/test/particle.vert", "assets/shaders/test/particle.frag")) {
+            LOG_ERROR("Failed to load particle shaders");
+            return nullptr;
+        }
+        auto mat = std::make_shared<Assets::MaterialInstance>(
+            tmpl, m_descriptorPool, m_rhi->getResourceManager().get(), m_descriptorSet);
+        RHI::BlendAttachmentState blend;
+        blend.blendEnable = true;  
+        mat->setAttachments({ blend });
+        mat->setDepthTest(false);
+        mat->setDepthWrite(false);
+        return mat;
     }
 
     std::shared_ptr<Renderer> getRenderer() { return m_renderer; }

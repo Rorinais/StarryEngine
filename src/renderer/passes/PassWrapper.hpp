@@ -54,17 +54,5 @@ namespace StarryEngine {
             float clearDepth = 1.0f,
             uint32_t clearStencil = 1);
 
-        static SubpassDesc createGeometrySubpassConfig(
-            const std::string& name,
-            std::shared_ptr<IPassExecutor> executor,
-            const std::vector<std::string>& colorTextureNames,
-            const std::string& depthTextureName);
-
-        static SubpassDesc createFullscreenSubpassConfig(
-            const std::string& name,
-            std::shared_ptr<IPassExecutor> executor,
-            const std::vector<SubpassAttachment>& colorAttachments,
-            const std::vector<SubpassAttachment>& inputAttachments = {},
-            std::optional<SubpassAttachment> depthAttachment = std::nullopt);
     };
 }

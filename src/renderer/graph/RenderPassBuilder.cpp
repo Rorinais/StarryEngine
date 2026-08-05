@@ -109,6 +109,20 @@ namespace StarryEngine::RenderGraph {
         }
     }
 
+    void RenderPassBuilder::updateAttachmentParams(uint32_t index, RHI::AttachmentLoadOp loadOp,
+        RHI::AttachmentStoreOp storeOp, RHI::ImageLayout initialLayout,
+        RHI::ImageLayout finalLayout) {
+        if (index < m_attachments.size()) {
+            m_attachments[index].loadOp = loadOp;
+            m_attachments[index].storeOp = storeOp;
+            m_attachments[index].initialLayout = initialLayout;
+            m_attachments[index].finalLayout = finalLayout;
+        }
+        else {
+            throw std::runtime_error("Invalid attachment index");
+        }
+    }
+
     std::unique_ptr<RenderPassBuildResult> RenderPassBuilder::build(bool autoDependencies) {
         analyzeAttachmentUsage();
 

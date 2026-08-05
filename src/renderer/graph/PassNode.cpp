@@ -4,6 +4,18 @@
 
 namespace StarryEngine::RenderGraph {
 
+    // 颜色附件参数是否一致（用于共享节点内复用同一个附件）
+    static bool sameColorAttachmentParams(const AttachmentParams& a, const AttachmentParams& b) {
+        auto colorEq = [](const std::optional<RHI::Color>& x, const std::optional<RHI::Color>& y) {
+            if (x.has_value() != y.has_value()) return false;
+            if (!x.has_value()) return true;
+            return x->r == y->r && x->g == y->g && x->b == y->b && x->a == y->a;
+        };
+        return a.format == b.format && a.loadOp == b.loadOp && a.storeOp == b.storeOp &&
+               a.initialLayout == b.initialLayout && a.finalLayout == b.finalLayout &&
+               colorEq(a.clearColor, b.clearColor);
+    }
+
     PassNode::PassNode(const std::string& name, PassType type)
         : m_name(name), m_builder(name), m_type(type) {
     }
@@ -17,6 +29,17 @@ namespace StarryEngine::RenderGraph {
     }
 
     std::string PassNode::addColorOutput(TextureId texId, const AttachmentParams& params) {
+        // 同一纹理 + 相同附件参数 → 复用已有颜色附件（多个 subpass 共享一个附件，避免重复附件/清屏）
+        if (texId.isValid()) {
+            auto it = m_colorOutputKeyByTex.find(texId);
+            if (it != m_colorOutputKeyByTex.end()) {
+                auto prevIt = m_keyToParams.find(it->second);
+                if (prevIt != m_keyToParams.end() && sameColorAttachmentParams(prevIt->second, params)) {
+                    return it->second;
+                }
+            }
+        }
+
         std::string key = "auto_color_" + std::to_string(m_nextAttachmentKey++);
         m_builder.registerColorAttachment(key,
             params.format.value_or(RHI::Format::RGBA8_UNorm),
@@ -30,6 +53,7 @@ namespace StarryEngine::RenderGraph {
             m_clearValueMap[key] = RHI::ClearValue(params.clearColor.value());
         }
         m_keyToParams[key] = params;
+        m_colorOutputKeyByTex[texId] = key;
         return key;
     }
 
@@ -43,6 +67,7 @@ namespace StarryEngine::RenderGraph {
             params.finalLayout.value_or(RHI::ImageLayout::DepthStencilAttachment));
         m_keyToTexId[key] = texId;
         m_writeTextures.insert(texId);
+        m_depthOutputKeyByTex[texId] = key;
         if (params.clearDepth.has_value()) {
             m_clearValueMap[key] = RHI::ClearValue(params.clearDepth.value(),
                 params.clearStencil.value_or(0));
@@ -121,8 +146,9 @@ namespace StarryEngine::RenderGraph {
         for (size_t i = 0; i < m_cachedBuildResult->renderPassDesc.attachments.size(); ++i) {
             const auto& att = m_cachedBuildResult->renderPassDesc.attachments[i];
             const std::string& name = m_cachedBuildResult->attachmentNames[i];
-            LOG_INFO("Attachment[{}] name={}, format={}, initialLayout={}, finalLayout={}",
+            LOG_INFO("Attachment[{}] name={}, format={}, loadOp={}, storeOp={}, initialLayout={}, finalLayout={}",
                 i, name, static_cast<int>(att.format),
+                static_cast<int>(att.loadOp), static_cast<int>(att.storeOp),
                 static_cast<int>(att.initialLayout), static_cast<int>(att.finalLayout));
         }
 
@@ -235,16 +261,11 @@ namespace StarryEngine::RenderGraph {
 
     void PassNode::execute(RHI::RHICommandEncoder* encoder,const RenderContext& context,uint32_t frameIndex,RHI::FramebufferHandle framebuffer) {
         if (m_type == PassType::Compute) {
-            // ── Compute Pass ──
+            // ── Compute Pass ── 执行全部交给 executor（绑管线 + 描述符 + push + dispatch）
             if (!m_enabled) return;
-            auto* pipeline = m_resMgr->getPipeline(m_computePipeline);
-            if (!pipeline) return;
-            encoder->bindComputePipeline(pipeline);
             if (m_computeRecorder) {
-                m_computeRecorder->execute(encoder, context,
-                    PassContext(m_resMgr, frameIndex, {}), 0);
+                m_computeRecorder->execute(encoder, context,PassContext(m_resMgr, frameIndex, {}), 0);
             }
-            encoder->dispatch(m_dispatchX, m_dispatchY, m_dispatchZ);
             return;
         }
 
@@ -253,9 +274,7 @@ namespace StarryEngine::RenderGraph {
 
         auto* renderPassObj = m_resMgr->getRenderPass(m_renderPassHandle);
         auto* fbObj = m_resMgr->getFramebuffer(framebuffer);
-        if (!renderPassObj || !fbObj) {
-            LOG_WARN("[{}] renderPassObj={} fbObj={} — skipping pass",
-                m_name, (void*)renderPassObj, (void*)fbObj);
+        if (!renderPassObj || !fbObj) {LOG_WARN("[{}] renderPassObj={} fbObj={} — skipping pass",m_name, (void*)renderPassObj, (void*)fbObj);
             return;
         }
 
@@ -316,12 +335,47 @@ namespace StarryEngine::RenderGraph {
         }
     }
 
+    // 声明式附件推断：只填未显式指定的字段（显式指定的一律保留）。
+    // 颜色首写→Clear/Undefined/ShaderReadOnly；后续→Load/ShaderReadOnly/ShaderReadOnly。
+    // 深度首写→Clear/Undefined/DepthStencilAttachment；后续→Load/DepthStencilAttachment/DepthStencilAttachment。
+    void PassNode::resolveInferredAttachments(const std::function<bool(TextureId)>& isFirstWriter) {
+        if (m_type != PassType::Graphics) return;
+
+        auto infer = [&](TextureId texId, const std::string& key, bool isDepth) {
+            auto it = m_keyToParams.find(key);
+            if (it == m_keyToParams.end()) return;
+            auto& params = it->second;
+            bool first = isFirstWriter(texId);
+
+            RHI::AttachmentLoadOp loadOp = params.loadOp.value_or(
+                first ? RHI::AttachmentLoadOp::Clear : RHI::AttachmentLoadOp::Load);
+            RHI::AttachmentStoreOp storeOp = params.storeOp.value_or(RHI::AttachmentStoreOp::Store);
+            RHI::ImageLayout initial = params.initialLayout.value_or(
+                first ? RHI::ImageLayout::Undefined
+                      : (isDepth ? RHI::ImageLayout::DepthStencilAttachment : RHI::ImageLayout::ShaderReadOnly));
+            RHI::ImageLayout final = params.finalLayout.value_or(
+                isDepth ? RHI::ImageLayout::DepthStencilAttachment : RHI::ImageLayout::ShaderReadOnly);
+
+            auto idxIt = m_builder.getAttachmentIndices().find(key);
+            if (idxIt == m_builder.getAttachmentIndices().end()) return;
+            m_builder.updateAttachmentParams(idxIt->second, loadOp, storeOp, initial, final);
+            // 同步回 params，保证 getTextureLayout 读到推断后的值
+            params.loadOp = loadOp;
+            params.storeOp = storeOp;
+            params.initialLayout = initial;
+            params.finalLayout = final;
+        };
+
+        for (auto& [texId, key] : m_colorOutputKeyByTex) infer(texId, key, false);
+        for (auto& [texId, key] : m_depthOutputKeyByTex) infer(texId, key, true);
+    }
+
     std::pair<RHI::ImageLayout, RHI::ImageLayout> PassNode::getTextureLayout(TextureId texId) const {
-        // Compute Pass：读 = ShaderReadOnly，写 = 取 m_computeWriteLayouts 中的值
+        // Compute Pass：读 = ShaderReadOnly，写 = General（storage image 访问前必须在 General）
         if (m_type == PassType::Compute) {
             if (m_computeWriteLayouts.count(texId)) {
-                return { RHI::ImageLayout::Undefined,         // 写前不需要特定布局
-                         m_computeWriteLayouts.at(texId) };   // 写后 = General
+                return { m_computeWriteLayouts.at(texId),      // 写前需要 General
+                         m_computeWriteLayouts.at(texId) };     // 写后 = General
             }
             if (m_readTextures.count(texId)) {
                 return { RHI::ImageLayout::ShaderReadOnly, RHI::ImageLayout::ShaderReadOnly };

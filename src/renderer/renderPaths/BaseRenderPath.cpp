@@ -82,14 +82,6 @@ namespace StarryEngine {
     bool BaseRenderPath::buildGraph() {
         m_tagToSubpass.clear();
         m_tagToPassNode.clear();
-        m_presentationPipelineReady = false;
-
-        // 销毁旧的 descriptor pool（presentation pipeline 每帧重建）
-        if (m_presentSceneColorPool.isValid()) {
-            m_resMgr->destroy(m_presentSceneColorPool);
-            m_presentSceneColorPool = RHI::DescriptorPoolHandle{};
-            m_presentSceneColorDescSet = RHI::DescriptorSetHandle{};
-        }
 
         if (m_renderGraph) {
             m_rhi->waitIdle();
@@ -191,9 +183,7 @@ namespace StarryEngine {
         std::string inputKey = passNode->addInput(sceneColorTexId, inputParams);
         subpassBuilder.addInputAttachmentRef(inputKey);
 
-        auto rec = std::make_shared<PresentationExecutor>(
-            RHI::PipelineHandle{}, RHI::PipelineLayoutHandle{},
-            m_globalDescSet, RHI::DescriptorSetHandle{});
+        auto rec = std::make_shared<PresentationExecutor>();
         subpassBuilder.setExecutor(rec);
         m_tagToSubpass[tag] = SubpassTarget{ {}, 0, rec };
         m_tagToPassNode[tag] = passNode;
@@ -211,9 +201,8 @@ namespace StarryEngine {
                 target.renderPass = passIt->second->getRenderPassHandle();
         }
 
-        if (m_tagToSubpass.count("Presentation") && m_globalSetLayout.isValid()) {
-            ensurePresentationShaders();
-            preparePresentationPipeline(texIdMap);
+        if (m_tagToSubpass.count("Presentation")) {
+            preparePresentationExecutor();
         }
 
         onAfterCompile();   // 子类扩展（如粒子管线）
@@ -223,92 +212,23 @@ namespace StarryEngine {
         return true;
     }
 
-    void BaseRenderPath::ensurePresentationShaders() {
-        if (m_presentationShadersReady) return;
-        if (!m_globalSetLayout.isValid()) return;
+    // 呈现 executor 自建管线：把编译好的 render pass + 全局描述符数据交给 PresentationExecutor::onPrepare
+    void BaseRenderPath::preparePresentationExecutor() {
+        auto it = m_tagToSubpass.find("Presentation");
+        if (it == m_tagToSubpass.end() || !it->second.executor) return;
 
-        Assets::ShaderLoader loader(m_resMgr);
-        auto vsInfo = loader.loadFromFile("assets/shaders/deferred/fullscreen.vert", RHI::ShaderStage::Vertex);
-        auto fsInfo = loader.loadFromFile("assets/shaders/deferred/copy.frag", RHI::ShaderStage::Fragment);
-        if (!vsInfo || !fsInfo) { LOG_ERROR("Presentation shaders failed"); return; }
-        m_fullscreenVert = vsInfo->module;
-        m_copyFrag = fsInfo->module;
+        auto* rec = dynamic_cast<PresentationExecutor*>(it->second.executor.get());
+        if (!rec) return;
 
-        RHI::DescriptorSetLayoutDesc set1Layout;
-        set1Layout.bindings = {{0, RHI::DescriptorType::CombinedImageSampler, 1, RHI::ShaderStage::Fragment}};
-        m_presentSceneColorLayout = m_resMgr->createDescriptorSetLayout(set1Layout);
-
-        RHI::PipelineLayoutDesc playoutDesc;
-        playoutDesc.descriptorSetLayouts = { m_globalSetLayout, m_presentSceneColorLayout };
-        m_presentPipelineLayout = m_resMgr->createPipelineLayout(playoutDesc);
-
-        m_presentationShadersReady = true;
-        LOG_INFO("PresentationPass shaders loaded");
-    }
-
-    void BaseRenderPath::preparePresentationPipeline(std::unordered_map<std::string, RenderGraph::TextureId>& texIdMap) {
-        if (!m_presentationShadersReady) ensurePresentationShaders();
-        if (!m_presentationShadersReady || m_presentationPipelineReady) return;
-
-        auto tagIt = m_tagToSubpass.find("Presentation");
-        if (tagIt == m_tagToSubpass.end()) return;
-        RHI::RenderPassHandle rp = tagIt->second.renderPass;
-        if (!rp.isValid()) return;
-
-        GraphicsPipelineState pso;
-        pso.vertexShader = m_fullscreenVert; pso.fragmentShader = m_copyFrag;
-        pso.layout = m_presentPipelineLayout;
-        pso.cullMode = RHI::CullMode::None;
-        pso.depthTestEnable = false; pso.depthWriteEnable = false;
-        pso.topology = RHI::PrimitiveTopology::TriangleList;
-        pso.dynamicStates = { RHI::DynamicState::Viewport, RHI::DynamicState::Scissor };
-        pso.vertexInput = {};
-        RHI::BlendAttachmentState blend; blend.blendEnable = false;
-        pso.attachments = { blend };
-
-        auto pipeline = Assets::PipelineCache::getOrCreateGraphicsPipeline(
-            m_resMgr.get(), pso, rp, tagIt->second.subpassIndex);
-        if (!pipeline.isValid()) { LOG_ERROR("Presentation pipeline failed"); return; }
-
-        auto sceneColorIt = texIdMap.find("SceneColor");
-        if (sceneColorIt != texIdMap.end()) {
-            RHI::TextureHandle physHandle = m_renderGraph->getPhysicalTextureHandle(sceneColorIt->second);
-            if (physHandle.isValid()) {
-                auto* texObj = m_resMgr->getTexture(physHandle);
-                auto* samplerObj = m_resMgr->getSampler(m_defaultSampler);
-                if (texObj && samplerObj) {
-                    RHI::DescriptorPoolDesc poolDesc;
-                    poolDesc.maxSets = 1;
-                    poolDesc.poolSizes = {{RHI::DescriptorType::CombinedImageSampler, 1}};
-                    m_presentSceneColorPool = m_resMgr->createDescriptorPool(poolDesc);
-
-                    RHI::DescriptorSetDesc setDesc;
-                    setDesc.descriptorSetLayout = m_presentSceneColorLayout;
-                    setDesc.descriptorPool = m_presentSceneColorPool;
-                    m_presentSceneColorDescSet = m_resMgr->createDescriptorSet(setDesc);
-                    if (m_presentSceneColorDescSet.isValid()) {
-                        auto* descSet = m_resMgr->getDescriptorSet(m_presentSceneColorDescSet);
-                        if (descSet) {
-                            descSet->writeTexture(0, 0, texObj, samplerObj,
-                                RHI::ImageLayout::ShaderReadOnly);
-                            descSet->update();
-                        }
-                    }
-                }
-            }
-        }
-
-        auto recIt = m_tagToSubpass.find("Presentation");
-        if (recIt != m_tagToSubpass.end() && recIt->second.executor) {
-            auto* rec = dynamic_cast<PresentationExecutor*>(recIt->second.executor.get());
-            if (rec) {
-                rec->setPipeline(pipeline);
-                rec->setLayout(m_presentPipelineLayout);
-                rec->setSceneColorSet(m_presentSceneColorDescSet);
-            }
-        }
-        m_presentationPipelineReady = true;
-        LOG_INFO("PresentationPass pipeline ready");
+        IPassExecutor::ExecutorPrepareContext ctx;
+        ctx.resMgr = m_resMgr;
+        ctx.rhi = m_rhi;
+        ctx.renderGraph = m_renderGraph.get();
+        ctx.globalSetLayout = m_globalSetLayout;
+        ctx.globalDescSet = m_globalDescSet;
+        ctx.renderPass = it->second.renderPass;
+        ctx.subpassIndex = it->second.subpassIndex;
+        rec->onPrepare(ctx);
     }
 
 } // namespace StarryEngine

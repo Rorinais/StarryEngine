@@ -109,6 +109,14 @@ namespace StarryEngine::RenderGraph {
         return ptr;
     }
 
+    PassNode* RenderGraph::addGraphicsPassNodeShared(const std::string& name, const std::string& dedupKey) {
+        auto it = m_sharedGraphicsNodes.find(dedupKey);
+        if (it != m_sharedGraphicsNodes.end()) return it->second;  // 复用已有节点
+        PassNode* node = addGraphicsPassNode(name);
+        m_sharedGraphicsNodes[dedupKey] = node;
+        return node;
+    }
+
     PassNode* RenderGraph::addComputePassNode(const std::string& name) {
         auto pass = std::make_unique<PassNode>(name, PassType::Compute);
         PassNode* ptr = pass.get();
@@ -171,39 +179,46 @@ namespace StarryEngine::RenderGraph {
             adj[src].push_back(dst);
             };
 
-        //根据纹理的读写关系建立依赖
+        // 根据纹理的读写关系建立依赖：
+        //   - 写后写：多个写 Pass 按 pass 列表顺序串行
+        //   - 写后读：reader 只依赖"它之前最近的写者"（不是所有写者——否则中间读者会被
+        //     后续写者倒序连成环），且必须在它之后的写者之前完成（否则读到的是覆盖后的内容）
         for (const auto& [tex, writers] : texWriters) {
             auto& readers = texReaders[tex];
-            // 写后读：写 Pass 必须在读 Pass 之前
-            for (uint32_t w : writers) {
-                for (uint32_t r : readers) {
-                    if (w != r && writers.find(r) == writers.end()) {
-                        addDependency(w, r);
-                    }
-                }
-            }
-            // 写后写：多个写 Pass 必须按顺序执行（通常需要）
             std::vector<uint32_t> wlist(writers.begin(), writers.end());
             std::sort(wlist.begin(), wlist.end());
+
+            // 写后写
             for (size_t i = 0; i + 1 < wlist.size(); ++i) {
                 addDependency(wlist[i], wlist[i + 1]);
+            }
+
+            // 写后读
+            for (uint32_t r : readers) {
+                auto it = std::lower_bound(wlist.begin(), wlist.end(), r);  // 第一个 >= r 的写者
+                if (it != wlist.begin()) addDependency(*std::prev(it), r);  // 最近前驱写者 → reader
+                for (auto it2 = it; it2 != wlist.end(); ++it2) {
+                    if (*it2 != r) addDependency(r, *it2);   // reader → 后续写者
+                }
             }
         }
 
-        //根据缓冲区的读写关系建立依赖（逻辑同上）
+        // 根据缓冲区的读写关系建立依赖（逻辑同上）
         for (const auto& [buf, writers] : bufWriters) {
             auto& readers = bufReaders[buf];
-            for (uint32_t w : writers) {
-                for (uint32_t r : readers) {
-                    if (w != r && writers.find(r) == writers.end()) {
-                        addDependency(w, r);
-                    }
-                }
-            }
             std::vector<uint32_t> wlist(writers.begin(), writers.end());
             std::sort(wlist.begin(), wlist.end());
+
             for (size_t i = 0; i + 1 < wlist.size(); ++i) {
                 addDependency(wlist[i], wlist[i + 1]);
+            }
+
+            for (uint32_t r : readers) {
+                auto it = std::lower_bound(wlist.begin(), wlist.end(), r);
+                if (it != wlist.begin()) addDependency(*std::prev(it), r);
+                for (auto it2 = it; it2 != wlist.end(); ++it2) {
+                    if (*it2 != r) addDependency(r, *it2);
+                }
             }
         }
 
@@ -229,6 +244,7 @@ namespace StarryEngine::RenderGraph {
                 auto& info = texPassInfo[tex];
                 if (info.firstUserIndex == -1) info.firstUserIndex = passIdx;
                 info.lastUserIndex = passIdx;
+                if (info.firstWriterIndex == -1) info.firstWriterIndex = passIdx;
                 info.lastWriterIndex = passIdx;
                 info.writeStage = static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::ColorAttachmentOutput);
                 info.writeAccess = static_cast<RHI::AccessFlags>(RHI::AccessFlag::ColorAttachmentWrite);
@@ -262,6 +278,14 @@ namespace StarryEngine::RenderGraph {
         // ── Memory Aliasing：贪心复用生命周期不重叠的 transient 纹理内存 ──
         performMemoryAliasing(texPassInfo);
 
+        // compute 写为 storage image 的纹理需要 STORAGE usage（允许无序访问）
+        std::unordered_set<TextureId> storageTexIds;
+        for (auto* pass : m_sortedPasses) {
+            if (pass->getType() == PassType::Compute) {
+                for (auto tex : pass->getWriteTextures()) storageTexIds.insert(tex);
+            }
+        }
+
         for (auto& vt : m_virtualTextures) {
             if (vt.imported) {
                 PhysicalTextureInfo info;
@@ -269,7 +293,8 @@ namespace StarryEngine::RenderGraph {
                 info.views = vt.externalViews;
                 m_textureMap[vt.id] = info;
             }
-            else {                                             
+            else {
+                if (storageTexIds.count(vt.id)) vt.desc.allowUnorderedAccess = true;
                 RHI::TextureHandle handle = m_resMgr->createTexture(vt.desc);
                 if (!handle.isValid()) {
                     throw std::runtime_error("Failed to create physical texture: " + vt.name);
@@ -298,6 +323,15 @@ namespace StarryEngine::RenderGraph {
         std::unordered_map<TextureId, RHI::TextureDesc> texDescMap;
         for (const auto& vt : m_virtualTextures) {
             texDescMap[vt.id] = vt.desc;
+        }
+
+        // ── 声明式附件：推断每个 pass 未显式指定的 loadOp/布局（首写→Clear，后续→Load）──
+        for (int32_t passIdx = 0; passIdx < static_cast<int32_t>(m_sortedPasses.size()); ++passIdx) {
+            auto* pass = m_sortedPasses[passIdx];
+            pass->resolveInferredAttachments([&](TextureId tex) {
+                auto it = texPassInfo.find(tex);
+                return it != texPassInfo.end() && it->second.firstWriterIndex == passIdx;
+            });
         }
 
         for (auto* pass : m_sortedPasses) {
@@ -536,6 +570,13 @@ namespace StarryEngine::RenderGraph {
         auto it = m_nameToTextureId.find(name);
         if (it == m_nameToTextureId.end())
             throw std::runtime_error("Texture not found: " + name);
+        return it->second;
+    }
+
+    BufferId RenderGraph::getBufferId(const std::string& name) const {
+        auto it = m_nameToBufferId.find(name);
+        if (it == m_nameToBufferId.end())
+            throw std::runtime_error("Buffer not found: " + name);
         return it->second;
     }
 

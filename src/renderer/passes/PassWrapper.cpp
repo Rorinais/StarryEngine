@@ -109,49 +109,4 @@ namespace StarryEngine {
 			std::nullopt
 		);
 	}
-
-	SubpassDesc PassWrapper::createGeometrySubpassConfig(
-		const std::string& name,
-		std::shared_ptr<IPassExecutor> executor,
-		const std::vector<std::string>& colorTextureNames,
-		const std::string& depthTextureName) {
-
-		SubpassDesc config;
-		config.name = name;
-		config.executor = executor;
-
-		auto colorAttachParams = createColorAttachment(
-			RHI::ImageLayout::Undefined,
-			RHI::ImageLayout::ColorAttachment,
-			RHI::AttachmentLoadOp::Clear,
-			RHI::AttachmentStoreOp::Store);
-		for (const auto& tex : colorTextureNames) {
-			config.colorAttachments.push_back({ tex, colorAttachParams });
-		}
-
-		auto depthAttachParams = createDepthAttachment(
-			RHI::ImageLayout::Undefined,
-			RHI::ImageLayout::DepthStencilAttachment,
-			RHI::AttachmentLoadOp::Clear,
-			RHI::AttachmentStoreOp::DontCare);
-		config.depthAttachment = { depthTextureName, depthAttachParams };
-
-		return config;
-	}
-
-	SubpassDesc PassWrapper::createFullscreenSubpassConfig(
-		const std::string& name,
-		std::shared_ptr<IPassExecutor> executor,
-		const std::vector<SubpassAttachment>& colorAttachments,
-		const std::vector<SubpassAttachment>& inputAttachments,
-		std::optional<SubpassAttachment> depthAttachment) {
-
-		SubpassDesc config;
-		config.name = name;
-		config.executor = executor;
-		config.colorAttachments = colorAttachments;
-		config.inputAttachments = inputAttachments;
-		if (depthAttachment) config.depthAttachment = depthAttachment;
-		return config;
-	}
 }

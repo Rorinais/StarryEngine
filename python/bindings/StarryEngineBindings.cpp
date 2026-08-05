@@ -13,7 +13,7 @@
 #include "../../src/renderer/renderPaths/DeferredRenderPath.hpp"
 #include "../../src/renderer/passes/GraphicsPass.hpp"
 #include "../../src/renderer/passes/PassWrapper.hpp"
-#include "../../src/renderer/passExecutor/MeshDrawExecutor.hpp"
+#include "../../src/renderer/passExecutor/SceneDrawExecutor.hpp"
 #include "../../src/assets/geometry/GeometryGenerator.hpp"
 
 namespace py = pybind11;
@@ -85,9 +85,8 @@ void wireDefaultScene(StarryEngine::Application& app) {
     auto forwardPass = std::make_shared<StarryEngine::GraphicsPass>("ForwardPass");
     {
         StarryEngine::SubpassDesc sp;
-        sp.name = "OpaqueGeometry";
         sp.tag = "Forward_Opaque";
-        sp.executor = std::make_shared<StarryEngine::MeshDrawExecutor>();
+        sp.executor = std::make_shared<StarryEngine::SceneDrawExecutor>();
 
         StarryEngine::RenderGraph::AttachmentParams color;
         color.initialLayout = StarryEngine::RHI::ImageLayout::Undefined;

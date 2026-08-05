@@ -8,6 +8,7 @@
 #include"camera/OrthographicCamera.hpp"
 #include"camera/PerspectiveCamera.hpp"
 #include"animation/Animator.hpp"
+#include "ParticleEmitter.hpp"
 
 
 namespace StarryEngine::Scene {
@@ -45,6 +46,12 @@ namespace StarryEngine::Scene {
         const std::vector<std::shared_ptr<ProceduralEffect>>& getProceduralEffects() const;
         void clearProceduralEffects();
 
+        // 粒子发射器：像 RenderObject 一样进场景，可增删
+        void addParticleEmitter(std::shared_ptr<ParticleEmitter> emitter);
+        bool removeParticleEmitter(std::shared_ptr<ParticleEmitter> emitter);
+        void clearParticleEmitters();
+        const std::vector<std::shared_ptr<ParticleEmitter>>& getParticleEmitters() const { return m_particleEmitters; }
+
         const std::vector<std::shared_ptr<RenderObject>>& getAllObjects() const { return m_allObjects; }
         const std::vector<std::shared_ptr<RenderObject>>& getOpaqueObjects() const { return m_opaqueObjects; }
         const std::vector<std::shared_ptr<RenderObject>>& getTransparentObjects() const { return m_transparentObjects; }
@@ -73,6 +80,7 @@ namespace StarryEngine::Scene {
         std::vector<std::shared_ptr<RenderObject>> m_opaqueObjects;
         std::vector<std::shared_ptr<RenderObject>> m_transparentObjects;
         std::vector<std::shared_ptr<ProceduralEffect>> m_proceduralEffects;
+        std::vector<std::shared_ptr<ParticleEmitter>> m_particleEmitters;
 
         std::vector<std::shared_ptr<ICamera>> m_cameras;
         std::shared_ptr<ICamera> m_activeCamera;

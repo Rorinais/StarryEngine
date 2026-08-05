@@ -1,0 +1,14 @@
+#version 450
+// 测试 compute：读 SceneColor（sampler）→ 反色 → 写 Processed（storage image）。
+// 验证"compute 读图形输出 + 写新纹理 + 布局转换"。
+layout(set = 0, binding = 0) uniform sampler2D uSrc;
+layout(set = 0, binding = 1, rgba16f) uniform image2D uDst;
+
+layout(local_size_x = 16, local_size_y = 16) in;
+
+void main() {
+    ivec2 p = ivec2(gl_GlobalInvocationID.xy);
+    vec2 uv = (vec2(p) + 0.5) / vec2(imageSize(uDst));
+    vec4 c = texture(uSrc, uv);
+    imageStore(uDst, p, vec4(1.0 - c.rgb, c.a));   // 反色
+}

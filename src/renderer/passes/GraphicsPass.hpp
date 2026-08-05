@@ -27,6 +27,11 @@ namespace StarryEngine {
 
         std::vector<PassSubpassInfo> getSubpasses() const override;
 
+        // 场景数据更新：把 draw items 分发给各 subpass executor，并从 sceneData.PSO 构建网格管线
+        void onSceneData(const AnalysisSceneResult& sceneData,
+                         const IPass::CompileContext& ctx,
+                         const std::string& defaultTag) override;
+
         const std::vector<SubpassDesc>& getSubpassDescs() const { return m_subpasses; }
         RenderGraph::PassNode* getPassNode() const { return m_passNode; }
 

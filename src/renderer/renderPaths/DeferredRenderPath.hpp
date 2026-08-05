@@ -30,9 +30,7 @@ namespace StarryEngine {
         void onAfterCompileImGui() override;
 
     private:
-        void distributeDrawItems(const AnalysisSceneResult& sceneData);
         void updateMaterialTextures(const AnalysisSceneResult& sceneData);
-        void prepareAllPipelines(const AnalysisSceneResult& sceneData);
 
         uint32_t m_imguiImageCount = 2;
         ImGuiManager* m_imguiManager = nullptr;

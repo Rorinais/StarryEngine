@@ -7,6 +7,7 @@
 #include <unordered_map>
 #include <set>
 #include <optional>
+#include <functional>
 #include "Types.hpp"
 #include "RenderPassBuilder.hpp"
 #include "SubpassBuilder.hpp"
@@ -59,8 +60,7 @@ namespace StarryEngine::RenderGraph {
         void addWriteTexture(TextureId t) { m_writeTextures.insert(t); m_computeWriteLayouts[t] = RHI::ImageLayout::General; }
         void addReadBuffer(BufferId b)    { m_readBuffers.insert(b); }
         void addWriteBuffer(BufferId b)   { m_writeBuffers.insert(b); }
-        void setComputePipeline(RHI::PipelineHandle p)   { m_computePipeline = p; }
-        void setDispatchSize(uint32_t x, uint32_t y, uint32_t z) { m_dispatchX = x; m_dispatchY = y; m_dispatchZ = z; }
+        // 执行全部交给 executor（绑管线 + 描述符 + push + dispatch），PassNode 只做结构
         void setComputeExecutor(std::shared_ptr<StarryEngine::IPassExecutor> r) { m_computeRecorder = std::move(r); }
 
         // Pass 启用/禁用
@@ -90,8 +90,14 @@ namespace StarryEngine::RenderGraph {
         const std::vector<std::string>& getAttachmentNames() const;
         TextureId getTextureIdForAttachmentKey(const std::string& key) const;
         std::pair<RHI::ImageLayout, RHI::ImageLayout> getTextureLayout(TextureId texId) const;
+        // 当前已添加的 subpass 数量（供共享 pass 时确定新 subpass 的索引）
+        uint32_t getSubpassCount() const { return static_cast<uint32_t>(m_builder.getSubpassBuilders().size()); }
         RHI::ImageLayout getFinalLayout(TextureId texId) const { return m_finalLayouts.at(texId); }
         void addDependency(const RHI::SubpassDependency& dep);
+
+        // 声明式附件：编译前由渲染图调用，推断未显式指定的 loadOp/storeOp/布局。
+        // isFirstWriter(texId)：该纹理的第一个写者是否为当前 pass（首写→Clear/Undefined，后续→Load/上一final）
+        void resolveInferredAttachments(const std::function<bool(TextureId)>& isFirstWriter);
 
         static bool isDepthFormat(RHI::Format format);
 
@@ -108,6 +114,10 @@ namespace StarryEngine::RenderGraph {
         std::unordered_map<std::string, TextureId> m_keyToTexId;
         std::unordered_map<std::string, TextureId> m_attachmentKeyToTexId;
         std::unordered_map<std::string, AttachmentParams> m_keyToParams;
+        // 颜色附件去重：texId → 已注册的颜色附件 key（同纹理+同参数复用，支持多 subpass 共享）
+        std::unordered_map<TextureId, std::string> m_colorOutputKeyByTex;
+        // 深度附件：texId → key（声明式附件推断需要区分颜色/深度以决定默认布局）
+        std::unordered_map<TextureId, std::string> m_depthOutputKeyByTex;
 
         std::shared_ptr<RHI::ResourceManager> m_resMgr;
         uint32_t m_width = 0;
@@ -127,8 +137,6 @@ namespace StarryEngine::RenderGraph {
         PassType m_type = PassType::Graphics;
 
         // ── Compute 专用 ──
-        RHI::PipelineHandle m_computePipeline;
-        uint32_t m_dispatchX = 1, m_dispatchY = 1, m_dispatchZ = 1;
         std::shared_ptr<StarryEngine::IPassExecutor> m_computeRecorder;
         std::unordered_map<TextureId, RHI::ImageLayout> m_computeWriteLayouts;
 

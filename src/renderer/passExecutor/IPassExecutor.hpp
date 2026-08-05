@@ -13,6 +13,7 @@
 #include "../../logging/Logger.hpp"
 
 namespace StarryEngine{
+    namespace RenderGraph { class RenderGraph; }
     class PassNode;
 
     struct RenderContext {
@@ -61,12 +62,24 @@ namespace StarryEngine{
         virtual void clearDrawItems() = 0;
         virtual void setDrawItems(const std::vector<std::shared_ptr<DrawItem>>& items) = 0;
         virtual const std::vector<std::shared_ptr<DrawItem>>& getDrawItems() = 0;
-        virtual void setPipeline(RHI::PipelineHandle pipeline) {}
         virtual void setPipelineMapping(const std::unordered_map<uint32_t, RHI::PipelineHandle>& mapping) = 0;
         virtual std::shared_ptr<Assets::MaterialInstance> getMaterial() const { return nullptr; }
         virtual void setMaterial(std::shared_ptr<Assets::MaterialInstance> material) {}
 
         virtual void addDrawItem(std::shared_ptr<DrawItem> item) {}
+
+        // 图编译后：自包含 executor（如呈现/粒子）在这里构建自己的管线/描述符。
+        // 与场景相关的管线（网格）由 pass 在 onSceneData 里构建，executor 只需接收 setPipelineMapping。
+        struct ExecutorPrepareContext {
+            std::shared_ptr<RHI::ResourceManager> resMgr;
+            std::shared_ptr<RHI::IRHI> rhi;
+            RenderGraph::RenderGraph* renderGraph = nullptr;
+            RHI::DescriptorSetLayoutHandle globalSetLayout;
+            RHI::DescriptorSetHandle globalDescSet;
+            RHI::RenderPassHandle renderPass;
+            uint32_t subpassIndex = 0;
+        };
+        virtual void onPrepare(const ExecutorPrepareContext& /*ctx*/) {}
 
         virtual void execute(RHI::RHICommandEncoder* encoder,
             const RenderContext& rctx,

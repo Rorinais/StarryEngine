@@ -20,12 +20,16 @@
 #include <cstdlib>
 #include "../src/renderer/passes/PassWrapper.hpp"
 #include "../src/renderer/passes/GraphicsPass.hpp"
+#include "../src/renderer/passes/MeshPass.hpp"
 #include "../src/renderer/renderPaths/DeferredRenderPath.hpp"
-#include "../src/renderer/passExecutor/MeshDrawExecutor.hpp"
+#include "../src/renderer/passExecutor/SceneDrawExecutor.hpp"
 #include "../src/assets/geometry/GeometryGenerator.hpp"
 #include "../src/assets/material/DefaultMaterialTemplate.hpp"
+#include "../src/renderer/passes/ParticlePass.hpp"
+#include "../src/scene/ParticleEmitter.hpp"
 #include "../src/assets/material/MaterialInstance.hpp"
 #include "../src/assets/loader/TextureLoader.hpp"
+
 
 #include "../src/application/Application.hpp"
 #include "../src/event/Events.hpp"
@@ -66,6 +70,7 @@ private:
         m_descriptorSet = m_renderer->getGlobalDescriptorSet();
 
         auto renderPath = std::make_shared<DeferredRenderPath>(m_rhi, m_width, m_height);
+        renderPath->setScene(m_scene.get());   // 场景数据源：粒子等 pass 建图时通过 configure 拿到
         // 透明窗口：present 阶段清屏为全透明
         renderPath->setPresentClearColor({ 0.0f, 0.0f, 0.0f, 0.0f });
 
@@ -78,31 +83,12 @@ private:
 
         PassList passes;
 
-        auto forwardPass = std::make_shared<GraphicsPass>("ForwardPass");
-        {
-            SubpassDesc sp;
-            sp.name = "OpaqueGeometry"; sp.tag = "Forward_Opaque";
-            sp.executor = std::make_shared<MeshDrawExecutor>();
+        // ForwardPass —— MeshPass 封装，透明窗口清屏色 alpha=0（背景全透明）
+        passes.push_back(std::make_shared<MeshPass>("ForwardPass", "Forward_Opaque",
+                                                    RHI::Color{ 0.0f, 0.0f, 0.0f, 0.0f }));
 
-            RenderGraph::AttachmentParams color;
-            color.initialLayout = RHI::ImageLayout::Undefined;
-            color.finalLayout   = RHI::ImageLayout::ShaderReadOnly;
-            color.loadOp = RHI::AttachmentLoadOp::Clear;
-            color.storeOp = RHI::AttachmentStoreOp::Store;
-            color.clearColor = { 0.0f, 0.0f, 0.0f, 0.0f };  // 背景全透明
-            sp.colorAttachments.push_back({"SceneColor", color});
-
-            RenderGraph::AttachmentParams depth;
-            depth.initialLayout = RHI::ImageLayout::Undefined;
-            depth.finalLayout   = RHI::ImageLayout::DepthStencilAttachment;
-            depth.loadOp = RHI::AttachmentLoadOp::Clear;
-            depth.storeOp = RHI::AttachmentStoreOp::Store;
-            depth.clearDepth = 1.0f;
-            sp.depthAttachment = {"Depth", depth};
-
-            forwardPass->addSubpass(sp);
-        }
-        passes.push_back(forwardPass);
+        // 粒子 pass：声明式，场景里 passTag="Particles" 的 emitters 都归它（内容来自场景）
+        passes.push_back(std::make_shared<ParticlePass>("Particles", "Particles"));
 
         renderPath->setPassList(std::move(passes));
         m_renderer->setRenderPath(std::move(renderPath));
@@ -148,10 +134,72 @@ private:
         m_scene->addObject(obj);
     }
 
+    // 粒子渲染材质：particle.vert/frag + alpha 混合（渲染走通用材质）
+    std::shared_ptr<Assets::MaterialInstance> makeParticleMaterial() {
+        auto tmpl = std::make_shared<Assets::DefaultMaterialTemplate>(
+            m_rhi->getResourceManager(), m_descriptorSetLayout);
+        if (!tmpl->loadShaders("assets/shaders/test/particle.vert", "assets/shaders/test/particle.frag")) {
+            LOG_ERROR("Failed to load particle shaders");
+            return nullptr;
+        }
+        auto mat = std::make_shared<Assets::MaterialInstance>(
+            tmpl, m_descriptorPool, m_rhi->getResourceManager().get(), m_descriptorSet);
+        RHI::BlendAttachmentState blend;
+        blend.blendEnable = true;   // 默认 SrcAlpha/OneMinusSrcAlpha
+        mat->setAttachments({ blend });
+        mat->setDepthTest(false);
+        mat->setDepthWrite(false);
+        return mat;
+    }
+
+    void addEmitter(const std::string& name, uint32_t count, ParticleParams p, const glm::vec3& pos) {
+        auto em = std::make_shared<Scene::ParticleEmitter>();
+        em->name = name;
+        em->particleCount = count;
+        em->computeShader = "assets/shaders/test/particle.comp";
+        em->material = makeParticleMaterial();
+        em->params = p;
+        em->transform = glm::translate(glm::mat4(1.0f), pos);   // 发射器局部坐标 → 世界
+        m_scene->addParticleEmitter(em);
+    }
+
     void createScene() {
-        // 左：不透明红方块；右：半透明蓝方块
-        addCube(glm::vec3(-1.8f, 0.5f, 0.0f), 1.6f, { 230, 60, 60, 255 }, false);
-        addCube(glm::vec3( 1.8f, 0.5f, 0.0f), 1.6f, {  60, 120, 255, 140 }, true);
+        // 粒子发射器（场景内容，可增删；增删后 renderer->setNeedRebuildGraph()）
+        ParticleParams fire;
+        fire.gravity  = -0.15f;
+        fire.speedMin = 0.5f;
+        fire.speedMax = 2.0f;
+        fire.lifetime = 3.5f;
+        fire.spreadXZ = 1.2f;
+        fire.swayFreq = 2.7f;
+        fire.swayAmp  = 0.6f;
+        fire.emitterY = 0.0f;
+        fire.topDiffuse   = 1.5f;
+        fire.topThreshold = 2.5f;
+        fire.colorYoung[0] = 1.0f; fire.colorYoung[1] = 0.9f; fire.colorYoung[2] = 0.2f;
+        fire.colorMiddle[0]= 1.0f; fire.colorMiddle[1]= 0.4f; fire.colorMiddle[2]= 0.05f;
+        fire.colorOld[0]   = 0.6f; fire.colorOld[1]   = 0.1f; fire.colorOld[2]   = 0.02f;
+        fire.pointSizeMin  = 3.0f;
+        fire.pointSizeMax  = 12.0f;
+        addEmitter("Fire", 1024, fire, glm::vec3(0.0f, 0.0f, 0.0f));
+
+        ParticleParams sparks;
+        sparks.gravity  = -0.05f;
+        sparks.speedMin = 0.3f;
+        sparks.speedMax = 1.5f;
+        sparks.lifetime = 2.0f;
+        sparks.spreadXZ = 0.5f;
+        sparks.swayFreq = 3.5f;
+        sparks.swayAmp  = 0.4f;
+        sparks.emitterY = 0.0f;
+        sparks.topDiffuse   = 1.0f;
+        sparks.topThreshold = 2.0f;
+        sparks.colorYoung[0] = 0.0f; sparks.colorYoung[1] = 1.0f; sparks.colorYoung[2] = 0.0f;
+        sparks.colorMiddle[0]= 0.0f; sparks.colorMiddle[1]= 0.8f; sparks.colorMiddle[2]= 0.0f;
+        sparks.colorOld[0]   = 0.0f; sparks.colorOld[1]   = 0.4f; sparks.colorOld[2]   = 0.0f;
+        sparks.pointSizeMin  = 4.0f;
+        sparks.pointSizeMax  = 15.0f;
+        addEmitter("Sparks", 256, sparks, glm::vec3(0.0f, 0.0f, 0.0f));
 
         auto cam = std::make_shared<Scene::PerspectiveCamera>();
         cam->setPerspective(glm::radians(45.0f), (float)m_width / m_height, 0.1f, 100.0f);

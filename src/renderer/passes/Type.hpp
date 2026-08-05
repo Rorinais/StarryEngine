@@ -11,8 +11,7 @@ namespace StarryEngine {
     };
 
     struct SubpassDesc {
-        std::string name;
-        std::string tag;             
+        std::string tag;           
         std::shared_ptr<IPassExecutor> executor;
         std::vector<SubpassAttachment> colorAttachments;
         std::optional<SubpassAttachment> depthAttachment;

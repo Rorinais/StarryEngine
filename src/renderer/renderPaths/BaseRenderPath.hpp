@@ -35,6 +35,9 @@ namespace StarryEngine {
         // 透明窗口：present 清屏色可配（alpha=0 让桌面透过来）
         void setPresentClearColor(const RHI::Color& color) { m_presentClearColor = color; }
 
+        // 场景数据源：放入黑板，pass 建图时通过 configure 的 RenderBlackboard 按类型取（粒子 pass 等）
+        void setScene(Scene::Scene* scene) { m_blackboard.put<Scene::Scene*>(scene); }
+
         void addOverlayPass(const OverlayPassDesc& desc) override { m_overlayPasses.push_back(desc); }
         void removeOverlayPass(const std::string& tag) override;
         void clearOverlayPasses() override { m_overlayPasses.clear(); }
@@ -61,8 +64,8 @@ namespace StarryEngine {
 
         // 编译 + 内建 Pass 管线
         bool compileAndFinalize(std::unordered_map<std::string, RenderGraph::TextureId>& texIdMap);
-        void ensurePresentationShaders();
-        void preparePresentationPipeline(std::unordered_map<std::string, RenderGraph::TextureId>& texIdMap);
+        // 呈现 executor 自建管线（PresentationExecutor::onPrepare），这里只负责把编译好的 render pass 传给它
+        void preparePresentationExecutor();
 
         // ── 子类可访问的数据 ──
         std::shared_ptr<RHI::IRHI> m_rhi;
@@ -89,17 +92,6 @@ namespace StarryEngine {
         std::unordered_map<std::string, RenderGraph::TextureId> m_textureIdMap;
 
         PassList m_passes;
-
-    private:
-        // ── 呈现层管道 ──
-        RHI::ShaderHandle               m_fullscreenVert;
-        RHI::ShaderHandle               m_copyFrag;
-        RHI::DescriptorSetLayoutHandle  m_presentSceneColorLayout;
-        RHI::PipelineLayoutHandle       m_presentPipelineLayout;
-        RHI::DescriptorSetHandle        m_presentSceneColorDescSet;
-        RHI::DescriptorPoolHandle       m_presentSceneColorPool;       
-        bool m_presentationShadersReady = false;
-        bool m_presentationPipelineReady = false;
     };
 
 } // namespace StarryEngine

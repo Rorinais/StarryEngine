@@ -16,6 +16,7 @@ namespace StarryEngine::RenderGraph {
     struct TexturePassInfo {
         int32_t firstUserIndex = -1;
         int32_t lastUserIndex  = -1;
+        int32_t firstWriterIndex = -1;
         int32_t lastWriterIndex = -1;
         int32_t firstReaderIndex = -1;
         RHI::PipelineStageFlags writeStage = static_cast<RHI::PipelineStageFlags>(0);
@@ -54,6 +55,11 @@ namespace StarryEngine::RenderGraph {
         BufferId createVirtualBuffer(const RHI::BufferDesc& desc, const std::string& name = "");
 
         PassNode* addGraphicsPassNode(const std::string& name);
+
+        // 按 dedupKey 共享同一个图形 pass 节点：同 key 复用（如多个粒子系统共用一个 render pass），
+        // 首次调用创建节点并登记，后续返回已有节点。map 随图生命周期（重建即清）。
+        PassNode* addGraphicsPassNodeShared(const std::string& name, const std::string& dedupKey);
+
         PassNode* addComputePassNode(const std::string& name);
 
         void dependencyAnalysis();
@@ -76,6 +82,7 @@ namespace StarryEngine::RenderGraph {
         size_t getPassCount() const { return m_passes.size(); }
 
         TextureId getTextureId(const std::string& name) const;
+        BufferId getBufferId(const std::string& name) const;
 
         const std::vector<RHI::FramebufferHandle>& getFramebuffersForPass(size_t passIndex) const;
         std::pair<RHI::PipelineStageFlags, RHI::AccessFlags> getStageAccessFromLayout(RHI::ImageLayout layout);
@@ -145,6 +152,9 @@ namespace StarryEngine::RenderGraph {
         uint32_t m_nextBufferId = 1;
 
         std::vector<std::unique_ptr<PassNode>> m_passes;
+
+        // 共享图形 pass 节点注册表：dedupKey → 节点（addGraphicsPassNodeShared 用）
+        std::unordered_map<std::string, PassNode*> m_sharedGraphicsNodes;
 
         std::vector<PassNode*> m_sortedPasses;
         std::unordered_map<TextureId, PhysicalTextureInfo> m_textureMap;  // 虚拟 -> 物理信息

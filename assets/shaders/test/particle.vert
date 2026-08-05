@@ -13,7 +13,7 @@ layout(set = 1, binding = 0) readonly buffer ParticleBuffer {
 } uParticles;
 
 layout(push_constant) uniform PC {
-    // vec3 按 16B 对齐，把颜色放在 deltaTime/count/padding 之后
+    mat4 model;                             // 发射器局部坐标 → 世界（offset 0..63）
     layout(offset = 64) vec3 colorYoung;   // 新生颜色
     layout(offset = 80) vec3 colorMiddle;  // 中年颜色
     layout(offset = 96) vec3 colorOld;     // 衰老颜色
@@ -28,7 +28,7 @@ void main() {
     float life = p.w;
     float t = 1.0 - life;
 
-    gl_Position = global.proj * global.view * vec4(p.xyz, 1.0);
+    gl_Position = global.proj * global.view * pc.model * vec4(p.xyz, 1.0);
     gl_PointSize = mix(pc.pointSizeMin, pc.pointSizeMax, sin(t * 3.14159)) * mix(1.2, 0.3, t);
 
     float mid = smoothstep(0.0, 0.5, t);
