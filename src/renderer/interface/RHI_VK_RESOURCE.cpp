@@ -1170,7 +1170,14 @@ namespace StarryEngine::RHI {
     void RHI_VK_Texture::createTexture() {
         VkFormat vkFormat;
         if (mDesc.allowDepthStencil) {
-            vkFormat = mDevice->findDepthFormat();
+            // ★尊重 desc 明确指定的深度模板格式（如 D24_UNorm_S8_UInt 需要 stencil 分量）。
+            // 旧代码一律 findDepthFormat()（优先 D32_SFLOAT，纯深度无 stencil）→ 模板不可用，
+            // 且 render pass 附件格式（来自 desc）与图像实际格式错配 → 模板全链路断。
+            // 只有 desc 格式无效（Undefined）时才回退设备首选深度格式。
+            vkFormat = FUNC::RHI_TO_VK_Format(mDesc.format);
+            if (vkFormat == VK_FORMAT_UNDEFINED) {
+                vkFormat = mDevice->findDepthFormat();
+            }
             mActualFormat = FUNC::VK_TO_RHI_Format(vkFormat);
         }
         else {
@@ -1181,7 +1188,11 @@ namespace StarryEngine::RHI {
         VkImageUsageFlags usage = convertUsage(mDesc);
         VkImageAspectFlags aspect;
         if (mDesc.allowDepthStencil) {
-            aspect = VK_IMAGE_ASPECT_DEPTH_BIT; // 假设只使用深度，如需模板可进一步判断
+            // 按实际格式决定 aspect：带 stencil 的深度模板格式 → DEPTH|STENCIL（视图才可访问模板）
+            aspect = VK_IMAGE_ASPECT_DEPTH_BIT;
+            if (vkFormat == VK_FORMAT_D24_UNORM_S8_UINT || vkFormat == VK_FORMAT_D32_SFLOAT_S8_UINT) {
+                aspect |= VK_IMAGE_ASPECT_STENCIL_BIT;
+            }
         }
         else {
             aspect = VK_IMAGE_ASPECT_COLOR_BIT;

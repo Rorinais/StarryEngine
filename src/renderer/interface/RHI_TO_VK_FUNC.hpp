@@ -71,6 +71,7 @@ namespace StarryEngine::RHI::FUNC {
         case Format::D16_UNorm: return VK_FORMAT_D16_UNORM;
         case Format::D32_Float: return VK_FORMAT_D32_SFLOAT;
         case Format::D24_UNorm_S8_UInt: return VK_FORMAT_D24_UNORM_S8_UINT;
+        case Format::D32_Float_S8_UInt: return VK_FORMAT_D32_SFLOAT_S8_UINT;
         case Format::RGB32_Float: return VK_FORMAT_R32G32B32_SFLOAT;
         case Format::RG32_Float: return VK_FORMAT_R32G32_SFLOAT;
         case Format::RGBA32_Float: return VK_FORMAT_R32G32B32A32_SFLOAT;
@@ -84,6 +85,7 @@ namespace StarryEngine::RHI::FUNC {
         case VK_FORMAT_D16_UNORM:          return RHI::Format::D16_UNorm;
         case VK_FORMAT_D32_SFLOAT:         return RHI::Format::D32_Float;
         case VK_FORMAT_D24_UNORM_S8_UINT:  return RHI::Format::D24_UNorm_S8_UInt;
+        case VK_FORMAT_D32_SFLOAT_S8_UINT:  return RHI::Format::D32_Float_S8_UInt;
         case VK_FORMAT_R8G8B8A8_UNORM:     return RHI::Format::RGBA8_UNorm;
         case VK_FORMAT_R8G8B8A8_SRGB:      return RHI::Format::RGBA8_sRGB;
         case VK_FORMAT_B8G8R8A8_UNORM:     return RHI::Format::BGRA8_UNorm;

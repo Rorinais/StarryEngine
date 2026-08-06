@@ -8,6 +8,14 @@
 #include "../src/assets/geometry/GeometryGenerator.hpp"
 
 #include"../src/application/Application.hpp"
+#include "../src/event/Events.hpp"
+
+static bool g_clickThrough = true;
+
+namespace {
+    constexpr uint32_t kWinW = 560;
+    constexpr uint32_t kWinH = 680;
+}
 
 using namespace StarryEngine;
 
@@ -33,9 +41,12 @@ public:
 
         auto renderPath = std::make_shared<DeferredRenderPath>(m_rhi, m_width, m_height);
         renderPath->setScene(m_scene.get());   // 场景数据源：粒子等 pass 建图时通过 configure 拿到
+        renderPath->setPresentClearColor({ 0.0f, 0.0f, 0.0f, 0.0f });
 
         auto colorDesc = PassWrapper::createColorTextureDesc({m_width, m_height, 1}, RHI::Format::RGBA16_Float);
-        auto depthDesc = PassWrapper::createDepthTextureDesc({m_width, m_height, 1}, RHI::Format::D32_Float);
+        // ★模板测试：Depth 附件带 stencil 分量。D24_S8 是 Vulkan 转换层已映射的标准深度模板格式
+        //（D32_Float_S8_UInt 枚举里有但 RHI_TO_VK 曾缺映射）。首写 clear 时 stencil 清零。
+        auto depthDesc = PassWrapper::createDepthTextureDesc({m_width, m_height, 1}, RHI::Format::D24_UNorm_S8_UInt);
         auto swapDesc   = PassWrapper::createColorTextureDesc({m_width, m_height, 1}, RHI::Format::BGRA8_sRGB);
         renderPath->addTextureDesc("SceneColor",  colorDesc);
         renderPath->addTextureDesc("Depth",       depthDesc);
@@ -45,26 +56,55 @@ public:
             PassList passes;
 
             // ForwardPass: OpaqueGeometry —— MeshPass 封装标准几何 pass（SceneColor+Depth 清屏 + Mesh 绘制）
-            passes.push_back(std::make_shared<MeshPass>("ForwardPass", "Forward_Opaque"));
+            passes.push_back(std::make_shared<MeshPass>("ForwardPass", "Forward_Opaque",RHI::Color::Transparent()));
 
             // PostProcessPass: Skybox + Grid（后续写者，loadOp/布局由渲染图推断为 Load）
-            auto postPass = std::make_shared<GraphicsPass>("PostProcessPass");
-            {
-                SubpassDesc sky;
-                sky.tag = "PostProcess_Skybox";
-                sky.executor = std::make_shared<SceneDrawExecutor>();  // 统一：SceneDrawExecutor 处理 procedural（天空盒）
-                sky.colorAttachments.push_back({"SceneColor"});
-                sky.depthAttachment = {"Depth"};
-                postPass->addSubpass(sky);
+            // auto postPass = std::make_shared<GraphicsPass>("PostProcessPass");
+            // {
+            //     SubpassDesc sky;
+            //     sky.tag = "PostProcess_Skybox";
+            //     sky.executor = std::make_shared<SceneDrawExecutor>(); 
+            //     sky.colorAttachments.push_back({"SceneColor"});
+            //     sky.depthAttachment = {"Depth"};
+            //     postPass->addSubpass(sky);
 
-                SubpassDesc grid;
-                grid.tag = "PostProcess_Grid";
-                grid.executor = std::make_shared<SceneDrawExecutor>();
-                grid.colorAttachments.push_back({"SceneColor"});
-                grid.depthAttachment = {"Depth"};
-                postPass->addSubpass(grid);
+            //     SubpassDesc grid;
+            //     grid.tag = "PostProcess_Grid";
+            //     grid.executor = std::make_shared<SceneDrawExecutor>();
+            //     grid.colorAttachments.push_back({"SceneColor"});
+            //     grid.depthAttachment = {"Depth"};
+            //     postPass->addSubpass(grid);
+            // }
+            // passes.push_back(postPass);
+
+            // ★模板描边 pass（放在粒子前：角色本体+外圈先画，粒子盖其上）：
+            //   subpass "StencilWrite"：角色本体正常画，同时 stencil Replace 写 1
+            //   subpass "StencilTest" ：放大 1.08 的角色副本，stencil NotEqual 反选 → 只留外圈描边
+            // 同一 render pass 内 subpass 间 stencil 读写靠 Vulkan 隐式 framebuffer-local 依赖；
+            // 本 pass 的深度附件 stencilLoadOp=Clear → 开 pass 时 stencil 清零，本体从 0 写 1。
+            {
+                auto stencilPass = std::make_shared<GraphicsPass>("StencilPass");
+
+                RenderGraph::AttachmentParams ds;
+                ds.clearDepth = 1.0f;
+                ds.clearStencil = 0;
+
+                SubpassDesc sw;
+                sw.tag = "StencilWrite";
+                sw.executor = std::make_shared<SceneDrawExecutor>();
+                sw.colorAttachments.push_back({ "SceneColor", RenderGraph::AttachmentParams{} });
+                sw.depthAttachment = { "Depth", ds };
+                stencilPass->addSubpass(sw);
+
+                SubpassDesc st;
+                st.tag = "StencilTest";
+                st.executor = std::make_shared<SceneDrawExecutor>();
+                st.colorAttachments.push_back({ "SceneColor", RenderGraph::AttachmentParams{} });
+                st.depthAttachment = { "Depth", ds };
+                stencilPass->addSubpass(st);
+
+                passes.push_back(stencilPass);
             }
-            passes.push_back(postPass);
 
             // 粒子 pass：声明式，场景里 passTag="Particles" 的 emitters 都归它（内容来自场景）
             passes.push_back(std::make_shared<ParticlePass>("Particles", "Particles"));
@@ -130,7 +170,6 @@ public:
         return gridMaterialInst;
     }
 
-
     std::shared_ptr<Assets::MaterialInstance> createTexturedPbrMaterial() {
         auto tmpl = std::make_shared<Assets::DefaultMaterialTemplate>(m_rhi->getResourceManager(), m_descriptorSetLayout);
         tmpl->loadShaders("assets/shaders/pbr/shpere_pbr.vert", "assets/shaders/pbr/shpere_pbr (2).frag");
@@ -167,52 +206,87 @@ public:
     void createScene() {
         initIBL();
 
-        auto skyboxEffect = std::make_shared<Scene::ProceduralEffect>();
-        skyboxEffect->material = createSkyboxMaterial();
-        m_scene->addProceduralEffect(skyboxEffect);
+        // auto skyboxEffect = std::make_shared<Scene::ProceduralEffect>();
+        // skyboxEffect->material = createSkyboxMaterial();
+        // m_scene->addProceduralEffect(skyboxEffect);
 
-        auto mat = createTexturedPbrMaterial();
-        auto sphere = std::make_shared<Scene::RenderObject>();
-        sphere->geometry = Assets::GeometryGenerator::createSphere(m_rhi->getResourceManager(), 1.0f);
-        sphere->materials = { mat };
-        sphere->transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.5f, 0.0f));
+        // auto mat = createTexturedPbrMaterial();
+        // auto sphere = std::make_shared<Scene::RenderObject>();
+        // sphere->geometry = Assets::GeometryGenerator::createSphere(m_rhi->getResourceManager(), 1.0f);
+        // sphere->materials = { mat };
+        // sphere->transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.5f, 0.0f));
 
-        // ── 变换动画：球体自转 + 上下浮动 ──
-        {
-            auto clip = std::make_shared<Assets::AnimationClip>();
-            clip->name = "SpinBob";
-            clip->duration = 4.0f;    // 4 秒一圈
-            clip->looping = true;
-            // 每 0.5s 一个关键帧：绕 Y 轴旋转 45°，并上下浮动
-            for (int i = 0; i <= 8; ++i) {
-                float t = i * 0.5f;
-                Assets::TransformKeyframe kf;
-                kf.time = t;
-                kf.position = glm::vec3(0.0f, 1.5f + 0.3f * std::sin(t * glm::pi<float>() / 2.0f), 0.0f);
-                kf.rotation = glm::angleAxis(t * glm::pi<float>() / 2.0f, glm::vec3(0.0f, 1.0f, 0.0f));
-                kf.scale = glm::vec3(1.0f);
-                clip->keyframes.push_back(kf);
-            }
+        // // ── 变换动画：球体自转 + 上下浮动 ──
+        // {
+        //     auto clip = std::make_shared<Assets::AnimationClip>();
+        //     clip->name = "SpinBob";
+        //     clip->duration = 4.0f;    // 4 秒一圈
+        //     clip->looping = true;
+        //     // 每 0.5s 一个关键帧：绕 Y 轴旋转 45°，并上下浮动
+        //     for (int i = 0; i <= 8; ++i) {
+        //         float t = i * 0.5f;
+        //         Assets::TransformKeyframe kf;
+        //         kf.time = t;
+        //         kf.position = glm::vec3(0.0f, 1.5f + 0.3f * std::sin(t * glm::pi<float>() / 2.0f), 0.0f);
+        //         kf.rotation = glm::angleAxis(t * glm::pi<float>() / 2.0f, glm::vec3(0.0f, 1.0f, 0.0f));
+        //         kf.scale = glm::vec3(1.0f);
+        //         clip->keyframes.push_back(kf);
+        //     }
 
-            auto animator = std::make_shared<Scene::Animator>();
-            animator->setClip(clip);
-            animator->setSpeed(1.0f);
-            sphere->animator = animator;
-        }
+        //     auto animator = std::make_shared<Scene::Animator>();
+        //     animator->setClip(clip);
+        //     animator->setSpeed(1.0f);
+        //     sphere->animator = animator;
+        // }
 
-        m_scene->addObject(sphere);
+        // m_scene->addObject(sphere);
 
 
-        auto groundMat = createTexturedPbrMaterial();
-        auto ground = std::make_shared<Scene::RenderObject>();
-        ground->geometry = Assets::GeometryGenerator::createCube(m_rhi->getResourceManager(), 20.0f, 0.3f, 20.0f);
-        ground->materials = { groundMat };
-        ground->transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -0.15f, 0.0f));
-        m_scene->addObject(ground);
+        // auto groundMat = createTexturedPbrMaterial();
+        // auto ground = std::make_shared<Scene::RenderObject>();
+        // ground->geometry = Assets::GeometryGenerator::createCube(m_rhi->getResourceManager(), 20.0f, 0.3f, 20.0f);
+        // ground->materials = { groundMat };
+        // ground->transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -0.15f, 0.0f));
+        // m_scene->addObject(ground);
 
         addGriseoModel();
 
-        // 粒子发射器（场景内容，可增删；增删后 renderer->setNeedRebuildGraph()）
+        // ── 模板描边：角色本体在 StencilWrite 画 + stencil Replace 写 1；放大副本在 StencilTest 测 NotEqual 反选 → 只留外圈 ──
+        {
+            // 1) 角色本体材质：tag 从 Forward_Opaque 改到 StencilWrite（本体移到描边 pass 里画），开 stencil 写 1
+            for (auto& mat : m_skinnedMaterials) {
+                if (!mat) continue;
+                mat->setSubpassTag("StencilWrite");
+                RHI::StencilOpState write;
+                write.failOp = RHI::StencilOp::Keep;
+                write.passOp = RHI::StencilOp::Replace;   // 测试通过（Always）→ 写 stencil=1
+                write.depthFailOp = RHI::StencilOp::Keep;
+                write.compareOp = RHI::CompareOp::Always;
+                write.compareMask = 0xFF;
+                write.writeMask = 0xFF;
+                write.reference = 1;
+                mat->setStencilTest(true);
+                mat->setStencilOps(write, write);
+            }
+
+            // 2) 描边副本：同一几何（同一骨骼矩阵）+ 放大变换，全 submesh 同一描边材质
+            m_outlineMaterial = makeOutlineMaterial();
+            if (m_outlineMaterial && m_modelGeometry) {
+                auto outline = std::make_shared<Scene::RenderObject>();
+                outline->geometry = m_modelGeometry;
+                // 材质列表长度对齐角色 submesh 索引（长度不够会解析到 default 材质 → 无蒙皮 → 破相）
+                std::vector<std::shared_ptr<Assets::MaterialInstance>> outlineMats(m_modelMaterialCount, m_outlineMaterial);
+                outline->materials = std::move(outlineMats);
+                // 放大 1.08，围绕角色中段 y=1.0 缩放 → 外圈厚度均匀
+                outline->transform =
+                    glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.0f, 0.0f))
+                    * glm::scale(glm::mat4(1.0f), glm::vec3(1.08f))
+                    * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -1.0f, 0.0f));
+                m_scene->addObject(outline);
+            }
+        }
+
+        //粒子发射器（场景内容，可增删；增删后 renderer->setNeedRebuildGraph()）
         {
             auto fire = std::make_shared<Scene::ParticleEmitter>();
             fire->name = "Fire";
@@ -261,7 +335,7 @@ public:
 
         auto perspectiveCamera = std::make_shared<Scene::PerspectiveCamera>();
         perspectiveCamera->setPerspective(glm::radians(45.0f), (float)m_width / m_height, 0.1f, 100.0f);
-        perspectiveCamera->lookAt(glm::vec3(1.0f, 2.0f, 5.0f),glm::vec3(0.0f, 1.5f, 0.0f),glm::vec3(0.0f, 1.0f, 0.0f));
+        perspectiveCamera->lookAt(glm::vec3(0.0f, 2.0f, 5.0f), glm::vec3(0.0f, 0.8f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
         m_scene->addCamera(perspectiveCamera);
         m_scene->setActiveCamera(perspectiveCamera);
     }
@@ -284,6 +358,26 @@ public:
         return mat;
     }
 
+    // 模板测试 quad 通用材质：复用 shader.vert（set0 global UBO + push mat4）+ 指定 frag，
+    // 绑白 1×1 纹理给 texSampler（保证 set1 描述符有效）。深度测试/写入默认关闭。
+    std::shared_ptr<Assets::MaterialInstance> makeStencilQuadMaterial(const std::string& fragPath) {
+        auto tmpl = std::make_shared<Assets::DefaultMaterialTemplate>(m_rhi->getResourceManager(), m_descriptorSetLayout);
+        if (!tmpl->loadShaders("assets/shaders/core/shader.vert", fragPath)) {
+            LOG_ERROR("Failed to load stencil quad shaders: {}", fragPath);
+            return nullptr;
+        }
+        auto mat = std::make_shared<Assets::MaterialInstance>(
+            tmpl, m_descriptorPool, m_rhi->getResourceManager().get(), m_descriptorSet);
+        Assets::TextureLoader loader(m_rhi->getResourceManager());
+        static const uint8_t kWhite[4] = { 255, 255, 255, 255 };
+        auto white = loader.loadTextureFromMemory(kWhite, 1, 1, RHI::Format::RGBA8_UNorm, "White");
+        if (white.texture.isValid())
+            mat->setTexture("texSampler", white.texture, white.sampler);
+        mat->setDepthTest(false);
+        mat->setDepthWrite(false);
+        return mat;
+    }
+
     std::shared_ptr<Renderer> getRenderer() { return m_renderer; }
 
     std::shared_ptr< Scene::Scene> getScene() { return m_scene; }
@@ -293,6 +387,7 @@ public:
 private:
     bool loadModelGeometry(Assets::Geometry& outGeometry,std::vector<Assets::MaterialParams>& outParams,Assets::Skeleton* outSkeleton = nullptr);
     std::shared_ptr<Assets::MaterialInstance> makeModelMaterial(const Assets::MaterialParams& param, bool skinned);
+    std::shared_ptr<Assets::MaterialInstance> makeOutlineMaterial();
     void addGriseoModel();
 
     Assets::Skeleton m_modelSkeleton;
@@ -304,6 +399,9 @@ private:
     float m_skeletalTime = 0.0f;
     bool m_skeletalReady = false;
     std::vector<std::shared_ptr<Assets::MaterialInstance>> m_skinnedMaterials;
+    std::shared_ptr<Assets::Geometry> m_modelGeometry;          // 角色几何（描边副本复用同一几何+骨骼数据）
+    size_t m_modelMaterialCount = 0;                             // 角色材质数（描边副本材质列表对齐 submesh 索引）
+    std::shared_ptr<Assets::MaterialInstance> m_outlineMaterial; // 描边副本材质（onUpdate 同步喂骨骼矩阵）
 
     uint32_t m_width, m_height;
     std::shared_ptr<RHI::IRHI> m_rhi;
@@ -328,7 +426,7 @@ private:
 
 bool PBRDemo::loadModelGeometry(Assets::Geometry& outGeometry,std::vector<Assets::MaterialParams>& outParams,Assets::Skeleton* outSkeleton) {
     Assets::ModelLoader loader(m_rhi->getResourceManager());
-    if (!loader.open("assets/models/fuxuan_Animation.fbx")) {
+    if (!loader.open("assets/models/fuxuan_Animation3.fbx")) {
         LOG_ERROR("Failed to load model");
         return false;
     }
@@ -344,6 +442,8 @@ bool PBRDemo::loadModelGeometry(Assets::Geometry& outGeometry,std::vector<Assets
 
     *outSkeleton = std::move(*skeleton);
     m_modelClip = std::move(*clip);
+    m_modelClip.looping = true;
+
     outParams = std::move(materials);
     outGeometry = std::move(*geometry);
 
@@ -397,6 +497,41 @@ std::shared_ptr<Assets::MaterialInstance> PBRDemo::makeModelMaterial(
     return instance;
 }
 
+// 描边副本材质：蒙皮顶点 + 高亮纯色 frag；stencil NotEqual 反选本体区域 → 只画外圈。
+// 深度测试开（外圈被本体/前方物体正确遮挡）、深度写关；不写 stencil（writeMask=0）。
+std::shared_ptr<Assets::MaterialInstance> PBRDemo::makeOutlineMaterial() {
+    auto tmpl = std::make_shared<Assets::DefaultMaterialTemplate>(
+        m_rhi->getResourceManager(), m_descriptorSetLayout);
+    if (!tmpl->loadShaders("assets/shaders/core/shader_skinned.vert", "assets/shaders/core/outline.frag")) {
+        LOG_ERROR("Failed to load outline shaders");
+        return nullptr;
+    }
+    auto mat = std::make_shared<Assets::MaterialInstance>(
+        tmpl, m_descriptorPool, m_rhi->getResourceManager().get(), m_descriptorSet);
+
+    Assets::TextureLoader loader(m_rhi->getResourceManager());
+    static const uint8_t kWhite[4] = { 255, 255, 255, 255 };
+    auto white = loader.loadTextureFromMemory(kWhite, 1, 1, RHI::Format::RGBA8_UNorm, "White");
+    if (white.texture.isValid())
+        mat->setTexture("texSampler", white.texture, white.sampler);
+
+    mat->setSubpassTag("StencilTest");
+    mat->setDepthTest(true);
+    mat->setDepthWrite(false);
+
+    RHI::StencilOpState outline;
+    outline.failOp = RHI::StencilOp::Keep;
+    outline.passOp = RHI::StencilOp::Keep;         // 只读 stencil，不改
+    outline.depthFailOp = RHI::StencilOp::Keep;
+    outline.compareOp = RHI::CompareOp::NotEqual;  // stencil != 1 → 本体外圈才通过
+    outline.compareMask = 0xFF;
+    outline.writeMask = 0x00;                      // 描边不写 stencil
+    outline.reference = 1;
+    mat->setStencilTest(true);
+    mat->setStencilOps(outline, outline);
+    return mat;
+}
+
 void PBRDemo::addGriseoModel() {
     auto geometry = std::make_shared<Assets::Geometry>(m_rhi->getResourceManager());
     std::vector<Assets::MaterialParams> params;
@@ -413,8 +548,11 @@ void PBRDemo::addGriseoModel() {
     auto obj = std::make_shared<Scene::RenderObject>();
     obj->geometry = geometry;
     obj->materials = materials;
-    obj->transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 2.5f));
+    obj->transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f));
     m_scene->addObject(obj);
+
+    m_modelGeometry = geometry;
+    m_modelMaterialCount = materials.size();
 
     m_skeletalReady = skinned;
     if (m_skeletalReady) {
@@ -428,7 +566,10 @@ void PBRDemo::onUpdate(float deltaTime) {
 
     // 动画时间是 ticks，deltaTime 是秒 → 乘 ticksPerSecond 换算
     float tps = (m_modelClip.ticksPerSecond > 0.0f) ? m_modelClip.ticksPerSecond : 25.0f;
-    m_skeletalTime += deltaTime * tps;
+    // 非循环动画播到 duration 就停住（保持最后一帧，不再推进/绕回）
+    if (m_modelClip.looping || m_skeletalTime < m_modelClip.duration) {
+        m_skeletalTime += deltaTime * tps;
+    }
     m_skeletalAnimator.updateSkeleton(m_modelSkeleton, m_modelClip, m_skeletalTime);
     const auto& matrices = m_skeletalAnimator.getBoneMatrices();
     if (matrices.empty()) return;
@@ -437,6 +578,8 @@ void PBRDemo::onUpdate(float deltaTime) {
     for (auto& mat : m_skinnedMaterials) {
         if (mat) mat->setStorageBuffer(1, 2, matrices.data(), bytes);
     }
+    // 描边副本复用同一批骨骼矩阵（同一几何同一 pose，仅模型矩阵放大）
+    if (m_outlineMaterial) m_outlineMaterial->setStorageBuffer(1, 2, matrices.data(), bytes);
 }
 
 
@@ -461,8 +604,22 @@ int main() {
 #endif
     StarryEngine::Logger::init();
     StarryEngine::Logger::setShowSourceLoc(true);
-    StarryEngine::Logger::setLevel("warn"); 
-    StarryEngine::Application app;
+    StarryEngine::Logger::setLevel("info"); 
+
+    StarryEngine::Application::Config cfg;
+    cfg.width = kWinW;
+    cfg.height = kWinH;
+    cfg.title = "Transparent Window Smoke Test";
+    cfg.resizable = false;
+    cfg.transparent = true;
+    cfg.borderless = true;
+    cfg.alwaysOnTop = true;
+
+    cfg.clickThrough = (std::getenv("STARRY_NO_CLICKTHROUGH") == nullptr);
+    cfg.nativeWayland = (std::getenv("STARRY_FORCE_X11") == nullptr);
+
+    LOG_INFO("[demo] 平台: {}（STARRY_FORCE_X11 强制 X11）", cfg.nativeWayland ? "原生 Wayland" : "X11");
+    StarryEngine::Application app(cfg);
 
     auto demo = std::make_shared<PBRDemo>(app.getRenderHardwareInterface(), app.getGlobalDescriptorPool(), app.getWidth(), app.getHeight());
 
@@ -470,6 +627,19 @@ int main() {
     app.setScene(demo->getScene());
     app.setUpdateCallback([demo](float deltaTime) { demo->onUpdate(deltaTime); });
     app.initEventDispatcher();
+
+    GetEventDispatcher().subscribe(EventType::KeyPressed, [&app](IEvent& e) {
+        auto& ev = static_cast<KeyEvent&>(e);
+        if (ev.getKey() == GLFW_KEY_F1 && ev.getAction() == GLFW_PRESS) {
+            g_clickThrough = !g_clickThrough;
+            if (app.getWindow()->setClickThrough(g_clickThrough)) {
+                LOG_INFO("[demo] 点击穿透: {}", g_clickThrough ? "ON（透明区不挡点击）" : "OFF（可交互）");
+            } else {
+                LOG_WARN("[demo] 当前平台切换点击穿透失败");
+            }
+        }
+    });
+
     app.run();
     StarryEngine::Logger::shutdown();
 }

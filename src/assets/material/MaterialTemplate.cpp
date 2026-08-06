@@ -58,6 +58,9 @@ namespace StarryEngine::Assets {
         desc.depthStencil.depthTestEnable = state.depthTestEnable;
         desc.depthStencil.depthWriteEnable = state.depthWriteEnable;
         desc.depthStencil.depthCompareOp = state.depthCompareOp;
+        desc.depthStencil.stencilTestEnable = state.stencilTestEnable;
+        desc.depthStencil.front = state.stencilFront;
+        desc.depthStencil.back = state.stencilBack;
         desc.topology = state.topology;
         desc.viewport.viewports = state.viewports;
         desc.viewport.scissors = state.scissors;

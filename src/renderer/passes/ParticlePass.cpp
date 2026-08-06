@@ -67,8 +67,6 @@ namespace StarryEngine {
         m_emitterStates.clear();
         m_renderPassNode = nullptr;
 
-        // 收集路由匹配的 emitters：passTag 优先 → 材质 subpassTag → 默认 "Particles"。
-        // 无材质也行（onAfterCompile 用 pass 的默认 Sprite 材质）
         std::vector<std::shared_ptr<Scene::ParticleEmitter>> emitters;
         for (auto& em : scene->getParticleEmitters()) {
             if (resolveEmitterTag(*em) != m_passTag) continue;
@@ -216,8 +214,7 @@ namespace StarryEngine {
                 }
             }
 
-            auto rec = std::make_shared<ParticleRenderExecutor>(
-                pipeline, st.renderLayout, ctx.globalDescSet, st.particleDescSet, em->particleCount);
+            auto rec = std::make_shared<ParticleRenderExecutor>(pipeline, st.renderLayout, ctx.globalDescSet, st.particleDescSet, em->particleCount);
             rec->setVSParams(em->params);
             rec->setTransform(em->transform);
             st.executor = rec;

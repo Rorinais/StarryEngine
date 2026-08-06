@@ -191,6 +191,21 @@ namespace std {
         }
     };
 
+    // RHI::StencilOpState
+    template<> struct hash<StarryEngine::RHI::StencilOpState> {
+        size_t operator()(const StarryEngine::RHI::StencilOpState& s) const {
+            size_t seed = 0;
+            StarryEngine::Utils::hash_combine(seed, static_cast<size_t>(s.failOp));
+            StarryEngine::Utils::hash_combine(seed, static_cast<size_t>(s.passOp));
+            StarryEngine::Utils::hash_combine(seed, static_cast<size_t>(s.depthFailOp));
+            StarryEngine::Utils::hash_combine(seed, static_cast<size_t>(s.compareOp));
+            StarryEngine::Utils::hash_combine(seed, s.compareMask);
+            StarryEngine::Utils::hash_combine(seed, s.writeMask);
+            StarryEngine::Utils::hash_combine(seed, s.reference);
+            return seed;
+        }
+    };
+
     // RHI::VertexBinding
     template<> struct hash<StarryEngine::RHI::VertexBinding> {
         size_t operator()(const StarryEngine::RHI::VertexBinding& vb) const {

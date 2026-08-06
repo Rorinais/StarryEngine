@@ -55,6 +55,11 @@ namespace StarryEngine::Assets {
         void setDepthTest(bool enable) { m_depthTestEnable = enable; }
         void setDepthWrite(bool enable) { m_depthWriteEnable = enable; }
         void setDepthCompareOp(RHI::CompareOp op) { m_depthCompareOp = op; }
+        // 模板测试（front/back 两个 StencilOpState；setStencilOps 里没显式设置的字段用 RHI 默认值）
+        void setStencilTest(bool enable) { m_stencilTestEnable = enable; }
+        void setStencilOps(RHI::StencilOpState front, RHI::StencilOpState back) {
+            m_stencilFront = front; m_stencilBack = back;
+        }
         void setAttachments(std::vector<RHI::BlendAttachmentState> attachments) { m_attachments = std::move(attachments); }
         void setDeferred(bool deferred) { m_isDeferred = deferred; }
         void enableTransparent(bool enable = true) { m_alphaBlend = enable; }
@@ -71,6 +76,9 @@ namespace StarryEngine::Assets {
         bool isTransparent() const { return m_alphaBlend; }
         bool isDepthTestEnable() const { return m_depthTestEnable; }
         bool isDepthWriteEnable() const { return m_depthWriteEnable; }
+        bool isStencilTestEnable() const { return m_stencilTestEnable; }
+        const RHI::StencilOpState& getStencilFront() const { return m_stencilFront; }
+        const RHI::StencilOpState& getStencilBack() const { return m_stencilBack; }
         bool isDeferred() const { return m_isDeferred; }
         std::string getDebugName() const { return m_debugName; }
 
@@ -165,6 +173,9 @@ namespace StarryEngine::Assets {
         bool m_alphaBlend = false;
         bool m_depthTestEnable = true;
         bool m_depthWriteEnable = true;
+        bool m_stencilTestEnable = false;
+        RHI::StencilOpState m_stencilFront;
+        RHI::StencilOpState m_stencilBack;
         bool m_isDeferred = false;
 
         std::string m_subpassTag;

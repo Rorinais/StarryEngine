@@ -7,6 +7,7 @@
 #include <assimp/Importer.hpp>
 #include <assimp/postprocess.h>
 #include <limits>
+#include <algorithm>
 #include <cmath>
 #include <functional>
 #include <unordered_map>
@@ -252,10 +253,9 @@ namespace StarryEngine::Assets {
                 const auto& rk = chan->mRotationKeys[k];
                 // 标准 assimp 读法：aiQuaternion 是 (w, x, y, z)
                 glm::quat q(rk.mValue.w, rk.mValue.x, rk.mValue.y, rk.mValue.z);
-                // 跳过 NaN/Inf 和退化四元数（Blender 可能在 t≈0 写 (0,0,0,0) 或 norm 极小的键）
                 float n = glm::length(q);
-                if (!std::isfinite(q.w) || !std::isfinite(q.x) || !std::isfinite(q.y) || !std::isfinite(q.z) ||
-                    n < 0.01f) { ++skippedRotKeys; continue; }
+                if (!std::isfinite(q.w) || !std::isfinite(q.x) || !std::isfinite(q.y) || !std::isfinite(q.z)) { ++skippedRotKeys; continue; }
+                if (n < 0.1f || n > 2.0f) { ++skippedRotKeys; continue; }   // ★坏键拒绝
                 q = glm::normalize(q);
                 float n2 = glm::length(q);
                 if (!std::isfinite(n2) || n2 < 0.01f) { ++skippedRotKeys; continue; }
@@ -291,19 +291,13 @@ namespace StarryEngine::Assets {
             cleanKeys(track.positions);
             cleanKeys(track.rotations);
             cleanKeys(track.scales);
-
-            // 修复第一帧：frame-0 旋转键是坏的（与绑定差 48-175°，翻跟头），
-            // 只把第一个旋转键覆盖成绑定旋转，其余键不动
-            if (!track.rotations.empty() && track.boneIndex >= 0 &&
-                track.boneIndex < static_cast<int>(skeleton.bones.size())) {
-                glm::quat bindRot = glm::normalize(
-                    glm::quat_cast(skeleton.bones[track.boneIndex].bindLocalTransform));
-                track.rotations.front().value = bindRot;
-            }
-
             clip.tracks.push_back(std::move(track));
         }
 
+        // 注：duration 直接用 FBX 声明的动画时长（anim->mDuration），不按旋转键最大
+        // 时间截断。曾有代码把时长截到"最后一个有效旋转键"来治 32s 后空档——那是
+        // assimp 头/库不匹配（aiQuatKey 布局 24 vs 32 字节）导致的误读，已修复。
+        // 正常动画尾部若有定格姿势（骨键提前结束、后续保持不动），截断反而会砍掉它。
         int totalBad = totalSkipPos + totalSkipRot + totalSkipScl;
         if (totalBad > 0)
             LOG_WARN("[{}] Cleaned {} bad animation keyframes ({} pos, {} rot, {} scl)",

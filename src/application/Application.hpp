@@ -43,17 +43,20 @@ namespace StarryEngine {
     public:
         // 启动配置：窗口尺寸 / 透明窗口（桌面角色）等
         struct Config {
+            int posX = -1;
+            int posY = -1;
+
             uint32_t width = 1200;
             uint32_t height = 720;
             const char* title = "StarryEngine";
             const char* iconPath = "assets/icons/window_icon.png";
             bool resizable = true;
-            bool transparent = false;   // 透明窗口（需 swapchain alpha 合成）
-            bool borderless = false;    // 无边框
-            bool alwaysOnTop = false;   // 置顶
-            bool clickThrough = false;  // 鼠标穿透（透明区不挡点击）
+            bool transparent = false;  
+            bool borderless = false;    
+            bool alwaysOnTop = false;  
+            bool clickThrough = false; 
             bool highDPI = false;
-            bool nativeWayland = false; // Wayland 会话下走原生 Wayland（透明窗口需要，XWayland 不支持 alpha 合成）
+            bool nativeWayland = false; 
         };
 
         Application();

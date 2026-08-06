@@ -120,11 +120,21 @@ namespace {
                 }
             }
 
+            if (mConfig.posX >= 0 && mConfig.posY >= 0){
+                glfwWindowHint(GLFW_POSITION_X,mConfig.posX);
+                glfwWindowHint(GLFW_POSITION_Y,mConfig.posY);
+            }
+
             mWindow = glfwCreateWindow(width, height, mConfig.title, monitor, nullptr);
 
             if (!mWindow) {
                 terminateGLFW();
                 throw std::runtime_error("Failed to create GLFW window");
+            }
+
+            // 初始窗口位置（-1 = 让窗口管理器自动摆放；原生 Wayland 下由 compositor 决定，会被忽略）
+            if (mConfig.posX >= 0 && mConfig.posY >= 0) {
+                glfwSetWindowPos(mWindow, mConfig.posX, mConfig.posY);
             }
 
             // 点击穿透需在窗口创建后应用（Wayland 靠 wl_surface 设空输入区，X11/Windows 靠运行时属性）

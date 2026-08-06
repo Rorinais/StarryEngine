@@ -72,6 +72,11 @@ namespace StarryEngine {
         bool depthWriteEnable = true;
         RHI::CompareOp depthCompareOp = RHI::CompareOp::Less;
 
+        // 模板测试（材质一级状态，默认关闭；开启后经 getOrCreateGraphicsPipeline 拷进 RHI desc）
+        bool stencilTestEnable = false;
+        RHI::StencilOpState stencilFront;
+        RHI::StencilOpState stencilBack;
+
         RHI::PrimitiveTopology topology = RHI::PrimitiveTopology::TriangleList;
 
         std::vector<RHI::Viewport> viewports = { RHI::Viewport{} };
@@ -93,6 +98,21 @@ namespace StarryEngine {
                 depthTestEnable == other.depthTestEnable &&
                 depthWriteEnable == other.depthWriteEnable &&
                 depthCompareOp == other.depthCompareOp &&
+                stencilTestEnable == other.stencilTestEnable &&
+                stencilFront.failOp == other.stencilFront.failOp &&
+                stencilFront.passOp == other.stencilFront.passOp &&
+                stencilFront.depthFailOp == other.stencilFront.depthFailOp &&
+                stencilFront.compareOp == other.stencilFront.compareOp &&
+                stencilFront.compareMask == other.stencilFront.compareMask &&
+                stencilFront.writeMask == other.stencilFront.writeMask &&
+                stencilFront.reference == other.stencilFront.reference &&
+                stencilBack.failOp == other.stencilBack.failOp &&
+                stencilBack.passOp == other.stencilBack.passOp &&
+                stencilBack.depthFailOp == other.stencilBack.depthFailOp &&
+                stencilBack.compareOp == other.stencilBack.compareOp &&
+                stencilBack.compareMask == other.stencilBack.compareMask &&
+                stencilBack.writeMask == other.stencilBack.writeMask &&
+                stencilBack.reference == other.stencilBack.reference &&
                 topology == other.topology &&
                 viewports == other.viewports &&
                 scissors == other.scissors &&
@@ -126,6 +146,9 @@ namespace std {
             StarryEngine::Utils::hash_combine(seed, state.depthTestEnable);
             StarryEngine::Utils::hash_combine(seed, state.depthWriteEnable);
             StarryEngine::Utils::hash_combine(seed, state.depthCompareOp);
+            StarryEngine::Utils::hash_combine(seed, state.stencilTestEnable);
+            StarryEngine::Utils::hash_combine(seed, state.stencilFront);
+            StarryEngine::Utils::hash_combine(seed, state.stencilBack);
             StarryEngine::Utils::hash_combine(seed, state.topology);
             StarryEngine::Utils::hash_combine(seed, state.viewports);
             StarryEngine::Utils::hash_combine(seed, state.scissors);

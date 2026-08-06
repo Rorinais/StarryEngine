@@ -133,6 +133,9 @@ namespace StarryEngine {
         pso.depthTestEnable = materialInst->isDepthTestEnable();
         pso.depthWriteEnable = materialInst->isDepthWriteEnable();
         pso.depthCompareOp = materialInst->getDethCompareOp();
+        pso.stencilTestEnable = materialInst->isStencilTestEnable();
+        pso.stencilFront = materialInst->getStencilFront();
+        pso.stencilBack = materialInst->getStencilBack();
         pso.attachments = materialInst->getAttachments();
         return pso;
     }
@@ -148,6 +151,9 @@ namespace StarryEngine {
         pso.depthTestEnable = material->isDepthTestEnable();
         pso.depthWriteEnable = material->isDepthWriteEnable();
         pso.depthCompareOp = material->getDethCompareOp();
+        pso.stencilTestEnable = material->isStencilTestEnable();
+        pso.stencilFront = material->getStencilFront();
+        pso.stencilBack = material->getStencilBack();
         pso.attachments = material->getAttachments();
         return pso;
     }

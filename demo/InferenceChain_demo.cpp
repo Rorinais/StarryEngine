@@ -36,7 +36,7 @@ static SubpassDesc makeChainSubpass(const std::string& tag) {
     SubpassDesc sp;
     sp.tag = tag;
     sp.executor = std::make_shared<SceneDrawExecutor>();
-    sp.colorAttachments.push_back({ "SceneColor" });   // loadOp/布局交给渲染图推断
+    sp.colorAttachments.push_back({ "SceneColor" });   
     sp.depthAttachment = { "Depth" };
     return sp;
 }
@@ -104,7 +104,7 @@ public:
             read.inputAttachments.push_back({ "Processed", in });
             post->addSubpass(read);
 
-            SubpassDesc grid = makeChainSubpass("Post_Grid");   // 附件推断：SceneColor 后续写者 Load
+            SubpassDesc grid = makeChainSubpass("Post_Grid");   
             post->addSubpass(grid);
             passes.push_back(post);
         }
@@ -200,7 +200,10 @@ int main() {
             setenv("LD_LIBRARY_PATH", (std::string(exePath) + ":" + (getenv("LD_LIBRARY_PATH") ?: "")).c_str(), 1);
         }
     }
+#elif _WIN32
+    _putenv_s("VK_LAYER_PATH", "layers");
 #endif
+
     StarryEngine::Logger::init();
     StarryEngine::Logger::setLevel("info");
 

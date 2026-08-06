@@ -5,8 +5,12 @@ namespace StarryEngine {
     class Window {
     public:
         struct Config {
+            int posX = -1;
+            int posY = -1;
+
             uint32_t width = 800;
             uint32_t height = 600;
+
             const char* title = "Vulkan App";
             bool resizable = false;
             int monitorIndex = 0;
@@ -47,6 +51,9 @@ namespace StarryEngine {
 
         bool shouldClose() const;
         void pollEvents() const;
+
+        // 移动窗口位置（X11/Windows 生效；原生 Wayland 由 compositor 决定，会被忽略）
+        void setPosition(int x, int y) { glfwSetWindowPos(mWindow, x, y); }
 
         // 运行时切换鼠标穿透（透明区不挡点击）。返回是否成功生效。
         bool setClickThrough(bool enable);

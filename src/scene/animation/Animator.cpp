@@ -1,4 +1,5 @@
 #include "Animator.hpp"
+#include <algorithm>
 #include <cmath>
 
 namespace StarryEngine::Scene {
@@ -26,10 +27,14 @@ namespace StarryEngine::Scene {
     void Animator::updateSkeleton(Assets::Skeleton& skeleton, const Assets::AnimationClip& clip, float time) {
         if (skeleton.bones.empty()) return;
 
-        // 时间循环取模（ticks）
+        // 时间取模（ticks）：循环动画绕回开头；非循环动画夹到末尾停住（匹配 Blender 播放完停住）
         if (clip.duration > 0.0f) {
-            time = std::fmod(time, clip.duration);
-            if (time < 0.0f) time += clip.duration;
+            if (clip.looping) {
+                time = std::fmod(time, clip.duration);
+                if (time < 0.0f) time += clip.duration;
+            } else {
+                time = std::clamp(time, 0.0f, clip.duration);
+            }
         }
 
         // 重置为绑定姿势（没有动画轨道的骨骼保持绑定姿势）
