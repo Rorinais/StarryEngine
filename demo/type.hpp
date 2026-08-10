@@ -1,11 +1,11 @@
 #pragma once
 #include <nlohmann/json.hpp>
-#include "../src/logging/Logger.hpp"
-#include "../src/renderer/Renderer.hpp"
-#include "../src/renderer/graph/RenderGraph.hpp"
-#include "../src/renderer/interface/RHI_TYPES.hpp"
-#include "../src/assets/geometry/GeometryGenerator.hpp"
-#include "../src/renderer/passExecutor/SceneDrawExecutor.hpp"
+#include <logging/Logger.hpp>
+#include <renderer/Renderer.hpp>
+#include <renderer/graph/RenderGraph.hpp>
+#include <renderer/interface/RHI_TYPES.hpp>
+#include <assets/geometry/GeometryGenerator.hpp>
+#include <renderer/passExecutor/SceneDrawExecutor.hpp>
 
 
 struct ModelData {

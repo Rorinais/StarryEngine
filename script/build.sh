@@ -1,84 +1,82 @@
 #!/bin/bash
-
 # ========================================
-#       增量构建脚本（不删除目录）
+#   StarryEngine 增量构建脚本（不删目录）
 # ========================================
+#  用法:
+#     ./script/build.sh [release|debug] [-j N] [-d DIR] [-t TARGET]
+#     BUILD_DIR=xxx ./script/build.sh       # 或环境变量指定构建目录
+#
+#  每次先重跑 cmake configure（保持编译数据库 compile_commands.json 最新，
+#  IDE 智能提示依赖它），再做增量编译。默认 Release。产物在 <构建目录>/bin/。
+#  不指定 -t 时构建全部目标。
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 cd "$PROJECT_ROOT" || exit 1
 
-# 设置默认构建类型
-BUILD_TYPE="Debug"
+BUILD_TYPE="Release"
+BUILD_DIR="${BUILD_DIR:-}"
+JOBS="$(nproc 2>/dev/null || echo 4)"
+TARGET=""
 
-# 解析命令行参数
-if [ $# -ge 1 ]; then
+usage() {
+    cat <<EOF
+用法: $0 [release|debug] [-j N] [-d DIR] [-t TARGET]
+  release|debug  构建类型（默认 release）
+  -j N           并行数（默认 = CPU 核数）
+  -d DIR         构建目录（默认 build/release 或 build/debug，按类型；可用环境变量 BUILD_DIR）
+  -t TARGET      只构建指定目标（demo 名，如 DeferredRender_demo / test1 /
+                 TransparentWindow_demo / InferenceChain_demo）；省略则构建全部。
+                 产物进 <构建目录>/<TARGET>/（单一构建树，静态库只编一次）
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
     case $1 in
-        debug|Debug|DEBUG)
-            BUILD_TYPE="Debug"
-            ;;
-        release|Release|RELEASE)
-            BUILD_TYPE="Release"
-            ;;
-        clean)
-            echo "执行清理构建..."
-            if [ -d "build" ]; then
-                cd build
-                make clean
-                cd ..
-                echo "清理完成"
-                exit 0
-            else
-                echo "错误: build 目录不存在"
-                exit 1
-            fi
-            ;;
-        *)
-            echo "未知参数: $1"
-            echo "用法: $0 [debug|release|clean]"
-            exit 1
-            ;;
+        release|Release|RELEASE|-release|-Release|-RELEASE) BUILD_TYPE="Release"; shift ;;
+        debug|Debug|DEBUG|-debug|-Debug|-DEBUG)              BUILD_TYPE="Debug";   shift ;;
+        -j|--jobs)               JOBS="$2"; shift 2 ;;
+        -j[0-9]*)                JOBS="${1:2}"; shift ;;
+        -d|--dir)                BUILD_DIR="$2"; shift 2 ;;
+        -d*)                     BUILD_DIR="${1:2}"; shift ;;
+        -t|--target)             TARGET="$2"; shift 2 ;;
+        -t*)                     TARGET="${1:2}"; shift ;;
+        -h|--help)               usage; exit 0 ;;
+        *) echo "未知参数: $1"; usage; exit 1 ;;
     esac
+done
+
+# 未指定构建目录时，按构建类型派生（build/release 或 build/debug）
+if [ -z "$BUILD_DIR" ]; then
+    if [ "$BUILD_TYPE" = "Debug" ]; then
+        BUILD_DIR="build/debug"
+    else
+        BUILD_DIR="build/release"
+    fi
+fi
+
+if [ ! -d "$BUILD_DIR" ]; then
+    echo "错误: 构建目录 $BUILD_DIR 不存在"
+    echo "请先运行: ./script/init.sh [-d $BUILD_DIR]"
+    exit 1
 fi
 
 echo "构建类型: $BUILD_TYPE"
+echo "构建目录: $BUILD_DIR"
+echo "并行数:   $JOBS"
+[ -n "$TARGET" ] && echo "目标:     $TARGET"
 
-# 检查 build 目录是否存在
-if [ ! -d "build" ]; then
-    echo "错误: build 目录不存在"
-    echo "请先运行完整构建脚本或创建 build 目录"
-    echo "运行: ./init.sh"
-    exit 1
-fi
+# 重跑 configure：既保证选项最新，也刷新 compile_commands.json（IDE 用）
+echo "==> 检查 CMake 配置..."
+cmake -S . -B "$BUILD_DIR" -DCMAKE_BUILD_TYPE="$BUILD_TYPE" || exit 1
 
-# 进入 build 目录
-cd build || exit 1
-echo "当前工作目录: $(pwd)"
-
-# 重新运行 CMake 以确保配置正确
-echo "检查 CMake 配置..."
-cmake -DCMAKE_BUILD_TYPE=$BUILD_TYPE ..
-
-# 检测是否使用 Ninja 构建系统
-if command -v ninja &> /dev/null && [ -f "build.ninja" ]; then
-    echo "使用 Ninja 进行增量构建..."
-    BUILD_CMD="ninja"
+echo "==> 增量构建..."
+if [ -n "$TARGET" ]; then
+    cmake --build "$BUILD_DIR" --target "$TARGET" -j "$JOBS" || exit 1
 else
-    echo "使用 Make 进行增量构建..."
-    BUILD_CMD="make -j4"
-fi
-
-# 执行增量构建
-echo "执行增量构建..."
-$BUILD_CMD
-
-if [ $? -ne 0 ]; then
-    echo "编译失败!"
-    cd ..
-    exit 1
+    cmake --build "$BUILD_DIR" -j "$JOBS" || exit 1
 fi
 
 echo "========================================"
 echo "       增量构建成功!"
 echo "========================================"
-cd ..

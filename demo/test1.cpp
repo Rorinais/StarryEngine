@@ -1,6 +1,6 @@
-#include "../src/assets/loader/ShaderLoader.hpp"
+#include <assets/loader/ShaderLoader.hpp>
 
-#include"../src/application/Application.hpp"
+#include <application/Application.hpp>
 #include "type.hpp"
 
 using namespace StarryEngine;

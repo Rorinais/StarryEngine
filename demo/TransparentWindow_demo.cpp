@@ -18,21 +18,21 @@
 //    F1 切换点击穿透；穿透时保留窗口顶部一条交互把手
 // ═══════════════════════════════════════════════════════════════
 #include <cstdlib>
-#include "../src/renderer/passes/PassWrapper.hpp"
-#include "../src/renderer/passes/GraphicsPass.hpp"
-#include "../src/renderer/passes/MeshPass.hpp"
-#include "../src/renderer/renderPaths/DeferredRenderPath.hpp"
-#include "../src/renderer/passExecutor/SceneDrawExecutor.hpp"
-#include "../src/assets/geometry/GeometryGenerator.hpp"
-#include "../src/assets/material/DefaultMaterialTemplate.hpp"
-#include "../src/renderer/passes/ParticlePass.hpp"
-#include "../src/scene/ParticleEmitter.hpp"
-#include "../src/assets/material/MaterialInstance.hpp"
-#include "../src/assets/loader/TextureLoader.hpp"
+#include <renderer/passes/PassWrapper.hpp>
+#include <renderer/passes/GraphicsPass.hpp>
+#include <renderer/passes/MeshPass.hpp>
+#include <renderer/renderPaths/DeferredRenderPath.hpp>
+#include <renderer/passExecutor/SceneDrawExecutor.hpp>
+#include <assets/geometry/GeometryGenerator.hpp>
+#include <assets/material/DefaultMaterialTemplate.hpp>
+#include <renderer/passes/ParticlePass.hpp>
+#include <scene/ParticleEmitter.hpp>
+#include <assets/material/MaterialInstance.hpp>
+#include <assets/loader/TextureLoader.hpp>
 
 
-#include "../src/application/Application.hpp"
-#include "../src/event/Events.hpp"
+#include <application/Application.hpp>
+#include <event/Events.hpp>
 
 using namespace StarryEngine;
 

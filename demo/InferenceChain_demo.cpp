@@ -14,19 +14,19 @@
 //    - 粒子无材质 → 走 ParticlePass 默认 Sprite 材质
 // ═══════════════════════════════════════════════════════════════
 #include <cstdlib>
-#include "../src/renderer/passes/PassWrapper.hpp"
-#include "../src/renderer/passes/GraphicsPass.hpp"
-#include "../src/renderer/passes/MeshPass.hpp"
-#include "../src/renderer/passes/ComputePass.hpp"
-#include "../src/renderer/passes/ParticlePass.hpp"
-#include "../src/renderer/renderPaths/DeferredRenderPath.hpp"
-#include "../src/renderer/passExecutor/SceneDrawExecutor.hpp"
-#include "../src/scene/ParticleEmitter.hpp"
-#include "../src/assets/geometry/GeometryGenerator.hpp"
-#include "../src/assets/material/DefaultMaterialTemplate.hpp"
-#include "../src/assets/material/MaterialInstance.hpp"
-#include "../src/assets/loader/TextureLoader.hpp"
-#include "../src/application/Application.hpp"
+#include <renderer/passes/PassWrapper.hpp>
+#include <renderer/passes/GraphicsPass.hpp>
+#include <renderer/passes/MeshPass.hpp>
+#include <renderer/passes/ComputePass.hpp>
+#include <renderer/passes/ParticlePass.hpp>
+#include <renderer/renderPaths/DeferredRenderPath.hpp>
+#include <renderer/passExecutor/SceneDrawExecutor.hpp>
+#include <scene/ParticleEmitter.hpp>
+#include <assets/geometry/GeometryGenerator.hpp>
+#include <assets/material/DefaultMaterialTemplate.hpp>
+#include <assets/material/MaterialInstance.hpp>
+#include <assets/loader/TextureLoader.hpp>
+#include <application/Application.hpp>
 
 using namespace StarryEngine;
 

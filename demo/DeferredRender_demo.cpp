@@ -1,20 +1,52 @@
-#include "../src/renderer/passes/PassWrapper.hpp"
-#include "../src/renderer/passes/GraphicsPass.hpp"
-#include "../src/renderer/passes/MeshPass.hpp"
-#include "../src/renderer/passes/ParticlePass.hpp"
-#include "../src/scene/ParticleEmitter.hpp"
-#include "../src/renderer/renderPaths/DeferredRenderPath.hpp"
-#include "../src/renderer/passExecutor/SceneDrawExecutor.hpp"
-#include "../src/assets/geometry/GeometryGenerator.hpp"
+#include <renderer/passes/PassWrapper.hpp>
+#include <renderer/passes/GraphicsPass.hpp>
+#include <renderer/passes/MeshPass.hpp>
+#include <renderer/passes/ParticlePass.hpp>
+#include <scene/ParticleEmitter.hpp>
+#include <renderer/renderPaths/DeferredRenderPath.hpp>
+#include <renderer/passExecutor/SceneDrawExecutor.hpp>
+#include <assets/geometry/GeometryGenerator.hpp>
 
-#include"../src/application/Application.hpp"
-#include "../src/event/Events.hpp"
+#include <application/Application.hpp>
+#include <event/Events.hpp>
+#include <renderer/backend/vulkan/FrameContext.hpp>
+
+#include <limits>
+#include <chrono>
 
 static bool g_clickThrough = true;
 
 namespace {
     constexpr uint32_t kWinW = 560;
     constexpr uint32_t kWinH = 680;
+
+    float computeModelFootY(const std::shared_ptr<StarryEngine::Assets::Geometry>& geometry) {
+        if (!geometry) return 0.0f;
+        const auto& layout = geometry->getVertexLayout();
+        const auto& verts = geometry->getVertices();
+
+        uint32_t posOffset = 0, binding = 0;
+        bool found = false;
+        for (const auto& a : layout.getAppAttributes()) {
+            if (a.semantic == StarryEngine::Assets::VertexSemantic::Position) {
+                posOffset = a.offset;
+                binding = a.binding;
+                found = true;
+                break;
+            }
+        }
+        if (!found) return 0.0f;
+
+        uint32_t stride = layout.getBindingStride(binding);
+        if (stride == 0) return 0.0f;
+
+        const uint32_t strideF = stride / sizeof(float);
+        const uint32_t posF = posOffset / sizeof(float) + 1;  // +1 = 位置 Y 分量
+        float footY = std::numeric_limits<float>::max();
+        for (size_t i = 0; i + strideF <= verts.size(); i += strideF)
+            footY = std::min(footY, verts[i + posF]);
+        return (footY == std::numeric_limits<float>::max()) ? 0.0f : footY;
+    }
 }
 
 using namespace StarryEngine;
@@ -44,8 +76,6 @@ public:
         renderPath->setPresentClearColor({ 0.0f, 0.0f, 0.0f, 0.0f });
 
         auto colorDesc = PassWrapper::createColorTextureDesc({m_width, m_height, 1}, RHI::Format::RGBA16_Float);
-        // ★模板测试：Depth 附件带 stencil 分量。D24_S8 是 Vulkan 转换层已映射的标准深度模板格式
-        //（D32_Float_S8_UInt 枚举里有但 RHI_TO_VK 曾缺映射）。首写 clear 时 stencil 清零。
         auto depthDesc = PassWrapper::createDepthTextureDesc({m_width, m_height, 1}, RHI::Format::D24_UNorm_S8_UInt);
         auto swapDesc   = PassWrapper::createColorTextureDesc({m_width, m_height, 1}, RHI::Format::BGRA8_sRGB);
         renderPath->addTextureDesc("SceneColor",  colorDesc);
@@ -106,7 +136,6 @@ public:
                 passes.push_back(stencilPass);
             }
 
-            // 粒子 pass：声明式，场景里 passTag="Particles" 的 emitters 都归它（内容来自场景）
             passes.push_back(std::make_shared<ParticlePass>("Particles", "Particles"));
 
             renderPath->setPassList(std::move(passes));
@@ -270,18 +299,22 @@ public:
             }
 
             // 2) 描边副本：同一几何（同一骨骼矩阵）+ 放大变换，全 submesh 同一描边材质
-            m_outlineMaterial = makeOutlineMaterial();
+            //    STARRY_NO_OUTLINE=1 关闭描边 → 与开着 A/B 对比描边的真实开销
+            bool outlineOn = (std::getenv("STARRY_NO_OUTLINE") == nullptr);
+            m_outlineMaterial = outlineOn ? makeOutlineMaterial() : nullptr;
             if (m_outlineMaterial && m_modelGeometry) {
                 auto outline = std::make_shared<Scene::RenderObject>();
                 outline->geometry = m_modelGeometry;
                 // 材质列表长度对齐角色 submesh 索引（长度不够会解析到 default 材质 → 无蒙皮 → 破相）
                 std::vector<std::shared_ptr<Assets::MaterialInstance>> outlineMats(m_modelMaterialCount, m_outlineMaterial);
                 outline->materials = std::move(outlineMats);
-                // 放大 1.08，围绕角色中段 y=1.0 缩放 → 外圈厚度均匀
+                // 放大 1.08，围绕脚底 Y 缩放 → 外圈在脚下收拢、与脚重合（脚下不悬青色条），看起来像踩在地上
+                float footY = computeModelFootY(m_modelGeometry);
+                LOG_INFO("[demo] 描边缩放中心（脚底）Y = {:.3f}", footY);
                 outline->transform =
-                    glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.0f, 0.0f))
-                    * glm::scale(glm::mat4(1.0f), glm::vec3(1.08f))
-                    * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -1.0f, 0.0f));
+                    glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, footY, 0.0f))
+                    * glm::scale(glm::mat4(1.0f), glm::vec3(1.03f))
+                    * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -footY, 0.0f));
                 m_scene->addObject(outline);
             }
         }
@@ -604,7 +637,8 @@ int main() {
 #endif
     StarryEngine::Logger::init();
     StarryEngine::Logger::setShowSourceLoc(true);
-    StarryEngine::Logger::setLevel("info"); 
+    // 默认 warn(静默);STARRY_VERBOSE=1 恢复 info(看 [perf] 帧数据 / 验证层信息时开)
+    StarryEngine::Logger::setLevel(std::getenv("STARRY_VERBOSE") ? "info" : "warn");
 
     StarryEngine::Application::Config cfg;
     cfg.width = kWinW;
@@ -617,15 +651,39 @@ int main() {
 
     cfg.clickThrough = (std::getenv("STARRY_NO_CLICKTHROUGH") == nullptr);
     cfg.nativeWayland = (std::getenv("STARRY_FORCE_X11") == nullptr);
-
     LOG_INFO("[demo] 平台: {}（STARRY_FORCE_X11 强制 X11）", cfg.nativeWayland ? "原生 Wayland" : "X11");
     StarryEngine::Application app(cfg);
+
+    // ── 性能测量（优化闭环第 1 步：先测基线，改完复测对比；关掉即恢复无痕）──
+    // 开 GPU 时间戳查询；窗口标题每 1s 刷 FPS/GPU/CPU，日志每 5s 打一行平均/最大帧时间
+    if (auto frameCtx = app.getRenderHardwareInterface()->getFrameContext())
+        frameCtx->enableTimestamps(true);
 
     auto demo = std::make_shared<PBRDemo>(app.getRenderHardwareInterface(), app.getGlobalDescriptorPool(), app.getWidth(), app.getHeight());
 
     app.setRenderer(demo->getRenderer());
     app.setScene(demo->getScene());
-    app.setUpdateCallback([demo](float deltaTime) { demo->onUpdate(deltaTime); });
+    auto perfLast = std::chrono::steady_clock::now();
+    uint64_t perfLastFrames = 0;
+    app.setUpdateCallback([demo, &app, &perfLast, &perfLastFrames](float deltaTime) {
+        demo->onUpdate(deltaTime);
+        auto now = std::chrono::steady_clock::now();
+        if (std::chrono::duration<double>(now - perfLast).count() >= 5.0) {
+            double wall = std::chrono::duration<double>(now - perfLast).count();
+            perfLast = now;
+            auto fc = app.getRenderHardwareInterface()->getFrameContext();
+            if (fc) {
+                const auto& s = fc->getStatistics();
+                uint64_t frames = s.totalFrames - perfLastFrames;
+                perfLastFrames = s.totalFrames;
+                // 真实 FPS 按墙钟 totalFrames 增量算;平均帧是渲染节奏(不含限帧睡眠),两者差即"每帧睡多少"
+                LOG_INFO("[perf] 窗内帧={} 实际FPS={:.1f} | 平均帧={:.2f}ms 最大帧={:.2f}ms | CPU均={:.2f}ms GPU均={:.2f}ms",
+                         frames, (wall > 0.0) ? static_cast<double>(frames) / wall : 0.0,
+                         s.averageFrameTime, s.maxFrameTime,
+                         s.averageCPUTime, s.averageGPUTime);
+            }
+        }
+    });
     app.initEventDispatcher();
 
     GetEventDispatcher().subscribe(EventType::KeyPressed, [&app](IEvent& e) {

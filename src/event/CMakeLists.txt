@@ -1,11 +1,12 @@
+add_library(event STATIC
+    src/EventDispatcher.cpp
+)
 
-file(GLOB SRC ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
+target_include_directories(event PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+)
 
-add_library(event STATIC ${SRC})
-
-target_link_libraries(event 
-PRIVATE
-    BaseInterface
-    core
-    logging
+target_link_libraries(event
+PUBLIC
+    renderer          # Events.hpp 引用 renderer 类型
 )

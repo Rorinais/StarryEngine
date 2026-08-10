@@ -135,7 +135,6 @@ function(copy_target_resources TARGET_NAME RESOURCES_OUTPUT_DIR)
             "${ARG_MODELS}/*.gltf"
             "${ARG_MODELS}/*.glb"
             "${ARG_MODELS}/*.mtl"
-            # 模型贴图（.mtl 引用的相对路径，如 textures/xxx.png）
             "${ARG_MODELS}/*.png"
             "${ARG_MODELS}/*.jpg"
             "${ARG_MODELS}/*.jpeg"
@@ -208,7 +207,6 @@ add_custom_command(
     add_dependencies(${TARGET_NAME} ${TARGET_NAME}_copy_resources)
 endfunction()
 
-# 复制 DLL（原 copy_target_dll 函数）
 function(copy_target_dll target dll_path)
     get_target_property(TARGET_OUTPUT_DIR ${target} RUNTIME_OUTPUT_DIRECTORY)
     add_custom_command(TARGET ${target} POST_BUILD
@@ -219,7 +217,6 @@ function(copy_target_dll target dll_path)
     )
 endfunction()
 
-# ==================== 主函数：创建可执行文件 ====================
 function(add_engine_executable)
     set(options)
     set(oneValueArgs TARGET_NAME OUTPUT_DIR SHADERS_DIR FONTS_DIR MODELS_DIR TEXTURES_DIR ICONS_DIR ICON_FILE )
@@ -233,12 +230,10 @@ function(add_engine_executable)
         message(FATAL_ERROR "SOURCES is required")
     endif()
 
-    # 输出目录默认值
     if(NOT ARG_OUTPUT_DIR)
-        set(ARG_OUTPUT_DIR "${CMAKE_BINARY_DIR}/bin")
+        set(ARG_OUTPUT_DIR "${CMAKE_BINARY_DIR}/${ARG_TARGET_NAME}")
     endif()
 
-    # 资源目录默认值（指向引擎的资产目录）
     if(NOT ARG_SHADERS_DIR)
         set(ARG_SHADERS_DIR "${CMAKE_SOURCE_DIR}/../StarryEngine/assets/shaders")
     endif()
@@ -274,25 +269,35 @@ function(add_engine_executable)
     set(RC_CONTENT "IDI_ICON1 ICON \"app_icon.ico\"\n")
     file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/generated.rc "${RC_CONTENT}")
 
-    # 创建可执行文件
     add_executable(${ARG_TARGET_NAME} ${ARG_SOURCES} ${CMAKE_CURRENT_BINARY_DIR}/generated.rc)
 
     set_target_properties(${ARG_TARGET_NAME} PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY ${ARG_OUTPUT_DIR}
     )
 
-    # 链接引擎库（假设这些库目标已经通过 add_subdirectory 定义）
-    target_link_libraries(${ARG_TARGET_NAME} PRIVATE 
-        BaseInterface
-        utils
-        core
-        application
-        renderer
-        assets
-        scene
-    )
+    if(UNIX AND NOT APPLE)
+        target_link_options(${ARG_TARGET_NAME} PRIVATE "-Wl,--disable-new-dtags")
+    endif()
 
-    # 复制资源
+    if(MSVC)
+        target_link_libraries(${ARG_TARGET_NAME} PRIVATE
+            application
+            core
+            assets
+            scene
+            event
+            utils
+            logging
+            renderer
+            ui
+        )
+    else()
+        target_link_libraries(${ARG_TARGET_NAME} PRIVATE
+            application
+            "$<LINK_GROUP:RESCAN,core,assets,scene,event,utils,logging,renderer,ui>"
+        )
+    endif()
+
     copy_target_resources(${ARG_TARGET_NAME} ${ARG_OUTPUT_DIR}
         SHADERS    ${ARG_SHADERS_DIR}
         FONTS      ${ARG_FONTS_DIR}
@@ -303,28 +308,26 @@ function(add_engine_executable)
         MATERIAL   ${ARG_MATERIAL_DIR}
     )
 
-    # 复制 DLL（仅 Windows）
     if(WIN32)
         if(MSVC)
-            copy_target_dll(${ARG_TARGET_NAME} "${CMAKE_SOURCE_DIR}/external/glfw/glfw3.dll")
+            copy_target_dll(${ARG_TARGET_NAME} "${CMAKE_SOURCE_DIR}/external/glfw/lib/glfw3.dll")
             copy_target_dll(${ARG_TARGET_NAME} "${CMAKE_SOURCE_DIR}/external/vulkan/lib/vulkan-1.dll")
-            copy_target_dll(${ARG_TARGET_NAME} "${CMAKE_SOURCE_DIR}/external/assimp/assimp/lib/assimp-vc143-mt.dll")
+            copy_target_dll(${ARG_TARGET_NAME} "${CMAKE_SOURCE_DIR}/external/assimp/lib/assimp-vc143-mt.dll")
+            copy_target_dll(${ARG_TARGET_NAME} "${CMAKE_SOURCE_DIR}/external/vulkan/lib/shaderc/shaderc_shared.dll")
             copy_target_dll(${ARG_TARGET_NAME} "${CMAKE_SOURCE_DIR}/external/vulkan/lib/shaderc/shaderc_sharedd.dll")
         elseif(MINGW)
-            copy_target_dll(${ARG_TARGET_NAME} "${CMAKE_SOURCE_DIR}/external/glfw/libglfw3.a")
+            copy_target_dll(${ARG_TARGET_NAME} "${CMAKE_SOURCE_DIR}/external/glfw/lib/libglfw3.a")
             copy_target_dll(${ARG_TARGET_NAME} "${CMAKE_SOURCE_DIR}/external/vulkan/lib/vulkan-1.dll")
-            copy_target_dll(${ARG_TARGET_NAME} "${CMAKE_SOURCE_DIR}/external/assimp/assimp/lib/libassimp-6.dll")
+            copy_target_dll(${ARG_TARGET_NAME} "${CMAKE_SOURCE_DIR}/external/assimp/lib/libassimp-6.dll")
+            copy_target_dll(${ARG_TARGET_NAME} "${CMAKE_SOURCE_DIR}/external/vulkan/lib/shaderc/shaderc_shared.dll")
             copy_target_dll(${ARG_TARGET_NAME} "${CMAKE_SOURCE_DIR}/external/vulkan/lib/shaderc/shaderc_sharedd.dll")
         endif()
     elseif(UNIX)
-        # 示例：复制 Linux 下的 .so 文件，请根据实际路径调整
-        copy_target_dll(${ARG_TARGET_NAME} "${CMAKE_SOURCE_DIR}/external/glfw/libglfw.so.3.4")
+        copy_target_dll(${ARG_TARGET_NAME} "${CMAKE_SOURCE_DIR}/external/glfw/lib/libglfw.so.3.4")
         copy_target_dll(${ARG_TARGET_NAME} "${CMAKE_SOURCE_DIR}/external/vulkan/lib/libvulkan.so.1.4.304")
-        copy_target_dll(${ARG_TARGET_NAME} "${CMAKE_SOURCE_DIR}/external/assimp/assimp/lib/libassimp.so.5.3.0")
         copy_target_dll(${ARG_TARGET_NAME} "${CMAKE_SOURCE_DIR}/external/vulkan/lib/shaderc/libshaderc_shared.so.1")
     endif()
 
-    # 调试模式设置（验证层 + 运行目标）
     if(CMAKE_BUILD_TYPE STREQUAL "Debug")
         target_compile_definitions(${ARG_TARGET_NAME} PRIVATE ENABLE_VALIDATION_LAYERS)
 

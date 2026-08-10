@@ -1,6 +1,8 @@
 .vs/
 out/
 build/
+.vscode/
+compile_commands.json
 external/opencv/
 external/pybind11/
 external/python/

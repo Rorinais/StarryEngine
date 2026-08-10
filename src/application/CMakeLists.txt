@@ -1,14 +1,20 @@
+add_library(application STATIC
+    src/Application.cpp
+)
 
-file(GLOB SRC ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
+target_include_directories(application PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+)
 
-add_library(application STATIC ${SRC})
-
-target_link_libraries(application 
-PRIVATE
-    BaseInterface
+target_link_libraries(application
+PUBLIC
+    assets
     core
     event
-    ui
+    logging
     renderer
-
+    scene
+    ui
+    glfw
+    imgui
 )

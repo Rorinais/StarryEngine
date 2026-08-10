@@ -1,9 +1,13 @@
+add_library(utils STATIC
+    src/FileUtils.cpp
+)
 
-file(GLOB SRC ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
+target_include_directories(utils PUBLIC
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+)
 
-add_library(utils STATIC ${SRC})
-
-target_link_libraries(utils 
-PRIVATE
-    BaseInterface
+target_link_libraries(utils
+PUBLIC
+    renderer          # FileUtils 反射 shader 用 renderer 类型（头外泄）
+    shaderc
 )

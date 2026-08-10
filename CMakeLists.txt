@@ -4,8 +4,7 @@ project(StarryEngine)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# 生成位置无关代码：pybind11 Python 模块是共享库，需链接 PIC 的静态库
-#set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 set(BASE_OUTPUT_DIR ${CMAKE_BINARY_DIR}/bin)
 
@@ -15,15 +14,9 @@ set(MODELS_DIR    ${CMAKE_CURRENT_SOURCE_DIR}/assets/models)
 set(TEXTURES_DIR  ${CMAKE_CURRENT_SOURCE_DIR}/assets/textures)
 set(ICONS_DIR     ${CMAKE_CURRENT_SOURCE_DIR}/assets/icons)
 
-add_subdirectory(external/vulkan)
-add_subdirectory(external/glfw)
-add_subdirectory(external/assimp)
-add_subdirectory(external/glm)
-add_subdirectory(external/imgui)
-add_subdirectory(external/spdlog)
-add_subdirectory(src) 
+include(${CMAKE_CURRENT_SOURCE_DIR}/cmake/Dependencies.cmake)
+
+add_subdirectory(src)
 
 # add_subdirectory(external/pybind11)
 # add_subdirectory(python)
-
-
