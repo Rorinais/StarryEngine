@@ -38,6 +38,7 @@ namespace StarryEngine {
             tmpl, m_defaultPool, ctx.resMgr.get(), ctx.globalDescSet);
         RHI::BlendAttachmentState blend;
         blend.blendEnable = true;   // 默认 SrcAlpha/OneMinusSrcAlpha
+        blend.dstAlphaBlendFactor = RHI::BlendFactor::OneMinusSrcAlpha;  // alpha 累加而非替换：粒子叠在不透明面上封口(a=1)，避免"角色前变黑"
         mat->setAttachments({ blend });
         mat->setDepthTest(false);
         mat->setDepthWrite(false);

@@ -80,6 +80,10 @@ namespace StarryEngine {
         using UpdateCallback = std::function<void(float deltaTime)>;
         void setUpdateCallback(UpdateCallback cb) { m_updateCallback = std::move(cb); }
 
+        // 每帧渲染+呈现完成后回调（GPU 上本帧已提交；用于帧读回/捕获等）
+        using PostRenderCallback = std::function<void()>;
+        void setPostRenderCallback(PostRenderCallback cb) { m_postRenderCallback = std::move(cb); }
+
         std::shared_ptr<RHI::IRHI> getRenderHardwareInterface() { return m_rhi; }
         std::shared_ptr<RHI::ResourceManager> getResourceManager() { return m_resMgr; }
         RHI::DescriptorPoolHandle getGlobalDescriptorPool() { return m_descriptorPool; }
@@ -102,6 +106,7 @@ namespace StarryEngine {
         std::shared_ptr<Scene::Scene> m_scene;
         std::shared_ptr<Renderer> m_renderer;
         UpdateCallback m_updateCallback;
+        PostRenderCallback m_postRenderCallback;
 
         std::shared_ptr<RHI::IRHI> m_rhi;
         std::shared_ptr<RHI::ResourceManager> m_resMgr;

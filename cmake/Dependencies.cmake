@@ -83,7 +83,7 @@ if(NOT TARGET assimp::assimp)
         )
         FetchContent_MakeAvailable(assimp)
         if(NOT TARGET assimp::assimp)
-            add_library(assimp::assimp ALIAS assimp)   # 源码构建的 target 名是 assimp
+            add_library(assimp::assimp ALIAS assimp)   
         endif()
 
         if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "15")

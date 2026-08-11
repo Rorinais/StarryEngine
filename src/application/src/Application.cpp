@@ -449,6 +449,11 @@ namespace StarryEngine {
                 return;
             }
 
+            // 渲染+呈现成功：通知后处理挂钩（帧读回等；本帧 GPU 命令已提交，读回走同队列序）
+            if (m_postRenderCallback) {
+                m_postRenderCallback();
+            }
+
             m_monitor->updateTitle();
 
             // 执行延迟销毁（资源释放队列）

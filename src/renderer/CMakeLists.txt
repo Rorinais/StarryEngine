@@ -24,6 +24,7 @@ add_library(renderer STATIC
     src/renderPaths/BaseRenderPath.cpp
     src/renderPaths/DeferredRenderPath.cpp
     src/renderPaths/ForwardRenderPath.cpp
+    src/utils/FrameCapture.cpp
 )
 
 target_include_directories(renderer PUBLIC
@@ -42,6 +43,7 @@ PUBLIC
     Vulkan::Vulkan
     glm::glm
     shaderc
+    stb_image        # FrameCapture: stb_image_write.h
     vk_mem_alloc
 PRIVATE
     ui                # 仅 cpp 里嵌 imgui 面板（循环，LINK_GROUP 处理）

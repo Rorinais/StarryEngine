@@ -193,14 +193,14 @@ function(copy_target_resources TARGET_NAME RESOURCES_OUTPUT_DIR)
         return()
     endif()
 
-add_custom_command(
-    OUTPUT ${ALL_RESOURCE_FILES}
-    COMMAND ${CMAKE_COMMAND} -E echo "复制资源文件到 ${ASSETS_DEST}/"
-    ${ALL_COPY_COMMANDS}
-    COMMENT "复制资源文件到目标目录"
-    DEPENDS ${SHADER_FILES} ${ICON_FILES} ${FONT_FILES} ${MODEL_FILES} ${TEXTURE_FILES} ${CONFIG_FILES} ${MATERIAL_FILES}
-    VERBATIM
-)
+    add_custom_command(
+        OUTPUT ${ALL_RESOURCE_FILES}
+        COMMAND ${CMAKE_COMMAND} -E echo "复制资源文件到 ${ASSETS_DEST}/"
+        ${ALL_COPY_COMMANDS}
+        COMMENT "复制资源文件到目标目录"
+        DEPENDS ${SHADER_FILES} ${ICON_FILES} ${FONT_FILES} ${MODEL_FILES} ${TEXTURE_FILES} ${CONFIG_FILES} ${MATERIAL_FILES}
+        VERBATIM
+    )
     add_custom_target(${TARGET_NAME}_copy_resources ALL
         DEPENDS ${ALL_RESOURCE_FILES}
     )
@@ -279,24 +279,10 @@ function(add_engine_executable)
         target_link_options(${ARG_TARGET_NAME} PRIVATE "-Wl,--disable-new-dtags")
     endif()
 
-    if(MSVC)
-        target_link_libraries(${ARG_TARGET_NAME} PRIVATE
-            application
-            core
-            assets
-            scene
-            event
-            utils
-            logging
-            renderer
-            ui
-        )
-    else()
-        target_link_libraries(${ARG_TARGET_NAME} PRIVATE
-            application
-            "$<LINK_GROUP:RESCAN,core,assets,scene,event,utils,logging,renderer,ui>"
-        )
-    endif()
+    target_link_libraries(${ARG_TARGET_NAME} PRIVATE
+        application
+        "$<LINK_GROUP:RESCAN,core,assets,scene,event,utils,logging,renderer,ui>"
+    )
 
     copy_target_resources(${ARG_TARGET_NAME} ${ARG_OUTPUT_DIR}
         SHADERS    ${ARG_SHADERS_DIR}
