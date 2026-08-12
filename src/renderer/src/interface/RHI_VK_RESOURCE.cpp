@@ -882,6 +882,11 @@ namespace StarryEngine::RHI {
         mViews.clear();
         mDefaultView = nullptr;
 
+        if (mDepthAspectView != VK_NULL_HANDLE) {
+            mDevice->destroyImageView(mDepthAspectView);
+            mDepthAspectView = VK_NULL_HANDLE;
+        }
+
         if (mUsingVMA) {
             if (vmaImage.image != VK_NULL_HANDLE) {
                 mDevice->destroyImageWithVMAFull(vmaImage);
@@ -954,6 +959,19 @@ namespace StarryEngine::RHI {
 
     void* RHI_VK_Texture::getDefaultView() const {
         return mDefaultView;
+    }
+
+    void* RHI_VK_Texture::getSamplingView() const {
+        // 深度模板纹理默认视图是 DEPTH|STENCIL 联合 aspect，直接采样非法；
+        // 懒创建 DEPTH-only 视图供采样（阴影贴图等场景）。普通纹理回退默认视图。
+        if (!mDesc.allowDepthStencil) return mDefaultView;
+        if (mDepthAspectView == VK_NULL_HANDLE) {
+            VkImage image = mUsingVMA ? vmaImage.image : traditionalImage.image;
+            VkFormat format = FUNC::RHI_TO_VK_Format(mDesc.format);
+            VkImageViewType viewType = FUNC::RHI_TO_VK_ImageViewType(ImageViewType::Auto, mDesc.type);
+            mDepthAspectView = mDevice->createImageView(image, format, VK_IMAGE_ASPECT_DEPTH_BIT, viewType,0, mDesc.mipLevels, 0, mDesc.arrayLayers);
+        }
+        return reinterpret_cast<void*>(mDepthAspectView);
     }
 
     void RHI_VK_Texture::transitionLayout(ImageLayout newLayout,
@@ -1521,7 +1539,7 @@ namespace StarryEngine::RHI {
     {
         if (!texture) return;
 
-        VkImageView imageView = static_cast<VkImageView>(texture->getDefaultView());
+        VkImageView imageView = static_cast<VkImageView>(texture->getSamplingView());
         if (imageView == VK_NULL_HANDLE) {
             std::cerr << "[DescriptorSet] Texture default view is null, skip write\n";
             return;

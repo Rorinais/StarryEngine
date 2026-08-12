@@ -138,6 +138,7 @@ namespace StarryEngine {
             globals.invView = glm::inverse(globals.view);
             globals.invProj = glm::inverse(globals.proj);
             globals.time = clock.getTime();
+            globals.lightVP = m_lightVP;
 
             auto* buf = m_resMgr->getBuffer(m_globalUniformBuffer);
             if (buf) buf->update(&globals, sizeof(globals), 0);

@@ -52,12 +52,14 @@ namespace StarryEngine {
     }
 
     void BaseRenderPath::onResize(uint32_t width, uint32_t height) {
-        // 注意：swapchain 可能在同尺寸下重建（present 返回 SUBOPTIMAL/OUT_OF_DATE，如 XWayland 首帧），
-        // 此时旧 image views 已被销毁，必须重建渲染图重新导入 —— 不能因为尺寸未变就跳过。
         if (width == 0 || height == 0) return;
+        uint32_t oldW = m_width, oldH = m_height;
         m_width = width; m_height = height;
         for (auto& [name, desc] : m_textureDescs) {
-            desc.extent.width = width; desc.extent.height = height;
+            //只更新跟随窗口变化的纹理，阴影纹理大小不跟新
+            if (desc.extent.width == oldW && desc.extent.height == oldH) {
+                desc.extent.width = width; desc.extent.height = height;
+            }
         }
         if (!initialize()) { LOG_ERROR("Failed to rebuild on resize"); return; }
     }

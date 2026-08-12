@@ -307,20 +307,21 @@ namespace StarryEngine::RHI {
 
             auto buffer = context->createBuffer(desc);
             if (buffer) {
-                auto tmp = BufferDesc(desc.size,
-                    BufferType::Staging,
-                    MemoryType::CPU_To_GPU,
-                    Format::Undefined,
-                    0,
-                    true,
-                    false,
-                    false,
-                    false,
-                    false,
-                    false,
-                    false,
-                    name + "_Staging"
-                );
+                auto tmp = BufferDesc{
+                    desc.size,                   // size
+                    BufferType::Staging,         // type
+                    Format::Undefined,           // format
+                    MemoryType::CPU_To_GPU,      // memoryType
+                    0,                           // stride
+                    true,                        // allowUpdate
+                    false,                       // allowReadback
+                    false,                       // allowRawViews
+                    false,                       // allowCounter
+                    false,                       // allowIndirectArgs
+                    false,                       // allowShaderAtomics
+                    false,                       // persistentMapped
+                    name + "_Staging"            // debugName
+                };
 
                 auto staging = context->createBuffer(tmp);
 

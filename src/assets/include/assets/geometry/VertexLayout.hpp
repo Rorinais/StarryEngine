@@ -2,6 +2,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <assets/AssetType.hpp>
+#include <cstddef>
 
 namespace StarryEngine::Assets {
 #define MAX_LIGHTS 4
@@ -17,8 +18,12 @@ namespace StarryEngine::Assets {
         glm::mat4 proj;
         glm::mat4 invView;
         glm::mat4 invProj;
-		float time;
+        float time;
+        float pad[3];          // std140：mat4 须 16 字节对齐 → time 后补 12 字节，否则 lightVP 错位到 260（glm::mat4 alignof=4）
+        glm::mat4 lightVP;     // 光源的 view*proj（平行光正交投影）——阴影贴图渲染 + PBR 采样共用
     };
+    static_assert(sizeof(GlobalUniforms) == 336, "GlobalUniforms 必须与 std140 布局一致（336 字节）");
+    static_assert(offsetof(GlobalUniforms, lightVP) == 272, "lightVP 必须位于 std140 偏移 272");
 
     struct MaterialUniforms {
         glm::vec4 baseColor = glm::vec4(1.0f);

@@ -469,17 +469,14 @@ namespace StarryEngine::RHI {
             const auto& cv = beginInfo.clearValues[i];
             VkClearValue vkCv{};
 
-            if (i == 0) {
-                // 颜色清除
+            if (cv.isDepth) {
+                vkCv.depthStencil.depth = cv.depth;
+                vkCv.depthStencil.stencil = cv.stencil;
+            }else {
                 vkCv.color.float32[0] = cv.color.r;
                 vkCv.color.float32[1] = cv.color.g;
                 vkCv.color.float32[2] = cv.color.b;
                 vkCv.color.float32[3] = cv.color.a;
-            }
-            else {
-                // 深度/模板清除
-                vkCv.depthStencil.depth = cv.depth;
-                vkCv.depthStencil.stencil = cv.stencil;
             }
 
             vkClearValues.push_back(vkCv);

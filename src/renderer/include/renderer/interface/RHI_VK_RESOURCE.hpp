@@ -415,6 +415,7 @@ namespace StarryEngine::RHI {
         void* createView(const ImageSubresourceRange& range, ImageViewType viewType = ImageViewType::Auto) override;
         void destroyView(void* view) override;
         void* getDefaultView() const override;
+        void* getSamplingView() const override;   
 
         void transitionLayout(ImageLayout newLayout,
             PipelineStage srcStage,
@@ -450,6 +451,7 @@ namespace StarryEngine::RHI {
         std::unordered_map<uint64_t, ViewInfo> mViews;
         uint64_t mNextViewKey = 1;
         void* mDefaultView = nullptr;
+        mutable VkImageView mDepthAspectView = VK_NULL_HANDLE;  // 懒创建：深度采样视图（DEPTH-only）
         RHI::Format mActualFormat;
 
         // 辅助函数

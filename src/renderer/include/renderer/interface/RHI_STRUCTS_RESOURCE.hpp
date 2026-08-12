@@ -72,12 +72,13 @@ namespace StarryEngine::RHI {
         virtual void* getNativeHandleFromView(void* viewKey) = 0;
         // ========== 视图管理 ==========
         // 创建视图，可指定子资源范围和视图类型（默认从纹理类型推导）
-        virtual void* createView(
-            const ImageSubresourceRange& range,
-            ImageViewType viewType = ImageViewType::Auto) = 0;
+        virtual void* createView(const ImageSubresourceRange& range,ImageViewType viewType = ImageViewType::Auto) = 0;
 
         // 获取默认视图（完整资源的视图，常用于渲染目标或采样）
         virtual void* getDefaultView() const = 0;
+
+        // 获取"用于采样"的视图。深度/深度模板纹理的默认视图是 DEPTH|STENCIL 联合 aspect，直接采样非法（Vulkan 只允许按单 aspect 采样）。
+        virtual void* getSamplingView() const { return getDefaultView(); }
 
         // 销毁由 createView 返回的视图句柄
         virtual void destroyView(void* view) = 0;

@@ -41,6 +41,8 @@ namespace StarryEngine {
         RHI::DescriptorSetLayoutHandle getGlobalSetLayout() { return m_globalSetLayout; }
         RHI::DescriptorSetHandle getGlobalDescriptorSet() { return m_globalDescriptorSet; }
 
+        void setLightViewProj(const glm::mat4& lightVP) { m_lightVP = lightVP; }
+
     private:
         void buildSceneResources();
         void updateDynamicBuffers(const Clock& clock);
@@ -66,5 +68,7 @@ namespace StarryEngine {
         bool m_materialsInitialized = false;
 
         bool m_needRebuildGraph = false;
+
+        glm::mat4 m_lightVP = glm::mat4(1.0f);   // 未设置时为单位阵（阴影贴图退化为无意义采样，不会崩溃）
     };
 }

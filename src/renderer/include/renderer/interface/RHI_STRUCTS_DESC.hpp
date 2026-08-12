@@ -211,13 +211,14 @@ namespace StarryEngine::RHI {
         Color color;
         float depth = 1.0f;
         uint32_t stencil = 0;
+        bool isDepth = false; 
 
         ClearValue() = default;
-        explicit ClearValue(const Color& color) : color(color) {}
-        ClearValue(float depth, uint32_t stencil = 0) : depth(depth), stencil(stencil) {}
+        explicit ClearValue(const Color& color) : color(color), isDepth(false) {}
+        ClearValue(float depth, uint32_t stencil = 0) : depth(depth), stencil(stencil), isDepth(true) {}
 
         bool operator==(const ClearValue& other) const {
-            return color == other.color && depth == other.depth && stencil == other.stencil;
+            return color == other.color && depth == other.depth && stencil == other.stencil && isDepth == other.isDepth;
         }
 
         bool operator!=(const ClearValue& other) const {
