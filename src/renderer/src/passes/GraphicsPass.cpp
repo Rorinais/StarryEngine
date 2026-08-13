@@ -64,6 +64,8 @@ namespace StarryEngine {
 
             sb.setExecutor(sp.executor);
         }
+        
+        resolveReadTextures(m_passNode, texIdMap);
         return true;
     }
 

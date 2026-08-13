@@ -160,6 +160,10 @@ namespace StarryEngine {
 
             // 线程命令池（用于多线程录制）
             VkCommandPool threadCommandPool = VK_NULL_HANDLE;
+
+            // 该槽位是否已 submit 过至少一帧。时间戳池首次使用前必须已被 reset+写，
+            // 否则 vkGetQueryPoolResults 读未初始化查询会触发 VUID-09401。
+            bool hasSubmittedFirstFrame = false;
         };
 
         std::shared_ptr<Device> mDevice;
@@ -185,7 +189,6 @@ namespace StarryEngine {
         bool mTimestampsEnabled = false;
         float mTimestampPeriod = 1.0f;
 
-        bool m_hasRenderedAnyFrame = false;
         uint32_t m_lastFrameIndex = 0;
 
         // 每个 swap chain image 独立的 renderFinishedSemaphore

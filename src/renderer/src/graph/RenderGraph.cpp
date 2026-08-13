@@ -374,8 +374,9 @@ namespace StarryEngine::RenderGraph {
                     auto texIt = std::find_if(m_virtualTextures.begin(), m_virtualTextures.end(),
                         [texId](const VirtualTexture& vt) { return vt.id == texId; });
                     RHI::Format format = (texIt != m_virtualTextures.end()) ? texIt->desc.format : RHI::Format::Undefined;
+                    bool computeReader = m_sortedPasses[firstUseIdx]->getType() == PassType::Compute;
                     auto [srcStage, srcAccess] = getStageAccessFromLayout(RHI::ImageLayout::Undefined);
-                    auto [dstStage, dstAccess] = getStageAccessFromLayout(firstLayoutInfo.initial);
+                    auto [dstStage, dstAccess] = getReadStageAccess(firstLayoutInfo.initial, computeReader);
                     uint32_t aspect = getAspectMask(format);
                     m_layoutTransitions.push_back({
                         -1, static_cast<uint32_t>(firstUseIdx), texId,
@@ -405,8 +406,9 @@ namespace StarryEngine::RenderGraph {
                         auto texIt = std::find_if(m_virtualTextures.begin(), m_virtualTextures.end(),
                             [texId](const VirtualTexture& vt) { return vt.id == texId; });
                         RHI::Format format = (texIt != m_virtualTextures.end()) ? texIt->desc.format : RHI::Format::Undefined;
+                        bool computeReader = m_sortedPasses[readIdx]->getType() == PassType::Compute;
                         auto [srcStage, srcAccess] = getStageAccessFromLayout(writeLayout);
-                        auto [dstStage, dstAccess] = getStageAccessFromLayout(readLayout);
+                        auto [dstStage, dstAccess] = getReadStageAccess(readLayout, computeReader);
                         uint32_t aspect = getAspectMask(format);
                         m_layoutTransitions.push_back({
                             static_cast<int32_t>(writeIdx), readIdx, texId,
@@ -613,6 +615,14 @@ namespace StarryEngine::RenderGraph {
             return { static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::AllCommands),
                      static_cast<RHI::AccessFlags>(RHI::AccessFlag::MemoryRead | RHI::AccessFlag::MemoryWrite) };
         }
+    }
+
+    std::pair<RHI::PipelineStageFlags, RHI::AccessFlags> RenderGraph::getReadStageAccess(
+        RHI::ImageLayout layout, bool computeReader) {
+        if (computeReader && layout == RHI::ImageLayout::ShaderReadOnly)
+            return { static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::ComputeShader),
+                     static_cast<RHI::AccessFlags>(RHI::AccessFlag::ShaderRead) };
+        return getStageAccessFromLayout(layout);
     }
 
     // ──── Pass Culling ──────────────────────────────────────────────

@@ -279,10 +279,27 @@ function(add_engine_executable)
         target_link_options(${ARG_TARGET_NAME} PRIVATE "-Wl,--disable-new-dtags")
     endif()
 
-    target_link_libraries(${ARG_TARGET_NAME} PRIVATE
-        application
-        "$<LINK_GROUP:RESCAN,core,assets,scene,event,utils,logging,renderer,ui>"
-    )
+    # 引擎模块库：重构按里程碑逐个 add_subdirectory 加入。
+    # 这里只链接"已存在"的模块 target，避免骨架阶段链接到尚不存在的库
+    # （否则 ld: cannot find -lcore / -lrenderer ...）。模块加入后自动进入链接组。
+    set(_se_modules core assets scene event utils logging renderer ui)
+    set(_se_modules_link "")
+    foreach(_se_mod IN LISTS _se_modules)
+        if(TARGET ${_se_mod})
+            list(APPEND _se_modules_link ${_se_mod})
+        endif()
+    endforeach()
+
+    if(_se_modules_link)
+        target_link_libraries(${ARG_TARGET_NAME} PRIVATE
+            application
+            "$<LINK_GROUP:RESCAN,${_se_modules_link}>"
+        )
+    else()
+        target_link_libraries(${ARG_TARGET_NAME} PRIVATE
+            application
+        )
+    endif()
 
     copy_target_resources(${ARG_TARGET_NAME} ${ARG_OUTPUT_DIR}
         SHADERS    ${ARG_SHADERS_DIR}

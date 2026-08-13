@@ -114,13 +114,18 @@ namespace StarryEngine {
             throw std::runtime_error("Frame already in progress");
         }
 
-        // 等待上一帧完成
+        // 等待当前槽位上一轮帧完成（frameCount=2 → 等待 2 帧前提交的帧）
         if (!waitForFrame(mCurrentFrameIndex)) {
             throw std::runtime_error("Failed to wait for previous frame");
         }
 
-        if (m_hasRenderedAnyFrame) {
-            updateStatistics(m_lastFrameIndex);
+        // 读 GPU 时间戳：waitForFrame 之后本槽位上一轮帧必然已完成，查询结果就绪。
+        // 之前读 m_lastFrameIndex（上一帧的槽位）是在帧中途强制 WAIT_BIT 隐式全管线
+        // 同步，在 Wayland/NVIDIA 上与 acquire 的时间线死锁（首帧卡死）。改读当前槽位。
+        // 但槽位首次使用前查询池从未被 reset+写，直接读会触发 VUID-09401 → 用
+        // hasSubmittedFirstFrame 跳过首轮。
+        if (mFrameData[mCurrentFrameIndex].hasSubmittedFirstFrame) {
+            updateStatistics(mCurrentFrameIndex);
         }
 
         FrameInfo frameInfo;
@@ -249,7 +254,8 @@ namespace StarryEngine {
             return submitResult;
         }
 
-        m_hasRenderedAnyFrame = true;
+        // 该槽位完成一次完整 submit：此后读它的时间戳池才是安全的
+        mFrameData[frameInfo.frameIndex].hasSubmittedFirstFrame = true;
 
         // 呈现图像（通过回调）
         VkResult presentResult = presentFunc(graphicsQueue, frameInfo.imageIndex, frameInfo.renderFinishedSemaphore);
@@ -545,6 +551,8 @@ namespace StarryEngine {
         }
 
         uint64_t timestamps[2] = { 0 };
+        // 非阻塞读：调用点（beginFrame）已 waitForFrame 该槽位的 fence，查询必然就绪。
+        // 不再用 WAIT_BIT——它会在帧中途插隐式全管线同步，Wayland/NVIDIA 上死锁 acquire。
         VkResult result = vkGetQueryPoolResults(
             mDevice->getLogicalDevice(),
             frameData.timestampQueryPool,
@@ -552,7 +560,7 @@ namespace StarryEngine {
             sizeof(timestamps),
             timestamps,
             sizeof(uint64_t),
-            VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WAIT_BIT
+            VK_QUERY_RESULT_64_BIT
         );
 
         if (result == VK_SUCCESS) {

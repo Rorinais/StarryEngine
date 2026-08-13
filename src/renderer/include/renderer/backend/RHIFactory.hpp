@@ -40,7 +40,7 @@ namespace StarryEngine {
             rhiConfig.srgb = true;
             rhiConfig.frameBuffering = flightFrame;
             rhiConfig.usePersistentCommandBuffers = true;
-            rhiConfig.enableTimestamps = false;  // 首帧卡死 bug（见会话汇报）；修复后改回 true
+            rhiConfig.enableTimestamps = true;   // 首帧卡死已修：读时间戳改为 waitForFrame 后读当前槽位 + 去 WAIT_BIT（FrameContext.cpp）
 #ifdef NDEBUG
             rhiConfig.enableDebug = false;
 #else

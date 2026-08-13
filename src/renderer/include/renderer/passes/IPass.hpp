@@ -2,6 +2,7 @@
 #include <renderer/graph/RenderGraph.hpp>
 #include <renderer/RenderTypes.hpp>
 #include <renderer/RenderBlackboard.hpp>
+#include <logging/Logger.hpp>
 #include <string>
 #include <vector>
 #include <memory>
@@ -30,7 +31,6 @@ namespace StarryEngine {
 
         virtual ~IPass() = default;
 
-        // 数据源注入：render path 建图前自动调用（demo 无需手动注入），pass 在 configure/onAfterCompile 里按类型从黑板取数据
         void setDataProvider(RenderBlackboard* data) { m_data = data; }
 
         virtual bool configure(RenderGraph::RenderGraph& graph,
@@ -41,19 +41,30 @@ namespace StarryEngine {
 
         virtual std::vector<PassSubpassInfo> getSubpasses() const { return {}; }
 
-        virtual void onAfterCompile(const CompileContext& /*ctx*/) {}
+        virtual void onAfterCompile(const CompileContext& ) {}
 
-        // 场景分析完成后：分发 draw items + 构建依赖场景数据的管线（如网格 PSO）。
-        // 与 onAfterCompile 分工：后者构建"只依赖图结构"的资源，前者构建"依赖场景数据"的资源。
-        // defaultTag：场景里没显式指定 subpass tag 的 draw item 路由到哪个 subpass（由渲染路径算出）。
-        virtual void onSceneData(const AnalysisSceneResult& /*sceneData*/,
-                                 const CompileContext& /*ctx*/,
-                                 const std::string& /*defaultTag*/) {}
+        virtual void onSceneData(const AnalysisSceneResult& ,const CompileContext& ,const std::string& ) {}
 
         virtual const std::string& getName() const = 0;
 
+        void addReadTextureByName(const std::string& texName) { m_readTextureNames.push_back(texName); }
+
     protected:
-        RenderBlackboard* m_data = nullptr;   // 数据源（render path 注入的黑板）
+        void resolveReadTextures(RenderGraph::PassNode* node,
+                                 const std::unordered_map<std::string, RenderGraph::TextureId>& texIdMap) {
+            if (!node) return;
+            for (auto& name : m_readTextureNames) {
+                auto tid = texIdMap.find(name);
+                if (tid == texIdMap.end()) {
+                    LOG_WARN("[{}] addReadTextureByName('{}') 未在 texIdMap 中找到，忽略", getName(), name);
+                    continue;
+                }
+                node->addReadTexture(tid->second);
+            }
+        }
+
+        RenderBlackboard* m_data = nullptr;   
+        std::vector<std::string> m_readTextureNames;   
     };
 
     using PassList = std::vector<std::shared_ptr<IPass>>;

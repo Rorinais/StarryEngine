@@ -13,8 +13,9 @@ layout(set = 0, binding = 0) uniform GlobalUniforms {
     mat4 view;
     mat4 proj;
     mat4 invView;
-    mat4 invProj; 
+    mat4 invProj;
     float time;
+    mat4 lightVP;
 } global;
 
 struct Light {
@@ -34,6 +35,7 @@ layout(set = 2, binding = 2) uniform sampler2D normalMap;
 layout(set = 2, binding = 3) uniform samplerCube uIrradianceMap;
 layout(set = 2, binding = 4) uniform samplerCube uPrefilteredMap;
 layout(set = 2, binding = 5) uniform sampler2D   uBrdfLut;
+layout(set = 2, binding = 6) uniform sampler2D   uShadowMap;
 
 const float PI = 3.14159265359;
 
@@ -92,9 +94,37 @@ void main() {
     vec3 nominator = NDF * G * F;
     float denominator = max(4.0 * NdotV * NdotL, 0.0001);
     vec3 specular = nominator / denominator;
-    
-    Lo += (kD * albedoSample.rgb / PI + specular) * radiance * NdotL;
-    
+
+    // ========== 阴影采样（阴影贴图：光视角深度）==========
+    float shadow = 1.0;
+    {
+        //global.lightVP[0].xyz =（1 / halfExtent），2.0 / (1/halfExtent) = 2*halfExtent → 世界空间总宽度，一个像素对应多少世界单位
+        float worldPerTexel = 2.0 / length(global.lightVP[0].xyz) / float(textureSize(uShadowMap, 0).x);
+        float depthPerWorld = length(global.lightVP[2].xyz); //(0, 0, 1/(far-near)) ，在世界空间中移动 1 个单位，对应 NDC 深度值变化多少。
+        vec2 texelSize = 1.0 / textureSize(uShadowMap, 0); //1.0 / (2048, 2048) 一个像素的uv大小
+
+        vec3 shadowSamplePos = fragWorldPos + N * (2.0 * worldPerTexel);
+
+        vec4 lightClip = global.lightVP * vec4(shadowSamplePos, 1.0);
+        vec3 ndc = lightClip.xyz / lightClip.w;
+        vec2 shadowUV = ndc.xy * 0.5 + 0.5;
+
+        if (shadowUV.x >= 0.0 && shadowUV.x <= 1.0 && shadowUV.y >= 0.0 && shadowUV.y <= 1.0) {
+            float currentDepth = ndc.z;
+            float bias = (2.0 + 8.0 * max(1.0 - dot(N, L), 0.0)) * worldPerTexel * depthPerWorld;
+
+            float lit = 0.0;
+            for (int x = -1; x <= 1; ++x)
+                for (int y = -1; y <= 1; ++y) {
+                    float d = texture(uShadowMap, shadowUV + vec2(float(x), float(y)) * texelSize).r;
+                    lit += (d + bias < currentDepth) ? 0.0 : 1.0;
+                }
+            shadow = lit / 9.0;
+        }
+    }
+
+    Lo += (kD * albedoSample.rgb / PI + specular) * radiance * NdotL * shadow;
+
     // ========== IBL 环境光 ==========
     // 漫反射 Irradiance
     vec3 irradiance = texture(uIrradianceMap, N).rgb;

@@ -2,6 +2,7 @@
 #include <renderer/passes/GraphicsPass.hpp>
 #include <renderer/passes/MeshPass.hpp>
 #include <renderer/passes/ParticlePass.hpp>
+#include <renderer/passes/ShadowPass.hpp>
 #include <scene/ParticleEmitter.hpp>
 #include <renderer/renderPaths/DeferredRenderPath.hpp>
 #include <renderer/passExecutor/SceneDrawExecutor.hpp>
@@ -80,15 +81,23 @@ public:
         auto colorDesc = PassWrapper::createColorTextureDesc({m_width, m_height, 1}, RHI::Format::RGBA16_Float);
         auto depthDesc = PassWrapper::createDepthTextureDesc({m_width, m_height, 1}, RHI::Format::D24_UNorm_S8_UInt);
         auto swapDesc   = PassWrapper::createColorTextureDesc({m_width, m_height, 1}, RHI::Format::BGRA8_sRGB);
+        // 阴影贴图：光源视角 depth-only，分辨率固定 2048²（与窗口无关）
+        auto shadowMapDesc = PassWrapper::createDepthTextureDesc({ShadowPass::kShadowMapSize, ShadowPass::kShadowMapSize, 1}, RHI::Format::D24_UNorm_S8_UInt);
         renderPath->addTextureDesc("SceneColor",  colorDesc);
         renderPath->addTextureDesc("Depth",       depthDesc);
         renderPath->addTextureDesc("Swapchain",   swapDesc);
+        renderPath->addTextureDesc("ShadowMap",   shadowMapDesc);
 
         {
             PassList passes;
 
+            // ShadowPass：先用光源 VP 把网格重渲成深度贴图（供 ForwardPass 的 PBR 材质采样）
+            passes.push_back(std::make_shared<ShadowPass>("ShadowPass"));
+
             // ForwardPass: OpaqueGeometry —— MeshPass 封装标准几何 pass（SceneColor+Depth 清屏 + Mesh 绘制）
-            passes.push_back(std::make_shared<MeshPass>("ForwardPass", "Forward_Opaque",RHI::Color::Transparent()));
+            auto forwardPass = std::make_shared<MeshPass>("ForwardPass", "Forward_Opaque",RHI::Color::Transparent());
+            forwardPass->addReadTextureByName("ShadowMap");  // PBR 材质采样阴影贴图（shader 级读，显式声明依赖）
+            passes.push_back(forwardPass);
 
             //PostProcessPass: Skybox + Grid（后续写者，loadOp/布局由渲染图推断为 Load）
             auto postPass = std::make_shared<GraphicsPass>("PostProcessPass");
@@ -114,29 +123,29 @@ public:
             //   subpass "StencilTest" ：放大 1.08 的角色副本，stencil NotEqual 反选 → 只留外圈描边
             // 同一 render pass 内 subpass 间 stencil 读写靠 Vulkan 隐式 framebuffer-local 依赖；
             // 本 pass 的深度附件 stencilLoadOp=Clear → 开 pass 时 stencil 清零，本体从 0 写 1。
-            // {
-            //     auto stencilPass = std::make_shared<GraphicsPass>("StencilPass");
+            {
+                auto stencilPass = std::make_shared<GraphicsPass>("StencilPass");
 
-            //     RenderGraph::AttachmentParams ds;
-            //     ds.clearDepth = 1.0f;
-            //     ds.clearStencil = 0;
+                RenderGraph::AttachmentParams ds;
+                ds.clearDepth = 1.0f;
+                ds.clearStencil = 0;
 
-            //     SubpassDesc sw;
-            //     sw.tag = "StencilWrite";
-            //     sw.executor = std::make_shared<SceneDrawExecutor>();
-            //     sw.colorAttachments.push_back({ "SceneColor", RenderGraph::AttachmentParams{} });
-            //     sw.depthAttachment = { "Depth", ds };
-            //     stencilPass->addSubpass(sw);
+                SubpassDesc sw;
+                sw.tag = "StencilWrite";
+                sw.executor = std::make_shared<SceneDrawExecutor>();
+                sw.colorAttachments.push_back({ "SceneColor", RenderGraph::AttachmentParams{} });
+                sw.depthAttachment = { "Depth", ds };
+                stencilPass->addSubpass(sw);
 
-            //     SubpassDesc st;
-            //     st.tag = "StencilTest";
-            //     st.executor = std::make_shared<SceneDrawExecutor>();
-            //     st.colorAttachments.push_back({ "SceneColor", RenderGraph::AttachmentParams{} });
-            //     st.depthAttachment = { "Depth", ds };
-            //     stencilPass->addSubpass(st);
+                SubpassDesc st;
+                st.tag = "StencilTest";
+                st.executor = std::make_shared<SceneDrawExecutor>();
+                st.colorAttachments.push_back({ "SceneColor", RenderGraph::AttachmentParams{} });
+                st.depthAttachment = { "Depth", ds };
+                stencilPass->addSubpass(st);
 
-            //     passes.push_back(stencilPass);
-            // }
+                passes.push_back(stencilPass);
+            }
 
             passes.push_back(std::make_shared<ParticlePass>("Particles", "Particles"));
 
@@ -145,6 +154,24 @@ public:
 
         m_renderPath = renderPath;
         m_renderer->setRenderPath(m_renderPath);
+
+        // 平行光阴影：从光源方向构建正交 view*proj（与 PBR shader 的 L=normalize(-lights.position) 一致）。
+        // 上传到 Renderer → GlobalUniforms.lightVP，阴影贴图 pass 与 PBR 采样共用同一矩阵。
+        {
+            glm::vec3 lightDir = glm::normalize(glm::vec3(0.5f, 1.0f, 0.8f));  // = normalize(-(-0.5,-1,-0.8))
+            glm::vec3 sceneCenter(0.0f, 1.0f, 0.0f);
+            // 视锥必须盖住可见地板（含球阴影区域），否则 shadowmap 边界线会露在画面里（摄像机左侧一条线）。
+            // 可见地板在光空间的跨度约 ±9，取 12 保证边界推出画面外（shadowmap 分辨率损失可忽略）。
+            float halfExtent = 12.0f;
+            float dist = 12.0f;
+            // 阴影相机必须放在“光源侧”朝场景看（太阳在 L 方向上方 → 相机在中心+L*dist 向下看）。
+            // 若放 -L*dist（光源到达侧）则从场景下方仰视，阴影贴图只拍到背面 → 地面永远收不到球影。
+            glm::vec3 eye = sceneCenter + lightDir * dist;
+            glm::mat4 view = glm::lookAt(eye, sceneCenter, glm::vec3(0.0f, 1.0f, 0.0f));
+            glm::mat4 proj = glm::orthoRH_ZO(-halfExtent, halfExtent, -halfExtent, halfExtent, 0.1f, 26.0f);
+            proj[1][1] *= -1.0f;   // 与引擎投影约定一致（Vulkan Y 翻转）
+            m_renderer->setLightViewProj(proj * view);
+        }
 
         // 帧序列输出：STARRY_FRAME_DUMP=<目录> 激活，STARRY_FRAME_COUNT=<帧数>（默认 1，0=持续）
         if (const char* dumpDir = std::getenv("STARRY_FRAME_DUMP")) {
@@ -232,6 +259,8 @@ public:
         material->setTexture("uIrradianceMap", m_irradianceMap, m_cubeSampler);
         material->setTexture("uPrefilteredMap", m_prefilteredMap, m_prefilterSampler);
         material->setTexture("uBrdfLut", m_brdfLut, m_lutSampler);
+        // 阴影贴图：图形虚拟纹理 "ShadowMap" 建图后由 updateMaterialTextures 自动绑定到 set2 binding6（uShadowMap）
+        material->addTextureDependency("ShadowMap", 2, 6);
 
         auto* lightBlock = material->getBlock("LightingUBO");
         if (lightBlock) {
@@ -304,46 +333,46 @@ public:
             m_scene->addObject(ground);
         }
 
-        //addGriseoModel();
+        addGriseoModel();
 
         // ── 模板描边：角色本体在 StencilWrite 画 + stencil Replace 写 1；放大副本在 StencilTest 测 NotEqual 反选 → 只留外圈 ──
-        // {
-        //     // 1) 角色本体材质：tag 从 Forward_Opaque 改到 StencilWrite（本体移到描边 pass 里画），开 stencil 写 1
-        //     for (auto& mat : m_skinnedMaterials) {
-        //         if (!mat) continue;
-        //         mat->setSubpassTag("StencilWrite");
-        //         RHI::StencilOpState write;
-        //         write.failOp = RHI::StencilOp::Keep;
-        //         write.passOp = RHI::StencilOp::Replace;   // 测试通过（Always）→ 写 stencil=1
-        //         write.depthFailOp = RHI::StencilOp::Keep;
-        //         write.compareOp = RHI::CompareOp::Always;
-        //         write.compareMask = 0xFF;
-        //         write.writeMask = 0xFF;
-        //         write.reference = 1;
-        //         mat->setStencilTest(true);
-        //         mat->setStencilOps(write, write);
-        //     }
+        {
+            // 1) 角色本体材质：tag 从 Forward_Opaque 改到 StencilWrite（本体移到描边 pass 里画），开 stencil 写 1
+            for (auto& mat : m_skinnedMaterials) {
+                if (!mat) continue;
+                mat->setSubpassTag("StencilWrite");
+                RHI::StencilOpState write;
+                write.failOp = RHI::StencilOp::Keep;
+                write.passOp = RHI::StencilOp::Replace;   // 测试通过（Always）→ 写 stencil=1
+                write.depthFailOp = RHI::StencilOp::Keep;
+                write.compareOp = RHI::CompareOp::Always;
+                write.compareMask = 0xFF;
+                write.writeMask = 0xFF;
+                write.reference = 1;
+                mat->setStencilTest(true);
+                mat->setStencilOps(write, write);
+            }
 
-        //     // 2) 描边副本：同一几何（同一骨骼矩阵）+ 放大变换，全 submesh 同一描边材质
-        //     //    STARRY_NO_OUTLINE=1 关闭描边 → 与开着 A/B 对比描边的真实开销
-        //     bool outlineOn = (std::getenv("STARRY_NO_OUTLINE") == nullptr);
-        //     m_outlineMaterial = outlineOn ? makeOutlineMaterial() : nullptr;
-        //     if (m_outlineMaterial && m_modelGeometry) {
-        //         auto outline = std::make_shared<Scene::RenderObject>();
-        //         outline->geometry = m_modelGeometry;
-        //         // 材质列表长度对齐角色 submesh 索引（长度不够会解析到 default 材质 → 无蒙皮 → 破相）
-        //         std::vector<std::shared_ptr<Assets::MaterialInstance>> outlineMats(m_modelMaterialCount, m_outlineMaterial);
-        //         outline->materials = std::move(outlineMats);
-        //         // 放大 1.08，围绕脚底 Y 缩放 → 外圈在脚下收拢、与脚重合（脚下不悬青色条），看起来像踩在地上
-        //         float footY = computeModelFootY(m_modelGeometry);
-        //         LOG_INFO("[demo] 描边缩放中心（脚底）Y = {:.3f}", footY);
-        //         outline->transform =
-        //             glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, footY, 0.0f))
-        //             * glm::scale(glm::mat4(1.0f), glm::vec3(1.03f))
-        //             * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -footY, 0.0f));
-        //         m_scene->addObject(outline);
-        //     }
-        // }
+            // 2) 描边副本：同一几何（同一骨骼矩阵）+ 放大变换，全 submesh 同一描边材质
+            //    STARRY_NO_OUTLINE=1 关闭描边 → 与开着 A/B 对比描边的真实开销
+            bool outlineOn = (std::getenv("STARRY_NO_OUTLINE") == nullptr);
+            m_outlineMaterial = outlineOn ? makeOutlineMaterial() : nullptr;
+            if (m_outlineMaterial && m_modelGeometry) {
+                auto outline = std::make_shared<Scene::RenderObject>();
+                outline->geometry = m_modelGeometry;
+                // 材质列表长度对齐角色 submesh 索引（长度不够会解析到 default 材质 → 无蒙皮 → 破相）
+                std::vector<std::shared_ptr<Assets::MaterialInstance>> outlineMats(m_modelMaterialCount, m_outlineMaterial);
+                outline->materials = std::move(outlineMats);
+                // 放大 1.08，围绕脚底 Y 缩放 → 外圈在脚下收拢、与脚重合（脚下不悬青色条），看起来像踩在地上
+                float footY = computeModelFootY(m_modelGeometry);
+                LOG_INFO("[demo] 描边缩放中心（脚底）Y = {:.3f}", footY);
+                outline->transform =
+                    glm::translate(glm::mat4(1.0f), glm::vec3(2.0f, footY, 0.0f))
+                    * glm::scale(glm::mat4(1.0f), glm::vec3(1.03f))
+                    * glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, -footY, 0.0f));
+                m_scene->addObject(outline);
+            }
+        }
 
         //粒子发射器（场景内容，可增删；增删后 renderer->setNeedRebuildGraph()）
         {
@@ -394,7 +423,7 @@ public:
 
         auto perspectiveCamera = std::make_shared<Scene::PerspectiveCamera>();
         perspectiveCamera->setPerspective(glm::radians(45.0f), (float)m_width / m_height, 0.1f, 100.0f);
-        perspectiveCamera->lookAt(glm::vec3(0.0f, 2.0f, 5.0f), glm::vec3(0.0f, 0.8f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        perspectiveCamera->lookAt(glm::vec3(0.0f, 2.0f, 7.0f), glm::vec3(0.0f, 0.8f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
         m_scene->addCamera(perspectiveCamera);
         m_scene->setActiveCamera(perspectiveCamera);
     }
@@ -615,7 +644,7 @@ void PBRDemo::addGriseoModel() {
     auto obj = std::make_shared<Scene::RenderObject>();
     obj->geometry = geometry;
     obj->materials = materials;
-    obj->transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f));
+    obj->transform = glm::translate(glm::mat4(1.0f), glm::vec3(2.0f, 0.0f, 0.0f));
     m_scene->addObject(obj);
 
     m_modelGeometry = geometry;
@@ -690,20 +719,21 @@ int main() {
     cfg.width = kWinW;
     cfg.height = kWinH;
     cfg.title = "Transparent Window Smoke Test";
-    cfg.resizable = false;
-    cfg.transparent = true;
-    cfg.borderless = true;
-    cfg.alwaysOnTop = true;
+    //cfg.resizable = false;
+    //cfg.transparent = false;
+    //cfg.borderless = true;
+    //cfg.alwaysOnTop = true;
 
-    cfg.clickThrough = (std::getenv("STARRY_NO_CLICKTHROUGH") == nullptr);
-    cfg.nativeWayland = (std::getenv("STARRY_FORCE_X11") == nullptr);
-    LOG_INFO("[demo] 平台: {}（STARRY_FORCE_X11 强制 X11）", cfg.nativeWayland ? "原生 Wayland" : "X11");
+    //cfg.clickThrough = (std::getenv("STARRY_NO_CLICKTHROUGH") == nullptr);
+    //cfg.nativeWayland = (std::getenv("STARRY_FORCE_X11") == nullptr);
+    //LOG_INFO("[demo] 平台: {}（STARRY_FORCE_X11 强制 X11）", cfg.nativeWayland ? "原生 Wayland" : "X11");
     StarryEngine::Application app(cfg);
 
     // ── 性能测量（优化闭环第 1 步：先测基线，改完复测对比；关掉即恢复无痕）──
     // 开 GPU 时间戳查询；窗口标题每 1s 刷 FPS/GPU/CPU，日志每 5s 打一行平均/最大帧时间
-    if (auto frameCtx = app.getRenderHardwareInterface()->getFrameContext())
-        frameCtx->enableTimestamps(true);
+    // 时间戳：enableTimestamps(true) 会触发首帧卡死 bug（见会话汇报），修复前保持关闭
+    // if (auto frameCtx = app.getRenderHardwareInterface()->getFrameContext())
+    //     frameCtx->enableTimestamps(true);
 
     auto demo = std::make_shared<PBRDemo>(app.getRenderHardwareInterface(), app.getGlobalDescriptorPool(), app.getWidth(), app.getHeight());
 

@@ -86,6 +86,7 @@ namespace StarryEngine::RenderGraph {
 
         const std::vector<RHI::FramebufferHandle>& getFramebuffersForPass(size_t passIndex) const;
         std::pair<RHI::PipelineStageFlags, RHI::AccessFlags> getStageAccessFromLayout(RHI::ImageLayout layout);
+        std::pair<RHI::PipelineStageFlags, RHI::AccessFlags> getReadStageAccess(RHI::ImageLayout layout, bool computeReader);
 
         bool isDepthOnlyFormat(RHI::Format format) {
             return format == RHI::Format::D16_UNorm || format == RHI::Format::D32_Float;
