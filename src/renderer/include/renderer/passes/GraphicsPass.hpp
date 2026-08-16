@@ -10,7 +10,6 @@
 
 namespace StarryEngine {
 
-    // GraphicsPass — 一次 Graphics RenderPass，包含多个 Subpass
     class GraphicsPass : public IPass {
     public:
         GraphicsPass(std::string name) : m_name(std::move(name)) {}
@@ -27,7 +26,6 @@ namespace StarryEngine {
 
         std::vector<PassSubpassInfo> getSubpasses() const override;
 
-        // 场景数据更新：把 draw items 分发给各 subpass executor，并从 sceneData.PSO 构建网格管线
         void onSceneData(const AnalysisSceneResult& sceneData,
                          const IPass::CompileContext& ctx,
                          const std::string& defaultTag) override;

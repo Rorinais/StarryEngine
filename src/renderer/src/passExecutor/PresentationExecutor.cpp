@@ -13,7 +13,6 @@ namespace StarryEngine {
         }
     }
 
-    // 自建呈现管线（原 BaseRenderPath::ensurePresentationShaders + preparePresentationPipeline）
     void PresentationExecutor::onPrepare(const ExecutorPrepareContext& ctx) {
         m_resMgr = ctx.resMgr;
         if (!m_resMgr || !ctx.renderGraph || !ctx.globalSetLayout.isValid()) return;
@@ -23,7 +22,6 @@ namespace StarryEngine {
         auto fsInfo = loader.loadFromFile("assets/shaders/deferred/copy.frag", RHI::ShaderStage::Fragment);
         if (!vsInfo || !fsInfo) { LOG_ERROR("[Presentation] shaders failed"); return; }
 
-        // set1：SceneColor 采样
         RHI::DescriptorSetLayoutDesc set1;
         set1.bindings = {{0, RHI::DescriptorType::CombinedImageSampler, 1, RHI::ShaderStage::Fragment}};
         m_sceneColorLayout = m_resMgr->createDescriptorSetLayout(set1);
@@ -48,7 +46,6 @@ namespace StarryEngine {
 
         m_globalSets = ctx.globalDescSets;
 
-        // SceneColor 描述符集（presentation 阶段采样 SceneColor 输出）
         RHI::SamplerDesc sampDesc;
         sampDesc.minFilter = RHI::SamplerFilter::Linear;
         sampDesc.magFilter = RHI::SamplerFilter::Linear;
@@ -88,7 +85,6 @@ namespace StarryEngine {
         encoder->bindGraphicPipeline(m_pipeline);
         RHI::PipelineLayoutHandle playout = pipeline->getLayout();
         if (playout.isValid()) {
-            // per-slot（ADR-6）：按本帧槽位绑全局集（每槽独立 globals UBO 缓冲）
             uint32_t slot = pctx.getFrameSlot();
             RHI::DescriptorSetHandle gset = (slot < m_globalSets.size()) ? m_globalSets[slot] : RHI::DescriptorSetHandle::Null();
             if (gset.isValid())

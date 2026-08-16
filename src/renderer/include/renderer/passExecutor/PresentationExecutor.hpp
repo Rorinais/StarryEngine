@@ -5,9 +5,6 @@
 
 namespace StarryEngine {
 
-    // 全屏 blit：fullscreen.vert + copy.frag → SceneColor → Swapchain
-    // 自包含 executor：在 onPrepare 里构建自己的管线 + SceneColor 描述符集，
-    // 不依赖 render path 注入（原 BaseRenderPath::preparePresentationPipeline 已收进这里）
     class PresentationExecutor : public IPassExecutor {
     public:
         PresentationExecutor() = default;
@@ -27,7 +24,7 @@ namespace StarryEngine {
     private:
         RHI::PipelineHandle m_pipeline;
         RHI::PipelineLayoutHandle m_layout;
-        std::vector<RHI::DescriptorSetHandle> m_globalSets;   // per-slot（ADR-6）
+        std::vector<RHI::DescriptorSetHandle> m_globalSets;   
         RHI::DescriptorSetHandle m_sceneColorSet;
         RHI::DescriptorSetLayoutHandle m_sceneColorLayout;
         RHI::DescriptorPoolHandle m_pool;

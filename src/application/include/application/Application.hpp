@@ -41,7 +41,6 @@
 namespace StarryEngine {
     class Application {
     public:
-        // 启动配置：窗口尺寸 / 透明窗口（桌面角色）等
         struct Config {
             int posX = -1;
             int posY = -1;
@@ -65,7 +64,6 @@ namespace StarryEngine {
 
         void run();
 
-        // 分步运行接口：initialize() + 循环 step()，供 Python 绑定逐帧驱动引擎
         void initialize();
         void step();
         void shutdown();
@@ -76,11 +74,9 @@ namespace StarryEngine {
         void setRenderer(std::shared_ptr<Renderer> renderer) { m_renderer = renderer; }
         void setScene(std::shared_ptr<Scene::Scene> scene) { m_scene = scene; }
 
-        // 每帧逻辑回调（demo 挂载动画/自定义更新）
         using UpdateCallback = std::function<void(float deltaTime)>;
         void setUpdateCallback(UpdateCallback cb) { m_updateCallback = std::move(cb); }
 
-        // 每帧渲染+呈现完成后回调（GPU 上本帧已提交；用于帧读回/捕获等）
         using PostRenderCallback = std::function<void()>;
         void setPostRenderCallback(PostRenderCallback cb) { m_postRenderCallback = std::move(cb); }
 
@@ -116,13 +112,10 @@ namespace StarryEngine {
         bool m_controlActive = false;
         bool m_enableControl = true;
 
-        // 全局游戏时钟：动画、shader time、场景逻辑的统一时间源
         Clock m_clock;
 
-        // 帧监控器（initialize() 中创建，step() 中推进）
         std::unique_ptr<FrameMonitor> m_monitor;
 
-        // ---------- 自动 Shader 热重载相关 ----------
         std::unordered_map<std::string, std::filesystem::file_time_type> m_shaderTimestamps;
         std::chrono::steady_clock::time_point m_lastFileCheck;
         std::chrono::steady_clock::time_point m_nextAllowedReload;
@@ -143,11 +136,9 @@ namespace StarryEngine {
         void initImGui();
         void drawImGuiPanels(float deltaTime);
 
-
-        // 代码编辑器相关
         TextEditor m_shaderEditor;
         std::string m_currentShaderPath;
-        // 辅助函数
+        
         void openShaderFile(const std::string& path);
         void saveCurrentShaderFile();
 

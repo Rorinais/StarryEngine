@@ -15,7 +15,6 @@ namespace StarryEngine {
 
 #if defined(__linux__) && defined(STARRY_HAVE_WAYLAND)
 namespace {
-    // 通过 wl_display 的 registry 取 wl_compositor（GLFW 不暴露，需自己拿）
     struct wl_compositor* g_wlCompositor = nullptr;
 
     const struct wl_registry_listener g_wlRegistryListener = {
@@ -45,7 +44,6 @@ namespace {
             std::cerr << "GLFW Error (" << error << "): " << description << std::endl;
         }
 
-        // Wayland 穿透模式下保留的交互把手高度（逻辑像素）：这一条始终可点，用来切回正常模式
         constexpr int kClickThroughHandleHeight = 40;
 
         void Window::terminateGLFW() {
@@ -55,8 +53,6 @@ namespace {
 
         Window::Window(const Config& config) : mConfig(config) {
 #ifdef __linux__
-            // Linux Wayland + GNOME 下原生 Wayland 后端窗口装饰有问题，默认改用 X11 (XWayland)；
-            // 但 XWayland 的 Vulkan surface 不支持 alpha 合成，透明窗口需显式选择原生 Wayland
             const char* sessionType = std::getenv("XDG_SESSION_TYPE");
             if (sessionType && std::string(sessionType) == "wayland") {
                 glfwInitHint(GLFW_PLATFORM, mConfig.nativeWayland ? GLFW_PLATFORM_WAYLAND : GLFW_PLATFORM_X11);
@@ -74,7 +70,6 @@ namespace {
                 glfwWindowHint(GLFW_SCALE_TO_MONITOR, GLFW_TRUE);
             }
 
-            // 透明窗口：请求逐像素 alpha 合成（系统不支持时静默退化为不透明）
             if (mConfig.transparent) {
                 glfwWindowHint(GLFW_TRANSPARENT_FRAMEBUFFER, GLFW_TRUE);
             }
@@ -88,7 +83,6 @@ namespace {
             int width = static_cast<int>(mConfig.width);
             int height = static_cast<int>(mConfig.height);
 
-            // 根据显示器缩放因子调整窗口像素尺寸，使逻辑尺寸匹配预期
             if (mConfig.scaleToMonitor && !mConfig.fullScreen) {
                 GLFWmonitor* primary = glfwGetPrimaryMonitor();
                 if (primary) {
@@ -132,12 +126,10 @@ namespace {
                 throw std::runtime_error("Failed to create GLFW window");
             }
 
-            // 初始窗口位置（-1 = 让窗口管理器自动摆放；原生 Wayland 下由 compositor 决定，会被忽略）
             if (mConfig.posX >= 0 && mConfig.posY >= 0) {
                 glfwSetWindowPos(mWindow, mConfig.posX, mConfig.posY);
             }
 
-            // 点击穿透需在窗口创建后应用（Wayland 靠 wl_surface 设空输入区，X11/Windows 靠运行时属性）
             if (mConfig.clickThrough) {
                 if (!setClickThrough(true)) {
                     std::cerr << "[Window] 点击穿透在当前平台不可用" << std::endl;
@@ -151,7 +143,6 @@ namespace {
             glfwSetWindowUserPointer(mWindow, this);
             glfwSetWindowSizeCallback(mWindow, [](GLFWwindow* window, int width, int height) {
                 GetEventDispatcher().dispatch<WindowResizeEvent>(width, height);
-                // 缩放会重置 Wayland input region，重应用点击穿透
                 auto* self = static_cast<Window*>(glfwGetWindowUserPointer(window));
                 if (self) self->reapplyClickThrough();
                 });
@@ -276,8 +267,6 @@ namespace {
             if (!compositor) return false;
 
             if (enable) {
-                // 穿透模式：仅保留顶部一条把手可交互（点击/聚焦后可用 F1 切回），其余整窗穿透。
-                // input region 用窗口逻辑尺寸（wl_region 坐标 = surface 逻辑空间，非缩放后 buffer）
                 int winW = 0, winH = 0;
                 glfwGetWindowSize(mWindow, &winW, &winH);
                 struct wl_region* region = wl_compositor_create_region(compositor);
@@ -288,7 +277,6 @@ namespace {
                 wl_surface_set_input_region(surface, region);
                 wl_region_destroy(region);
             } else {
-                // NULL → 恢复整窗接收输入
                 wl_surface_set_input_region(surface, nullptr);
             }
             return true;
@@ -306,13 +294,11 @@ namespace {
             }
 #endif
 #ifdef __linux__
-            // 原生 Wayland 会话但没编入 wayland-client：无法穿透（避免 glfwSetWindowAttrib 报错）
             if (glfwGetPlatform() == GLFW_PLATFORM_WAYLAND) {
                 std::cerr << "[Window] Wayland 下点击穿透需 wayland-client 支持（当前不可用）" << std::endl;
                 return false;
             }
 #endif
-            // X11 / Windows / macOS：GLFW 原生支持（XShape / WS_EX_TRANSPARENT / ignoresMouseEvents）
             glfwSetWindowAttrib(mWindow, GLFW_MOUSE_PASSTHROUGH, enable ? GLFW_TRUE : GLFW_FALSE);
             return true;
         }

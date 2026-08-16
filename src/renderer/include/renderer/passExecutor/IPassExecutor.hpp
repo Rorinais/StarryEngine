@@ -23,7 +23,6 @@ namespace StarryEngine{
         glm::mat4 projMatrix;
         float deltaTime = 0.0f;
 
-        // 帧槽位（0/1，ADR-6 per-slot）：录制时绑 slot 对应的描述符集/实例缓冲
         uint32_t frameSlot = 0;
 
         Assets::GlobalUniforms globalUniforms;
@@ -51,8 +50,8 @@ namespace StarryEngine{
             : mResMgr(resMgr), mFrameIndex(frameIndex), mFramebuffer(framebuffer), mFrameSlot(frameSlot) {
         }
 
-        uint32_t getFrameIndex() const { return mFrameIndex; }     // 交换链图像索引
-        uint32_t getFrameSlot() const { return mFrameSlot; }       // 帧槽位（per-slot 数据索引）
+        uint32_t getFrameIndex() const { return mFrameIndex; }     
+        uint32_t getFrameSlot() const { return mFrameSlot; }       
         RHI::FramebufferHandle getFramebuffer() const { return mFramebuffer; }
         std::shared_ptr<RHI::ResourceManager> getResourceManager() const { return mResMgr; }
 

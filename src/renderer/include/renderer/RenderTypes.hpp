@@ -25,9 +25,6 @@ namespace StarryEngine {
         Procedural   // 无网格，直接绘制顶点
     };
 
-    // 单次 draw call 的渲染数据。由 SceneAnalyzer 从 RenderObject 生成。
-    // per-slot（ADR-6）：描述符集与实例缓冲都按帧槽位双份——帧 N 录制的绑定引 slot N%2 的描述符
-    // 与实例缓冲；集 0 每槽指向 SceneAnalyzer 的 per-slot global set。
     struct DrawItem {
         DrawItemType type = DrawItemType::Mesh;
 
@@ -77,7 +74,6 @@ namespace StarryEngine {
         bool depthWriteEnable = true;
         RHI::CompareOp depthCompareOp = RHI::CompareOp::Less;
 
-        // 模板测试（材质一级状态，默认关闭；开启后经 getOrCreateGraphicsPipeline 拷进 RHI desc）
         bool stencilTestEnable = false;
         RHI::StencilOpState stencilFront;
         RHI::StencilOpState stencilBack;
@@ -125,7 +121,6 @@ namespace StarryEngine {
         }
     };
 
-    // 场景分析产出：渲染器每帧消费
     struct AnalysisSceneResult {
         std::vector<std::shared_ptr<GraphicsPipelineState>> PSO;   // 用于实时创建管线
         std::vector<std::shared_ptr<Assets::MaterialInstance>> materials; // 更新纹理和 uniform

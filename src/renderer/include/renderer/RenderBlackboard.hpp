@@ -5,8 +5,6 @@
 
 namespace StarryEngine {
 
-    // 类型键控的数据块（黑板）：render path 共享数据给 pass/executor 用。
-    // put<T>(value) / get<T>() 按完整类型 T 索引（含指针/引用，如 put<Scene::Scene*>(scene)）。
     class RenderBlackboard {
     public:
         template<typename T>

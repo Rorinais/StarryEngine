@@ -11,7 +11,6 @@ namespace StarryEngine {
         float pointSizeMin, pointSizeMax;
     };
 
-    // 渲染 push constant（与 particle.vert 一致）：model(0..64) + 参数(64..120)
     struct ParticleRenderPC {
         glm::mat4 model;
         ParticleVSPC params;
@@ -19,7 +18,6 @@ namespace StarryEngine {
 
     class ParticleRenderExecutor : public IPassExecutor {
     public:
-        // globalSets 按帧槽位（ADR-6）：execute 按 pctx.getFrameSlot() 绑对应槽的全局集
         ParticleRenderExecutor(RHI::PipelineHandle pipeline, RHI::PipelineLayoutHandle layout,
                                std::vector<RHI::DescriptorSetHandle> globalSets, RHI::DescriptorSetHandle particleSet,
                                uint32_t count);
@@ -36,7 +34,6 @@ namespace StarryEngine {
                      const PassContext& pctx, uint32_t) override;
 
         void setVSParams(const ParticleParams& p);
-        // 发射器局部坐标 → 世界（push constant model）
         void setTransform(const glm::mat4& t) { m_model = t; }
 
     private:

@@ -32,7 +32,6 @@ namespace StarryEngine {
         std::unordered_map<std::string, RenderGraph::TextureId>& texIdMap)
     {
         for (auto& pass : m_passes) {
-            // 数据源自动注入：黑板（含场景等），pass 里按类型读取（demo 无需手动注入）
             pass->setDataProvider(&m_blackboard);
 
             if (!pass->configure(*m_renderGraph, texIdMap, m_width, m_height, m_resMgr, m_globalSetLayout)) {
@@ -46,7 +45,6 @@ namespace StarryEngine {
             }
         }
 
-        // 校验：emitter 的路由 tag 是否命中某个粒子 pass（否则被静默丢弃——给提示）
         {
             std::unordered_set<std::string> particleTags;
             for (auto& pass : m_passes)
@@ -72,7 +70,6 @@ namespace StarryEngine {
     void DeferredRenderPath::doRebuildResources(const AnalysisSceneResult& sceneData) {
         updateMaterialTextures(sceneData);
 
-        // draw item 分发 + 场景相关管线全部委托给各 pass（GraphicsPass 自己处理网格）
         IPass::CompileContext ctx;
         ctx.resMgr = m_resMgr;
         ctx.rhi = m_rhi;
@@ -86,7 +83,6 @@ namespace StarryEngine {
             if (!subs.empty()) defaultTag = subs.front().tag;
         }
 
-        // 诊断：确保每个 draw item 的 tag 都能命中某个 subpass
         std::unordered_set<std::string> allTags;
         for (auto& pass : m_passes)
             for (auto& info : pass->getSubpasses())
@@ -128,7 +124,6 @@ namespace StarryEngine {
     }
 
     // ──── Material Texture Binding ────────────────────────────────
-
     void DeferredRenderPath::updateMaterialTextures(const AnalysisSceneResult& sceneData) {
         if (!m_renderGraph || m_textureIdMap.empty()) { LOG_WARN("RG not ready for textures"); return; }
         RHI::TextureHandle swapchainPhys;

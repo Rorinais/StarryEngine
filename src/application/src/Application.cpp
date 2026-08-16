@@ -25,7 +25,7 @@ namespace StarryEngine {
         config.decorated = !cfg.borderless;
         config.floating = cfg.alwaysOnTop;
         config.clickThrough = cfg.clickThrough;
-        config.nativeWayland = cfg.nativeWayland;   // 仅 Linux 生效，其他平台忽略
+        config.nativeWayland = cfg.nativeWayland;   
         m_window = Window::create(config);
 
         m_rhi = VulkanRHIFactory::createDefault(RHI::API::Vulkan, m_window, m_width, m_height, m_flightFrame, cfg.transparent);

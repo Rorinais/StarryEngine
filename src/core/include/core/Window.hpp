@@ -10,26 +10,19 @@ namespace StarryEngine {
 
             uint32_t width = 800;
             uint32_t height = 600;
+            int monitorIndex = 0;
 
             const char* title = "Vulkan App";
+            const char* iconPath = nullptr;
+
             bool resizable = false;
-            int monitorIndex = 0;
             bool fullScreen = false;
             bool highDPI = false;
             bool scaleToMonitor = true;
-            const char* iconPath = nullptr;
-
-            // 透明窗口（桌面角色需要）：窗口支持逐像素 alpha 合成
             bool transparent = false;
-            bool decorated = true;    // 有边框（透明窗口通常设为 false）
-            bool floating = false;    // 置顶显示
-
-            // 鼠标点击穿透：透明区域不拦截点击，事件落到桌面/下层窗口。
-            // X11/Windows 走 GLFW_MOUSE_PASSTHROUGH；原生 Wayland 手动设空输入区。
+            bool decorated = true;    
+            bool floating = false;    
             bool clickThrough = false;
-
-            // Wayland 会话下默认强制 X11 (XWayland)，因其 Vulkan surface 不支持 alpha 合成。
-            // 透明窗口需改走原生 Wayland（无边框时不受当初的装饰问题影响）。
             bool nativeWayland = false;
         };
 
@@ -52,10 +45,8 @@ namespace StarryEngine {
         bool shouldClose() const;
         void pollEvents() const;
 
-        // 移动窗口位置（X11/Windows 生效；原生 Wayland 由 compositor 决定，会被忽略）
         void setPosition(int x, int y) { glfwSetWindowPos(mWindow, x, y); }
 
-        // 运行时切换鼠标穿透（透明区不挡点击）。返回是否成功生效。
         bool setClickThrough(bool enable);
 
         float getAspectRatio() const noexcept {

@@ -16,7 +16,6 @@ namespace StarryEngine {
         DeferredRenderPath(std::shared_ptr<RHI::IRHI> rhi, uint32_t width, uint32_t height);
         ~DeferredRenderPath() = default;
 
-        // IRenderPath — deferred-specific overrides
         void setConfig(const RenderPathConfig&) override;  
         void setDrawItems(const AnalysisSceneResult& sceneData) override;
 

@@ -16,9 +16,6 @@
 namespace StarryEngine {
 
     namespace {
-        // 线性 → sRGB 8bit（与 swapchain BGRA8_sRGB 硬件编码一致，得到屏幕所见）。
-        // powf 每像素一次太贵（~100 周期 × 150 万像素），用 8192 项 LUT 查表：
-        // 误差 < 1/255（LUT 步长 1/8191 ≈ 0.00012，sRGB 曲线最陡处斜率 ~12.92 → 误差 <0.0016）。
         struct SrgbLut {
             uint8_t v[8192];
             SrgbLut() {
@@ -32,7 +29,7 @@ namespace StarryEngine {
         };
         inline uint8_t linearToSrgb8(float c) {
             c = glm::clamp(c, 0.0f, 1.0f);
-            static const SrgbLut lut;   // 首次调用初始化一次（C++11 线程安全）
+            static const SrgbLut lut;
             return lut.v[static_cast<int>(c * 8191.0f + 0.5f)];
         }
 
@@ -40,12 +37,6 @@ namespace StarryEngine {
             return static_cast<uint8_t>(glm::clamp(c, 0.0f, 1.0f) * 255.0f + 0.5f);
         }
 
-        // ── 极速 PNG 编码（Sub 滤波 + zlib stored 块，不压缩）──
-        // 捕获吞吐 = 编码吞吐（背压限帧率）。stbi 自带 zlib 把 quality 钳到 ≥5
-        //（stbi_zlib_compress 里 `if (quality < 5) quality = 5`，设 1/3 无效），
-        // LZ77 单帧 ~220ms，8 worker 也只有 ~29 FPS。这里跳过压缩：stored 块就是
-        // 带 5 字节头的原始拷贝，编码降到 ~40ms → 满帧率捕获。代价：文件 ~6MB/帧
-        //（stbi 压缩 ~1.9MB）——调试帧序列，可接受。
         uint32_t s_crcTable[256];
         bool s_crcInit = false;
 
@@ -74,7 +65,6 @@ namespace StarryEngine {
             out.push_back(static_cast<uint8_t>(v));
         }
 
-        // PNG chunk = len(4) + type(4) + payload + crc32(type+payload)
         void putChunk(std::vector<uint8_t>& out, const char type[4],
                       const uint8_t* payload, size_t payloadLen) {
             putU32(out, static_cast<uint32_t>(payloadLen));
@@ -84,8 +74,6 @@ namespace StarryEngine {
             putU32(out, crc32(out.data() + start, out.size() - start));
         }
 
-        // RGBA8 → PNG（stored-deflate）。每行 1 字节 filter 类型(Sub=1) + Sub 滤波数据；
-        // 行字节数（w*4+1）< 65535 → 每行一个 stored 块，最后一行 BFINAL=1。
         bool encodePngStored(std::vector<uint8_t>& out, uint32_t w, uint32_t h, const uint8_t* rgba) {
             out.clear();
             static const uint8_t sig[8] = { 137, 80, 78, 71, 13, 10, 26, 10 };
@@ -96,37 +84,37 @@ namespace StarryEngine {
             ihdr[2] = static_cast<uint8_t>(w >> 8);  ihdr[3] = static_cast<uint8_t>(w);
             ihdr[4] = static_cast<uint8_t>(h >> 24); ihdr[5] = static_cast<uint8_t>(h >> 16);
             ihdr[6] = static_cast<uint8_t>(h >> 8);  ihdr[7] = static_cast<uint8_t>(h);
-            ihdr[8] = 8;    // bit depth
-            ihdr[9] = 6;    // color type: RGBA
+            ihdr[8] = 8;   
+            ihdr[9] = 6;   
             putChunk(out, "IHDR", ihdr, 13);
 
             size_t rowBytes = static_cast<size_t>(w) * 4;
             std::vector<uint8_t> filtered(rowBytes + 1);
             std::vector<uint8_t> idat;
             idat.reserve((rowBytes + 1) * h + h * 5 + 6);
-            idat.push_back(0x78);   // zlib header (CMF=0x78: 32K window)
-            idat.push_back(0x01);   // FLG (FLEVEL=0)
+            idat.push_back(0x78);  
+            idat.push_back(0x01);   
 
-            uint32_t a = 1, b = 0;   // adler32 在滤波后的流上累计
+            uint32_t a = 1, b = 0;  
             for (uint32_t y = 0; y < h; ++y) {
                 const uint8_t* row = rgba + static_cast<size_t>(y) * rowBytes;
-                filtered[0] = 1;    // filter type: Sub
-                for (size_t i = 0; i < 4; ++i) filtered[1 + i] = row[i];            // 首像素无左邻
-                for (size_t i = 4; i < rowBytes; ++i)                               // Sub: filt = raw - raw[-4]
+                filtered[0] = 1;    
+                for (size_t i = 0; i < 4; ++i) filtered[1 + i] = row[i];           
+                for (size_t i = 4; i < rowBytes; ++i)                               
                     filtered[1 + i] = static_cast<uint8_t>(row[i] - row[i - 4]);
                 for (size_t i = 0; i <= rowBytes; ++i) {
                     a = (a + filtered[i]) % 65521u;
                     b = (b + a) % 65521u;
                 }
                 bool last = (y + 1 == h);
-                idat.push_back(last ? 1u : 0u);   // BFINAL + BTYPE=00 (stored)
-                idat.push_back(static_cast<uint8_t>(rowBytes + 1));                  // LEN (LE)
+                idat.push_back(last ? 1u : 0u);   
+                idat.push_back(static_cast<uint8_t>(rowBytes + 1));            
                 idat.push_back(static_cast<uint8_t>((rowBytes + 1) >> 8));
-                idat.push_back(static_cast<uint8_t>(~(rowBytes + 1)));              // NLEN = ~LEN (LE)
+                idat.push_back(static_cast<uint8_t>(~(rowBytes + 1)));              
                 idat.push_back(static_cast<uint8_t>(~((rowBytes + 1) >> 8)));
                 idat.insert(idat.end(), filtered.begin(), filtered.end());
             }
-            putU32(idat, (b << 16) | a);   // adler32（大端）
+            putU32(idat, (b << 16) | a);  
             putChunk(out, "IDAT", idat.data(), idat.size());
             putChunk(out, "IEND", nullptr, 0);
             return true;
@@ -139,8 +127,6 @@ namespace StarryEngine {
     }
 
     FrameCapture::~FrameCapture() {
-        // 先让所有在飞读回完成（fence 必信号），再停 worker —— 否则 worker 会挂在
-        // vkWaitForFences 上；等 drain 完队列（不丢帧）后释放 staging。
         if (m_rhi) m_rhi->waitIdle();
         {
             std::lock_guard<std::mutex> lock(m_workMutex);
@@ -189,7 +175,7 @@ namespace StarryEngine {
             {
                 std::unique_lock<std::mutex> lock(m_workMutex);
                 m_workCv.wait(lock, [this] { return m_stop || !m_workQueue.empty(); });
-                if (m_workQueue.empty()) break;          // stop 且队列已空 → 退出（drain 完成）
+                if (m_workQueue.empty()) break;          
                 job = m_workQueue.front();
                 m_workQueue.pop_front();
             }
@@ -214,17 +200,13 @@ namespace StarryEngine {
             std::lock_guard<std::mutex> lock(m_freeMutex);
             m_freeSlots.push_back(job.slot);
         }
-        m_freeCv.notify_one();   // 唤醒可能背压等待槽位的主线程
+        m_freeCv.notify_one();   
     }
 
     void FrameCapture::encodeAndWrite(const PendingJob& job, const uint16_t* half, const std::string& outputDir) {
         uint32_t w = job.width, h = job.height;
         size_t pixelCount = static_cast<size_t>(w) * h;
 
-        // 半精度 → float → sRGB 8bit。alpha 线性不转 sRGB。
-        // SceneColor 是"直通 alpha blend 到透明黑"的结果：背景区域 RGB 实际已按 alpha 预乘
-        //（绿色×alpha）。PNG 查看器按直通 alpha 再乘一遍 → 双重变暗 → 软边粒子黑边。
-        // 这里先除回 alpha（un-premultiply）得到直通 alpha 的亮色；alpha≈0 时保留透明黑。
         std::vector<uint8_t> rgba8(pixelCount * 4);
         for (size_t i = 0; i < pixelCount; ++i) {
             const uint16_t* p = half + i * 4;
@@ -259,8 +241,6 @@ namespace StarryEngine {
         uint32_t w = extent.width, h = extent.height;
         if (!m_staging.empty() && m_width == w && m_height == h) return true;
 
-        // 尺寸变化（resize）：等所有在读槽位归还后再重建，避免销毁正被 worker 读的 buffer。
-        // 首次创建（m_staging 空）时空闲列表本就为空，等它只会死锁，必须跳过。
         if (!m_staging.empty()) {
             std::unique_lock<std::mutex> lock(m_freeMutex);
             m_freeCv.wait(lock, [this] { return m_stop || m_freeSlots.size() >= kSlots; });
@@ -269,11 +249,11 @@ namespace StarryEngine {
 
         for (uint32_t i = 0; i < kSlots; ++i) {
             RHI::BufferDesc desc;
-            desc.size = static_cast<uint64_t>(w) * h * 4 * 2;   // RGBA16_Float = 每像素 8 字节
+            desc.size = static_cast<uint64_t>(w) * h * 4 * 2;   
             desc.type = RHI::BufferType::Staging;
             desc.memoryType = RHI::MemoryType::GPU_To_CPU;
             desc.allowReadback = true;
-            // ResourceManager 按名登记、重名即拒绝，槽位名须唯一。
+
             char name[64];
             std::snprintf(name, sizeof(name), "FrameCapture_Staging_%u", i);
             desc.debugName = name;
@@ -308,7 +288,6 @@ namespace StarryEngine {
 
         uint64_t thisFrame = m_frameCounter++;
         if (m_cfg.frameIndex != UINT32_MAX) {
-            // 指定索引帧：只导出这一帧（渲染帧号 == frameIndex）
             if (thisFrame != m_cfg.frameIndex) return false;
             if (m_captured >= 1) return false;
         } else if (m_cfg.frameCount > 0 && m_captured >= m_cfg.frameCount) {
@@ -327,7 +306,6 @@ namespace StarryEngine {
         auto extent = tex->getExtent();
         if (!ensureStaging(extent)) return false;
 
-        // 背压：无空闲槽位则阻塞等 worker 归还（绝不丢帧）。
         uint32_t slot;
         {
             std::unique_lock<std::mutex> lock(m_freeMutex);
@@ -355,14 +333,12 @@ namespace StarryEngine {
 
         RHI::BufferImageCopyRegion region;
         region.bufferOffset = 0;
-        region.bufferRowLength = 0;       // 0 = 紧密打包（行宽 = width * 每像素字节）
+        region.bufferRowLength = 0;    
         region.bufferImageHeight = 0;
         region.imageSubresource = range;
         region.imageOffset = { 0, 0, 0 };
         region.imageExtent = extent;
 
-        // 异步提交（transition+copy+transition 一个命令缓冲 + fence，不等待）。
-        // 调用时机在本帧 submit 之后 → 队列序靠后，读到的就是本帧内容。
         if (!m_rhi->beginAsyncReadback(slot, tex, staging, region)) {
             LOG_ERROR("[FrameCapture] beginAsyncReadback 失败，帧 {} 丢弃", thisFrame);
             std::lock_guard<std::mutex> lock(m_freeMutex);

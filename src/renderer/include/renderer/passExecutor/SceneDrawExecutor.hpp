@@ -1,4 +1,3 @@
-// SceneDrawExecutor.hpp
 #pragma once
 #include <renderer/passExecutor/IPassExecutor.hpp>
 #include <renderer/graph/PassNode.hpp>
@@ -16,7 +15,6 @@ namespace StarryEngine {
         const std::vector<std::shared_ptr<DrawItem>>& getDrawItems() override { return m_drawItems; }
         void setDrawItems(const std::vector<std::shared_ptr<DrawItem>>& items) override { m_drawItems = items; }
 
-        // 新的管线映射设置
         void setPipelineMapping(const std::unordered_map<uint32_t, RHI::PipelineHandle>& mapping) override {
             m_pipelineMapping = mapping;
         }
@@ -25,8 +23,6 @@ namespace StarryEngine {
             m_drawItems.push_back(item);
         }
 
-        // 统一 mesh + 过程式（天空盒）绘制。procedural 分支必须 continue，否则会穿透到
-        // mesh 分支给不存在的顶点/索引缓冲绑定（旧 SkyboxExecutor 已合并进这里）
         void execute(RHI::RHICommandEncoder* encoder,const RenderContext& rctx,const PassContext& pctx,uint32_t subpassIndex) override {
             auto resMgr = pctx.getResourceManager();
             uint32_t slot = pctx.getFrameSlot();
@@ -48,17 +44,14 @@ namespace StarryEngine {
                     encoder->bindDescriptorSets(RHI::PipelineBindPoint::Graphics, pipelineLayout, setIndex, { setHandle }, {});
                 }
 
-                // 过程式绘制（天空盒/全屏三角形）：纯 shader 生成顶点，无顶点/索引缓冲、无变换
                 if (item->type == DrawItemType::Procedural) {
                     encoder->draw(item->vertexCount, item->instanceCount, item->firstVertex, item->firstInstance);
                     continue;
                 }
 
-                // 网格绘制
                 auto obj = item->object.lock();
                 if (!obj) { LOG_WARN("DrawItem object expired"); continue; }
 
-                // 非实例化时 push 变换矩阵
                 if (!item->isInstanced) {
                     encoder->pushConstants(pipelineLayout, RHI::ShaderStage::Vertex, 0, sizeof(glm::mat4), &obj->transform);
                 }

@@ -159,7 +159,6 @@ namespace StarryEngine {
     }
 
     std::array<std::unordered_map<uint32_t, RHI::DescriptorSetHandle>, RHI::kMaxFramesInFlight> SceneAnalyzer::buildDescriptorSetMap(const std::shared_ptr<Assets::MaterialInstance>& materialInst){
-        // 先保证材质各 set 两槽描述符集都建出来（无 slot 版本建满两槽；集 0 用全局集，不在此建）
         for (const auto& [setIdx, layout] : materialInst->getTemplate()->getLayouts()) {
             if (setIdx != 0) materialInst->getOrCreateSet(setIdx);
         }
@@ -203,7 +202,7 @@ namespace StarryEngine {
         }
         else {
             item->instanceCount = 1;
-            item->instanceBuffer = {};   // 值初始化 = Null 句柄
+            item->instanceBuffer = {};   
             item->instanceBufferStride = 0;
         }
         return item;
@@ -228,7 +227,7 @@ namespace StarryEngine {
 
     void SceneAnalyzer::prepareInstanceBuffer(const std::shared_ptr<Scene::RenderObject>& obj) {
         size_t requiredSize = obj->instanceTransforms.size() * sizeof(glm::mat4);
-        // 按帧槽位建/扩（ADR-6）：每槽独立 buffer，帧 N CPU 写槽 N%2，GPU(N) 只读该槽
+
         for (uint32_t s = 0; s < RHI::kMaxFramesInFlight; ++s) {
             bool needCreate = !obj->instanceBuffers[s].isValid();
             if (!needCreate) {

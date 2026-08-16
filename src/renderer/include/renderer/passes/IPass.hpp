@@ -25,7 +25,6 @@ namespace StarryEngine {
             std::shared_ptr<RHI::ResourceManager> resMgr;
             std::shared_ptr<RHI::IRHI> rhi;
             RenderGraph::RenderGraph* renderGraph = nullptr;
-            // 按帧槽位的 global 描述符集（ADR-6）
             std::vector<RHI::DescriptorSetHandle> globalDescSets;
             RHI::DescriptorSetLayoutHandle globalSetLayout;
         };

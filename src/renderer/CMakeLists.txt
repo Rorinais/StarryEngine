@@ -24,7 +24,6 @@ add_library(renderer STATIC
     src/passes/ShadowPass.cpp
     src/renderPaths/BaseRenderPath.cpp
     src/renderPaths/DeferredRenderPath.cpp
-    src/renderPaths/ForwardRenderPath.cpp
     src/utils/FrameCapture.cpp
 )
 

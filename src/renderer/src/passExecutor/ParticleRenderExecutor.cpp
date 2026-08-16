@@ -28,7 +28,6 @@ namespace StarryEngine {
                 encoder->bindDescriptorSets(RHI::PipelineBindPoint::Graphics, m_layout, 0, {gset}, {});
             if (m_particleSet.isValid())
                 encoder->bindDescriptorSets(RHI::PipelineBindPoint::Graphics, m_layout, 1, {m_particleSet}, {});
-            // model(0..64) + 参数(64..120)，一次 push
             ParticleRenderPC pc;
             pc.model = m_model;
             pc.params = m_vsPC;

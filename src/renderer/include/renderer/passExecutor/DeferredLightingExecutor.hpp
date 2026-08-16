@@ -24,7 +24,6 @@ namespace StarryEngine {
                 if (!pipeline) continue;
                 encoder->bindGraphicPipeline(it->second);
                 RHI::PipelineLayoutHandle layout = pipeline->getLayout();
-                // per-slot（ADR-6）：绑本帧槽位的描述符集
                 uint32_t slot = pctx.getFrameSlot();
                 if (slot >= RHI::kMaxFramesInFlight) slot = 0;
                 for (auto& [set, handle] : item->descriptorSets[slot])
