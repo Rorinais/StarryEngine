@@ -6,8 +6,6 @@
 
 namespace StarryEngine::Scene {
 
-    // 变换动画组件：每帧推进时间 → 采样 clip → 输出对象变换矩阵。
-    // Scene::update 每帧调用，把 getTransform() 写回 RenderObject.transform。
     class Animator {
     public:
         void setClip(std::shared_ptr<Assets::AnimationClip> clip) { m_clip = clip; }
@@ -26,13 +24,10 @@ namespace StarryEngine::Scene {
         void pause() { m_playing = false; }
         bool isPlaying() const { return m_playing; }
 
-        // 每帧推进动画时间并采样（由 Scene::update 驱动）
         void update(const Clock& clock);
 
-        // 采样结果矩阵（Scene::update 用它写回 RenderObject.transform）
         const glm::mat4& getTransform() const { return m_transform; }
 
-        // 骨骼动画：采样 clip → 更新 Skeleton 的每帧矩阵
         void updateSkeleton(Assets::Skeleton& skeleton, const Assets::AnimationClip& clip, float time);
         const std::vector<glm::mat4>& getBoneMatrices() const { return m_boneMatrices; }
 

@@ -74,17 +74,15 @@ public:
         m_renderer->initDefaultMaterials();
 
         m_descriptorSetLayout = m_renderer->getGlobalSetLayout();
-        // 构造注入的 globalSet 是渲染期废码（SceneAnalyzer 用 per-slot 全局集覆盖 set0），取槽 0 句柄
         m_descriptorSet = m_renderer->getGlobalDescriptorSet(0);
 
         auto renderPath = std::make_shared<DeferredRenderPath>(m_rhi, m_width, m_height);
-        renderPath->setScene(m_scene.get());   // 场景数据源：粒子等 pass 建图时通过 configure 拿到
+        renderPath->setScene(m_scene.get());   
         renderPath->setPresentClearColor({ 0.0f, 0.0f, 0.0f, 0.0f });
 
         auto colorDesc = PassWrapper::createColorTextureDesc({m_width, m_height, 1}, RHI::Format::RGBA16_Float);
         auto depthDesc = PassWrapper::createDepthTextureDesc({m_width, m_height, 1}, RHI::Format::D24_UNorm_S8_UInt);
         auto swapDesc   = PassWrapper::createColorTextureDesc({m_width, m_height, 1}, RHI::Format::BGRA8_sRGB);
-        // 阴影贴图：光源视角 depth-only，分辨率固定 2048²（与窗口无关）
         auto shadowMapDesc = PassWrapper::createDepthTextureDesc({ShadowPass::kShadowMapSize, ShadowPass::kShadowMapSize, 1}, RHI::Format::D24_UNorm_S8_UInt);
         renderPath->addTextureDesc("SceneColor",  colorDesc);
         renderPath->addTextureDesc("Depth",       depthDesc);
@@ -94,15 +92,12 @@ public:
         {
             PassList passes;
 
-            // ShadowPass：先用光源 VP 把网格重渲成深度贴图（供 ForwardPass 的 PBR 材质采样）
             passes.push_back(std::make_shared<ShadowPass>("ShadowPass"));
 
-            // ForwardPass: OpaqueGeometry —— MeshPass 封装标准几何 pass（SceneColor+Depth 清屏 + Mesh 绘制）
             auto forwardPass = std::make_shared<MeshPass>("ForwardPass", "Forward_Opaque",RHI::Color::Transparent());
-            forwardPass->addReadTextureByName("ShadowMap");  // PBR 材质采样阴影贴图（shader 级读，显式声明依赖）
+            forwardPass->addReadTextureByName("ShadowMap");  
             passes.push_back(forwardPass);
 
-            //PostProcessPass: Skybox + Grid（后续写者，loadOp/布局由渲染图推断为 Load）
             auto postPass = std::make_shared<GraphicsPass>("PostProcessPass");
             {
                 SubpassDesc sky;
@@ -121,11 +116,6 @@ public:
             }
             passes.push_back(postPass);
 
-            // ★模板描边 pass（放在粒子前：角色本体+外圈先画，粒子盖其上）：
-            //   subpass "StencilWrite"：角色本体正常画，同时 stencil Replace 写 1
-            //   subpass "StencilTest" ：放大 1.08 的角色副本，stencil NotEqual 反选 → 只留外圈描边
-            // 同一 render pass 内 subpass 间 stencil 读写靠 Vulkan 隐式 framebuffer-local 依赖；
-            // 本 pass 的深度附件 stencilLoadOp=Clear → 开 pass 时 stencil 清零，本体从 0 写 1。
             {
                 auto stencilPass = std::make_shared<GraphicsPass>("StencilPass");
 
@@ -158,27 +148,20 @@ public:
         m_renderPath = renderPath;
         m_renderer->setRenderPath(m_renderPath);
 
-        // 平行光阴影：从光源方向构建正交 view*proj（与 PBR shader 的 L=normalize(-lights.position) 一致）。
-        // 上传到 Renderer → GlobalUniforms.lightVP，阴影贴图 pass 与 PBR 采样共用同一矩阵。
         {
-            glm::vec3 lightDir = glm::normalize(glm::vec3(0.5f, 1.0f, 0.8f));  // = normalize(-(-0.5,-1,-0.8))
+            glm::vec3 lightDir = glm::normalize(glm::vec3(0.5f, 1.0f, 0.8f));  
             glm::vec3 sceneCenter(0.0f, 1.0f, 0.0f);
-            // 视锥必须盖住可见地板（含球阴影区域），否则 shadowmap 边界线会露在画面里（摄像机左侧一条线）。
-            // 可见地板在光空间的跨度约 ±9，取 12 保证边界推出画面外（shadowmap 分辨率损失可忽略）。
+
             float halfExtent = 12.0f;
             float dist = 12.0f;
-            // 阴影相机必须放在“光源侧”朝场景看（太阳在 L 方向上方 → 相机在中心+L*dist 向下看）。
-            // 若放 -L*dist（光源到达侧）则从场景下方仰视，阴影贴图只拍到背面 → 地面永远收不到球影。
+
             glm::vec3 eye = sceneCenter + lightDir * dist;
             glm::mat4 view = glm::lookAt(eye, sceneCenter, glm::vec3(0.0f, 1.0f, 0.0f));
             glm::mat4 proj = glm::orthoRH_ZO(-halfExtent, halfExtent, -halfExtent, halfExtent, 0.1f, 26.0f);
-            proj[1][1] *= -1.0f;   // 与引擎投影约定一致（Vulkan Y 翻转）
+            proj[1][1] *= -1.0f;  
             m_renderer->setLightViewProj(proj * view);
         }
 
-        // 帧序列输出：STARRY_FRAME_DUMP=<目录> 激活；STARRY_FRAME_COUNT=<帧数>（默认 1，0=持续）；
-        // STARRY_FRAME_INDEX=<N> 指定只导出第 N 帧（渲染帧号），此时忽略 FRAME_COUNT；
-        // STARRY_FRAME_EXIT=1 录满后自动关窗退出（触发 FrameCapture 析构 drain，验证无丢帧/无死锁）。
         if (const char* dumpDir = std::getenv("STARRY_FRAME_DUMP")) {
             const char* cnt = std::getenv("STARRY_FRAME_COUNT");
             const char* idx = std::getenv("STARRY_FRAME_INDEX");
@@ -268,7 +251,6 @@ public:
         material->setTexture("uIrradianceMap", m_irradianceMap, m_cubeSampler);
         material->setTexture("uPrefilteredMap", m_prefilteredMap, m_prefilterSampler);
         material->setTexture("uBrdfLut", m_brdfLut, m_lutSampler);
-        // 阴影贴图：图形虚拟纹理 "ShadowMap" 建图后由 updateMaterialTextures 自动绑定到 set2 binding6（uShadowMap）
         material->addTextureDependency("ShadowMap", 2, 6);
 
         auto* lightBlock = material->getBlock("LightingUBO");
@@ -296,7 +278,6 @@ public:
         sphere->materials = { mat };
         sphere->transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.5f, 0.0f));
 
-        // ── 变换动画：球体自转 + 上下浮动 ──
         {        
             auto skyboxEffect = std::make_shared<Scene::ProceduralEffect>();
             skyboxEffect->material = createSkyboxMaterial();
@@ -308,13 +289,11 @@ public:
             sphere->materials = { mat };
             sphere->transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.5f, 0.0f));
 
-            // ── 变换动画：球体自转 + 上下浮动 ──
             {
                 auto clip = std::make_shared<Assets::AnimationClip>();
                 clip->name = "SpinBob";
-                clip->duration = 4.0f;    // 4 秒一圈
+                clip->duration = 4.0f;   
                 clip->looping = true;
-                // 每 0.5s 一个关键帧：绕 Y 轴旋转 45°，并上下浮动
                 for (int i = 0; i <= 8; ++i) {
                     float t = i * 0.5f;
                     Assets::TransformKeyframe kf;
@@ -344,15 +323,13 @@ public:
 
         addGriseoModel();
 
-        // ── 模板描边：角色本体在 StencilWrite 画 + stencil Replace 写 1；放大副本在 StencilTest 测 NotEqual 反选 → 只留外圈 ──
         {
-            // 1) 角色本体材质：tag 从 Forward_Opaque 改到 StencilWrite（本体移到描边 pass 里画），开 stencil 写 1
             for (auto& mat : m_skinnedMaterials) {
                 if (!mat) continue;
                 mat->setSubpassTag("StencilWrite");
                 RHI::StencilOpState write;
                 write.failOp = RHI::StencilOp::Keep;
-                write.passOp = RHI::StencilOp::Replace;   // 测试通过（Always）→ 写 stencil=1
+                write.passOp = RHI::StencilOp::Replace; 
                 write.depthFailOp = RHI::StencilOp::Keep;
                 write.compareOp = RHI::CompareOp::Always;
                 write.compareMask = 0xFF;
@@ -362,17 +339,15 @@ public:
                 mat->setStencilOps(write, write);
             }
 
-            // 2) 描边副本：同一几何（同一骨骼矩阵）+ 放大变换，全 submesh 同一描边材质
-            //    STARRY_NO_OUTLINE=1 关闭描边 → 与开着 A/B 对比描边的真实开销
             bool outlineOn = (std::getenv("STARRY_NO_OUTLINE") == nullptr);
             m_outlineMaterial = outlineOn ? makeOutlineMaterial() : nullptr;
             if (m_outlineMaterial && m_modelGeometry) {
                 auto outline = std::make_shared<Scene::RenderObject>();
                 outline->geometry = m_modelGeometry;
-                // 材质列表长度对齐角色 submesh 索引（长度不够会解析到 default 材质 → 无蒙皮 → 破相）
+
                 std::vector<std::shared_ptr<Assets::MaterialInstance>> outlineMats(m_modelMaterialCount, m_outlineMaterial);
                 outline->materials = std::move(outlineMats);
-                // 放大 1.08，围绕脚底 Y 缩放 → 外圈在脚下收拢、与脚重合（脚下不悬青色条），看起来像踩在地上
+
                 float footY = computeModelFootY(m_modelGeometry);
                 LOG_INFO("[demo] 描边缩放中心（脚底）Y = {:.3f}", footY);
                 outline->transform =
@@ -383,7 +358,6 @@ public:
             }
         }
 
-        //粒子发射器（场景内容，可增删；增删后 renderer->setNeedRebuildGraph()）
         {
             auto fire = std::make_shared<Scene::ParticleEmitter>();
             fire->name = "Fire";
@@ -436,11 +410,6 @@ public:
         m_scene->addCamera(perspectiveCamera);
         m_scene->setActiveCamera(perspectiveCamera);
 
-        // 预热骨骼 SSBO（主线程建 buffer + 写描述符）：setStorageBuffer 首次调用走
-        // vkUpdateDescriptorSets（外同步在描述符池），不能留到 worker job。预热后每帧
-        // 池 job 内只是 memcpy → 安全。无池时首次调用在主线程 onUpdate，也安全。
-        // ADR-6 per-slot：首次调用自动建"两槽" buffer + 写"两槽"描述符 + 灌满初始数据
-        // （writtenOnce=true），因此首帧无论槽位都有帧 0 的骨骼数据，无需显式传槽。
         if (m_boneProducer && m_renderer && m_renderer->getJobSystem()) {
             const auto& m0 = m_boneProducer->getFrame0Matrices();
             if (!m0.empty()) {
@@ -451,7 +420,6 @@ public:
         }
     }
 
-    // 粒子渲染材质：particle.vert/frag + alpha 混合（渲染走通用材质）
     std::shared_ptr<Assets::MaterialInstance> makeParticleMaterial() {
         auto tmpl = std::make_shared<Assets::DefaultMaterialTemplate>(
             m_rhi->getResourceManager(), m_descriptorSetLayout);
@@ -462,16 +430,14 @@ public:
         auto mat = std::make_shared<Assets::MaterialInstance>(
             tmpl, m_descriptorPool, m_rhi->getResourceManager().get(), m_descriptorSet);
         RHI::BlendAttachmentState blend;
-        blend.blendEnable = true;   // 默认 SrcAlpha/OneMinusSrcAlpha
-        blend.dstAlphaBlendFactor = RHI::BlendFactor::OneMinusSrcAlpha;  // alpha 累加而非替换：粒子叠在不透明角色上封口(a=1)，帧输出不再"角色前变黑"
+        blend.blendEnable = true;   
+        blend.dstAlphaBlendFactor = RHI::BlendFactor::OneMinusSrcAlpha; 
         mat->setAttachments({ blend });
         mat->setDepthTest(false);
         mat->setDepthWrite(false);
         return mat;
     }
 
-    // 模板测试 quad 通用材质：复用 shader.vert（set0 global UBO + push mat4）+ 指定 frag，
-    // 绑白 1×1 纹理给 texSampler（保证 set1 描述符有效）。深度测试/写入默认关闭。
     std::shared_ptr<Assets::MaterialInstance> makeStencilQuadMaterial(const std::string& fragPath) {
         auto tmpl = std::make_shared<Assets::DefaultMaterialTemplate>(m_rhi->getResourceManager(), m_descriptorSetLayout);
         if (!tmpl->loadShaders("assets/shaders/core/shader.vert", fragPath)) {
@@ -494,13 +460,9 @@ public:
 
     std::shared_ptr< Scene::Scene> getScene() { return m_scene; }
 
-    // 每帧骨骼动画更新：消费 AsyncBoneProducer 的槽位 → 上传骨骼矩阵 SSBO
     void onUpdate(float deltaTime);
-
-    // 每帧渲染+呈现完成后读回 SceneColor 写 PNG（STARRY_FRAME_DUMP 时激活）
     void captureFrame();
 
-    // 录满自动退出用的关窗回调（STARRY_FRAME_EXIT=1 时 main 注入 app.shutdown）
     void setExitCallback(std::function<void()> cb) { m_requestExit = std::move(cb); }
 private:
     bool loadModelGeometry(Assets::Geometry& outGeometry,std::vector<Assets::MaterialParams>& outParams,Assets::Skeleton* outSkeleton = nullptr);
@@ -512,26 +474,24 @@ private:
     Assets::AnimationClip m_modelClip;
     std::string m_modelTextureDir = "fuxuan";  
 
-    // 骨骼动画运行时状态：AsyncBoneProducer 持有骨架/动画副本，软开关（STARRY_ASYNC_BONES=1 开线程）
     std::unique_ptr<AsyncBoneProducer> m_boneProducer;
     bool m_skeletalReady = false;
-    float m_lastDelta = 0.0f;   // 帧间解耦(FID)：onUpdate 只存本帧 delta，渲染器数据相用它算 N+1
+    float m_lastDelta = 0.0f;   
     std::vector<std::shared_ptr<Assets::MaterialInstance>> m_skinnedMaterials;
-    std::shared_ptr<Assets::Geometry> m_modelGeometry;          // 角色几何（描边副本复用同一几何+骨骼数据）
-    size_t m_modelMaterialCount = 0;                             // 角色材质数（描边副本材质列表对齐 submesh 索引）
-    std::shared_ptr<Assets::MaterialInstance> m_outlineMaterial; // 描边副本材质（onUpdate 同步喂骨骼矩阵）
+    std::shared_ptr<Assets::Geometry> m_modelGeometry;        
+    size_t m_modelMaterialCount = 0;                            
+    std::shared_ptr<Assets::MaterialInstance> m_outlineMaterial; 
 
     uint32_t m_width, m_height;
     std::shared_ptr<RHI::IRHI> m_rhi;
     std::shared_ptr<Renderer> m_renderer;
     std::shared_ptr< Scene::Scene> m_scene;
 
-    // 帧序列捕获（STARRY_FRAME_DUMP 激活；保留 renderPath 引用以取 SceneColor 物理纹理）
     std::shared_ptr<DeferredRenderPath> m_renderPath;
     std::shared_ptr<FrameCapture> m_frameCapture;
-    bool m_frameExit = false;         // STARRY_FRAME_EXIT=1：录满自动关窗
-    uint32_t m_frameExitTarget = 0;   // 需录满的帧数（index 模式=1）
-    std::function<void()> m_requestExit;   // main 注入的关窗回调（demo 不持有 Application）
+    bool m_frameExit = false;       
+    uint32_t m_frameExitTarget = 0;   
+    std::function<void()> m_requestExit;   
 
     // IBL
     RHI::TextureHandle m_envCubemap;
@@ -622,8 +582,6 @@ std::shared_ptr<Assets::MaterialInstance> PBRDemo::makeModelMaterial(
     return instance;
 }
 
-// 描边副本材质：蒙皮顶点 + 高亮纯色 frag；stencil NotEqual 反选本体区域 → 只画外圈。
-// 深度测试开（外圈被本体/前方物体正确遮挡）、深度写关；不写 stencil（writeMask=0）。
 std::shared_ptr<Assets::MaterialInstance> PBRDemo::makeOutlineMaterial() {
     auto tmpl = std::make_shared<Assets::DefaultMaterialTemplate>(
         m_rhi->getResourceManager(), m_descriptorSetLayout);
@@ -646,11 +604,11 @@ std::shared_ptr<Assets::MaterialInstance> PBRDemo::makeOutlineMaterial() {
 
     RHI::StencilOpState outline;
     outline.failOp = RHI::StencilOp::Keep;
-    outline.passOp = RHI::StencilOp::Keep;         // 只读 stencil，不改
+    outline.passOp = RHI::StencilOp::Keep;       
     outline.depthFailOp = RHI::StencilOp::Keep;
-    outline.compareOp = RHI::CompareOp::NotEqual;  // stencil != 1 → 本体外圈才通过
+    outline.compareOp = RHI::CompareOp::NotEqual;  
     outline.compareMask = 0xFF;
-    outline.writeMask = 0x00;                      // 描边不写 stencil
+    outline.writeMask = 0x00;                     
     outline.reference = 1;
     mat->setStencilTest(true);
     mat->setStencilOps(outline, outline);
@@ -676,8 +634,6 @@ void PBRDemo::addGriseoModel() {
     obj->transform = glm::translate(glm::mat4(1.0f), glm::vec3(2.0f, 0.0f, 0.0f));
     m_scene->addObject(obj);
 
-    // 基准开关：STARRY_EXTRA_CHARS=<N> 复制 N 个角色副本（共享几何/材质/骨骼，
-    // 只增加 draw call 数——测并行录制 CPU 瓶颈用；副本沿 X 排开）
     if (const char* ec = std::getenv("STARRY_EXTRA_CHARS")) {
         uint32_t n = std::strtoul(ec, nullptr, 10);
         for (uint32_t i = 0; i < n; ++i) {
@@ -697,26 +653,19 @@ void PBRDemo::addGriseoModel() {
     m_skeletalReady = skinned;
     if (m_skeletalReady) {
         m_skinnedMaterials = materials;
-        // 线程归属三级（ADR-6 第 2 步）：池(帧内并行) > 独立线程(STARRY_ASYNC_BONES) > 同步内联。
-        // 池激活时骨骼 job 提交进共享池（与渲染器数据/录制 job 同一帧 barrier），producer 不再开自身线程。
+
         AsyncBoneProducer::Config cfg;
         const bool poolActive = (m_renderer && m_renderer->getJobSystem() != nullptr);
         cfg.enableThread = !poolActive && (std::getenv("STARRY_ASYNC_BONES") != nullptr);
         m_boneProducer = std::make_unique<AsyncBoneProducer>(m_modelSkeleton, m_modelClip, cfg);
-        LOG_INFO("[async] 骨骼动画: {}",
-            poolActive ? "池（帧内并行 job）"
-            : (cfg.enableThread ? "ON（独立线程）" : "OFF（同步内联）"));
+        LOG_INFO("[async] 骨骼动画: {}",poolActive ? "池（帧内并行 job）": (cfg.enableThread ? "ON（独立线程）" : "OFF（同步内联）"));
 
-        // 帧间解耦（FID，STARRY_FRAME_IN_FLIGHT=1）：骨骼作为渲染器数据相的一部分，
-        // 渲染器在 renderFrame 末尾 kick（GPU(N) 执行期算 N+1 骨骼，写槽 (N+1)%2），
-        // 不在这里/onUpdate kick——onUpdate 早于 renderFrame，会被开头 waitAll 一并 join。
-        // delta 在主线程 kick 时捕获进 lambda（m_lastDelta 由 onUpdate 存，1 帧潜伏推进）。
         if (m_renderer && m_renderer->isFrameInFlight()) {
             auto* js = m_renderer->getJobSystem();
             m_renderer->setFrameDataBoneProvider([this, js](uint32_t dataSlot) {
-                float d = m_lastDelta;   // 主线程读（onUpdate 已写），kick 时捕获
+                float d = m_lastDelta;  
                 js->submit([this, d, dataSlot]() {
-                    const auto& matrices = m_boneProducer->step(d);   // producer 非线程模式 = 就地计算
+                    const auto& matrices = m_boneProducer->step(d);  
                     if (matrices.empty()) return;
                     size_t bytes = matrices.size() * sizeof(glm::mat4);
                     for (auto& mat : m_skinnedMaterials) if (mat) mat->setStorageBuffer(1, 2, matrices.data(), bytes, dataSlot);
@@ -730,19 +679,12 @@ void PBRDemo::addGriseoModel() {
 void PBRDemo::onUpdate(float deltaTime) {
     if (!m_boneProducer || m_skinnedMaterials.empty()) return;
 
-    // 帧间解耦（FID）：骨骼交给渲染器数据相（GPU(N) 期间算 N+1），onUpdate 只存 delta。
     m_lastDelta = deltaTime;
     if (m_renderer && m_renderer->isFrameInFlight()) return;
 
-    // 帧槽位（ADR-6 per-slot）：onUpdate(N) 在 renderFrame(N) 之前执行，此刻
-    // getCurrentFrameIndex() 已 == 本帧槽位 N%2（VulkanRHI::renderFrame = beginFrame →
-    // drawFunc → submitFrame，槽位在 submitFrame 末尾翻转）。骨骼数据写该槽，GPU(N) 只读该槽。
-    // 槽位在 kick 时捕获进 lambda：JobSystem inline 模式 job 在 submit() 同步执行，
-    // job 内读"稍后设置"的成员会拿到旧值 → 必须显式传参。
     uint32_t targetSlot = m_rhi->getCurrentFrameIndex();
     if (targetSlot >= RHI::kMaxFramesInFlight) targetSlot = 0;
 
-    // SSBO 上传（memcpy，预热后无描述符写）：skinned 材质 + 描边副本（同一批骨骼矩阵）
     auto upload = [this, targetSlot](const std::vector<glm::mat4>& matrices) {
         if (matrices.empty()) return;
         size_t bytes = matrices.size() * sizeof(glm::mat4);
@@ -752,17 +694,14 @@ void PBRDemo::onUpdate(float deltaTime) {
         if (m_outlineMaterial) m_outlineMaterial->setStorageBuffer(1, 2, matrices.data(), bytes, targetSlot);
     };
 
-    // 池模式（ADR-6 第 2 步）：骨骼计算 + SSBO 上传作为一个 job 提交进共享池，
-    // 不等待 → renderFrame 的数据 phase waitAll() 统一兜住（join-before-submit）。
     if (auto* js = (m_renderer ? m_renderer->getJobSystem() : nullptr)) {
         js->submit([this, delta = deltaTime, upload]() {
-            const auto& matrices = m_boneProducer->step(delta);   // producer 非线程模式 = 就地计算
+            const auto& matrices = m_boneProducer->step(delta); 
             upload(matrices);
         });
         return;
     }
 
-    // 非池模式（原路径）：同步内联或 AsyncBoneProducer 独立线程
     const auto& matrices = m_boneProducer->step(deltaTime);
     upload(matrices);
 }
@@ -772,14 +711,11 @@ void PBRDemo::captureFrame() {
     auto graph = m_renderPath ? m_renderPath->getRenderGraph() : nullptr;
     if (!graph) return;
 
-    // 每次现解析：graph 重建（resize/rebuild）后 SceneColor 物理句柄会变
     auto texId = graph->getTextureId("SceneColor");
     auto handle = graph->getPhysicalTextureHandle(texId);
     auto* tex = m_rhi->getResourceManager()->getTexture(handle);
     m_frameCapture->capture(tex);
 
-    // 录满自动退出：窗口关闭 → run 循环结束 → FrameCapture 析构 drain
-    //（waitIdle 等 fence 信号 → stop worker → join → 释放 staging），验证无丢帧/无死锁。
     if (m_frameExit && m_frameExitTarget != UINT32_MAX &&
         m_frameCapture->capturedCount() >= m_frameExitTarget) {
         m_frameExit = false;   // 只触发一次
@@ -809,13 +745,12 @@ int main() {
 #endif
     StarryEngine::Logger::init();
     StarryEngine::Logger::setShowSourceLoc(true);
-    // 默认 warn(静默);STARRY_VERBOSE=1 恢复 info(看 [perf] 帧数据 / 验证层信息时开)
     StarryEngine::Logger::setLevel("info");
 
     StarryEngine::Application::Config cfg;
     cfg.width = kWinW;
     cfg.height = kWinH;
-    // 分辨率开关：STARRY_WIN_W / STARRY_WIN_H（默认 560×680；基准测试可调大压 GPU）
+
     if (const char* w = std::getenv("STARRY_WIN_W")) cfg.width = std::strtoul(w, nullptr, 10);
     if (const char* h = std::getenv("STARRY_WIN_H")) cfg.height = std::strtoul(h, nullptr, 10);
     cfg.title = "Transparent Window Smoke Test";
@@ -829,21 +764,12 @@ int main() {
     //LOG_INFO("[demo] 平台: {}（STARRY_FORCE_X11 强制 X11）", cfg.nativeWayland ? "原生 Wayland" : "X11");
     StarryEngine::Application app(cfg);
 
-    // ── 性能测量（优化闭环第 1 步：先测基线，改完复测对比；关掉即恢复无痕）──
-    // 开 GPU 时间戳查询；窗口标题每 1s 刷 FPS/GPU/CPU，日志每 5s 打一行平均/最大帧时间
-    // 时间戳：enableTimestamps(true) 会触发首帧卡死 bug（见会话汇报），修复前保持关闭
-    // if (auto frameCtx = app.getRenderHardwareInterface()->getFrameContext())
-    //     frameCtx->enableTimestamps(true);
-
     auto demo = std::make_shared<PBRDemo>(app.getRenderHardwareInterface(), app.getGlobalDescriptorPool(), app.getWidth(), app.getHeight());
-    demo->setExitCallback([&app]() { app.shutdown(); });   // STARRY_FRAME_EXIT=1 录满后自动关窗
+    demo->setExitCallback([&app]() { app.shutdown(); });  
 
     app.setRenderer(demo->getRenderer());
     app.setScene(demo->getScene());
 
-    // 帧序列捕获：每帧渲染+呈现完成后读回 SceneColor（STARRY_FRAME_DUMP 激活）
-    // STARRY_AUTO_QUIT=<帧数>：渲染 N 帧后自动关窗（不经过 FrameCapture 的 teardown 隔离入口，
-    // 用于复现已知的 Wayland+NVIDIA teardown 卡死 —— 关窗本身即触发，与帧捕获无关）
     const char* autoQuitEnv = std::getenv("STARRY_AUTO_QUIT");
     uint64_t autoQuitFrames = autoQuitEnv ? std::strtoull(autoQuitEnv, nullptr, 10) : 0;
     uint64_t frameCounter = 0;
@@ -864,7 +790,7 @@ int main() {
                 const auto& s = fc->getStatistics();
                 uint64_t frames = s.totalFrames - perfLastFrames;
                 perfLastFrames = s.totalFrames;
-                // 真实 FPS 按墙钟 totalFrames 增量算;平均帧是渲染节奏(不含限帧睡眠),两者差即"每帧睡多少"
+ 
                 LOG_INFO("[perf] 窗内帧={} 实际FPS={:.1f} | 平均帧={:.2f}ms 最大帧={:.2f}ms | CPU均={:.2f}ms GPU均={:.2f}ms",
                          frames, (wall > 0.0) ? static_cast<double>(frames) / wall : 0.0,
                          s.averageFrameTime, s.maxFrameTime,

@@ -83,19 +83,11 @@ namespace StarryEngine::RenderGraph {
             RHI::FramebufferHandle framebuffer,
             uint32_t frameSlot = 0);
 
-        // ── 并行命令录制（ADR-6 第 2 步）：把 pass 拆成"主缓冲的渲染通道框架"
-        //    （begin/nextSubpass/end）与"次缓冲的 pass 主体（recordBody）"两段。
-        //    execute() 保留原串行路径不动（软开关第 0 级）；并行路径用下面这些方法。
-        // beginPassOnPrimary：beginRenderPass（native RP/fb + renderArea + clearValues）。
-        //   contents 为 Inline 时=原串行语义；Secondary 时配合 executeCommands 执行次缓冲。
         void beginPassOnPrimary(RHI::RHICommandEncoder* encoder,
             RHI::FramebufferHandle framebuffer,
             RHI::SubpassContents contents);
         void nextSubpassOnPrimary(RHI::RHICommandEncoder* encoder, RHI::SubpassContents contents);
         void endPassOnPrimary(RHI::RHICommandEncoder* encoder);
-        // recordBody：把某 subpass 的主体录进一条 secondary 编码器（viewport/scissor +
-        //   该 subpass 的 executor；compute 则录 m_computeRecorder）。不含 barrier、
-        //   不含 begin/endRenderPass——那些必须在主缓冲（Vulkan 约束清单已有）。
         void recordBody(RHI::RHICommandEncoder* encoder,
             const RenderContext& context,
             uint32_t frameIndex,
@@ -116,8 +108,6 @@ namespace StarryEngine::RenderGraph {
         RHI::ImageLayout getFinalLayout(TextureId texId) const { return m_finalLayouts.at(texId); }
         void addDependency(const RHI::SubpassDependency& dep);
 
-        // 声明式附件：编译前由渲染图调用，推断未显式指定的 loadOp/storeOp/布局。
-        // isFirstWriter(texId)：该纹理的第一个写者是否为当前 pass（首写→Clear/Undefined，后续→Load/上一final）
         void resolveInferredAttachments(const std::function<bool(TextureId)>& isFirstWriter);
 
         static bool isDepthFormat(RHI::Format format);

@@ -20,13 +20,13 @@ target_include_directories(assets PUBLIC
 
 target_link_libraries(assets
 PUBLIC
-    renderer          # 各 Asset 头引用 renderer 类型
+    renderer          
     glm::glm
     assimp::assimp
-    shaderc           # ShaderLoader.hpp 引用 shaderc 头
-    spirv-cross-glsl  # ShaderLoader.hpp 引用 spirv_cross 头（传递 spirv-cross-core）
-    stb_image         # TextureLoader 单头
+    shaderc           
+    spirv-cross-glsl  
+    stb_image         
 PRIVATE
-    logging           # 仅 cpp 用
-    utils             # 仅 cpp 用
+    logging        
+    utils             
 )

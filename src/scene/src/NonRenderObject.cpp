@@ -1,1 +1,0 @@
-#include <scene/NonRenderObject.hpp>

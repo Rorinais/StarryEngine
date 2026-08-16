@@ -8,5 +8,5 @@ target_include_directories(event PUBLIC
 
 target_link_libraries(event
 PUBLIC
-    renderer          # Events.hpp 引用 renderer 类型
+    renderer         
 )

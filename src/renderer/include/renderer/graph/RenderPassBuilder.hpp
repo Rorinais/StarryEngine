@@ -55,7 +55,7 @@ namespace StarryEngine::RenderGraph {
             RHI::AttachmentStoreOp storeOp = RHI::AttachmentStoreOp::Store);
 
         void updateAttachmentFormat(uint32_t index, RHI::Format newFormat);
-        // 声明式附件：编译前由渲染图推断 loadOp/storeOp/布局后覆盖
+
         void updateAttachmentParams(uint32_t index, RHI::AttachmentLoadOp loadOp,
             RHI::AttachmentStoreOp storeOp, RHI::ImageLayout initialLayout,
             RHI::ImageLayout finalLayout);

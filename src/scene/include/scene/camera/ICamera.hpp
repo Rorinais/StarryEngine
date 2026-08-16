@@ -1,6 +1,5 @@
 #pragma once
 #include<glm/mat4x4.hpp>
-#include <scene/NonRenderObject.hpp>
 
 namespace StarryEngine::Scene {
 	class ICamera {

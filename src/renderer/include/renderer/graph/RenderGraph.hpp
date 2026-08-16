@@ -57,8 +57,6 @@ namespace StarryEngine::RenderGraph {
 
         PassNode* addGraphicsPassNode(const std::string& name);
 
-        // 按 dedupKey 共享同一个图形 pass 节点：同 key 复用（如多个粒子系统共用一个 render pass），
-        // 首次调用创建节点并登记，后续返回已有节点。map 随图生命周期（重建即清）。
         PassNode* addGraphicsPassNodeShared(const std::string& name, const std::string& dedupKey);
 
         PassNode* addComputePassNode(const std::string& name);
@@ -71,10 +69,6 @@ namespace StarryEngine::RenderGraph {
 
         void createFrameBuffer();
 
-        // parallel == nullptr → 原串行路径（每 pass 直接录进主缓冲，行为与单线程一致）。
-        // parallel != nullptr → 并行路径：每 (pass×subpass) 录进独立 secondary CB（一个 job），
-        //   帧 barrier 后主线程发布局转换 barrier + beginRenderPass(Secondary)+executeCommands+end。
-        // frameSlot：帧槽位（ADR-6 per-slot），录制 job 按值捕获，绑 slot 对应的描述符集/实例缓冲。
         void execute(RHI::RHICommandEncoder* encoder, const RenderContext& context, uint32_t frameIndex,
             uint32_t frameSlot,
             const ParallelRecordingContext* parallel = nullptr);

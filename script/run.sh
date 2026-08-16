@@ -8,7 +8,7 @@
 #
 #  自动判断: 可执行文件缺失 / --force / 源码或资源更新 → 先增量构建再运行。
 #  demo 以相对路径加载资源，故在 bin/ 目录下执行。默认 Release。
-#  -t 指定 demo 目标（默认 DeferredRender_demo）。
+#  -t 指定 demo 目标（默认 StarryEngine）。
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
@@ -16,7 +16,7 @@ cd "$PROJECT_ROOT" || exit 1
 
 BUILD_TYPE="Release"
 BUILD_DIR="${BUILD_DIR:-}"
-TARGET="${STARRY_TARGET:-DeferredRender_demo}"
+TARGET="${STARRY_TARGET:-StarryEngine}"
 FORCE=0
 APP_ARGS=()
 
@@ -26,8 +26,7 @@ usage() {
   release|debug  构建类型（默认 release）
   -f, --force    强制重新构建（忽略时间戳）
   -d DIR         构建目录（默认 build/release 或 build/debug，按类型；可用环境变量 BUILD_DIR）
-  -t TARGET      demo 目标名（默认 DeferredRender_demo；可选 test1 /
-                 TransparentWindow_demo / InferenceChain_demo）。
+  -t TARGET      demo 目标名（默认 StarryEngine；
                  产物进 <构建目录>/<TARGET>/（单一构建树，静态库只编一次）
   -- args        其后参数原样传给程序
 EOF

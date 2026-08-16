@@ -9,8 +9,8 @@ target_include_directories(ui PUBLIC
 
 target_link_libraries(ui
 PUBLIC
-    renderer          # ImGuiExecutor.hpp 引用 renderer 类型
+    renderer     
     imgui
 PRIVATE
-    core              # 仅 cpp 用（循环，LINK_GROUP 处理）
+    core           
 )

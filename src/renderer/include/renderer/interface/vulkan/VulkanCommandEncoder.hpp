@@ -24,7 +24,6 @@ namespace StarryEngine::RHI {
                 mCommandBuffer->end();
                 mEnded = true;
             }
-            // 对于 VkCommandBuffer 版本的编码器，也需要结束录制
             else if (m_vkCmdBuf != VK_NULL_HANDLE && !mEnded) {
                 vkEndCommandBuffer(m_vkCmdBuf);
                 mEnded = true;
