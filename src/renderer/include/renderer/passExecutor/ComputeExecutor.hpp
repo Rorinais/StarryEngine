@@ -2,7 +2,7 @@
 #pragma once
 #include <renderer/passExecutor/IPassExecutor.hpp>
 #include <renderer/graph/PassNode.hpp>
-#include <renderer/backend/vulkan/VulkanRHI.hpp>
+#include <renderer/interface/vulkan/VulkanRHI.hpp>
 #include <scene/Scene.hpp>
 #include <renderer/RenderTypes.hpp>
 #include <core/base.hpp>   
@@ -27,18 +27,15 @@ namespace StarryEngine {
 
         void execute(RHI::RHICommandEncoder* encoder, const RenderContext& rctx,
                      const PassContext& pctx, uint32_t) override {
-            auto resMgr = pctx.getResourceManager();
-            auto* pipeline = resMgr->getPipeline(m_pipeline);
-            if (!pipeline) return;
-            encoder->bindComputePipeline(pipeline);
+            if (!m_pipeline.isValid()) return;
+            encoder->bindComputePipeline(m_pipeline);
 
-            auto* plo = resMgr->getPipelineLayout(m_layout);
-            if (plo && m_descSet.isValid())
-                encoder->bindDescriptorSets(RHI::PipelineBindPoint::Compute, plo, 0, {m_descSet}, {});
+            if (m_layout.isValid() && m_descSet.isValid())
+                encoder->bindDescriptorSets(RHI::PipelineBindPoint::Compute, m_layout, 0, {m_descSet}, {});
             if (m_pcSize > 0 && m_fill) {
                 std::vector<uint8_t> data(m_pcSize);
                 m_fill(data.data(), rctx.deltaTime);
-                encoder->pushConstants(plo, RHI::ShaderStage::Compute, 0, m_pcSize, data.data());
+                encoder->pushConstants(m_layout, RHI::ShaderStage::Compute, 0, m_pcSize, data.data());
             }
             encoder->dispatch(m_dispatchX, m_dispatchY, m_dispatchZ);
         }

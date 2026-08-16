@@ -1,8 +1,10 @@
 #pragma once
 #include <memory>
 #include <vector>
+#include <array>
 #include <unordered_map>
-#include <renderer/interface/RHI_RESOURCE_MANAGER.hpp>
+#include <renderer/interface/IRHI.hpp>
+#include <renderer/interface/RHIManager.hpp>
 #include <assets/material/MaterialTemplate.hpp>
 #include <assets/material/DefaultMaterialTemplate.hpp>
 #include <assets/material/MaterialParameterBlock.hpp>
@@ -41,10 +43,12 @@ namespace StarryEngine::Assets {
         void registerBlockLayout(const std::string& blockName, const RHI::ResourceBinding& binding);
         void setTexture(const std::string& name, RHI::TextureHandle texture, RHI::SamplerHandle sampler);
         void addTextureDependency(const std::string& shaderVarName,const std::string& rgTextureName,ResourceDependencyType type);
-        void applyAllDirtyBlocks();
+        void applyAllDirtyBlocks(uint32_t slot = UINT32_MAX);
 
-        void setUniform(uint32_t setIndex, uint32_t binding, const void* data, size_t size);
-        void setStorageBuffer(uint32_t setIndex, uint32_t binding, const void* data, size_t size);
+        // slot 参数：帧槽位（0/1，ADR-6 per-slot）。UINT32_MAX = 用 m_currentSlot（渲染器每帧设）。
+        // 首调会建两槽 buffer+描述符并灌满初始数据（writtenOnce），之后的逐帧写只落指定槽。
+        void setUniform(uint32_t setIndex, uint32_t binding, const void* data, size_t size, uint32_t slot = UINT32_MAX);
+        void setStorageBuffer(uint32_t setIndex, uint32_t binding, const void* data, size_t size, uint32_t slot = UINT32_MAX);
         void setTexture(uint32_t setIndex, uint32_t binding, RHI::TextureHandle texture, RHI::SamplerHandle sampler);
         void setInputAttachment(uint32_t setIndex, uint32_t binding, RHI::TextureHandle texture, RHI::ImageLayout layout = RHI::ImageLayout::ShaderReadOnly);
         void addTextureDependency(const std::string& textureName,uint32_t set,uint32_t binding,ResourceDependencyType type = ResourceDependencyType::Sampler) {
@@ -82,11 +86,17 @@ namespace StarryEngine::Assets {
         bool isDeferred() const { return m_isDeferred; }
         std::string getDebugName() const { return m_debugName; }
 
+        // per-slot 描述符集：slot 版本返回该槽位的集；无 slot 版本建满两槽并返回槽 0 的
+        //（兼容"建好后批量绑定"的调用方，见 SceneAnalyzer::buildDescriptorSetMap）。
         RHI::DescriptorSetHandle getOrCreateSet(uint32_t setIndex);
-        RHI::DescriptorSetHandle getSet(uint32_t setIndex) const;
+        RHI::DescriptorSetHandle getOrCreateSet(uint32_t setIndex, uint32_t slot);
+        RHI::DescriptorSetHandle getSet(uint32_t setIndex, uint32_t slot) const;
+
+        // 当前帧槽位（renderer 每帧开始 setCurrentSlot；UINT32_MAX 参数的兜底）
+        void setCurrentSlot(uint32_t slot) { m_currentSlot = slot; }
+        uint32_t getCurrentSlot() const { return m_currentSlot; }
 
         std::shared_ptr<MaterialTemplate> getTemplate() const { return m_template; }
-        const std::unordered_map<uint32_t, RHI::DescriptorSetHandle>& getAllSets() const { return m_sets; }
         const std::unordered_map<std::string, DependencyInfo>& getTextureDependencies() const {return m_textureDependencies;}
 
         bool hasSubpassTag() const { return m_hasTag; }
@@ -117,18 +127,27 @@ namespace StarryEngine::Assets {
         RHI::ResourceManager* m_resMgr;
         RHI::DescriptorPoolHandle m_pool;
 
-        // 描述符集管理
-        std::unordered_map<uint32_t, RHI::DescriptorSetHandle> m_sets;
+        // 描述符集管理。m_sets[setIdx] 是按帧槽位的 vector（ADR-6 per-slot）：
+        // 集 0 是被渲染器 global 覆盖的废码（构造注入 globalSet，两槽同一句柄）；
+        // 集 >=1 每槽一个，被绑定到 slot 对应的描述符。
+        std::unordered_map<uint32_t, std::vector<RHI::DescriptorSetHandle>> m_sets;
         std::unordered_map<uint32_t, RHI::DescriptorSetLayoutHandle> m_layouts;
 
         struct BufferResource {
             RHI::BufferHandle buffer;
-            void* mappedData;
-            size_t size;
+            void* mappedData = nullptr;
+            size_t size = 0;
             RHI::BufferType type = RHI::BufferType::Uniform;
         };
-        std::unordered_map<uint64_t, BufferResource> m_buffers;
+        // 每帧写的缓冲 → 按帧槽位双份。writtenOnce 记录是否已灌满两槽首帧数据
+        // （首调/首写须填两槽，否则另一槽第一次上屏无光照/无数据）。
+        struct SlotBuffers {
+            std::array<BufferResource, RHI::kMaxFramesInFlight> perSlot;
+            bool writtenOnce = false;
+        };
+        std::unordered_map<uint64_t, SlotBuffers> m_buffers;
         std::unordered_map<std::string, DependencyInfo> m_textureDependencies;
+        uint32_t m_currentSlot = 0;
 
         InstancingLayout m_instancingLayout;
         bool m_hasCustomInstancingLayout = false;
@@ -161,7 +180,11 @@ namespace StarryEngine::Assets {
 
         // 统一的 buffer 写入：按 binding 的 descriptor 类型建 UBO/SSBO
         void setBufferData(uint32_t setIndex, uint32_t binding,
-            const void* data, size_t size, RHI::DescriptorType descriptorType);
+            const void* data, size_t size, RHI::DescriptorType descriptorType,
+            uint32_t slot = UINT32_MAX);
+        uint32_t resolveSlot(uint32_t slot) const {
+            return (slot == UINT32_MAX) ? m_currentSlot : slot;
+        }
         RHI::DescriptorType resolveBindingDescriptorType(uint32_t setIndex, uint32_t binding) const;
 
         // ---------- 实例独立的渲染状态 ----------

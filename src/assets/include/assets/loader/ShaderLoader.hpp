@@ -4,7 +4,7 @@
 #include <vector>
 #include <mutex> 
 #include <unordered_map>
-#include <renderer/interface/RHI_RESOURCE_MANAGER.hpp>
+#include <renderer/interface/RHIManager.hpp>
 #include <assets/AssetType.hpp>
 #include <shaderc/shaderc.hpp>
 #include <spirv_cross/spirv_glsl.hpp>

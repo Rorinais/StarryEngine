@@ -30,7 +30,9 @@ namespace StarryEngine {
 
         void addTextureDesc(std::string name, RHI::TextureDesc desc);
         void setTextureDescs(const std::unordered_map<std::string, RHI::TextureDesc>& descs);
-        void setPresentationDescriptorData(RHI::DescriptorSetLayoutHandle globalSetLayout,RHI::DescriptorSetHandle globalDescSet);
+        // globalDescSets 按帧槽位（ADR-6）：呈现/粒子 execute 按 pctx.getFrameSlot() 取
+        void setPresentationDescriptorData(RHI::DescriptorSetLayoutHandle globalSetLayout,
+            std::vector<RHI::DescriptorSetHandle> globalDescSets);
 
         // 透明窗口：present 清屏色可配（alpha=0 让桌面透过来）
         void setPresentClearColor(const RHI::Color& color) { m_presentClearColor = color; }
@@ -45,6 +47,8 @@ namespace StarryEngine {
 
         void setPassList(PassList passes) { m_passes = std::move(passes); }
         std::shared_ptr<RenderGraph::RenderGraph> getRenderGraph() { return m_renderGraph; }
+
+        void setParallelRecording(const ParallelRecordingContext* parallel) override { m_parallel = parallel; }
 
     protected:
         virtual void buildConfigPasses(std::unordered_map<std::string, RenderGraph::TextureId>& texIdMap) = 0;
@@ -76,6 +80,7 @@ namespace StarryEngine {
         std::vector<OverlayPassDesc> m_overlayPasses;
 
         uint32_t m_width, m_height;
+        const ParallelRecordingContext* m_parallel = nullptr;   // 并行命令录制上下文（nullptr = 串行）
         bool m_resourceStatsPrinted = false;
         RHI::SamplerHandle m_defaultSampler;
         std::string m_swapchainTextureName = "Swapchain";
@@ -86,7 +91,7 @@ namespace StarryEngine {
         std::unordered_map<std::string, RenderGraph::PassNode*> m_tagToPassNode;
 
         RHI::DescriptorSetLayoutHandle  m_globalSetLayout;
-        RHI::DescriptorSetHandle        m_globalDescSet;
+        std::vector<RHI::DescriptorSetHandle> m_globalDescSets;
 
         std::unordered_map<std::string, RHI::TextureDesc> m_textureDescs;
         std::unordered_map<std::string, RenderGraph::TextureId> m_textureIdMap;

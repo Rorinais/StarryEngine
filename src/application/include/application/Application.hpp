@@ -24,8 +24,8 @@
 #include <core/Clock.hpp>
 #include <renderer/Renderer.hpp>
 #include <renderer/graph/RenderGraph.hpp>
-#include <renderer/backend/RHIFactory.hpp>
-#include <renderer/interface/RHI_TYPES.hpp>
+#include <renderer/interface/RHIFactory.hpp>
+#include <renderer/interface/RHIEnums.hpp>
 #include <scene/camera/CameraController.hpp>
 #include <renderer/passExecutor/SceneDrawExecutor.hpp>
 #include <renderer/passExecutor/DeferredLightingExecutor.hpp>

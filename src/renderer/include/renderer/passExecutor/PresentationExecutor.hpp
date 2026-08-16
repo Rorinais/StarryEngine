@@ -27,7 +27,8 @@ namespace StarryEngine {
     private:
         RHI::PipelineHandle m_pipeline;
         RHI::PipelineLayoutHandle m_layout;
-        RHI::DescriptorSetHandle m_globalSet, m_sceneColorSet;
+        std::vector<RHI::DescriptorSetHandle> m_globalSets;   // per-slot（ADR-6）
+        RHI::DescriptorSetHandle m_sceneColorSet;
         RHI::DescriptorSetLayoutHandle m_sceneColorLayout;
         RHI::DescriptorPoolHandle m_pool;
         RHI::SamplerHandle m_sampler;

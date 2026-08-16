@@ -1,11 +1,11 @@
 #pragma once
 #include <core/Window.hpp>
-#include <renderer/backend/vulkan/FrameContext.hpp>
+#include <renderer/interface/vulkan/VulkanFrameContext.hpp>
 
 namespace StarryEngine {
     class FrameMonitor {
     public:
-        FrameMonitor(Window::Ptr window, std::shared_ptr<FrameContext> frameContext, uint32_t flightFrame);
+        FrameMonitor(Window::Ptr window, std::shared_ptr<VulkanFrameContext> frameContext, uint32_t flightFrame);
         void tick();
         void updateTitle();
         float getTime() const;
@@ -13,7 +13,7 @@ namespace StarryEngine {
         float getFPS() const { return m_fps; }
     private:
         Window::Ptr m_window;
-        std::shared_ptr<FrameContext> m_frameContext;
+        std::shared_ptr<VulkanFrameContext> m_frameContext;
         uint32_t m_flightFrame;
         std::chrono::high_resolution_clock::time_point m_startTime;
         std::chrono::high_resolution_clock::time_point m_lastFrameTime;

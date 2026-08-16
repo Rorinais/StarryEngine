@@ -22,9 +22,12 @@ namespace StarryEngine {
                 if (it == m_pipelineMapping.end()) { LOG_ERROR("No pipeline for idx {}", item->pipelineIndex); continue; }
                 auto pipeline = pctx.getResourceManager()->getPipeline(it->second);
                 if (!pipeline) continue;
-                encoder->bindPipeline(pipeline);
-                auto layout = pctx.getResourceManager()->getPipelineLayout(pipeline->getLayout());
-                for (auto& [set, handle] : item->descriptorSets)
+                encoder->bindGraphicPipeline(it->second);
+                RHI::PipelineLayoutHandle layout = pipeline->getLayout();
+                // per-slot（ADR-6）：绑本帧槽位的描述符集
+                uint32_t slot = pctx.getFrameSlot();
+                if (slot >= RHI::kMaxFramesInFlight) slot = 0;
+                for (auto& [set, handle] : item->descriptorSets[slot])
                     encoder->bindDescriptorSets(RHI::PipelineBindPoint::Graphics, layout, set, {handle}, {});
                 encoder->draw(item->vertexCount, item->instanceCount, item->firstVertex, item->firstInstance);
             }

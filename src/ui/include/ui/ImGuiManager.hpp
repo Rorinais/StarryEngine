@@ -6,12 +6,14 @@
 #include <vector>
 #include <string>
 
-#include <renderer/interface/RHI_ENUMS.hpp>
-#include <renderer/interface/RHI_TYPES.hpp>
-#include <renderer/interface/RHI_STRUCTS_DESC.hpp>
-#include <renderer/interface/RHI_STRUCTS_RESOURCE.hpp>
-#include <renderer/interface/RHI_RESOURCE_FACTORY.hpp>
-#include <renderer/interface/RHI_RESOURCE_MANAGER.hpp>
+#include <renderer/interface/IRHI.hpp>
+#include <renderer/interface/RHIEnums.hpp>
+#include <renderer/interface/IRHI.hpp>
+#include <renderer/interface/RHIEnums.hpp>
+#include <renderer/interface/RHIStructs.hpp>
+#include <renderer/interface/IRHIResources.hpp>
+#include <renderer/interface/RHIFactory.hpp>
+#include <renderer/interface/RHIManager.hpp>
 #include <renderer/graph/RenderGraph.hpp>
 
 namespace StarryEngine {

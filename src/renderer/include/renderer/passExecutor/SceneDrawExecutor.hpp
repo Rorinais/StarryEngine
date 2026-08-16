@@ -2,7 +2,7 @@
 #pragma once
 #include <renderer/passExecutor/IPassExecutor.hpp>
 #include <renderer/graph/PassNode.hpp>
-#include <renderer/backend/vulkan/VulkanRHI.hpp>
+#include <renderer/interface/vulkan/VulkanRHI.hpp>
 #include <scene/Scene.hpp>
 #include <renderer/RenderTypes.hpp>
 #include <core/base.hpp>
@@ -29,6 +29,8 @@ namespace StarryEngine {
         // mesh 分支给不存在的顶点/索引缓冲绑定（旧 SkyboxExecutor 已合并进这里）
         void execute(RHI::RHICommandEncoder* encoder,const RenderContext& rctx,const PassContext& pctx,uint32_t subpassIndex) override {
             auto resMgr = pctx.getResourceManager();
+            uint32_t slot = pctx.getFrameSlot();
+            if (slot >= RHI::kMaxFramesInFlight) slot = 0;
             for (const auto& item : m_drawItems) {
                 auto it = m_pipelineMapping.find(item->pipelineIndex);
                 if (it == m_pipelineMapping.end()) {
@@ -37,10 +39,12 @@ namespace StarryEngine {
                 }
                 auto* pipeline = resMgr->getPipeline(it->second);
                 if (!pipeline) { LOG_ERROR("Failed to get pipeline from handle"); continue; }
-                encoder->bindPipeline(pipeline);
+                encoder->bindGraphicPipeline(it->second);
 
-                auto* pipelineLayout = resMgr->getPipelineLayout(pipeline->getLayout());
-                for (const auto& [setIndex, setHandle] : item->descriptorSets) {
+                RHI::PipelineLayoutHandle pipelineLayout = pipeline->getLayout();
+                if (!pipelineLayout.isValid()) { LOG_ERROR("Failed to get pipeline layout"); continue; }
+                const auto& slotSets = item->descriptorSets[slot < RHI::kMaxFramesInFlight ? slot : 0];
+                for (const auto& [setIndex, setHandle] : slotSets) {
                     encoder->bindDescriptorSets(RHI::PipelineBindPoint::Graphics, pipelineLayout, setIndex, { setHandle }, {});
                 }
 
@@ -59,16 +63,16 @@ namespace StarryEngine {
                     encoder->pushConstants(pipelineLayout, RHI::ShaderStage::Vertex, 0, sizeof(glm::mat4), &obj->transform);
                 }
 
-                std::vector<RHI::RHIBuffer*> vertexBuffers;
+                std::vector<RHI::BufferHandle> vertexBuffers;
                 std::vector<uint64_t> offsets;
-                vertexBuffers.push_back(resMgr->getBuffer(item->vertexBuffer));
+                vertexBuffers.push_back(item->vertexBuffer);
                 offsets.push_back(0);
-                if (item->isInstanced && item->instanceBuffer.isValid()) {
-                    vertexBuffers.push_back(resMgr->getBuffer(item->instanceBuffer));
+                if (item->isInstanced && item->instanceBuffer[slot].isValid()) {
+                    vertexBuffers.push_back(item->instanceBuffer[slot]);
                     offsets.push_back(0);
                 }
                 encoder->bindVertexBuffers(0, vertexBuffers, offsets);
-                encoder->bindIndexBuffer(resMgr->getBuffer(item->indexBuffer), 0, RHI::IndexType::UInt32);
+                encoder->bindIndexBuffer(item->indexBuffer, 0, RHI::IndexType::UInt32);
 
                 if (item->isInstanced) {
                     encoder->drawIndexed(item->indexCount, item->instanceCount, item->indexOffset, 0, 0);

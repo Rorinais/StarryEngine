@@ -2,7 +2,7 @@
 #include <optional> 
 #include <cstdint>
 #include <functional>
-#include <renderer/interface/RHI_STRUCTS_DESC.hpp>
+#include <renderer/interface/RHIStructs.hpp>
 
 namespace StarryEngine::RenderGraph {
     struct AttachmentParams {

@@ -259,12 +259,12 @@ namespace StarryEngine::RenderGraph {
         return true;
     }
 
-    void PassNode::execute(RHI::RHICommandEncoder* encoder,const RenderContext& context,uint32_t frameIndex,RHI::FramebufferHandle framebuffer) {
+    void PassNode::execute(RHI::RHICommandEncoder* encoder,const RenderContext& context,uint32_t frameIndex,RHI::FramebufferHandle framebuffer,uint32_t frameSlot) {
         if (m_type == PassType::Compute) {
             // ── Compute Pass ── 执行全部交给 executor（绑管线 + 描述符 + push + dispatch）
             if (!m_enabled) return;
             if (m_computeRecorder) {
-                m_computeRecorder->execute(encoder, context,PassContext(m_resMgr, frameIndex, {}), 0);
+                m_computeRecorder->execute(encoder, context,PassContext(m_resMgr, frameIndex, {}, frameSlot), 0);
             }
             return;
         }
@@ -279,8 +279,8 @@ namespace StarryEngine::RenderGraph {
         }
 
         RHI::RenderPassBeginInfo beginInfo{
-            .renderPass = renderPassObj->getNativeHandle(),
-            .framebuffer = fbObj->getNativeHandle(),
+            .renderPass = m_renderPassHandle,
+            .framebuffer = framebuffer,
             .renderArea = { {0, 0}, { m_width, m_height } },
             .clearValues = m_clearValues
         };
@@ -294,12 +294,70 @@ namespace StarryEngine::RenderGraph {
             for (uint32_t i = 0; i < m_passExecutors.size(); ++i) {
                 if (i > 0) encoder->nextSubpass(RHI::SubpassContents::Inline);
                 if (m_passExecutors[i]) {
-                    m_passExecutors[i]->execute(encoder, context, PassContext(m_resMgr, frameIndex, framebuffer), i);
+                    m_passExecutors[i]->execute(encoder, context, PassContext(m_resMgr, frameIndex, framebuffer, frameSlot), i);
                 }
             }
         }
 
         encoder->endRenderPass();
+    }
+
+    // ── 并行命令录制：主缓冲侧（渲染通道框架）──────────────────────────────
+
+    void PassNode::beginPassOnPrimary(RHI::RHICommandEncoder* encoder,
+        RHI::FramebufferHandle framebuffer,
+        RHI::SubpassContents contents) {
+        if (!m_renderPassHandle.isValid()) throw std::runtime_error("Pass not compiled: " + m_name);
+        auto* renderPassObj = m_resMgr->getRenderPass(m_renderPassHandle);
+        auto* fbObj = m_resMgr->getFramebuffer(framebuffer);
+        if (!renderPassObj || !fbObj) {
+            LOG_WARN("[{}] beginPassOnPrimary: renderPassObj={} fbObj={} — skipping pass", m_name,
+                (void*)renderPassObj, (void*)fbObj);
+            return;
+        }
+
+        RHI::RenderPassBeginInfo beginInfo{
+            .renderPass = m_renderPassHandle,
+            .framebuffer = framebuffer,
+            .renderArea = { {0, 0}, { m_width, m_height } },
+            .clearValues = m_clearValues
+        };
+        encoder->beginRenderPass(beginInfo, contents);
+    }
+
+    void PassNode::nextSubpassOnPrimary(RHI::RHICommandEncoder* encoder, RHI::SubpassContents contents) {
+        encoder->nextSubpass(contents);
+    }
+
+    void PassNode::endPassOnPrimary(RHI::RHICommandEncoder* encoder) {
+        encoder->endRenderPass();
+    }
+
+    // ── 并行命令录制：次缓冲侧（pass 主体）──────────────────────────────
+    // 只录 viewport/scissor + 该 subpass 的 executor（或 compute recorder）。
+    // 不含 barrier、不含 begin/endRenderPass——那些必须在主缓冲（Vulkan 能力约束）。
+
+    void PassNode::recordBody(RHI::RHICommandEncoder* encoder,
+        const RenderContext& context,
+        uint32_t frameIndex,
+        RHI::FramebufferHandle framebuffer,
+        uint32_t subpassIndex,
+        uint32_t frameSlot) {
+        if (m_type == PassType::Compute) {
+            if (m_enabled && m_computeRecorder) {
+                m_computeRecorder->execute(encoder, context, PassContext(m_resMgr, frameIndex, {}, frameSlot), 0);
+            }
+            return;
+        }
+
+        if (!m_enabled) return;
+        encoder->setViewport({ 0.0f, 0.0f, (float)m_width, (float)m_height, 0.0f, 1.0f });
+        encoder->setScissor({ {0, 0}, {m_width, m_height} });
+
+        if (subpassIndex < m_passExecutors.size() && m_passExecutors[subpassIndex]) {
+            m_passExecutors[subpassIndex]->execute(encoder, context,
+                PassContext(m_resMgr, frameIndex, framebuffer, frameSlot), subpassIndex);
+        }
     }
 
     const std::vector<std::string>& PassNode::getAttachmentNames() const {

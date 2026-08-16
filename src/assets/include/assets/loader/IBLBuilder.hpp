@@ -2,9 +2,10 @@
 #include <memory>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
-#include <renderer/interface/RHI_RESOURCE_MANAGER.hpp>
-#include <renderer/interface/RHI_RESOURCE_FACTORY.hpp>
-#include <renderer/interface/RHI_TYPES.hpp>
+#include <renderer/interface/IRHI.hpp>
+#include <renderer/interface/RHIManager.hpp>
+#include <renderer/interface/RHIFactory.hpp>
+#include <renderer/interface/RHIEnums.hpp>
 
 namespace StarryEngine::Assets {
 

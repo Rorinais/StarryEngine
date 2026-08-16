@@ -5,10 +5,10 @@ namespace StarryEngine {
 
     SceneAnalyzer::SceneAnalyzer(
         RHI::ResourceManager* resMgr,
-        RHI::DescriptorSetHandle globalDescriptorSet,
+        const std::array<RHI::DescriptorSetHandle, RHI::kMaxFramesInFlight>& globalDescriptorSets,
         std::shared_ptr<Assets::MaterialInstance> defaultMaterial,
         std::shared_ptr<Assets::MaterialInstance> errorMaterial)
-        : m_resMgr(resMgr), m_globalDescriptorSet(globalDescriptorSet),
+        : m_resMgr(resMgr), m_globalDescriptorSets(globalDescriptorSets),
         m_defaultMaterial(defaultMaterial), m_errorMaterial(errorMaterial) {
     }
 
@@ -158,14 +158,20 @@ namespace StarryEngine {
         return pso;
     }
 
-    std::unordered_map<uint32_t, RHI::DescriptorSetHandle> SceneAnalyzer::buildDescriptorSetMap(const std::shared_ptr<Assets::MaterialInstance>& materialInst){
+    std::array<std::unordered_map<uint32_t, RHI::DescriptorSetHandle>, RHI::kMaxFramesInFlight> SceneAnalyzer::buildDescriptorSetMap(const std::shared_ptr<Assets::MaterialInstance>& materialInst){
+        // 先保证材质各 set 两槽描述符集都建出来（无 slot 版本建满两槽；集 0 用全局集，不在此建）
         for (const auto& [setIdx, layout] : materialInst->getTemplate()->getLayouts()) {
             if (setIdx != 0) materialInst->getOrCreateSet(setIdx);
         }
-        std::unordered_map<uint32_t, RHI::DescriptorSetHandle> descSets;
-        descSets[0] = m_globalDescriptorSet; 
-        for (const auto& [setIdx, setHandle] : materialInst->getAllSets()) {
-            if (setIdx != 0) descSets[setIdx] = setHandle;
+        std::array<std::unordered_map<uint32_t, RHI::DescriptorSetHandle>, RHI::kMaxFramesInFlight> descSets;
+        for (uint32_t s = 0; s < RHI::kMaxFramesInFlight; ++s) {
+            descSets[s][0] = m_globalDescriptorSets[s];
+            for (const auto& [setIdx, layout] : materialInst->getTemplate()->getLayouts()) {
+                if (setIdx != 0) {
+                    auto h = materialInst->getSet(setIdx, s);
+                    if (h.isValid()) descSets[s][setIdx] = h;
+                }
+            }
         }
         return descSets;
     }
@@ -176,7 +182,7 @@ namespace StarryEngine {
         uint32_t pipelineIdx,
         bool instanced,
         const Assets::InstancingLayout* instLayout,
-        std::unordered_map<uint32_t, RHI::DescriptorSetHandle> descSets)
+        std::array<std::unordered_map<uint32_t, RHI::DescriptorSetHandle>, RHI::kMaxFramesInFlight> descSets)
     {
         auto item = std::make_shared<DrawItem>();
         item->type = DrawItemType::Mesh;
@@ -192,12 +198,12 @@ namespace StarryEngine {
         item->isInstanced = instanced;
         if (instanced) {
             item->instanceCount = static_cast<uint32_t>(obj->instanceTransforms.size());
-            item->instanceBuffer = obj->instanceBuffer;
+            item->instanceBuffer = obj->instanceBuffers;
             item->instanceBufferStride = instLayout->stride;
         }
         else {
             item->instanceCount = 1;
-            item->instanceBuffer = RHI::BufferHandle::Null();
+            item->instanceBuffer = {};   // 值初始化 = Null 句柄
             item->instanceBufferStride = 0;
         }
         return item;
@@ -206,7 +212,7 @@ namespace StarryEngine {
     std::shared_ptr<DrawItem> SceneAnalyzer::createProceduralDrawItem(
         const std::shared_ptr<Scene::ProceduralEffect>& effect,
         uint32_t pipelineIdx,
-        std::unordered_map<uint32_t, RHI::DescriptorSetHandle> descSets)
+        std::array<std::unordered_map<uint32_t, RHI::DescriptorSetHandle>, RHI::kMaxFramesInFlight> descSets)
     {
         auto item = std::make_shared<DrawItem>();
         item->type = DrawItemType::Procedural;
@@ -222,14 +228,21 @@ namespace StarryEngine {
 
     void SceneAnalyzer::prepareInstanceBuffer(const std::shared_ptr<Scene::RenderObject>& obj) {
         size_t requiredSize = obj->instanceTransforms.size() * sizeof(glm::mat4);
-        if (!obj->instanceBuffer.isValid() ||
-            m_resMgr->getBuffer(obj->instanceBuffer)->getSize() < requiredSize) {
-            RHI::BufferDesc bufDesc;
-            bufDesc.size = requiredSize;
-            bufDesc.type = RHI::BufferType::Vertex;
-            bufDesc.memoryType = RHI::MemoryType::CPU_To_GPU;
-            bufDesc.allowUpdate = true;
-            obj->instanceBuffer = m_resMgr->createBuffer(bufDesc);
+        // 按帧槽位建/扩（ADR-6）：每槽独立 buffer，帧 N CPU 写槽 N%2，GPU(N) 只读该槽
+        for (uint32_t s = 0; s < RHI::kMaxFramesInFlight; ++s) {
+            bool needCreate = !obj->instanceBuffers[s].isValid();
+            if (!needCreate) {
+                auto* buf = m_resMgr->getBuffer(obj->instanceBuffers[s]);
+                needCreate = !buf || buf->getSize() < requiredSize;
+            }
+            if (needCreate) {
+                RHI::BufferDesc bufDesc;
+                bufDesc.size = requiredSize;
+                bufDesc.type = RHI::BufferType::Vertex;
+                bufDesc.memoryType = RHI::MemoryType::CPU_To_GPU;
+                bufDesc.allowUpdate = true;
+                obj->instanceBuffers[s] = m_resMgr->createBuffer(bufDesc);
+            }
         }
     }
 

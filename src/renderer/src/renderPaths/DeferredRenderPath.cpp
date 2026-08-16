@@ -77,7 +77,7 @@ namespace StarryEngine {
         ctx.resMgr = m_resMgr;
         ctx.rhi = m_rhi;
         ctx.renderGraph = m_renderGraph.get();
-        ctx.globalDescSet = m_globalDescSet;
+        ctx.globalDescSets = m_globalDescSets;
         ctx.globalSetLayout = m_globalSetLayout;
 
         std::string defaultTag;
@@ -105,7 +105,7 @@ namespace StarryEngine {
         ctx.resMgr = m_resMgr;
         ctx.rhi = m_rhi;
         ctx.renderGraph = m_renderGraph.get();
-        ctx.globalDescSet = m_globalDescSet;
+        ctx.globalDescSets = m_globalDescSets;
         ctx.globalSetLayout = m_globalSetLayout;
 
         for (auto& pass : m_passes) {

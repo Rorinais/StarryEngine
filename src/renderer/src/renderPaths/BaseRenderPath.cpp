@@ -26,9 +26,9 @@ namespace StarryEngine {
 
     void BaseRenderPath::setPresentationDescriptorData(
         RHI::DescriptorSetLayoutHandle globalSetLayout,
-        RHI::DescriptorSetHandle globalDescSet) {
+        std::vector<RHI::DescriptorSetHandle> globalDescSets) {
         m_globalSetLayout = globalSetLayout;
-        m_globalDescSet = globalDescSet;
+        m_globalDescSets = std::move(globalDescSets);
     }
 
     void BaseRenderPath::removeOverlayPass(const std::string& tag) {
@@ -67,7 +67,11 @@ namespace StarryEngine {
     void BaseRenderPath::render(RHI::RHICommandEncoder* encoder, uint32_t frameIndex) {
         if (!m_renderGraph) return;
         auto context = buildRenderContext();
-        m_renderGraph->execute(encoder, context, frameIndex);
+        // 帧槽位（ADR-6）：render() 在 renderFrame 内调用，此时 getCurrentFrameIndex() == 本帧槽位。
+        // 录制 job 按值捕获 context（含 frameSlot），executor 绑 slot 对应的描述符集/实例缓冲。
+        context.frameSlot = m_rhi->getCurrentFrameIndex();
+        if (context.frameSlot >= RHI::kMaxFramesInFlight) context.frameSlot = 0;
+        m_renderGraph->execute(encoder, context, frameIndex, context.frameSlot, m_parallel);
     }
 
     void BaseRenderPath::rebuildResources(const AnalysisSceneResult& sceneData) {
@@ -227,7 +231,7 @@ namespace StarryEngine {
         ctx.rhi = m_rhi;
         ctx.renderGraph = m_renderGraph.get();
         ctx.globalSetLayout = m_globalSetLayout;
-        ctx.globalDescSet = m_globalDescSet;
+        ctx.globalDescSets = m_globalDescSets;
         ctx.renderPass = it->second.renderPass;
         ctx.subpassIndex = it->second.subpassIndex;
         rec->onPrepare(ctx);

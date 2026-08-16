@@ -2,7 +2,7 @@
 #include <string>
 #include <vector>
 #include <memory>
-#include <renderer/interface/RHI_RESOURCE_MANAGER.hpp>
+#include <renderer/interface/RHIManager.hpp>
 #include <assets/AssetType.hpp>
 
 namespace StarryEngine::Assets {

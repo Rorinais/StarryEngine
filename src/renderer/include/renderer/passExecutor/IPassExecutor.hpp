@@ -9,7 +9,9 @@
 #include <assets/Assets.hpp>
 #include <scene/Scene.hpp>
 #include <renderer/RenderTypes.hpp>
-#include <renderer/interface/RHI_RESOURCE_FACTORY.hpp>
+#include <renderer/interface/IRHI.hpp>
+#include <renderer/interface/RHIFactory.hpp>
+#include <renderer/interface/RHICommandEncoder.hpp>
 #include <logging/Logger.hpp>
 
 namespace StarryEngine{
@@ -20,6 +22,9 @@ namespace StarryEngine{
         glm::mat4 viewMatrix;
         glm::mat4 projMatrix;
         float deltaTime = 0.0f;
+
+        // 帧槽位（0/1，ADR-6 per-slot）：录制时绑 slot 对应的描述符集/实例缓冲
+        uint32_t frameSlot = 0;
 
         Assets::GlobalUniforms globalUniforms;
         std::shared_ptr<AnalysisSceneResult> sceneData;
@@ -41,11 +46,13 @@ namespace StarryEngine{
     public:
         PassContext(std::shared_ptr<RHI::ResourceManager> resMgr,
             uint32_t frameIndex,
-            RHI::FramebufferHandle framebuffer)
-            : mResMgr(resMgr), mFrameIndex(frameIndex), mFramebuffer(framebuffer) {
+            RHI::FramebufferHandle framebuffer,
+            uint32_t frameSlot)
+            : mResMgr(resMgr), mFrameIndex(frameIndex), mFramebuffer(framebuffer), mFrameSlot(frameSlot) {
         }
 
-        uint32_t getFrameIndex() const { return mFrameIndex; }
+        uint32_t getFrameIndex() const { return mFrameIndex; }     // 交换链图像索引
+        uint32_t getFrameSlot() const { return mFrameSlot; }       // 帧槽位（per-slot 数据索引）
         RHI::FramebufferHandle getFramebuffer() const { return mFramebuffer; }
         std::shared_ptr<RHI::ResourceManager> getResourceManager() const { return mResMgr; }
 
@@ -53,6 +60,7 @@ namespace StarryEngine{
         std::shared_ptr<RHI::ResourceManager> mResMgr;
         uint32_t mFrameIndex = 0;
         RHI::FramebufferHandle mFramebuffer;
+        uint32_t mFrameSlot = 0;
     };
 
     class IPassExecutor {
@@ -75,7 +83,8 @@ namespace StarryEngine{
             std::shared_ptr<RHI::IRHI> rhi;
             RenderGraph::RenderGraph* renderGraph = nullptr;
             RHI::DescriptorSetLayoutHandle globalSetLayout;
-            RHI::DescriptorSetHandle globalDescSet;
+            // 按帧槽位的 global 描述符集（ADR-6）：execute 时按 pctx.getFrameSlot() 取
+            std::vector<RHI::DescriptorSetHandle> globalDescSets;
             RHI::RenderPassHandle renderPass;
             uint32_t subpassIndex = 0;
         };

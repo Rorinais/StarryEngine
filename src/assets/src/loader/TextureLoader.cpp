@@ -89,8 +89,8 @@ namespace StarryEngine::Assets {
             RHI::ImageLayout::ShaderReadOnly,
             RHI::PipelineStage::Transfer,
             RHI::PipelineStage::FragmentShader,
-            static_cast<RHI::AccessFlags>(RHI::AccessFlag::TransferWrite),
-            static_cast<RHI::AccessFlags>(RHI::AccessFlag::ShaderRead),
+            RHI::AccessFlag::TransferWrite,
+            RHI::AccessFlag::ShaderRead,
             range);
         return true;
     }
@@ -332,8 +332,8 @@ namespace StarryEngine::Assets {
             RHI::ImageLayout::TransferSrc,
             RHI::PipelineStage::FragmentShader,
             RHI::PipelineStage::Transfer,
-            static_cast<RHI::AccessFlags>(RHI::AccessFlag::ShaderRead),
-            static_cast<RHI::AccessFlags>(RHI::AccessFlag::TransferRead),
+            RHI::AccessFlag::ShaderRead,
+            RHI::AccessFlag::TransferRead,
             range);
 
         // 4. 执行拷贝：纹理 → staging buffer
@@ -382,8 +382,8 @@ namespace StarryEngine::Assets {
             RHI::ImageLayout::ShaderReadOnly,
             RHI::PipelineStage::Transfer,
             RHI::PipelineStage::FragmentShader,
-            static_cast<RHI::AccessFlags>(RHI::AccessFlag::TransferRead),
-            static_cast<RHI::AccessFlags>(RHI::AccessFlag::ShaderRead),
+            RHI::AccessFlag::TransferRead,
+            RHI::AccessFlag::ShaderRead,
             range);
 
         if (!success) {

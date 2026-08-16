@@ -1,6 +1,7 @@
 add_library(core STATIC
     src/FrameMonitor.cpp
     src/Window.cpp
+    src/JobSystem.cpp
 )
 
 target_include_directories(core PUBLIC

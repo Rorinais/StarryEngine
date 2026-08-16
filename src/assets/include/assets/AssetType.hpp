@@ -2,7 +2,7 @@
 #include <iostream>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
-#include <renderer/interface/RHI_RESOURCE_MANAGER.hpp>
+#include <renderer/interface/RHIManager.hpp>
 
 namespace StarryEngine::Assets {
     struct MaterialParams {

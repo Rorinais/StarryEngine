@@ -3,7 +3,7 @@
 #include <logging/Logger.hpp>
 #include <renderer/Renderer.hpp>
 #include <renderer/graph/RenderGraph.hpp>
-#include <renderer/interface/RHI_TYPES.hpp>
+#include <renderer/interface/RHIEnums.hpp>
 #include <assets/geometry/GeometryGenerator.hpp>
 #include <renderer/passExecutor/SceneDrawExecutor.hpp>
 

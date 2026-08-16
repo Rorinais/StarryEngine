@@ -1,7 +1,7 @@
 #include <core/FrameMonitor.hpp>
 
 namespace StarryEngine {
-    FrameMonitor::FrameMonitor(Window::Ptr window, std::shared_ptr<FrameContext> frameContext, uint32_t flightFrame)
+    FrameMonitor::FrameMonitor(Window::Ptr window, std::shared_ptr<VulkanFrameContext> frameContext, uint32_t flightFrame)
         : m_window(window)
         , m_frameContext(frameContext)
         , m_flightFrame(flightFrame)

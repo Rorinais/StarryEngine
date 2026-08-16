@@ -3,6 +3,7 @@
 #include <scene/Scene.hpp>
 #include <renderer/RenderTypes.hpp>
 #include <memory>
+#include <array>
 
 namespace StarryEngine {
 
@@ -10,7 +11,7 @@ namespace StarryEngine {
     public:
         SceneAnalyzer(
             RHI::ResourceManager* resMgr,
-            RHI::DescriptorSetHandle globalDescriptorSet,
+            const std::array<RHI::DescriptorSetHandle, RHI::kMaxFramesInFlight>& globalDescriptorSets,
             std::shared_ptr<Assets::MaterialInstance> defaultMaterial,
             std::shared_ptr<Assets::MaterialInstance> errorMaterial);
 
@@ -44,7 +45,8 @@ namespace StarryEngine {
         GraphicsPipelineState buildProceduralPSO(
             const std::shared_ptr<Assets::MaterialInstance>& material);
 
-        std::unordered_map<uint32_t, RHI::DescriptorSetHandle> buildDescriptorSetMap(
+        // per-slot 描述符集图：[slot][setIdx]（ADR-6）。slot 对应当前帧槽位，录制时绑该槽。
+        std::array<std::unordered_map<uint32_t, RHI::DescriptorSetHandle>, RHI::kMaxFramesInFlight> buildDescriptorSetMap(
             const std::shared_ptr<Assets::MaterialInstance>& materialInst);
 
         std::shared_ptr<DrawItem> createMeshDrawItem(
@@ -53,12 +55,12 @@ namespace StarryEngine {
             uint32_t pipelineIdx,
             bool instanced,
             const Assets::InstancingLayout* instLayout,
-            std::unordered_map<uint32_t, RHI::DescriptorSetHandle> descSets);
+            std::array<std::unordered_map<uint32_t, RHI::DescriptorSetHandle>, RHI::kMaxFramesInFlight> descSets);
 
         std::shared_ptr<DrawItem> createProceduralDrawItem(
             const std::shared_ptr<Scene::ProceduralEffect>& effect,
             uint32_t pipelineIdx,
-            std::unordered_map<uint32_t, RHI::DescriptorSetHandle> descSets);
+            std::array<std::unordered_map<uint32_t, RHI::DescriptorSetHandle>, RHI::kMaxFramesInFlight> descSets);
 
         void prepareInstanceBuffer(const std::shared_ptr<Scene::RenderObject>& obj);
 
@@ -68,7 +70,7 @@ namespace StarryEngine {
             std::unordered_map<GraphicsPipelineState, uint32_t, std::hash<GraphicsPipelineState>>& pipelineIndexMap);
 
         RHI::ResourceManager* m_resMgr;
-        RHI::DescriptorSetHandle m_globalDescriptorSet;
+        std::array<RHI::DescriptorSetHandle, RHI::kMaxFramesInFlight> m_globalDescriptorSets;
         std::shared_ptr<Assets::MaterialInstance> m_defaultMaterial;
         std::shared_ptr<Assets::MaterialInstance> m_errorMaterial;
     };

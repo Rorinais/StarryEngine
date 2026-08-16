@@ -19,8 +19,9 @@ namespace StarryEngine {
 
     class ParticleRenderExecutor : public IPassExecutor {
     public:
+        // globalSets 按帧槽位（ADR-6）：execute 按 pctx.getFrameSlot() 绑对应槽的全局集
         ParticleRenderExecutor(RHI::PipelineHandle pipeline, RHI::PipelineLayoutHandle layout,
-                               RHI::DescriptorSetHandle globalSet, RHI::DescriptorSetHandle particleSet,
+                               std::vector<RHI::DescriptorSetHandle> globalSets, RHI::DescriptorSetHandle particleSet,
                                uint32_t count);
 
         void setParticleSet(RHI::DescriptorSetHandle s) { m_particleSet = s; }
@@ -41,7 +42,8 @@ namespace StarryEngine {
     private:
         RHI::PipelineHandle m_pipeline;
         RHI::PipelineLayoutHandle m_layout;
-        RHI::DescriptorSetHandle m_globalSet, m_particleSet;
+        std::vector<RHI::DescriptorSetHandle> m_globalSets;
+        RHI::DescriptorSetHandle m_particleSet;
         uint32_t m_count;
         glm::mat4 m_model = glm::mat4(1.0f);
         ParticleVSPC m_vsPC = {};

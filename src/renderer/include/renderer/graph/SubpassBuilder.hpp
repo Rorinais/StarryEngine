@@ -6,9 +6,9 @@
 #include <unordered_map>
 #include <optional>
 #include <stdexcept>
-#include <renderer/interface/RHI_ENUMS.hpp>
-#include <renderer/interface/RHI_HANDLES_SYSTEM.hpp>
-#include <renderer/interface/RHI_STRUCTS_DESC.hpp>
+#include <renderer/interface/RHIEnums.hpp>
+#include <renderer/interface/RHIHandles.hpp>
+#include <renderer/interface/RHIStructs.hpp>
 #include <renderer/passExecutor/IPassExecutor.hpp>
 
 namespace StarryEngine::RenderGraph {

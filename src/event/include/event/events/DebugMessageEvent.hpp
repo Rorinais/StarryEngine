@@ -1,6 +1,6 @@
 #pragma once
 #include <event/IEvent.hpp>
-#include <renderer/interface/RHI_ENUMS.hpp>
+#include <renderer/interface/RHIEnums.hpp>
 #include <string>
 
 namespace StarryEngine {

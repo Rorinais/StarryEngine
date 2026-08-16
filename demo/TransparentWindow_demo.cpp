@@ -67,7 +67,7 @@ private:
         m_renderer->initDefaultMaterials();
 
         m_descriptorSetLayout = m_renderer->getGlobalSetLayout();
-        m_descriptorSet = m_renderer->getGlobalDescriptorSet();
+        m_descriptorSet = m_renderer->getGlobalDescriptorSet(0);   // 构造注入的 globalSet 是废码，取槽 0 句柄
 
         auto renderPath = std::make_shared<DeferredRenderPath>(m_rhi, m_width, m_height);
         renderPath->setScene(m_scene.get());   // 场景数据源：粒子等 pass 建图时通过 configure 拿到

@@ -2,8 +2,8 @@
 #include <cstddef>
 #include <vector>
 #include <functional>
-#include <renderer/interface/RHI_ENUMS.hpp>
-#include <renderer/interface/RHI_HANDLES_SYSTEM.hpp>
+#include <renderer/interface/RHIEnums.hpp>
+#include <renderer/interface/RHIHandles.hpp>
 namespace StarryEngine::Utils {
 
     // 基础 hash_combine（用于单个值）

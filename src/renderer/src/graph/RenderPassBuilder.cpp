@@ -247,10 +247,10 @@ namespace StarryEngine::RenderGraph {
         RHI::SubpassDependency dep{};
         dep.srcSubpass = src;
         dep.dstSubpass = dst;
-        dep.srcStageMask = static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::ColorAttachmentOutput);
-        dep.dstStageMask = static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::FragmentShader);
-        dep.srcAccessMask = static_cast<RHI::AccessFlags>(RHI::AccessFlag::ColorAttachmentWrite);
-        dep.dstAccessMask = static_cast<RHI::AccessFlags>(RHI::AccessFlag::InputAttachmentRead);
+        dep.srcStageMask = RHI::PipelineStage::ColorAttachmentOutput;
+        dep.dstStageMask = RHI::PipelineStage::FragmentShader;
+        dep.srcAccessMask = RHI::AccessFlag::ColorAttachmentWrite;
+        dep.dstAccessMask = RHI::AccessFlag::InputAttachmentRead;
         dep.byRegion = true;
         m_autoDependencies.push_back(dep);
     }
@@ -259,10 +259,10 @@ namespace StarryEngine::RenderGraph {
         RHI::SubpassDependency dep{};
         dep.srcSubpass = src;
         dep.dstSubpass = dst;
-        dep.srcStageMask = static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::LateFragmentTests);
-        dep.dstStageMask = static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::FragmentShader);
-        dep.srcAccessMask = static_cast<RHI::AccessFlags>(RHI::AccessFlag::DepthStencilAttachmentWrite);
-        dep.dstAccessMask = static_cast<RHI::AccessFlags>(RHI::AccessFlag::InputAttachmentRead);
+        dep.srcStageMask = RHI::PipelineStage::LateFragmentTests;
+        dep.dstStageMask = RHI::PipelineStage::FragmentShader;
+        dep.srcAccessMask = RHI::AccessFlag::DepthStencilAttachmentWrite;
+        dep.dstAccessMask = RHI::AccessFlag::InputAttachmentRead;
         dep.byRegion = true;
         m_autoDependencies.push_back(dep);
     }
@@ -271,11 +271,11 @@ namespace StarryEngine::RenderGraph {
         RHI::SubpassDependency dep{};
         dep.srcSubpass = first;
         dep.dstSubpass = second;
-        dep.srcStageMask = static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::ColorAttachmentOutput);
-        dep.dstStageMask = static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::ColorAttachmentOutput);
-        dep.srcAccessMask = static_cast<RHI::AccessFlags>(RHI::AccessFlag::ColorAttachmentWrite);
-        dep.dstAccessMask = static_cast<RHI::AccessFlags>(RHI::AccessFlag::ColorAttachmentRead) |
-            static_cast<RHI::AccessFlags>(RHI::AccessFlag::ColorAttachmentWrite);
+        dep.srcStageMask = RHI::PipelineStage::ColorAttachmentOutput;
+        dep.dstStageMask = RHI::PipelineStage::ColorAttachmentOutput;
+        dep.srcAccessMask = RHI::AccessFlag::ColorAttachmentWrite;
+        dep.dstAccessMask = RHI::AccessFlag::ColorAttachmentRead |
+            RHI::AccessFlag::ColorAttachmentWrite;
         dep.byRegion = true;
         m_autoDependencies.push_back(dep);
     }
@@ -284,11 +284,11 @@ namespace StarryEngine::RenderGraph {
         RHI::SubpassDependency dep{};
         dep.srcSubpass = first;
         dep.dstSubpass = second;
-        dep.srcStageMask = static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::LateFragmentTests);
-        dep.dstStageMask = static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::LateFragmentTests);
-        dep.srcAccessMask = static_cast<RHI::AccessFlags>(RHI::AccessFlag::DepthStencilAttachmentWrite);
-        dep.dstAccessMask = static_cast<RHI::AccessFlags>(RHI::AccessFlag::DepthStencilAttachmentRead) |
-            static_cast<RHI::AccessFlags>(RHI::AccessFlag::DepthStencilAttachmentWrite);
+        dep.srcStageMask = RHI::PipelineStage::LateFragmentTests;
+        dep.dstStageMask = RHI::PipelineStage::LateFragmentTests;
+        dep.srcAccessMask = RHI::AccessFlag::DepthStencilAttachmentWrite;
+        dep.dstAccessMask = RHI::AccessFlag::DepthStencilAttachmentRead |
+            RHI::AccessFlag::DepthStencilAttachmentWrite;
         dep.byRegion = true;
         m_autoDependencies.push_back(dep);
     }
@@ -310,18 +310,18 @@ namespace StarryEngine::RenderGraph {
             dep.dstSubpass = firstUser;
             dep.byRegion = true;
             if (isDepthStencil) {
-                dep.srcStageMask = static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::BottomOfPipe);
-                dep.dstStageMask = static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::EarlyFragmentTests);
-                dep.srcAccessMask = static_cast<RHI::AccessFlags>(RHI::AccessFlag::None);
-                dep.dstAccessMask = static_cast<RHI::AccessFlags>(RHI::AccessFlag::DepthStencilAttachmentRead) |
-                    static_cast<RHI::AccessFlags>(RHI::AccessFlag::DepthStencilAttachmentWrite);
+                dep.srcStageMask = RHI::PipelineStage::BottomOfPipe;
+                dep.dstStageMask = RHI::PipelineStage::EarlyFragmentTests;
+                dep.srcAccessMask = RHI::AccessFlag::None;
+                dep.dstAccessMask = RHI::AccessFlag::DepthStencilAttachmentRead |
+                    RHI::AccessFlag::DepthStencilAttachmentWrite;
             }
             else {
-                dep.srcStageMask = static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::BottomOfPipe);
-                dep.dstStageMask = static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::ColorAttachmentOutput);
-                dep.srcAccessMask = static_cast<RHI::AccessFlags>(RHI::AccessFlag::None);
-                dep.dstAccessMask = static_cast<RHI::AccessFlags>(RHI::AccessFlag::ColorAttachmentRead) |
-                    static_cast<RHI::AccessFlags>(RHI::AccessFlag::ColorAttachmentWrite);
+                dep.srcStageMask = RHI::PipelineStage::BottomOfPipe;
+                dep.dstStageMask = RHI::PipelineStage::ColorAttachmentOutput;
+                dep.srcAccessMask = RHI::AccessFlag::None;
+                dep.dstAccessMask = RHI::AccessFlag::ColorAttachmentRead |
+                    RHI::AccessFlag::ColorAttachmentWrite;
             }
             m_autoDependencies.push_back(dep);
         }
@@ -345,18 +345,18 @@ namespace StarryEngine::RenderGraph {
             dep.dstSubpass = SUBPASS_EXTERNAL;
             dep.byRegion = true;
             if (isDepthStencil) {
-                dep.srcStageMask = static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::LateFragmentTests);
-                dep.dstStageMask = static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::BottomOfPipe);
-                dep.srcAccessMask = static_cast<RHI::AccessFlags>(RHI::AccessFlag::DepthStencilAttachmentRead) |
-                    static_cast<RHI::AccessFlags>(RHI::AccessFlag::DepthStencilAttachmentWrite);
-                dep.dstAccessMask = static_cast<RHI::AccessFlags>(RHI::AccessFlag::None);
+                dep.srcStageMask = RHI::PipelineStage::LateFragmentTests;
+                dep.dstStageMask = RHI::PipelineStage::BottomOfPipe;
+                dep.srcAccessMask = RHI::AccessFlag::DepthStencilAttachmentRead |
+                    RHI::AccessFlag::DepthStencilAttachmentWrite;
+                dep.dstAccessMask = RHI::AccessFlag::None;
             }
             else {
-                dep.srcStageMask = static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::ColorAttachmentOutput);
-                dep.dstStageMask = static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::BottomOfPipe);
-                dep.srcAccessMask = static_cast<RHI::AccessFlags>(RHI::AccessFlag::ColorAttachmentRead) |
-                    static_cast<RHI::AccessFlags>(RHI::AccessFlag::ColorAttachmentWrite);
-                dep.dstAccessMask = static_cast<RHI::AccessFlags>(RHI::AccessFlag::None);
+                dep.srcStageMask = RHI::PipelineStage::ColorAttachmentOutput;
+                dep.dstStageMask = RHI::PipelineStage::BottomOfPipe;
+                dep.srcAccessMask = RHI::AccessFlag::ColorAttachmentRead |
+                    RHI::AccessFlag::ColorAttachmentWrite;
+                dep.dstAccessMask = RHI::AccessFlag::None;
             }
             m_autoDependencies.push_back(dep);
         }
@@ -398,8 +398,9 @@ namespace StarryEngine::RenderGraph {
 
         for (const auto& dep : result) {
             LOG_INFO("Dependency: src={}, dst={}, srcStage={}, dstStage={}, srcAccess={}, dstAccess={}",
-                dep.srcSubpass, dep.dstSubpass, dep.srcStageMask, dep.dstStageMask,
-                dep.srcAccessMask, dep.dstAccessMask);
+                dep.srcSubpass, dep.dstSubpass,
+                static_cast<uint64_t>(dep.srcStageMask), static_cast<uint64_t>(dep.dstStageMask),
+                static_cast<uint64_t>(dep.srcAccessMask), static_cast<uint64_t>(dep.dstAccessMask));
         }
         return result;
     }

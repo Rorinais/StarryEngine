@@ -6,11 +6,12 @@
 #include <vector>
 #include <unordered_map>
 #include <set>
-#include <renderer/interface/RHI_ENUMS.hpp>
-#include <renderer/interface/RHI_STRUCTS_DESC.hpp>
-#include <renderer/interface/RHI_HANDLES_SYSTEM.hpp>
-#include <renderer/backend/vulkan/VulkanRHI.hpp>
+#include <renderer/interface/RHIEnums.hpp>
+#include <renderer/interface/RHIStructs.hpp>
+#include <renderer/interface/RHIHandles.hpp>
+#include <renderer/interface/vulkan/VulkanRHI.hpp>
 #include <renderer/graph/PassNode.hpp>
+#include <renderer/graph/ParallelRecording.hpp>
 
 namespace StarryEngine::RenderGraph {
     struct TexturePassInfo {
@@ -19,10 +20,10 @@ namespace StarryEngine::RenderGraph {
         int32_t firstWriterIndex = -1;
         int32_t lastWriterIndex = -1;
         int32_t firstReaderIndex = -1;
-        RHI::PipelineStageFlags writeStage = static_cast<RHI::PipelineStageFlags>(0);
-        RHI::AccessFlags writeAccess = static_cast<RHI::AccessFlags>(0);
-        RHI::PipelineStageFlags readStage = static_cast<RHI::PipelineStageFlags>(0);
-        RHI::AccessFlags readAccess = static_cast<RHI::AccessFlags>(0);
+        RHI::PipelineStage writeStage = RHI::PipelineStage::None;
+        RHI::AccessFlag writeAccess = RHI::AccessFlag::None;
+        RHI::PipelineStage readStage = RHI::PipelineStage::None;
+        RHI::AccessFlag readAccess = RHI::AccessFlag::None;
     };
 
     class RenderGraph {
@@ -70,7 +71,13 @@ namespace StarryEngine::RenderGraph {
 
         void createFrameBuffer();
 
-        void execute(RHI::RHICommandEncoder* encoder, const RenderContext& context,uint32_t frameIndex);
+        // parallel == nullptr → 原串行路径（每 pass 直接录进主缓冲，行为与单线程一致）。
+        // parallel != nullptr → 并行路径：每 (pass×subpass) 录进独立 secondary CB（一个 job），
+        //   帧 barrier 后主线程发布局转换 barrier + beginRenderPass(Secondary)+executeCommands+end。
+        // frameSlot：帧槽位（ADR-6 per-slot），录制 job 按值捕获，绑 slot 对应的描述符集/实例缓冲。
+        void execute(RHI::RHICommandEncoder* encoder, const RenderContext& context, uint32_t frameIndex,
+            uint32_t frameSlot,
+            const ParallelRecordingContext* parallel = nullptr);
 
         RHI::TextureHandle getPhysicalTextureHandle(TextureId id) const;
         RHI::BufferHandle getPhysicalBuffer(BufferId id) const;
@@ -85,8 +92,8 @@ namespace StarryEngine::RenderGraph {
         BufferId getBufferId(const std::string& name) const;
 
         const std::vector<RHI::FramebufferHandle>& getFramebuffersForPass(size_t passIndex) const;
-        std::pair<RHI::PipelineStageFlags, RHI::AccessFlags> getStageAccessFromLayout(RHI::ImageLayout layout);
-        std::pair<RHI::PipelineStageFlags, RHI::AccessFlags> getReadStageAccess(RHI::ImageLayout layout, bool computeReader);
+        std::pair<RHI::PipelineStage, RHI::AccessFlag> getStageAccessFromLayout(RHI::ImageLayout layout);
+        std::pair<RHI::PipelineStage, RHI::AccessFlag> getReadStageAccess(RHI::ImageLayout layout, bool computeReader);
 
         bool isDepthOnlyFormat(RHI::Format format) {
             return format == RHI::Format::D16_UNorm || format == RHI::Format::D32_Float;

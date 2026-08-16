@@ -27,10 +27,10 @@ namespace StarryEngine::RenderGraph {
         TextureId texId;
         RHI::ImageLayout srcLayout;
         RHI::ImageLayout dstLayout;
-        RHI::PipelineStageFlags srcStage;
-        RHI::PipelineStageFlags dstStage;
-        RHI::AccessFlags srcAccess;
-        RHI::AccessFlags dstAccess;
+        RHI::PipelineStage srcStage;
+        RHI::PipelineStage dstStage;
+        RHI::AccessFlag srcAccess;
+        RHI::AccessFlag dstAccess;
         uint32_t aspectMask;
     };
 
@@ -80,7 +80,28 @@ namespace StarryEngine::RenderGraph {
         void execute(RHI::RHICommandEncoder* encoder,
             const RenderContext& context,
             uint32_t frameIndex,
-            RHI::FramebufferHandle framebuffer);
+            RHI::FramebufferHandle framebuffer,
+            uint32_t frameSlot = 0);
+
+        // ── 并行命令录制（ADR-6 第 2 步）：把 pass 拆成"主缓冲的渲染通道框架"
+        //    （begin/nextSubpass/end）与"次缓冲的 pass 主体（recordBody）"两段。
+        //    execute() 保留原串行路径不动（软开关第 0 级）；并行路径用下面这些方法。
+        // beginPassOnPrimary：beginRenderPass（native RP/fb + renderArea + clearValues）。
+        //   contents 为 Inline 时=原串行语义；Secondary 时配合 executeCommands 执行次缓冲。
+        void beginPassOnPrimary(RHI::RHICommandEncoder* encoder,
+            RHI::FramebufferHandle framebuffer,
+            RHI::SubpassContents contents);
+        void nextSubpassOnPrimary(RHI::RHICommandEncoder* encoder, RHI::SubpassContents contents);
+        void endPassOnPrimary(RHI::RHICommandEncoder* encoder);
+        // recordBody：把某 subpass 的主体录进一条 secondary 编码器（viewport/scissor +
+        //   该 subpass 的 executor；compute 则录 m_computeRecorder）。不含 barrier、
+        //   不含 begin/endRenderPass——那些必须在主缓冲（Vulkan 约束清单已有）。
+        void recordBody(RHI::RHICommandEncoder* encoder,
+            const RenderContext& context,
+            uint32_t frameIndex,
+            RHI::FramebufferHandle framebuffer,
+            uint32_t subpassIndex,
+            uint32_t frameSlot = 0);
 
         // 查询接口
         const std::string& getName() const { return m_name; }

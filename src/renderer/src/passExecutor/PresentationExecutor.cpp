@@ -46,7 +46,7 @@ namespace StarryEngine {
         m_pipeline = Assets::PipelineCache::getOrCreateGraphicsPipeline(
             m_resMgr.get(), pso, ctx.renderPass, ctx.subpassIndex);
 
-        m_globalSet = ctx.globalDescSet;
+        m_globalSets = ctx.globalDescSets;
 
         // SceneColor 描述符集（presentation 阶段采样 SceneColor 输出）
         RHI::SamplerDesc sampDesc;
@@ -85,11 +85,14 @@ namespace StarryEngine {
         auto resMgr = pctx.getResourceManager();
         auto* pipeline = resMgr->getPipeline(m_pipeline);
         if (!pipeline) return;
-        encoder->bindPipeline(pipeline);
-        auto* playout = resMgr->getPipelineLayout(pipeline->getLayout());
-        if (playout) {
-            if (m_globalSet.isValid())
-                encoder->bindDescriptorSets(RHI::PipelineBindPoint::Graphics, playout, 0, {m_globalSet}, {});
+        encoder->bindGraphicPipeline(m_pipeline);
+        RHI::PipelineLayoutHandle playout = pipeline->getLayout();
+        if (playout.isValid()) {
+            // per-slot（ADR-6）：按本帧槽位绑全局集（每槽独立 globals UBO 缓冲）
+            uint32_t slot = pctx.getFrameSlot();
+            RHI::DescriptorSetHandle gset = (slot < m_globalSets.size()) ? m_globalSets[slot] : RHI::DescriptorSetHandle::Null();
+            if (gset.isValid())
+                encoder->bindDescriptorSets(RHI::PipelineBindPoint::Graphics, playout, 0, {gset}, {});
             if (m_sceneColorSet.isValid())
                 encoder->bindDescriptorSets(RHI::PipelineBindPoint::Graphics, playout, 1, {m_sceneColorSet}, {});
         }

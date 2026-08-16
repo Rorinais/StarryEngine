@@ -34,8 +34,10 @@ namespace StarryEngine {
         poolDesc.poolSizes = {{RHI::DescriptorType::StorageBuffer, 4}};
         m_defaultPool = ctx.resMgr->createDescriptorPool(poolDesc);
 
+        // 构造注入的 globalSet 是渲染期废码，给槽 0 句柄即可
+        RHI::DescriptorSetHandle gs0 = ctx.globalDescSets.empty() ? RHI::DescriptorSetHandle::Null() : ctx.globalDescSets[0];
         auto mat = std::make_shared<Assets::MaterialInstance>(
-            tmpl, m_defaultPool, ctx.resMgr.get(), ctx.globalDescSet);
+            tmpl, m_defaultPool, ctx.resMgr.get(), gs0);
         RHI::BlendAttachmentState blend;
         blend.blendEnable = true;   // 默认 SrcAlpha/OneMinusSrcAlpha
         blend.dstAlphaBlendFactor = RHI::BlendFactor::OneMinusSrcAlpha;  // alpha 累加而非替换：粒子叠在不透明面上封口(a=1)，避免"角色前变黑"
@@ -129,7 +131,7 @@ namespace StarryEngine {
             subpass.setTag(subpassTag);
             st.executor = std::make_shared<ParticleRenderExecutor>(
                 RHI::PipelineHandle{}, RHI::PipelineLayoutHandle{},
-                RHI::DescriptorSetHandle{}, RHI::DescriptorSetHandle{}, em->particleCount);  // 占位，onAfterCompile 替换
+                std::vector<RHI::DescriptorSetHandle>{}, RHI::DescriptorSetHandle{}, em->particleCount);  // 占位，onAfterCompile 替换
             subpass.setExecutor(st.executor);
             st.renderPassNode = m_renderPassNode;
 
@@ -215,7 +217,7 @@ namespace StarryEngine {
                 }
             }
 
-            auto rec = std::make_shared<ParticleRenderExecutor>(pipeline, st.renderLayout, ctx.globalDescSet, st.particleDescSet, em->particleCount);
+            auto rec = std::make_shared<ParticleRenderExecutor>(pipeline, st.renderLayout, ctx.globalDescSets, st.particleDescSet, em->particleCount);
             rec->setVSParams(em->params);
             rec->setTransform(em->transform);
             st.executor = rec;

@@ -1,4 +1,5 @@
 #include <renderer/graph/RenderGraph.hpp>
+#include <core/JobSystem.hpp>
 #include <logging/Logger.hpp>
 #include <algorithm>
 #include <queue>
@@ -246,8 +247,8 @@ namespace StarryEngine::RenderGraph {
                 info.lastUserIndex = passIdx;
                 if (info.firstWriterIndex == -1) info.firstWriterIndex = passIdx;
                 info.lastWriterIndex = passIdx;
-                info.writeStage = static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::ColorAttachmentOutput);
-                info.writeAccess = static_cast<RHI::AccessFlags>(RHI::AccessFlag::ColorAttachmentWrite);
+                info.writeStage = RHI::PipelineStage::ColorAttachmentOutput;
+                info.writeAccess = RHI::AccessFlag::ColorAttachmentWrite;
             }
             for (auto tex : pass->getReadTextures()) {
                 auto& info = texPassInfo[tex];
@@ -255,8 +256,8 @@ namespace StarryEngine::RenderGraph {
                 info.lastUserIndex = passIdx;
                 if (info.firstReaderIndex == -1) {
                     info.firstReaderIndex = passIdx;
-                    info.readStage = static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::FragmentShader);
-                    info.readAccess = static_cast<RHI::AccessFlags>(RHI::AccessFlag::InputAttachmentRead);
+                    info.readStage = RHI::PipelineStage::FragmentShader;
+                    info.readAccess = RHI::AccessFlag::InputAttachmentRead;
                 }
             }
         }
@@ -266,10 +267,10 @@ namespace StarryEngine::RenderGraph {
                 RHI::SubpassDependency dep{};
                 dep.srcSubpass = SUBPASS_EXTERNAL;               
                 dep.dstSubpass = 0;                               
-                dep.srcStageMask = static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::AllGraphics);
-                dep.dstStageMask = static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::FragmentShader);
-                dep.srcAccessMask = static_cast<RHI::AccessFlags>(RHI::AccessFlag::MemoryWrite);
-                dep.dstAccessMask = static_cast<RHI::AccessFlags>(RHI::AccessFlag::InputAttachmentRead);
+                dep.srcStageMask = RHI::PipelineStage::AllGraphics;
+                dep.dstStageMask = RHI::PipelineStage::FragmentShader;
+                dep.srcAccessMask = RHI::AccessFlag::MemoryWrite;
+                dep.dstAccessMask = RHI::AccessFlag::InputAttachmentRead;
                 dep.byRegion = true;                         
                 m_sortedPasses[info.firstReaderIndex]->addDependency(dep);
             }
@@ -458,7 +459,10 @@ namespace StarryEngine::RenderGraph {
 
             // 对每个交换链图像索引（或帧索引）创建对应的帧缓冲
             for (uint32_t imgIdx = 0; imgIdx < m_swapchainImageCount; ++imgIdx) {
-                std::vector<void*> attachments;                       // 附件视图列表
+                std::vector<RHI::TextureHandle> attachments;          // 有句柄的附件
+                RHI::FramebufferDesc fbDesc;
+                fbDesc.extent = { pass->getWidth(), pass->getHeight() };
+                fbDesc.layers = 1;
                 for (const auto& key : attachmentKeys) {
                     TextureId texId = pass->getTextureIdForAttachmentKey(key);
                     auto it = m_textureMap.find(texId);
@@ -466,38 +470,95 @@ namespace StarryEngine::RenderGraph {
                         throw std::runtime_error("Texture not found for key: " + key);
                     }
                     const auto& texInfo = it->second;
-                    void* view = nullptr;
-                    if (texInfo.views.size() == 1) {                  // 单视图纹理（如深度、颜色）
-                        view = texInfo.views[0];
+                    if (texInfo.handle.isValid()) {                   // 常规纹理 → 句柄（默认视图）
+                        attachments.push_back(texInfo.handle);
                     }
-                    else if (texInfo.views.size() > 1) {            // 多视图纹理（如交换链，每个图像一个视图）
-                        if (imgIdx >= texInfo.views.size()) {
-                            throw std::runtime_error("View index out of range for texture");
+                    else {                                            // 外部纹理（如交换链）→ 原生视图
+                        void* view = nullptr;
+                        if (texInfo.views.size() == 1) {              // 单视图
+                            view = texInfo.views[0];
                         }
-                        view = texInfo.views[imgIdx];
+                        else if (texInfo.views.size() > 1) {          // 多视图（每图像一个视图）
+                            if (imgIdx >= texInfo.views.size()) {
+                                throw std::runtime_error("View index out of range for texture");
+                            }
+                            view = texInfo.views[imgIdx];
+                        }
+                        else {
+                            throw std::runtime_error("No views for texture");
+                        }
+                        fbDesc.nativeAttachments.push_back(view);
                     }
-                    else {
-                        throw std::runtime_error("No views for texture");
-                    }
-                    attachments.push_back(view);
                 }
-
-                RHI::FramebufferDesc fbDesc;
-                fbDesc.renderPass = rpObj->getNativeHandle();        
-                fbDesc.attachments = attachments;                     
-                fbDesc.extent = { pass->getWidth(), pass->getHeight() }; 
-                fbDesc.layers = 1;                                     
-                auto fb = m_resMgr->createFramebuffer(fbDesc);
+                auto fb = m_resMgr->createFramebuffer(rpHandle, attachments, fbDesc);
                 framebuffersForPass.push_back(fb);
             }
             m_perPassFramebuffers.push_back(std::move(framebuffersForPass));
         }
     }
 
-    void RenderGraph::execute(RHI::RHICommandEncoder* encoder, const RenderContext& context, uint32_t frameIndex) {
+    void RenderGraph::execute(RHI::RHICommandEncoder* encoder, const RenderContext& context, uint32_t frameIndex,
+        uint32_t frameSlot, const ParallelRecordingContext* parallel) {
         if (m_sortedPasses.empty()) return;
         if (m_perPassFramebuffers.size() != m_sortedPasses.size()) {
             throw std::runtime_error("Framebuffer count mismatch in RenderGraph");
+        }
+
+        const bool parallelEnabled = (parallel != nullptr && parallel->jobs != nullptr);
+
+        // ── Phase 1（并行路径）：预分配 secondary + 逐 (pass×subpass) 提交录制 job ──
+        // 录制只是把命令写进各自的 command buffer（互不相交），依赖顺序由 Phase 2
+        // 主缓冲上的布局转换 barrier + executeCommands 保证，与录制先后无关。
+        std::vector<std::vector<void*>> secondaries;   // secondaries[i][sub] = pass i subpass sub 的 native secondary 句柄
+        if (parallelEnabled) {
+            secondaries.resize(m_sortedPasses.size());
+            for (size_t i = 0; i < m_sortedPasses.size(); ++i) {
+                auto* pass = m_sortedPasses[i];
+                if (!pass->isEnabled()) continue;   // 禁用 pass：Phase 2 用 Inline 空体（保持 clear 语义）
+
+                const bool isCompute = (pass->getType() == PassType::Compute);
+                const uint32_t subpassCount = isCompute ? 1u : pass->getSubpassCount();
+                RHI::FramebufferHandle fb = isCompute
+                    ? RHI::FramebufferHandle{}
+                    : m_perPassFramebuffers[i][frameIndex];
+
+                // 继承信息（compute 不需要渲染通道继承）
+                RHI::RenderPassHandle nativeRP = RHI::RenderPassHandle{};
+                RHI::FramebufferHandle nativeFB = RHI::FramebufferHandle{};
+                if (!isCompute) {
+                    nativeRP = pass->getRenderPassHandle();
+                    nativeFB = fb;
+                    if (!nativeRP.isValid() || !nativeFB.isValid()) {
+                        LOG_WARN("[{}] 并行录制：renderPass={} fb={} — 跳过", pass->getName(),
+                            nativeRP.isValid(), nativeFB.isValid());
+                        continue;
+                    }
+                }
+
+                // 预置槽位：每个 job 只写自己的下标（互不相交），主线程 waitAll 后才读 → 无锁安全
+                secondaries[i].resize(subpassCount, nullptr);
+                for (uint32_t sub = 0; sub < subpassCount; ++sub) {
+                    // 分配 + beginSecondary 都移进 job（在"执行线程"上做）：
+                    // 执行线程从自己的 per-worker 命令池取 secondary，避免多线程并发录同一池
+                    // （验证层 UNASSIGNED-Threading-MultipleThreads-Write → NVIDIA 驱动 submit 段错误）。
+                    parallel->jobs->submit(
+                        [pass, alloc = parallel->allocateSecondary, ctx = context, frameIndex, fb, sub,
+                         nativeRP, nativeFB, isCompute, frameSlot, slot = &secondaries[i][sub]]() {
+                            auto sec = alloc(JobSystem::currentWorkerIndex());
+                            if (!sec) return;
+                            if (isCompute) {
+                                sec->beginSecondary({ .renderPassContinue = false });
+                            } else {
+                                sec->beginSecondary({ .renderPass = nativeRP, .framebuffer = nativeFB,
+                                                     .subpass = sub, .renderPassContinue = true });
+                            }
+                            pass->recordBody(sec.get(), ctx, frameIndex, fb, sub, frameSlot);
+                            sec->end();   // vkEndCommandBuffer：Phase 2 才能 executeCommands
+                            *slot = sec->getCommandBuffer();   // 存 native 句柄给 Phase 2
+                        });
+                }
+            }
+            parallel->jobs->waitAll();   // 帧 barrier：全部 secondary 录完
         }
 
         std::unordered_map<TextureId, RHI::ImageLayout> currentLayouts;
@@ -545,7 +606,31 @@ namespace StarryEngine::RenderGraph {
                 ++transIt;
             }
 
-            pass->execute(encoder, context,frameIndex, fb);
+            if (!parallelEnabled) {
+                // ── 原串行路径（软开关第 0 级）：行为与单线程完全一致 ──
+                pass->execute(encoder, context, frameIndex, fb, frameSlot);
+            } else if (pass->getType() == PassType::Compute) {
+                // ── 并行路径：compute pass 直接在主缓冲执行已录好的 secondary ──
+                if (!secondaries[i].empty() && secondaries[i][0] != nullptr) {
+                    encoder->executeCommands(secondaries[i]);
+                }
+            } else {
+                if (secondaries[i].empty()) {
+                    // 禁用的 graphics pass：Inline 空体 begin/end，保持 loadOp 的 clear 语义
+                    pass->beginPassOnPrimary(encoder, fb, RHI::SubpassContents::Inline);
+                    pass->endPassOnPrimary(encoder);
+                } else {
+                    pass->beginPassOnPrimary(encoder, fb, RHI::SubpassContents::SecondaryCommandBuffers);
+                    for (uint32_t sub = 0; sub < secondaries[i].size(); ++sub) {
+                        if (secondaries[i][sub] == nullptr) continue;   // job 分配失败则跳过该 subpass
+                        if (sub > 0) {
+                            pass->nextSubpassOnPrimary(encoder, RHI::SubpassContents::SecondaryCommandBuffers);
+                        }
+                        encoder->executeCommands({ secondaries[i][sub] });
+                    }
+                    pass->endPassOnPrimary(encoder);
+                }
+            }
 
             auto allTex = pass->getReadTextures();
             allTex.insert(pass->getWriteTextures().begin(), pass->getWriteTextures().end());
@@ -588,40 +673,32 @@ namespace StarryEngine::RenderGraph {
         return m_perPassFramebuffers[passIndex];
     }
 
-    std::pair<RHI::PipelineStageFlags, RHI::AccessFlags> RenderGraph::getStageAccessFromLayout(RHI::ImageLayout layout) {
+    std::pair<RHI::PipelineStage, RHI::AccessFlag> RenderGraph::getStageAccessFromLayout(RHI::ImageLayout layout) {
         switch (layout) {
         case RHI::ImageLayout::Undefined:
-            return { static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::TopOfPipe),
-                     static_cast<RHI::AccessFlags>(RHI::AccessFlag::None) };
+            return { RHI::PipelineStage::TopOfPipe, RHI::AccessFlag::None };
         case RHI::ImageLayout::ColorAttachment:
-            return { static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::ColorAttachmentOutput),
-                     static_cast<RHI::AccessFlags>(RHI::AccessFlag::ColorAttachmentWrite) };
+            return { RHI::PipelineStage::ColorAttachmentOutput, RHI::AccessFlag::ColorAttachmentWrite };
         case RHI::ImageLayout::DepthStencilAttachment:
-            return { static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::EarlyFragmentTests),
-                     static_cast<RHI::AccessFlags>(RHI::AccessFlag::DepthStencilAttachmentWrite) };
+            return { RHI::PipelineStage::EarlyFragmentTests, RHI::AccessFlag::DepthStencilAttachmentWrite };
         case RHI::ImageLayout::ShaderReadOnly:
-            return { static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::FragmentShader),
-                     static_cast<RHI::AccessFlags>(RHI::AccessFlag::ShaderRead) };
+            return { RHI::PipelineStage::FragmentShader, RHI::AccessFlag::ShaderRead };
         case RHI::ImageLayout::TransferSrc:
-            return { static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::Transfer),
-                     static_cast<RHI::AccessFlags>(RHI::AccessFlag::TransferRead) };
+            return { RHI::PipelineStage::Transfer, RHI::AccessFlag::TransferRead };
         case RHI::ImageLayout::TransferDst:
-            return { static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::Transfer),
-                     static_cast<RHI::AccessFlags>(RHI::AccessFlag::TransferWrite) };
+            return { RHI::PipelineStage::Transfer, RHI::AccessFlag::TransferWrite };
         case RHI::ImageLayout::PresentSrc:
-            return { static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::BottomOfPipe),
-                     static_cast<RHI::AccessFlags>(RHI::AccessFlag::None) };
+            return { RHI::PipelineStage::BottomOfPipe, RHI::AccessFlag::None };
         default:
-            return { static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::AllCommands),
-                     static_cast<RHI::AccessFlags>(RHI::AccessFlag::MemoryRead | RHI::AccessFlag::MemoryWrite) };
+            return { RHI::PipelineStage::AllCommands,
+                     RHI::AccessFlag::MemoryRead | RHI::AccessFlag::MemoryWrite };
         }
     }
 
-    std::pair<RHI::PipelineStageFlags, RHI::AccessFlags> RenderGraph::getReadStageAccess(
+    std::pair<RHI::PipelineStage, RHI::AccessFlag> RenderGraph::getReadStageAccess(
         RHI::ImageLayout layout, bool computeReader) {
         if (computeReader && layout == RHI::ImageLayout::ShaderReadOnly)
-            return { static_cast<RHI::PipelineStageFlags>(RHI::PipelineStage::ComputeShader),
-                     static_cast<RHI::AccessFlags>(RHI::AccessFlag::ShaderRead) };
+            return { RHI::PipelineStage::ComputeShader, RHI::AccessFlag::ShaderRead };
         return getStageAccessFromLayout(layout);
     }
 

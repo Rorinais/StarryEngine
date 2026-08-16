@@ -53,7 +53,7 @@ public:
         m_renderer->createGlobalUniformBuffer();
         m_renderer->initDefaultMaterials();
         m_setLayout = m_renderer->getGlobalSetLayout();
-        m_descSet = m_renderer->getGlobalDescriptorSet();
+        m_descSet = m_renderer->getGlobalDescriptorSet(0);   // 构造注入的 globalSet 是废码，取槽 0 句柄
 
         auto path = std::make_shared<DeferredRenderPath>(m_rhi, m_w, m_h);
         path->setScene(m_scene.get());

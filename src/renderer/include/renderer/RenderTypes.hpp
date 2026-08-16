@@ -2,10 +2,13 @@
 
 #include <vector>
 #include <memory>
+#include <array>
 #include <functional>
 #include <unordered_map>
 #include <utils/Hash.hpp>
-#include <renderer/interface/RHI_TYPES.hpp>
+#include <renderer/interface/IRHI.hpp>
+#include <renderer/interface/RHIEnums.hpp>
+#include <renderer/interface/RHIHandles.hpp>
 
 namespace StarryEngine::Scene {
     struct RenderObject;   
@@ -23,11 +26,13 @@ namespace StarryEngine {
     };
 
     // 单次 draw call 的渲染数据。由 SceneAnalyzer 从 RenderObject 生成。
+    // per-slot（ADR-6）：描述符集与实例缓冲都按帧槽位双份——帧 N 录制的绑定引 slot N%2 的描述符
+    // 与实例缓冲；集 0 每槽指向 SceneAnalyzer 的 per-slot global set。
     struct DrawItem {
         DrawItemType type = DrawItemType::Mesh;
 
         std::string passTag;
-        std::unordered_map<uint32_t, RHI::DescriptorSetHandle> descriptorSets;
+        std::array<std::unordered_map<uint32_t, RHI::DescriptorSetHandle>, RHI::kMaxFramesInFlight> descriptorSets;
         uint32_t pipelineIndex = 0;
         std::weak_ptr<Scene::RenderObject> object;
 
@@ -38,7 +43,7 @@ namespace StarryEngine {
 
         bool isInstanced = false;
         uint32_t instanceCount = 1;
-        RHI::BufferHandle instanceBuffer;
+        std::array<RHI::BufferHandle, RHI::kMaxFramesInFlight> instanceBuffer;
         uint32_t instanceBufferStride = 0;
 
         uint32_t vertexCount = 0;

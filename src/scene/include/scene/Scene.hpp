@@ -1,10 +1,13 @@
 #pragma once
 #include <vector>
 #include <memory>
+#include <array>
 #include <functional>
 #include <unordered_map>
 #include <assets/Assets.hpp>
 #include <core/Clock.hpp>
+#include <renderer/interface/IRHI.hpp>
+#include <renderer/interface/RHIHandles.hpp>
 #include <scene/camera/OrthographicCamera.hpp>
 #include <scene/camera/PerspectiveCamera.hpp>
 #include <scene/animation/Animator.hpp>
@@ -18,7 +21,9 @@ namespace StarryEngine::Scene {
         std::vector<std::shared_ptr<Assets::MaterialInstance>> materials;
 
         std::vector<glm::mat4> instanceTransforms;
-        RHI::BufferHandle instanceBuffer;   // 轻量句柄，值语义（与 DrawItem 一致）
+        // 实例缓冲按帧槽位双份（ADR-6 per-slot）：帧 N CPU 写槽 N%2，GPU(N) 只读该槽，
+        // 避免"下一帧 CPU 写覆盖在途帧读"。轻量句柄，值语义（与 DrawItem 一致）。
+        std::array<RHI::BufferHandle, RHI::kMaxFramesInFlight> instanceBuffers;
         bool isInstanced = false;
 
         // 变换动画组件（可选）。由 Scene::update 驱动，改写 transform。

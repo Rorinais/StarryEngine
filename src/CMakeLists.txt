@@ -64,3 +64,11 @@ add_engine_executable(
     TEXTURES_DIR ${TEXTURES_DIR}
     ICONS_DIR ${ICONS_DIR}
 )
+
+# JobSystem 自测：核心多线程地基，纯命令行无资源。验证线程/同步两模式 +
+# 并发 submit + worker 内嵌套 submit。产物 <构建目录>/JobSystem_test/
+add_executable(JobSystem_test test/JobSystem_test.cpp)
+target_link_libraries(JobSystem_test PRIVATE core)
+set_target_properties(JobSystem_test PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/JobSystem_test
+)

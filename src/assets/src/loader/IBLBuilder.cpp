@@ -120,7 +120,7 @@ namespace StarryEngine::Assets {
     };
 
     IBLBuilder::IBLBuilder(std::shared_ptr<RHI::ResourceManager> resMgr,std::shared_ptr<RHI::IRHI> rhi)
-        : m_resMgr(std::move(resMgr)), m_rhi(std::move(rhi)){
+        : m_resMgr(std::move(resMgr)), m_rhi(std::move(rhi)) {
 
         Assets::ShaderLoader shaderLoader(m_resMgr);
         auto vsInfo = shaderLoader.loadFromFile("assets/shaders/ibl/equirect_to_cubemap.vert", RHI::ShaderStage::Vertex);
@@ -252,31 +252,28 @@ namespace StarryEngine::Assets {
             void* nativeView = m_resMgr->getTexture(cubemap)->getNativeHandleFromView(viewKey);
 
             RHI::FramebufferDesc fbDesc;
-            fbDesc.renderPass = m_resMgr->getRenderPass(renderPass)->getNativeHandle();
             fbDesc.extent = { faceSize, faceSize };
-            fbDesc.attachments = { nativeView };
             fbDesc.layers = 1;
-            framebuffers[face] = m_resMgr->createFramebuffer(fbDesc);
+            fbDesc.nativeAttachments = { nativeView };
+            framebuffers[face] = m_resMgr->createFramebuffer(renderPass, {}, fbDesc);
         }
 
         {
             OneTimeCommandExecutor executor(m_rhi.get(), m_resMgr.get());
             auto* cmd = executor.get();
-            auto* pipelineObj = m_resMgr->getPipeline(pipeline);
-            auto* pipelineLayoutObj = m_resMgr->getPipelineLayout(m_pipelineLayout);
 
             for (int face = 0; face < 6; ++face) {
                 RHI::RenderPassBeginInfo rpBegin;
-                rpBegin.renderPass = m_resMgr->getRenderPass(renderPass)->getNativeHandle();
-                rpBegin.framebuffer = m_resMgr->getFramebuffer(framebuffers[face])->getNativeHandle();
+                rpBegin.renderPass = renderPass;
+                rpBegin.framebuffer = framebuffers[face];
                 rpBegin.renderArea = { {0, 0}, {faceSize, faceSize} };
                 rpBegin.clearValues = { {0.0f, 0.0f, 0.0f, 0.0f} };
                 cmd->beginRenderPass(rpBegin, RHI::SubpassContents::Inline);
-                cmd->bindPipeline(pipelineObj);
-                cmd->bindDescriptorSets(RHI::PipelineBindPoint::Graphics, pipelineLayoutObj,
+                cmd->bindGraphicPipeline(pipeline);
+                cmd->bindDescriptorSets(RHI::PipelineBindPoint::Graphics, m_pipelineLayout,
                     0, { descSet }, {});
                 struct { int face; float faceSize; } pc = { face, float(faceSize) };
-                cmd->pushConstants(pipelineLayoutObj, RHI::ShaderStage::Fragment,
+                cmd->pushConstants(m_pipelineLayout, RHI::ShaderStage::Fragment,
                     0, sizeof(pc), &pc);
                 cmd->setViewport({ 0.0f, 0.0f, float(faceSize), float(faceSize), 0.0f, 1.0f });
                 cmd->setScissor({ {0, 0}, {faceSize, faceSize} });
@@ -355,8 +352,8 @@ namespace StarryEngine::Assets {
                         RHI::ImageLayout::General,
                         RHI::PipelineStage::TopOfPipe,
                         RHI::PipelineStage::ComputeShader,
-                        static_cast<RHI::AccessFlags>(0),
-                        static_cast<RHI::AccessFlags>(RHI::AccessFlag::ShaderWrite),
+                        RHI::AccessFlag::None,
+                        RHI::AccessFlag::ShaderWrite,
                         mipRange);
 
                     std::vector<void*> faceViews;
@@ -388,15 +385,15 @@ namespace StarryEngine::Assets {
                     {
                         OneTimeCommandExecutor dsExec(m_rhi.get(), m_resMgr.get());
                         auto* dsCmd = dsExec.get();
-                        dsCmd->bindComputePipeline(m_resMgr->getPipeline(dsPipeline));
+                        dsCmd->bindComputePipeline(dsPipeline);
 
                         for (int f = 0; f < 6; ++f) {
                             dsCmd->bindDescriptorSets(RHI::PipelineBindPoint::Compute,
-                                m_resMgr->getPipelineLayout(dsPlLayout), 0,
+                                dsPlLayout, 0,
                                 { faceDescSets[f] }, {});
                             struct { int face; float srcSize; } pc;
                             pc.face = f; pc.srcSize = float(srcSize);
-                            dsCmd->pushConstants(m_resMgr->getPipelineLayout(dsPlLayout),
+                            dsCmd->pushConstants(dsPlLayout,
                                 RHI::ShaderStage::Compute, 0, sizeof(pc), &pc);
                             dsCmd->dispatch(gx, gy, 1);
                         }
@@ -409,8 +406,8 @@ namespace StarryEngine::Assets {
                         RHI::ImageLayout::ShaderReadOnly,
                         RHI::PipelineStage::ComputeShader,
                         RHI::PipelineStage::AllCommands,
-                        static_cast<RHI::AccessFlags>(RHI::AccessFlag::ShaderWrite),
-                        static_cast<RHI::AccessFlags>(RHI::AccessFlag::ShaderRead),
+                        RHI::AccessFlag::ShaderWrite,
+                        RHI::AccessFlag::ShaderRead,
                         mipRange);
                 }
 
@@ -496,29 +493,26 @@ namespace StarryEngine::Assets {
             void* vk = m_resMgr->getTexture(irradMap)->createView(range, RHI::ImageViewType::Texture2D);
             void* nv = m_resMgr->getTexture(irradMap)->getNativeHandleFromView(vk);
             RHI::FramebufferDesc fbDesc;
-            fbDesc.renderPass = m_resMgr->getRenderPass(renderPass)->getNativeHandle();
             fbDesc.extent = { outputSize, outputSize };
-            fbDesc.attachments = { nv };
             fbDesc.layers = 1;
-            framebuffers[face] = m_resMgr->createFramebuffer(fbDesc);
+            fbDesc.nativeAttachments = { nv };
+            framebuffers[face] = m_resMgr->createFramebuffer(renderPass, {}, fbDesc);
         }
 
         {
             OneTimeCommandExecutor executor(m_rhi.get(), m_resMgr.get());
             auto* cmd = executor.get();
-            auto* ppl = m_resMgr->getPipeline(pipeline);
-            auto* plo = m_resMgr->getPipelineLayout(plLayout);
             for (int face = 0; face < 6; ++face) {
                 RHI::RenderPassBeginInfo rpBegin;
-                rpBegin.renderPass = m_resMgr->getRenderPass(renderPass)->getNativeHandle();
-                rpBegin.framebuffer = m_resMgr->getFramebuffer(framebuffers[face])->getNativeHandle();
+                rpBegin.renderPass = renderPass;
+                rpBegin.framebuffer = framebuffers[face];
                 rpBegin.renderArea = { {0, 0}, {outputSize, outputSize} };
                 rpBegin.clearValues = { {0.0f, 0.0f, 0.0f, 0.0f} };
                 cmd->beginRenderPass(rpBegin, RHI::SubpassContents::Inline);
-                cmd->bindPipeline(ppl);
-                cmd->bindDescriptorSets(RHI::PipelineBindPoint::Graphics, plo, 0, { descSet }, {});
+                cmd->bindGraphicPipeline(pipeline);
+                cmd->bindDescriptorSets(RHI::PipelineBindPoint::Graphics, plLayout, 0, { descSet }, {});
                 struct { int face; float faceSize; } pc = { face, float(outputSize) };
-                cmd->pushConstants(plo, RHI::ShaderStage::Fragment, 0, sizeof(pc), &pc);
+                cmd->pushConstants(plLayout, RHI::ShaderStage::Fragment, 0, sizeof(pc), &pc);
                 cmd->setViewport({ 0.0f, 0.0f, float(outputSize), float(outputSize), 0.0f, 1.0f });
                 cmd->setScissor({ {0, 0}, {outputSize, outputSize} });
                 cmd->draw(3, 1, 0, 0);
@@ -602,8 +596,6 @@ namespace StarryEngine::Assets {
         {
             OneTimeCommandExecutor executor(m_rhi.get(), m_resMgr.get());
             auto* cmd = executor.get();
-            auto* ppl = m_resMgr->getPipeline(pipeline);
-            auto* plo = m_resMgr->getPipelineLayout(plLayout);
 
             float sourceFaceSize = static_cast<float>(m_resMgr->getTexture(envCubemap)->getExtent().width);
             for (uint32_t mip = 0; mip < mipLevels; ++mip) {
@@ -621,25 +613,24 @@ namespace StarryEngine::Assets {
                     tempViews.push_back(vk);
 
                     RHI::FramebufferDesc fbDesc;
-                    fbDesc.renderPass = m_resMgr->getRenderPass(renderPass)->getNativeHandle();
                     fbDesc.extent = { mipSize, mipSize };
-                    fbDesc.attachments = { nv };
                     fbDesc.layers = 1;
-                    auto fb = m_resMgr->createFramebuffer(fbDesc);
+                    fbDesc.nativeAttachments = { nv };
+                    auto fb = m_resMgr->createFramebuffer(renderPass, {}, fbDesc);
                     tempFBs.push_back(fb);
 
                     RHI::RenderPassBeginInfo rpBegin;
-                    rpBegin.renderPass = m_resMgr->getRenderPass(renderPass)->getNativeHandle();
-                    rpBegin.framebuffer = m_resMgr->getFramebuffer(fb)->getNativeHandle();
+                    rpBegin.renderPass = renderPass;
+                    rpBegin.framebuffer = fb;
                     rpBegin.renderArea = { {0, 0}, {mipSize, mipSize} };
                     rpBegin.clearValues = { {0.0f, 0.0f, 0.0f, 0.0f} };
                     cmd->beginRenderPass(rpBegin, RHI::SubpassContents::Inline);
-                    cmd->bindPipeline(ppl);
-                    cmd->bindDescriptorSets(RHI::PipelineBindPoint::Graphics, plo, 0, { descSet }, {});
+                    cmd->bindGraphicPipeline(pipeline);
+                    cmd->bindDescriptorSets(RHI::PipelineBindPoint::Graphics, plLayout, 0, { descSet }, {});
                     struct { int face; float faceSize; float roughness; float envResolution; } pc;
                     pc.face = face; pc.faceSize = float(mipSize); pc.roughness = roughness;
                     pc.envResolution = sourceFaceSize;
-                    cmd->pushConstants(plo, RHI::ShaderStage::Fragment, 0, sizeof(pc), &pc);
+                    cmd->pushConstants(plLayout, RHI::ShaderStage::Fragment, 0, sizeof(pc), &pc);
                     cmd->setViewport({ 0.0f, 0.0f, float(mipSize), float(mipSize), 0.0f, 1.0f });
                     cmd->setScissor({ {0, 0}, {mipSize, mipSize} });
                     cmd->draw(3, 1, 0, 0);
@@ -698,22 +689,21 @@ namespace StarryEngine::Assets {
         void* vk = m_resMgr->getTexture(brdfLut)->createView(range, RHI::ImageViewType::Texture2D);
         void* nv = m_resMgr->getTexture(brdfLut)->getNativeHandleFromView(vk);
         RHI::FramebufferDesc fbDesc;
-        fbDesc.renderPass = m_resMgr->getRenderPass(renderPass)->getNativeHandle();
         fbDesc.extent = { size, size };
-        fbDesc.attachments = { nv };
         fbDesc.layers = 1;
-        auto framebuffer = m_resMgr->createFramebuffer(fbDesc);
+        fbDesc.nativeAttachments = { nv };
+        auto framebuffer = m_resMgr->createFramebuffer(renderPass, {}, fbDesc);
 
         {
             OneTimeCommandExecutor executor(m_rhi.get(), m_resMgr.get());
             auto* cmd = executor.get();
             RHI::RenderPassBeginInfo rpBegin;
-            rpBegin.renderPass = m_resMgr->getRenderPass(renderPass)->getNativeHandle();
-            rpBegin.framebuffer = m_resMgr->getFramebuffer(framebuffer)->getNativeHandle();
+            rpBegin.renderPass = renderPass;
+            rpBegin.framebuffer = framebuffer;
             rpBegin.renderArea = { {0, 0}, {size, size} };
             rpBegin.clearValues = { {0.0f, 0.0f, 0.0f, 0.0f} };
             cmd->beginRenderPass(rpBegin, RHI::SubpassContents::Inline);
-            cmd->bindPipeline(m_resMgr->getPipeline(pipeline));
+            cmd->bindGraphicPipeline(pipeline);
             cmd->setViewport({ 0.0f, 0.0f, float(size), float(size), 0.0f, 1.0f });
             cmd->setScissor({ {0, 0}, {size, size} });
             cmd->draw(3, 1, 0, 0);
@@ -830,16 +820,16 @@ namespace StarryEngine::Assets {
                 RHI::ImageLayout::General,
                 RHI::PipelineStage::TopOfPipe,
                 RHI::PipelineStage::ComputeShader,
-                static_cast<RHI::AccessFlags>(0),
-                static_cast<RHI::AccessFlags>(RHI::AccessFlag::ShaderWrite),
+                RHI::AccessFlag::None,
+                RHI::AccessFlag::ShaderWrite,
                 allMips);
 
-            cmd->bindComputePipeline(m_resMgr->getPipeline(pipeline));
+            cmd->bindComputePipeline(pipeline);
             cmd->bindDescriptorSets(RHI::PipelineBindPoint::Compute,
-                m_resMgr->getPipelineLayout(plLayout), 0, { descSet }, {});
+                plLayout, 0, { descSet }, {});
 
             uint32_t fs = faceSize;
-            cmd->pushConstants(m_resMgr->getPipelineLayout(plLayout),
+            cmd->pushConstants(plLayout,
                 RHI::ShaderStage::Compute, 0, sizeof(uint32_t), &fs);
 
             uint32_t gx = (faceSize + 15) / 16;
@@ -860,8 +850,8 @@ namespace StarryEngine::Assets {
                 RHI::ImageLayout::ShaderReadOnly,
                 RHI::PipelineStage::ComputeShader,
                 RHI::PipelineStage::ComputeShader,
-                static_cast<RHI::AccessFlags>(RHI::AccessFlag::ShaderWrite),
-                static_cast<RHI::AccessFlags>(RHI::AccessFlag::ShaderRead),
+                RHI::AccessFlag::ShaderWrite,
+                RHI::AccessFlag::ShaderRead,
                 mip0Range);
         }
 
@@ -951,15 +941,15 @@ namespace StarryEngine::Assets {
                     {
                         OneTimeCommandExecutor dsExec(m_rhi.get(), m_resMgr.get());
                         auto* dsCmd = dsExec.get();
-                        dsCmd->bindComputePipeline(m_resMgr->getPipeline(dsPipeline));
+                        dsCmd->bindComputePipeline(dsPipeline);
 
                         for (int f = 0; f < 6; ++f) {
                             dsCmd->bindDescriptorSets(RHI::PipelineBindPoint::Compute,
-                                m_resMgr->getPipelineLayout(dsPlLayout), 0,
+                                dsPlLayout, 0,
                                 { faceDescSets[f] }, {});
                             struct { int face; float srcSize; } pc;
                             pc.face = f; pc.srcSize = float(srcSize);
-                            dsCmd->pushConstants(m_resMgr->getPipelineLayout(dsPlLayout),
+                            dsCmd->pushConstants(dsPlLayout,
                                 RHI::ShaderStage::Compute, 0, sizeof(pc), &pc);
                             dsCmd->dispatch(gx, gy, 1);
                         }
@@ -978,8 +968,8 @@ namespace StarryEngine::Assets {
                         RHI::ImageLayout::ShaderReadOnly,
                         RHI::PipelineStage::ComputeShader,
                         RHI::PipelineStage::AllCommands,
-                        static_cast<RHI::AccessFlags>(RHI::AccessFlag::ShaderWrite),
-                        static_cast<RHI::AccessFlags>(RHI::AccessFlag::ShaderRead),
+                        RHI::AccessFlag::ShaderWrite,
+                        RHI::AccessFlag::ShaderRead,
                         mipRange);
                 }
 
@@ -1101,14 +1091,14 @@ namespace StarryEngine::Assets {
                 RHI::ImageLayout::General,
                 RHI::PipelineStage::TopOfPipe,
                 RHI::PipelineStage::ComputeShader,
-                static_cast<RHI::AccessFlags>(0),
-                static_cast<RHI::AccessFlags>(RHI::AccessFlag::ShaderWrite),range);
+                RHI::AccessFlag::None,
+                RHI::AccessFlag::ShaderWrite, range);
 
-            cmd->bindComputePipeline(m_resMgr->getPipeline(pipeline));
-            cmd->bindDescriptorSets(RHI::PipelineBindPoint::Compute,m_resMgr->getPipelineLayout(plLayout), 0, { descSet }, {});
+            cmd->bindComputePipeline(pipeline);
+            cmd->bindDescriptorSets(RHI::PipelineBindPoint::Compute,plLayout, 0, { descSet }, {});
 
             uint32_t fs = outputSize;
-            cmd->pushConstants(m_resMgr->getPipelineLayout(plLayout),RHI::ShaderStage::Compute, 0, sizeof(uint32_t), &fs);
+            cmd->pushConstants(plLayout,RHI::ShaderStage::Compute, 0, sizeof(uint32_t), &fs);
 
             uint32_t gx = (outputSize + 15) / 16;
             uint32_t gy = (outputSize + 15) / 16;
@@ -1121,8 +1111,8 @@ namespace StarryEngine::Assets {
             RHI::ImageLayout::ShaderReadOnly,
             RHI::PipelineStage::ComputeShader,
             RHI::PipelineStage::AllCommands,
-            static_cast<RHI::AccessFlags>(RHI::AccessFlag::ShaderWrite),
-            static_cast<RHI::AccessFlags>(RHI::AccessFlag::ShaderRead),range);
+            RHI::AccessFlag::ShaderWrite,
+            RHI::AccessFlag::ShaderRead,range);
 
         irradObj->destroyView(cubeViewKey);
         m_resMgr->destroy(descSet);
@@ -1257,8 +1247,8 @@ namespace StarryEngine::Assets {
                 RHI::ImageLayout::General,
                 RHI::PipelineStage::TopOfPipe,
                 RHI::PipelineStage::ComputeShader,
-                static_cast<RHI::AccessFlags>(0),
-                static_cast<RHI::AccessFlags>(RHI::AccessFlag::ShaderWrite),
+                RHI::AccessFlag::None,
+                RHI::AccessFlag::ShaderWrite,
                 allMipsAndLayers);
 
             float sourceFaceSize = static_cast<float>(envTexObj->getExtent().width);
@@ -1270,9 +1260,9 @@ namespace StarryEngine::Assets {
                 uint32_t gy = (mipSize + 15) / 16;
 
                 for (int face = 0; face < 6; ++face) {
-                    cmd->bindComputePipeline(m_resMgr->getPipeline(pipeline));
+                    cmd->bindComputePipeline(pipeline);
                     cmd->bindDescriptorSets(RHI::PipelineBindPoint::Compute,
-                        m_resMgr->getPipelineLayout(plLayout), 0,
+                        plLayout, 0,
                         { allDescSets[setIdx] }, {});
 
                     struct { int face; float faceSize; float roughness; float envResolution; } pc;
@@ -1280,7 +1270,7 @@ namespace StarryEngine::Assets {
                     pc.faceSize = float(mipSize);
                     pc.roughness = roughness;
                     pc.envResolution = sourceFaceSize;
-                    cmd->pushConstants(m_resMgr->getPipelineLayout(plLayout),
+                    cmd->pushConstants(plLayout,
                         RHI::ShaderStage::Compute, 0, sizeof(pc), &pc);
 
                     cmd->dispatch(gx, gy, 1);
@@ -1304,8 +1294,8 @@ namespace StarryEngine::Assets {
             RHI::ImageLayout::ShaderReadOnly,
             RHI::PipelineStage::ComputeShader,
             RHI::PipelineStage::AllCommands,
-            static_cast<RHI::AccessFlags>(RHI::AccessFlag::ShaderWrite),
-            static_cast<RHI::AccessFlags>(RHI::AccessFlag::ShaderRead),
+            RHI::AccessFlag::ShaderWrite,
+            RHI::AccessFlag::ShaderRead,
             allMipsAndLayers);
 
         m_resMgr->destroy(pool);
@@ -1383,15 +1373,15 @@ namespace StarryEngine::Assets {
                 RHI::ImageLayout::General,
                 RHI::PipelineStage::TopOfPipe,
                 RHI::PipelineStage::ComputeShader,
-                static_cast<RHI::AccessFlags>(0),
-                static_cast<RHI::AccessFlags>(RHI::AccessFlag::ShaderWrite),
+                RHI::AccessFlag::None,
+                RHI::AccessFlag::ShaderWrite,
                 range);
 
             m_resMgr->getDescriptorSet(descSet)->update();
 
-            cmd->bindComputePipeline(m_resMgr->getPipeline(pipeline));
+            cmd->bindComputePipeline(pipeline);
             cmd->bindDescriptorSets(RHI::PipelineBindPoint::Compute,
-                m_resMgr->getPipelineLayout(plLayout), 0, { descSet }, {});
+                plLayout, 0, { descSet }, {});
 
             uint32_t gx = (size + 15) / 16;
             uint32_t gy = (size + 15) / 16;
@@ -1403,8 +1393,8 @@ namespace StarryEngine::Assets {
             RHI::ImageLayout::ShaderReadOnly,
             RHI::PipelineStage::ComputeShader,
             RHI::PipelineStage::AllCommands,
-            static_cast<RHI::AccessFlags>(RHI::AccessFlag::ShaderWrite),
-            static_cast<RHI::AccessFlags>(RHI::AccessFlag::ShaderRead),
+            RHI::AccessFlag::ShaderWrite,
+            RHI::AccessFlag::ShaderRead,
             range);
 
         m_resMgr->destroy(descSet);
@@ -1454,8 +1444,8 @@ namespace StarryEngine::Assets {
                 RHI::ImageLayout::ShaderReadOnly,
                 RHI::PipelineStage::Transfer,
                 RHI::PipelineStage::FragmentShader,
-                static_cast<RHI::AccessFlags>(RHI::AccessFlag::TransferWrite),
-                static_cast<RHI::AccessFlags>(RHI::AccessFlag::ShaderRead),
+                RHI::AccessFlag::TransferWrite,
+                RHI::AccessFlag::ShaderRead,
                 range);
         }
         stbi_image_free(pixels);
