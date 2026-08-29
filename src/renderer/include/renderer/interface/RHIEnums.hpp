@@ -5,23 +5,12 @@
 
 namespace StarryEngine::RHI {
 
-    // ============================================================================
-    // 位标志枚举统一支持
-    // ----------------------------------------------------------------------------
-    // 用法：任何位标志枚举定义完后加一行
-    //     STARRY_DEFINE_BITMASK(枚举名);
-    // 即可获得 | & ~ |= &= hasFlag，无需为每个枚举手写重载。
-    // 类型安全：只有注册过的枚举能位运算，误用（如 Format|Format）编译期报错。
-    // ============================================================================
-
-    // 1. 位掩码特征：默认不是位掩码
     template <typename E>
     struct IsBitmask : std::false_type {};
 
 #define STARRY_DEFINE_BITMASK(E)                                        \
     template <> struct IsBitmask<E> : std::true_type {}
 
-    // 2. 泛型位运算（SFINAE：只对注册过的枚举生效）
     template <typename E>
     constexpr std::enable_if_t<IsBitmask<E>::value, E>
     operator|(E a, E b) noexcept {
@@ -54,7 +43,6 @@ namespace StarryEngine::RHI {
         return a = a & b;
     }
 
-    // 3. 判断"包含某位"：比 (flags & bit) != 0 可读
     template <typename E>
     constexpr std::enable_if_t<IsBitmask<E>::value, bool>
     hasFlag(E flags, E bit) noexcept {

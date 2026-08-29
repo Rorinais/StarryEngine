@@ -30,14 +30,11 @@ namespace StarryEngine {
 
         void addTextureDesc(std::string name, RHI::TextureDesc desc);
         void setTextureDescs(const std::unordered_map<std::string, RHI::TextureDesc>& descs);
-        // globalDescSets 按帧槽位（ADR-6）：呈现/粒子 execute 按 pctx.getFrameSlot() 取
         void setPresentationDescriptorData(RHI::DescriptorSetLayoutHandle globalSetLayout,
             std::vector<RHI::DescriptorSetHandle> globalDescSets);
 
-        // 透明窗口：present 清屏色可配（alpha=0 让桌面透过来）
         void setPresentClearColor(const RHI::Color& color) { m_presentClearColor = color; }
 
-        // 场景数据源：放入黑板，pass 建图时通过 configure 的 RenderBlackboard 按类型取（粒子 pass 等）
         void setScene(Scene::Scene* scene) { m_blackboard.put<Scene::Scene*>(scene); }
 
         void addOverlayPass(const OverlayPassDesc& desc) override { m_overlayPasses.push_back(desc); }
@@ -61,17 +58,13 @@ namespace StarryEngine {
 
         bool buildGraph();
         std::unordered_map<std::string, RenderGraph::TextureId> buildTextureIdMap();
+        bool hasSceneColorClearPass() const;
 
-        // 呈现层：自动管理 Swapchain 输出
         void buildPresentationPasses(std::unordered_map<std::string, RenderGraph::TextureId>& texIdMap);
         void buildPresentationPass(std::unordered_map<std::string, RenderGraph::TextureId>& texIdMap);
-
-        // 编译 + 内建 Pass 管线
         bool compileAndFinalize(std::unordered_map<std::string, RenderGraph::TextureId>& texIdMap);
-        // 呈现 executor 自建管线（PresentationExecutor::onPrepare），这里只负责把编译好的 render pass 传给它
         void preparePresentationExecutor();
 
-        // ── 子类可访问的数据 ──
         std::shared_ptr<RHI::IRHI> m_rhi;
         std::shared_ptr<RHI::ResourceManager> m_resMgr;
         std::shared_ptr<RenderGraph::RenderGraph> m_renderGraph;
@@ -80,11 +73,11 @@ namespace StarryEngine {
         std::vector<OverlayPassDesc> m_overlayPasses;
 
         uint32_t m_width, m_height;
-        const ParallelRecordingContext* m_parallel = nullptr;   // 并行命令录制上下文（nullptr = 串行）
+        const ParallelRecordingContext* m_parallel = nullptr;   
         bool m_resourceStatsPrinted = false;
         RHI::SamplerHandle m_defaultSampler;
         std::string m_swapchainTextureName = "Swapchain";
-        RHI::Color m_presentClearColor = { 0.08f, 0.08f, 0.10f, 1.0f };
+        RHI::Color m_presentClearColor = { 0.1f, 0.15f, 0.3f, 1.0f };
 
         // 子通道 → PassNode 映射（子类构建 config pass 时填充）
         std::unordered_map<std::string, SubpassTarget> m_tagToSubpass;

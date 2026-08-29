@@ -1,5 +1,11 @@
 #include <renderer/utils/FrameCapture.hpp>
 
+// GCC 15 对手写 PNG 编码器中 std::vector 重分配内联路径的 -Wfree-nonheap-object 误报：
+// idat/filtered 均为合法 vector 堆分配，非真实非法 delete。仅对 GCC 抑制，clang 不受影响。
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic ignored "-Wfree-nonheap-object"
+#endif
+
 #include <cmath>
 #include <cstdio>
 #include <filesystem>

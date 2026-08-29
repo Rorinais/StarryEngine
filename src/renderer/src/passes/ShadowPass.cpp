@@ -11,7 +11,6 @@ namespace StarryEngine {
                                std::shared_ptr<RHI::ResourceManager> /*resMgr*/,
                                RHI::DescriptorSetLayoutHandle /*globalSetLayout*/) {
         m_passNode = graph.addGraphicsPassNode(m_name);
-        // 渲染区域 = 阴影贴图分辨率（与窗口尺寸无关）
         m_passNode->setRenderArea(kShadowMapSize, kShadowMapSize);
 
         RenderGraph::AttachmentParams depth;
@@ -69,7 +68,6 @@ namespace StarryEngine {
         GraphicsPipelineState pso = src;
         pso.vertexShader = isSkinnedInput(src) ? m_shadowSkinnedVS : m_shadowVS;
         pso.fragmentShader = m_shadowFS;
-        // depth-only：只写深度
         pso.depthTestEnable = true;
         pso.depthWriteEnable = true;
         pso.depthCompareOp = RHI::CompareOp::Less;

@@ -1,5 +1,6 @@
 #include <renderer/renderPaths/BaseRenderPath.hpp>
 #include <renderer/passExecutor/PresentationExecutor.hpp>
+#include <renderer/passes/GraphicsPass.hpp>
 #include <logging/Logger.hpp>
 #include <assets/loader/ShaderLoader.hpp>
 #include <algorithm>
@@ -67,8 +68,6 @@ namespace StarryEngine {
     void BaseRenderPath::render(RHI::RHICommandEncoder* encoder, uint32_t frameIndex) {
         if (!m_renderGraph) return;
         auto context = buildRenderContext();
-        // 帧槽位（ADR-6）：render() 在 renderFrame 内调用，此时 getCurrentFrameIndex() == 本帧槽位。
-        // 录制 job 按值捕获 context（含 frameSlot），executor 绑 slot 对应的描述符集/实例缓冲。
         context.frameSlot = m_rhi->getCurrentFrameIndex();
         if (context.frameSlot >= RHI::kMaxFramesInFlight) context.frameSlot = 0;
         m_renderGraph->execute(encoder, context, frameIndex, context.frameSlot, m_parallel);
@@ -98,9 +97,27 @@ namespace StarryEngine {
         m_renderGraph->setSwapchainImageCount(m_rhi->getSwapChainImageCount());
 
         auto texIdMap = buildTextureIdMap();
+
         buildConfigPasses(texIdMap);         // 子类实现
         buildPresentationPasses(texIdMap);    // 基类实现
         return compileAndFinalize(texIdMap);
+    }
+
+    // 是否有 GraphicsPass 通过颜色附件清除 SceneColor（loadOp 缺省按 Clear 处理）
+    bool BaseRenderPath::hasSceneColorClearPass() const {
+        for (const auto& pass : m_passes) {
+            if (auto* gp = dynamic_cast<const GraphicsPass*>(pass.get())) {
+                for (const auto& sp : gp->getSubpassDescs()) {
+                    for (const auto& att : sp.colorAttachments) {
+                        if (att.textureName == "SceneColor" &&
+                            att.params.loadOp.value_or(RHI::AttachmentLoadOp::Clear) == RHI::AttachmentLoadOp::Clear) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        return false;
     }
 
     std::unordered_map<std::string, RenderGraph::TextureId> BaseRenderPath::buildTextureIdMap() {
@@ -123,6 +140,23 @@ namespace StarryEngine {
                 LOG_ERROR("Failed to create texture '{}': {}", name, e.what());
                 throw;
             }
+        }
+
+        if (!hasSceneColorClearPass()) {
+            auto clearPass = std::make_shared<GraphicsPass>("AutoClearPass");
+            RenderGraph::AttachmentParams bg;
+            bg.loadOp = RHI::AttachmentLoadOp::Clear;
+            bg.storeOp = RHI::AttachmentStoreOp::Store;
+            bg.initialLayout = RHI::ImageLayout::ShaderReadOnly;
+            bg.finalLayout = RHI::ImageLayout::ShaderReadOnly;
+            bg.clearColor = m_presentClearColor;
+            SubpassDesc sp;
+            sp.tag = "AutoClear";
+            sp.colorAttachments.push_back({ "SceneColor", bg });
+            clearPass->addSubpass(sp);
+            m_passes.insert(m_passes.begin(), clearPass);
+            LOG_INFO("[BaseRenderPath] 无场景 pass 清除 SceneColor → 自动插入清屏 pass（颜色={},{},{}）",
+                m_presentClearColor.r, m_presentClearColor.g, m_presentClearColor.b);
         }
         return texIdMap;
     }

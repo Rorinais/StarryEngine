@@ -86,15 +86,18 @@ namespace StarryEngine {
         RHI::RenderPassHandle rp = m_passNode->getRenderPassHandle();
         if (!rp.isValid()) return;
 
-        for (auto& sp : m_subpasses) sp.executor->clearDrawItems();
+        for (auto& sp : m_subpasses) {
+            if (sp.executor) sp.executor->clearDrawItems();
+        }
         for (auto& item : sceneData.drawItems) {
             std::string tag = item->passTag.empty() ? defaultTag : item->passTag;
             for (auto& sp : m_subpasses) {
-                if (sp.tag == tag) { sp.executor->addDrawItem(item); break; }
+                if (sp.executor && sp.tag == tag) { sp.executor->addDrawItem(item); break; }
             }
         }
 
         for (uint32_t i = 0; i < m_subpasses.size(); ++i) {
+            if (!m_subpasses[i].executor) continue;
             auto& items = m_subpasses[i].executor->getDrawItems();
             if (items.empty()) continue;
             std::unordered_set<uint32_t> usedIndices;
@@ -108,6 +111,8 @@ namespace StarryEngine {
             }
             m_subpasses[i].executor->setPipelineMapping(std::move(mapping));
         }
+
+        
     }
 
 } // namespace StarryEngine

@@ -863,8 +863,6 @@ namespace StarryEngine::RHI {
         Extent2D extent;                            ///< 尺寸
         uint32_t layers = 1;                        ///< 层数
         std::string debugName;                      ///< 调试名称
-        /// 原生附件视图（无对应 TextureHandle 的外部图像，如交换链图像）。
-        /// 顺序约定：先于 handle 附件，按 render pass 附件顺序排列。
         std::vector<void*> nativeAttachments;
 
         auto operator==(const FramebufferDesc& other) const {

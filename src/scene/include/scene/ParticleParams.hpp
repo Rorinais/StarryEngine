@@ -2,7 +2,6 @@
 
 namespace StarryEngine {
 
-    // 可调粒子参数（与 shader push_constant 布局一致）
     struct ParticleParams {
         float gravity = 0.0f, speedMin = 0.8f, speedMax = 2.5f, lifetime = 3.0f;
         float spreadXZ = 0.8f, swayFreq = 2.7f, swayAmp = 0.8f;

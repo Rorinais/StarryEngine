@@ -542,11 +542,7 @@ namespace StarryEngine {
             fboDesc.layers = 1;
             fboDesc.debugName = "framebuffer_" + std::to_string(i);
 
-            // 附件 = 交换链图像视图（原生，无 TextureHandle）+ 可选深度纹理（句柄）
             std::vector<RHI::TextureHandle> attachments;
-            // 交换链图像没有 TextureHandle（由 swapchain 直接持有 view），
-            // 通过 FramebufferDesc::nativeAttachments 按顺序（颜色在前）传入，
-            // VulkanFramebuffer 先拼原生视图再拼 handle 默认视图。
             fboDesc.nativeAttachments.push_back(mSwapChain->getImageView(i));
             if (mDepthTextureHandle != RHI::TextureHandle::Null()) {
                 attachments.push_back(mDepthTextureHandle);

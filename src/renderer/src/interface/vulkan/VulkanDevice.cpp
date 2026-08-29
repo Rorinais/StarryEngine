@@ -40,10 +40,6 @@ namespace StarryEngine {
                     vkGetDeviceProcAddr(mLogicalDevice, "vkSetDebugUtilsObjectNameEXT");
             }
 
-            if (mConfig.enablePerformanceCounters) {
-                std::cout << "[DEBUG] Performance counters will be initialized later" << std::endl;
-            }
-
         }
         catch (const std::exception& e) {
             std::cerr << "[ERROR] Device construction failed: " << e.what() << std::endl;

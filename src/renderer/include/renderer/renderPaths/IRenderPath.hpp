@@ -72,9 +72,6 @@ namespace StarryEngine {
 
         RenderBlackboard& getBlackboard() { return m_blackboard; }
 
-        // 并行命令录制上下文（ADR-6 第 2 步）。nullptr → 串行；非空 → 每 pass 录
-        // 独立 secondary CB（job 并行），主线程 barrier + executeCommands。默认 no-op，
-        // 子类不接线的自动回到串行，零破坏。
         virtual void setParallelRecording(const ParallelRecordingContext* parallel) { (void)parallel; }
 
         template<typename T>

@@ -97,9 +97,6 @@ namespace StarryEngine {
             // 验证层配置
             bool enableValidation = true;
 
-            // 性能计数器配置
-            bool enablePerformanceCounters = false;
-
             // 内存分配器配置
             bool enableVMA = true;
         };

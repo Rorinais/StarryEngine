@@ -5,7 +5,6 @@
 
 namespace StarryEngine {
 
-    // ── 声明：建 compute 节点 + 读/写资源 + dispatch ──
     bool ComputePass::configure(RenderGraph::RenderGraph& graph,
                                 std::unordered_map<std::string, RenderGraph::TextureId>& texIdMap,
                                 uint32_t /*width*/, uint32_t /*height*/,
@@ -40,7 +39,6 @@ namespace StarryEngine {
         return true;
     }
 
-    // ── 管线：shader → 布局 → 描述符 → executor ──
     void ComputePass::onAfterCompile(const CompileContext& ctx) {
         auto resMgr = ctx.resMgr;
         if (!resMgr || !m_passNode || !ctx.renderGraph) return;
@@ -53,7 +51,6 @@ namespace StarryEngine {
         }
         m_shader = csInfo->module;
 
-        // set 0 布局：合并所有资源的 binding
         RHI::DescriptorSetLayoutDesc setDesc;
         for (auto& r : m_desc.resources)
             setDesc.bindings.push_back({ r.binding, r.type, 1, RHI::ShaderStage::Compute });
@@ -70,7 +67,6 @@ namespace StarryEngine {
         cpDesc.pipelineLayoutHandle = m_pipelineLayout;
         m_pipeline = resMgr->createComputePipeline(cpDesc);
 
-        // 描述符池 + set：绑定声明的资源
         RHI::DescriptorPoolDesc poolDesc;
         poolDesc.maxSets = 1;
         for (auto& r : m_desc.resources)

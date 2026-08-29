@@ -78,7 +78,6 @@ public:
 
         auto renderPath = std::make_shared<DeferredRenderPath>(m_rhi, m_width, m_height);
         renderPath->setScene(m_scene.get());   
-        renderPath->setPresentClearColor({ 0.0f, 0.0f, 0.0f, 0.0f });
 
         auto colorDesc = PassWrapper::createColorTextureDesc({m_width, m_height, 1}, RHI::Format::RGBA16_Float);
         auto depthDesc = PassWrapper::createDepthTextureDesc({m_width, m_height, 1}, RHI::Format::D24_UNorm_S8_UInt);
@@ -267,16 +266,6 @@ public:
     
     void createScene() {
         initIBL();
-
-        auto skyboxEffect = std::make_shared<Scene::ProceduralEffect>();
-        skyboxEffect->material = createSkyboxMaterial();
-        m_scene->addProceduralEffect(skyboxEffect);
-
-        auto mat = createTexturedPbrMaterial();
-        auto sphere = std::make_shared<Scene::RenderObject>();
-        sphere->geometry = Assets::GeometryGenerator::createSphere(m_rhi->getResourceManager(), 1.0f);
-        sphere->materials = { mat };
-        sphere->transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 1.5f, 0.0f));
 
         {        
             auto skyboxEffect = std::make_shared<Scene::ProceduralEffect>();
