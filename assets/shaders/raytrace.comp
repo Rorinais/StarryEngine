@@ -1,0 +1,340 @@
+#version 450
+
+layout(local_size_x = 16, local_size_y = 16) in;
+
+layout(set = 0, binding = 0, rgba16f) uniform writeonly image2D outImage;
+
+layout(push_constant) uniform PushConstants {
+    vec4 camPos;
+    vec4 camRight;
+    vec4 camUp;
+    vec4 camFwd;
+    vec4 sppInfo;   // x = 每像素采样数；y = 帧号（混入随机种子，帧间样本不同 → 累积收敛）
+} pc;
+
+// ═══ 蒙特卡洛路径追踪（渲染方程 MC 估计）═══
+// 漫反射：余弦重要性采样（pdf=cosθ/π），BRDF·cosθ/pdf 相消 → 权重=albedo
+// 金属：reflect + fuzz（δ 方向）；玻璃：Snell 折射 + Schlick 反射概率
+// 俄罗斯轮盘赌：按透射率概率终止路径（无偏），避免低贡献路径浪费
+
+const vec3 BOX_MIN = vec3(-3.0, -2.5, -6.0);
+const vec3 BOX_MAX = vec3(3.0, 2.5, 6.0);
+const float LIGHT_RADIUS = 1.0;
+const vec3 LIGHT_EMISSIVE = vec3(6.0, 5.8, 5.5);
+
+struct Sphere {
+    vec3 center;
+    float radius;
+    vec3 albedo;
+    float matType;   // 0=漫反射 1=金属 2=玻璃
+    float fuzz;      // 金属模糊度
+    float ior;       // 玻璃折射率
+};
+
+const int SPHERE_COUNT = 3;
+const Sphere SPHERES[SPHERE_COUNT] = Sphere[SPHERE_COUNT](
+    Sphere(vec3(0.0, -0.7, -1.4), 0.75, vec3(0.85, 0.25, 0.2), 0.0, 0.0, 1.5),
+    Sphere(vec3(-1.2, -0.9, -1.9), 0.5, vec3(0.9, 0.9, 0.95), 1.0, 0.1, 1.5),
+    Sphere(vec3(1.2, -0.75, -2.3), 0.55, vec3(0.4, 0.8, 0.95), 2.0, 0.0, 1.5)
+);
+
+const float EPS = 0.001;
+const float INF = 1e30;
+const float PI = 3.14159265;
+// 漫反射采样策略：1=余弦重要性采样（pdf=cosθ/π，低方差）；0=均匀半球采样（pdf=1/2π，对照实验）
+// 两种都是无偏 MC（权重已按 pdf 修正），只影响方差不影响均值
+const int USE_COSINE_IS = 0;
+
+// ── 随机（Peter Shirley 风格）──
+uint hash(uint x) {
+    x ^= x >> 16; 
+    x *= 0x7feb352dU; 
+    x ^= x >> 15;
+    x *= 0x846ca68bU; 
+    x ^= x >> 16;
+    return x;
+}
+float rand(inout uint state) {
+    state = hash(state);
+    return float(state) / 4294967296.0;
+}
+vec3 random_in_unit_sphere(inout uint s) {
+    // 有界拒绝采样：hash 有不动点 hash(0)=0，状态一旦归零 rand() 恒返回 0，
+    // 无界 do-while 会永远拒绝 → GPU 死循环 → Xid 109 CTX SWITCH TIMEOUT（设备丢失）。
+    // 64 次后回退到上次候选方向（|p|>=1，normalize 安全），任何情况下都不会挂起。
+    vec3 p;
+    for (int i = 0; i < 64; ++i) {
+        p = 2.0 * vec3(rand(s), rand(s), rand(s)) - vec3(1.0);
+        if (dot(p, p) < 1.0) return p;
+    }
+    return normalize(p);
+}
+vec3 random_in_hemisphere(vec3 n, inout uint s) {
+    vec3 p = random_in_unit_sphere(s);
+    return (dot(p, n) > 0.0) ? p : -p;
+}
+// 余弦加权重要性采样（Malley 法）：pdf = cosθ/π，匹配 Lambert BRDF
+// MC 权重 = BRDF·cosθ/pdf = (albedo/π)·cosθ/(cosθ/π) = albedo（cosθ 与 pdf 相消）
+vec3 random_cosine_direction(vec3 n, inout uint s) {
+    float phi = 2.0 * PI * rand(s);
+    float r = sqrt(rand(s));
+    float x = r * cos(phi);
+    float y = r * sin(phi);
+    float z = sqrt(max(0.0, 1.0 - r * r));
+    vec3 ref = (abs(n.y) < 0.999) ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+    vec3 t = normalize(cross(ref, n));
+    vec3 b = cross(n, t);
+    return normalize(t * x + b * y + n * z);
+}
+
+// ── 求交 ──
+// 通用二次方程（对任意 |rd| 正确）：a·t² + 2b·t + c = 0
+float hitSphere(vec3 ro, vec3 rd, Sphere sp, out vec3 n) {
+    vec3 oc = ro - sp.center;
+    float a = dot(rd, rd);
+    float b = dot(oc, rd);
+    float c = dot(oc, oc) - sp.radius * sp.radius;
+    float disc = b * b - a * c;
+    if (disc < 0.0) return -1.0;
+    float sq = sqrt(disc);
+    float t = (-b - sq) / a;
+    if (t < EPS) t = (-b + sq) / a;
+    if (t < EPS) return -1.0;
+    n = normalize((ro + rd * t) - sp.center);
+    return t;
+}
+
+bool hitBox(vec3 ro, vec3 rd, out float t, out vec3 n) {
+    vec3 inv = 1.0 / rd;
+    vec3 t0 = (BOX_MIN - ro) * inv;
+    vec3 t1 = (BOX_MAX - ro) * inv;
+    vec3 tmin = min(t0, t1);
+    vec3 tmax = max(t0, t1);
+    float tEnter = max(max(tmin.x, tmin.y), tmin.z);
+    float tExit = min(min(tmax.x, tmax.y), tmax.z);
+    if (tExit < tEnter || tExit < 0.0) return false;
+    if (tEnter >= 0.0) {
+        t = tEnter;
+        if (abs(tEnter - tmin.x) < 1e-6)      n = (t0.x < t1.x) ? vec3(-1, 0, 0) : vec3(1, 0, 0);
+        else if (abs(tEnter - tmin.y) < 1e-6) n = (t0.y < t1.y) ? vec3(0, -1, 0) : vec3(0, 1, 0);
+        else                                  n = (t0.z < t1.z) ? vec3(0, 0, -1) : vec3(0, 0, 1);
+    } else {
+        t = tExit;
+        if (abs(tExit - tmax.x) < 1e-6)      n = (t0.x < t1.x) ? vec3(-1, 0, 0) : vec3(1, 0, 0);
+        else if (abs(tExit - tmax.y) < 1e-6) n = (t0.y < t1.y) ? vec3(0, -1, 0) : vec3(0, 1, 0);
+        else                                 n = (t0.z < t1.z) ? vec3(0, 0, -1) : vec3(0, 0, 1);
+    }
+    return true;
+}
+
+vec3 boxColor(vec3 n) {
+    if (n.x < -0.5) return vec3(0.65, 0.05, 0.05);
+    if (n.x > 0.5)  return vec3(0.12, 0.45, 0.15);
+    return vec3(0.73);
+}
+
+// Schlick 菲涅尔（玻璃）
+float fresnelSchlick(float cosT, float ior) {
+    float r0 = (ior - 1.0) / (ior + 1.0);
+    r0 *= r0;
+    return r0 + (1.0 - r0) * pow(1.0 - cosT, 5.0);
+}
+
+// ── NEE：对顶部矩形光源均匀采样（pdf_light = 1/A）+ MIS 权重 ──
+// 估计式：est = f_r·Le·cosθx·cosθy/d² · w_light/p_light；f_r = albedo/π
+// 阴影射线测试遮挡（玻璃透光不遮挡）
+vec3 directLightNEE(vec3 p, vec3 n, vec3 albedo, inout uint s) {
+    float lx = (2.0 * rand(s) - 1.0) * LIGHT_RADIUS;
+    float lz = (2.0 * rand(s) - 1.0) * LIGHT_RADIUS;
+    vec3 lp = vec3(lx, BOX_MAX.y, lz);
+    vec3 toL = lp - p;
+    float d2 = dot(toL, toL);
+    float d = sqrt(d2);
+    vec3 w = toL / d;
+    float cosX = max(dot(n, w), 0.0);
+    if (cosX <= 0.0) return vec3(0.0);
+    // 光源法线朝下 (0,-1,0)：cosθy = dot((0,-1,0), -w) = w.y
+    float cosY = max(w.y, 0.0);
+    if (cosY <= 0.0) return vec3(0.0);
+    // 阴影测试（玻璃不遮）
+    vec3 ro = p + n * EPS;
+    for (int i = 0; i < SPHERE_COUNT; ++i) {
+        if (SPHERES[i].matType > 1.5) continue;
+        vec3 tn;
+        float t = hitSphere(ro, w, SPHERES[i], tn);
+        if (t > EPS && t < d - EPS) return vec3(0.0);
+    }
+    const float AREA = 4.0 * LIGHT_RADIUS * LIGHT_RADIUS;
+    // MIS 平衡启发式：w_light = p_light / (p_light + p_bsdfA)
+    // p_bsdfA = 余弦采样方向 pdf（cosθx/π）转换到光源面积 = cosθx·cosθy/(π·d²)
+    float pLight = 1.0 / AREA;
+    // p_bsdfA：BSDF 方向 pdf 转换到光源面积（随采样策略）
+    // 余弦采样：pdf_dir = cosθx/π → cosθx·cosθy/(π·d²)
+    // 均匀采样：pdf_dir = 1/(2π) → cosθy/(2π·d²)
+    float pBsdfA;
+    if (USE_COSINE_IS == 1) pBsdfA = (cosX / PI) * cosY / d2;
+    else                    pBsdfA = cosY / (2.0 * PI * d2);
+    float wLight = pLight / (pLight + pBsdfA);
+    // 近光源时 p_bsdfA∝1/d² 很大 → wLight∝d²，正好抵消 1/d² 的爆炸（消除火亮点）
+    return (albedo / PI) * LIGHT_EMISSIVE * cosX * cosY / d2 * (wLight / pLight);
+}
+
+// ── 蒙特卡洛路径追踪 + NEE + MIS（多重重要性采样）──
+// NEE 与 BSDF 采样按平衡启发式加权：近光源 BSDF 主导（压掉 1/d² 爆炸），远光源 NEE 主导
+vec3 tracePath(vec3 ro, vec3 rd, inout uint s, out float firstT) {
+    vec3 color = vec3(0.0);
+    vec3 att = vec3(1.0);
+    bool specular = true;   // 相机光线视为镜面来源（无前置散射，不重复计数）
+    vec3 prevN = vec3(0.0); // 上一散射顶点法线（BSDF 策略的 MIS 权重用）
+    firstT = 1e30;          // 首击中距离（降噪深度边缘权重用；未命中=无穷）
+
+    for (int depth = 0; depth < 10; ++depth) {
+        // 最近命中
+        float tSphere = -1.0; vec3 nSphere;
+        int hitIdx = -1;
+        for (int i = 0; i < SPHERE_COUNT; ++i) {
+            vec3 tn;
+            float t = hitSphere(ro, rd, SPHERES[i], tn);
+            if (t > 0.0 && (tSphere < 0.0 || t < tSphere)) { tSphere = t; nSphere = tn; hitIdx = i; }
+        }
+        float tBox; vec3 nBox;
+        bool hitW = hitBox(ro, rd, tBox, nBox);
+
+        bool hitWall = hitW && (tSphere < 0.0 || tBox < tSphere);
+        if (depth == 0) {
+            if (hitWall) firstT = tBox;
+            else if (hitIdx >= 0) firstT = tSphere;
+        }
+
+        if (hitWall) {
+            vec3 p = ro + rd * tBox;
+            // 顶部光源区域
+            if (abs(p.y - BOX_MAX.y) < 0.01 && abs(p.x) < LIGHT_RADIUS && abs(p.z) < LIGHT_RADIUS) {
+                if (specular) {
+                    // 镜面路径/相机光线：BSDF 采样是唯一策略（δ 方向），全额计入
+                    color += att * LIGHT_EMISSIVE;
+                } else {
+                    // BSDF 采样命中光源：MIS 权重 w_bsdf（同一直射路径已由 NEE 估计）
+                    const float AREA = 4.0 * LIGHT_RADIUS * LIGHT_RADIUS;
+                    float pLight = 1.0 / AREA;
+                    float cosXb = max(dot(prevN, rd), 0.0);
+                    float cosYb = max(rd.y, 0.0);
+                    float pBsdfA;
+                    if (USE_COSINE_IS == 1) pBsdfA = (cosXb / PI) * cosYb / max(tBox * tBox, 1e-9);
+                    else                    pBsdfA = cosYb / (2.0 * PI * max(tBox * tBox, 1e-9));
+                    float wBsdf = pBsdfA / (pLight + pBsdfA);
+                    color += att * LIGHT_EMISSIVE * wBsdf;
+                }
+                break;
+            }
+            vec3 albedo = boxColor(nBox);
+            color += att * directLightNEE(p, nBox, albedo, s);
+            prevN = nBox;
+            if (USE_COSINE_IS == 1) {
+                rd = random_cosine_direction(nBox, s);
+                att *= albedo;                       // cosθ 与 pdf 相消
+            } else {
+                rd = normalize(random_in_hemisphere(nBox, s));
+                att *= 2.0 * albedo * max(dot(nBox, rd), 0.0);  // 均匀采样：BRDF·cosθ/pdf
+            }
+            ro = p + nBox * EPS;
+            specular = false;
+        } else if (hitIdx >= 0) {
+            vec3 p = ro + rd * tSphere;
+            vec3 n = nSphere;
+            float mat = SPHERES[hitIdx].matType;
+            if (mat < 0.5) {
+                vec3 albedo = SPHERES[hitIdx].albedo;
+                color += att * directLightNEE(p, n, albedo, s);
+                prevN = n;
+                if (USE_COSINE_IS == 1) {
+                    rd = random_cosine_direction(n, s);
+                    att *= albedo;
+                } else {
+                    rd = normalize(random_in_hemisphere(n, s));
+                    att *= 2.0 * albedo * max(dot(n, rd), 0.0);
+                }
+                ro = p + n * EPS;
+                specular = false;
+            } else if (mat < 1.5) {
+                // 金属：反射方向 + fuzz 扰动（δ 方向，无 pdf 项；归一化保证求交正确）
+                rd = normalize(reflect(rd, n) + SPHERES[hitIdx].fuzz * random_in_unit_sphere(s));
+                ro = p + n * EPS;
+                att *= SPHERES[hitIdx].albedo;
+                specular = true;
+            } else {
+                // 玻璃：Snell 折射 + Schlick 反射概率（法线指向入射光，eta = n1/n2）
+                float ior = SPHERES[hitIdx].ior;
+                bool entering = dot(rd, n) < 0.0;   // 从空气进入玻璃
+                vec3 gn = entering ? n : -n;        // 法线朝向入射光（dot(gn,rd) < 0）
+                float eta = entering ? 1.0 / ior : ior;
+                float cosT = abs(dot(gn, rd));
+                float F = fresnelSchlick(cosT, ior);
+                vec3 refr = refract(rd, gn, eta);
+                if (dot(refr, refr) < 0.001 || rand(s) < F) {
+                    rd = reflect(rd, gn);
+                    ro = p + gn * EPS;
+                } else {
+                    rd = refr;
+                    ro = p - gn * EPS;
+                }
+                specular = true;
+            }
+        } else {
+            // 未命中（封闭盒内不应发生）
+            color += att * vec3(0.01);
+            break;
+        }
+
+        // 俄罗斯轮盘赌：以透射率 q 为存活概率继续，att /= q 保持无偏
+        float q = max(max(att.r, att.g), att.b);
+        if (q <= 0.0) break;
+        if (depth >= 2 && q < 1.0) {
+            if (rand(s) >= q) break;
+            att /= q;
+        }
+    }
+    return color;
+}
+
+void main() {
+    ivec2 pix = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size = imageSize(outImage);
+    if (pix.x >= size.x || pix.y >= size.y) return;
+
+    int SPP = int(pc.sppInfo.x);
+    if (SPP < 1) SPP = 1;
+    vec3 ro = pc.camPos.xyz;
+    // 种子：混入帧号 → 帧间样本不同，时域累积收敛（GAMES202 1spp + temporal）；
+    // 此前帧相关种子触发 GPU 挂起，根因是 random_in_unit_sphere 的无界拒绝循环
+    // （hash 不动点 0 → rand 恒 0 → 永远拒绝），已改为有界循环修复。
+    uint seed = hash(uint(pix.y) * 73856093u + uint(pix.x) * 19349663u + 1u);
+    if (pc.sppInfo.z > 0.5) {
+        seed = hash(seed + uint(pc.sppInfo.y) * 2654435761u);
+    }
+    vec3 color = vec3(0.0);
+    float firstT = 1e30;
+
+    for (int s = 0; s < SPP; ++s) {
+        uint sseed = hash(seed + uint(s) * 2654435761u);
+        // 像素内抖动（抗锯齿）
+        float ox = rand(sseed), oy = rand(sseed);
+        vec2 uv = (vec2(pix) + vec2(ox, oy)) / vec2(size);
+        vec2 ndc = uv * 2.0 - 1.0;
+        ndc.y = -ndc.y;
+        vec3 rd = normalize(pc.camFwd.xyz + pc.camRight.xyz * ndc.x + pc.camUp.xyz * ndc.y);
+        float t0;
+        color += tracePath(ro, rd, sseed, t0);
+        if (s == 0) firstT = t0;   // 首样本的首击中距离（降噪深度边缘权重）
+    }
+    color /= float(SPP);
+
+    // 不做色调映射：直接输出原始辐射度（高光区 radiance>1 会在显示时裁白，保留真实对比）
+    // 仅做 gamma 编码（sRGB 显示编码，UNorm 交换链需要；避免线性值直接显示过暗）
+
+    // gamma 校正（正确公式：线性 → sRGB）
+    color = pow(max(color, vec3(0.0)), vec3(1.0 / 2.2));
+    // alpha 存归一化首击中距离（÷10 → 0-1，16F 精度足够；降噪深度边缘权重用；
+    // readback/accumulate 只读 rgb，不受影响）
+    imageStore(outImage, pix, vec4(color, clamp(firstT / 10.0, 0.0, 1.0)));
+}

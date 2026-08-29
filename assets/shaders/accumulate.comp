@@ -1,0 +1,20 @@
+#version 450
+layout(local_size_x = 16, local_size_y = 16) in;
+layout(set = 0, binding = 0) uniform sampler2D uNewFrame;
+layout(set = 0, binding = 1, rgba32f) uniform image2D uAccum;
+layout(push_constant) uniform PC { uint reset; } pc;
+void main() {
+    ivec2 pix = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size = imageSize(uAccum);
+    if (pix.x >= size.x || pix.y >= size.y) return;
+    vec2 uv = (vec2(pix) + 0.5) / vec2(size);
+    vec3 newC = texture(uNewFrame, uv).rgb;
+    vec4 acc = imageLoad(uAccum, pix);
+    // 32F 累积器：长时间运行时 sum 增长到 1e4+，16F 精度步长变大 → 均值漂移、对比度加深；
+    // 32F 在 2^23 内精度步长 <0.01，count 上限 1e6（约 4.6 小时@60fps）后重置防溢出
+    if (pc.reset == 1u || acc.a < 1.0 || acc.a > 1000000.0) {
+        imageStore(uAccum, pix, vec4(newC, 1.0));
+    } else {
+        imageStore(uAccum, pix, vec4(acc.rgb + newC, acc.a + 1.0));
+    }
+}

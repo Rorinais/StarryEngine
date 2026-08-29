@@ -1,6 +1,7 @@
 #include <renderer/renderPaths/BaseRenderPath.hpp>
 #include <renderer/passExecutor/PresentationExecutor.hpp>
 #include <renderer/passes/GraphicsPass.hpp>
+#include <renderer/passes/ComputePass.hpp>
 #include <logging/Logger.hpp>
 #include <assets/loader/ShaderLoader.hpp>
 #include <algorithm>
@@ -113,6 +114,15 @@ namespace StarryEngine {
                             att.params.loadOp.value_or(RHI::AttachmentLoadOp::Clear) == RHI::AttachmentLoadOp::Clear) {
                             return true;
                         }
+                    }
+                }
+            }
+            // compute pass 写 SceneColor（如软光线追踪输出）也视为已清屏
+            if (auto* cp = dynamic_cast<const ComputePass*>(pass.get())) {
+                for (const auto& r : cp->getDesc().resources) {
+                    if (r.type == RHI::DescriptorType::StorageImage &&
+                        r.write && r.resourceName == "SceneColor") {
+                        return true;
                     }
                 }
             }

@@ -1,0 +1,75 @@
+#version 450
+layout(local_size_x = 16, local_size_y = 16) in;
+layout(set = 0, binding = 0) uniform sampler2D uAccum;
+layout(set = 0, binding = 1) uniform sampler2D uDepth;
+layout(set = 0, binding = 2, rgba16f) uniform image2D uOut;
+layout(push_constant) uniform PC { uint spp; } pc;
+
+// ── GAMES202 风格空域降噪：多级扩张边缘感知 a-trous 小波 ──
+// 5 级 × 5×5 核，步长 1,2,4,8,16，等效支持半径 ~±32px。
+// 权重 = 空间高斯(随步长扩张) × 颜色差(σc=0.4，容忍噪声) × 深度斜率比边缘
+//
+// 深度边缘（无 gbuffer 法线时的替代）：
+//   uDepth.alpha 存归一化首击中距离（÷10 → 0-1）。平坦表面上 |Δd| ≈ 局部斜率×像素距离，
+//   ratio = |d-dC| / (slope×dist) ≈ 1 —— 与墙面角度无关 → 各级扩张都保持强平滑；
+//   跨越几何边缘（球轮廓/墙拐角）时 ratio >> 1 → 权重截断 → 边缘锐利。
+//   斜率下限 0.002 防止近平面（背墙）pred→0 的数值放大。
+
+void main() {
+    ivec2 pix = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 size = imageSize(uOut);
+    if (pix.x >= size.x || pix.y >= size.y) return;
+    vec2 uv = (vec2(pix) + 0.5) / vec2(size);
+
+    vec4 accC = texture(uAccum, uv);
+    vec3 center = accC.rgb / max(accC.a, 1.0);
+    float dC = texture(uDepth, uv).a;
+
+    // 局部深度斜率（±2px 有限差分）
+    vec2 px2 = vec2(2.0) / vec2(size);
+    float dR = texture(uDepth, uv + vec2(px2.x, 0.0)).a;
+    float dL = texture(uDepth, uv - vec2(px2.x, 0.0)).a;
+    float dU = texture(uDepth, uv + vec2(0.0, px2.y)).a;
+    float dD = texture(uDepth, uv - vec2(0.0, px2.y)).a;
+    float slope = max(max(abs(dR - dL), abs(dU - dD)) * 0.5, 0.002);
+
+    vec3 sum = vec3(0.0);
+    float wsum = 0.0;
+    // 自适应降噪：噪声 ∝ 1/√(有效样本数 = count×spp)。
+    //   n ≤ 64   → 5 级全强度（保持 1spp 降噪质量：1spp×1帧≈14.8，1spp×30帧≈1.9）
+    //   n ≥ ~430 → 恒等输出（输入已收敛，不再滤波 → 高采样离线不糊、交互长时间后锐利）
+    //   中间     → 按 t 裁剪级别数平滑过渡
+    float n = max(accC.a * float(pc.spp), 1.0);
+    float t = clamp(64.0 / n, 0.0, 1.0);
+    int maxLevel = (t < 0.15) ? -1 : clamp(int(ceil(5.0 * t)) - 1, 0, 4);
+    if (maxLevel < 0) {
+        imageStore(uOut, pix, vec4(center, 1.0));
+        return;
+    }
+    const float inv2sC = 1.0 / (2.0 * 0.4 * 0.4);      // 颜色差（容忍 1spp 噪声）
+    const float inv2sN = 1.0 / (2.0 * 0.5 * 0.5);      // 深度斜率比边缘
+    for (int level = 0; level <= maxLevel; ++level) {
+        int stride = 1 << level;
+        float sigmaS = 2.5 * float(stride);
+        float inv2sS = 1.0 / (2.0 * sigmaS * sigmaS);
+        for (int dy = -2; dy <= 2; ++dy) {
+            for (int dx = -2; dx <= 2; ++dx) {
+                ivec2 o = pix + ivec2(dx, dy) * stride;
+                if (o.x < 0 || o.y < 0 || o.x >= size.x || o.y >= size.y) continue;
+                vec2 ouv = (vec2(o) + 0.5) / vec2(size);
+                vec4 a2 = texture(uAccum, ouv);
+                vec3 c = a2.rgb / max(a2.a, 1.0);
+                float d = texture(uDepth, ouv).a;
+                float ws = exp(-float(dx * dx + dy * dy) * inv2sS);
+                float wc = exp(-dot(c - center, c - center) * inv2sC);
+                float pred = slope * float(length(ivec2(dx, dy)) * stride);
+                float ratio = abs(d - dC) / max(pred, 1e-4);
+                float wn = exp(-pow(max(ratio - 1.0, 0.0), 2.0) * inv2sN);
+                float w = ws * wc * wn;
+                sum += c * w;
+                wsum += w;
+            }
+        }
+    }
+    imageStore(uOut, pix, vec4(sum / max(wsum, 1e-4), 1.0));
+}

@@ -29,6 +29,7 @@ namespace StarryEngine {
         explicit ComputePass(const ComputePassDesc& desc) : m_desc(desc) {}
 
         const std::string& getName() const override { return m_desc.name; }
+        const ComputePassDesc& getDesc() const { return m_desc; }
 
         bool configure(RenderGraph::RenderGraph& graph,
                        std::unordered_map<std::string, RenderGraph::TextureId>& texIdMap,

@@ -81,7 +81,9 @@ namespace StarryEngine {
             rhiConfig.deviceFeatures.dynamicRendering = true;
             rhiConfig.presentMode = RHI::RHIInitConfig::PresentMode::FIFO;
             rhiConfig.swapChainImages = flightFrame;
-            rhiConfig.srgb = true;
+            // 软光追模式（RT shader 已内置 Reinhard+gamma 编码）→ 交换链必须 UNorm；
+            // 否则 sRGB 硬件二次编码 → 画面发白、饱和度丢失。PBR 管线保持 sRGB（shader 输出线性）。
+            rhiConfig.srgb = (std::getenv("STARRY_RT") == nullptr && std::getenv("STARRY_OFFLINE") == nullptr);
             rhiConfig.frameBuffering = flightFrame;
             rhiConfig.usePersistentCommandBuffers = true;
             rhiConfig.enableTimestamps = true;
