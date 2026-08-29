@@ -125,6 +125,13 @@ namespace StarryEngine::RenderGraph {
         return ptr;
     }
 
+    PassNode* RenderGraph::findNode(const std::string& name) {
+        for (auto& pass : m_passes) {
+            if (pass->getName() == name) return pass.get();
+        }
+        return nullptr;
+    }
+
     // 拓扑排序函数，根据邻接表返回节点的执行顺序，若存在环则抛出异常
     std::vector<uint32_t> RenderGraph::topologicalSort(const std::vector<std::vector<uint32_t>>& adj) const {
         size_t n = adj.size();

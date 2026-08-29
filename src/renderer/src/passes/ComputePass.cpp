@@ -41,7 +41,14 @@ namespace StarryEngine {
 
     void ComputePass::onAfterCompile(const CompileContext& ctx) {
         auto resMgr = ctx.resMgr;
-        if (!resMgr || !m_passNode || !ctx.renderGraph) return;
+        if (!resMgr || !ctx.renderGraph) return;
+        // cullUnusedPasses 可能已从图中删除本 pass 的节点（旧 m_passNode 悬垂）。
+        // 按名字从当前图重新解析；节点已被裁剪时安全退出（该 pass 不参与渲染）。
+        m_passNode = ctx.renderGraph->findNode(m_desc.name);
+        if (!m_passNode) {
+            LOG_WARN("[{}] node culled by RenderGraph — onAfterCompile skipped", m_desc.name);
+            return;
+        }
 
         Assets::ShaderLoader loader(resMgr);
         auto csInfo = loader.loadFromFile(m_desc.shader, RHI::ShaderStage::Compute);

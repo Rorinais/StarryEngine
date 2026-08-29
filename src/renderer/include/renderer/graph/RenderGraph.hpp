@@ -61,6 +61,9 @@ namespace StarryEngine::RenderGraph {
 
         PassNode* addComputePassNode(const std::string& name);
 
+        // 按名字查找节点（cullUnusedPasses 可能删除节点 → 持有旧指针的 pass 需重新解析）
+        PassNode* findNode(const std::string& name);
+
         void dependencyAnalysis();
         void cullUnusedPasses();
         void exportDot(const std::string& filepath) const;

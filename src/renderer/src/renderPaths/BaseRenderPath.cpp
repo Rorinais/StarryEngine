@@ -219,11 +219,12 @@ namespace StarryEngine {
         inputParams.storeOp = RHI::AttachmentStoreOp::DontCare;
         inputParams.initialLayout = RHI::ImageLayout::ShaderReadOnly;
         inputParams.finalLayout = RHI::ImageLayout::ShaderReadOnly;
-        auto sceneColorTexId = texIdMap.at("SceneColor");
+        auto sceneColorTexId = texIdMap.at(m_presentInputTexture);
         std::string inputKey = passNode->addInput(sceneColorTexId, inputParams);
         subpassBuilder.addInputAttachmentRef(inputKey);
 
         auto rec = std::make_shared<PresentationExecutor>();
+        rec->setInputTextureName(m_presentInputTexture);
         subpassBuilder.setExecutor(rec);
         m_tagToSubpass[tag] = SubpassTarget{ {}, 0, rec };
         m_tagToPassNode[tag] = passNode;

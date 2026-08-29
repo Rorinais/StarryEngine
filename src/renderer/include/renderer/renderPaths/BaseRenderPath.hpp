@@ -34,6 +34,9 @@ namespace StarryEngine {
             std::vector<RHI::DescriptorSetHandle> globalDescSets);
 
         void setPresentClearColor(const RHI::Color& color) { m_presentClearColor = color; }
+        // 呈现 pass 的输入纹理（默认 SceneColor；软光追+降噪时切 SceneColorFiltered，
+        // 使 RT→Present 链条完整，避免 cullUnusedPasses 裁剪掉 RT pass 导致 onAfterCompile 悬垂崩溃）
+        void setPresentInput(const std::string& tex) { m_presentInputTexture = tex; }
 
         void setScene(Scene::Scene* scene) { m_blackboard.put<Scene::Scene*>(scene); }
 
@@ -77,6 +80,7 @@ namespace StarryEngine {
         bool m_resourceStatsPrinted = false;
         RHI::SamplerHandle m_defaultSampler;
         std::string m_swapchainTextureName = "Swapchain";
+        std::string m_presentInputTexture = "SceneColor";
         RHI::Color m_presentClearColor = { 0.1f, 0.15f, 0.3f, 1.0f };
 
         // 子通道 → PassNode 映射（子类构建 config pass 时填充）

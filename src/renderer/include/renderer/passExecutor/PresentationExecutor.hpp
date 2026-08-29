@@ -21,6 +21,9 @@ namespace StarryEngine {
         void execute(RHI::RHICommandEncoder* encoder, const RenderContext&,
                      const PassContext& pctx, uint32_t) override;
 
+        // 呈现输入纹理名（默认 SceneColor；软光追+降噪时切 SceneColorFiltered）
+        void setInputTextureName(const std::string& name) { m_inputTextureName = name; }
+
     private:
         RHI::PipelineHandle m_pipeline;
         RHI::PipelineLayoutHandle m_layout;
@@ -30,6 +33,7 @@ namespace StarryEngine {
         RHI::DescriptorPoolHandle m_pool;
         RHI::SamplerHandle m_sampler;
         std::shared_ptr<RHI::ResourceManager> m_resMgr;
+        std::string m_inputTextureName = "SceneColor";
         std::vector<std::shared_ptr<DrawItem>> m_empty;
     };
 

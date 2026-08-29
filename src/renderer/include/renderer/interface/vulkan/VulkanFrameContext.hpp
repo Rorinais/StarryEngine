@@ -116,6 +116,10 @@ namespace StarryEngine {
         void setAutoRecreate(bool autoRecreate) { mConfig.autoRecreate = autoRecreate; }
         void resetAllFrames();
 
+        // === 离线无呈现模式 ===
+        void setSkipPresent(bool v) { m_skipPresent = v; }
+        bool getSkipPresent() const { return m_skipPresent; }
+
         // ==================== 多线程支持 ====================
         VkCommandBuffer allocateThreadCommandBuffer(uint32_t threadIndex, VkCommandBufferLevel level);
         void freeThreadCommandBuffers(uint32_t threadIndex);
@@ -196,6 +200,11 @@ namespace StarryEngine {
 
         std::vector<VkSemaphore> mPerImageRenderFinishedSemaphores;
         uint32_t mSwapChainImageCount = 0;
+
+        // 离线无呈现：固定复用已获取的图像，跳过 acquire/present
+        bool m_skipPresent = false;
+        uint32_t m_fixedImageIndex = 0;
+        bool m_fixedImageAcquired = false;
 
     private:
         // 内部创建函数

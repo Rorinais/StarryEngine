@@ -51,7 +51,7 @@ namespace StarryEngine {
         sampDesc.magFilter = RHI::SamplerFilter::Linear;
         m_sampler = m_resMgr->createSampler(sampDesc);
 
-        auto scId = ctx.renderGraph->getTextureId("SceneColor");
+        auto scId = ctx.renderGraph->getTextureId(m_inputTextureName);
         RHI::TextureHandle phys = ctx.renderGraph->getPhysicalTextureHandle(scId);
         auto* texObj = m_resMgr->getTexture(phys);
         auto* samplerObj = m_resMgr->getSampler(m_sampler);

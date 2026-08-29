@@ -138,11 +138,20 @@ namespace StarryEngine {
         // 重置栅栏
         resetFrame(mCurrentFrameIndex);
 
-        // 获取图像（通过回调）
+        // 获取图像（通过回调）；离线无呈现模式：首次真实 acquire 后固定复用
         uint32_t imageIndex = 0;
-        VkResult acquireResult = acquireFunc(frameData.imageAvailableSemaphore,
-            VK_NULL_HANDLE,
-            imageIndex);
+        VkResult acquireResult = VK_SUCCESS;
+        if (m_skipPresent && m_fixedImageAcquired) {
+            imageIndex = m_fixedImageIndex;   // 复用已获取的图像（不 acquire → 不依赖 present 归还）
+        } else {
+            acquireResult = acquireFunc(frameData.imageAvailableSemaphore,
+                VK_NULL_HANDLE,
+                imageIndex);
+            if (m_skipPresent) {
+                m_fixedImageIndex = imageIndex;
+                m_fixedImageAcquired = true;
+            }
+        }
 
         frameInfo.acquireResult = acquireResult;
 
@@ -241,12 +250,12 @@ namespace StarryEngine {
 
         VkSubmitInfo submitInfo = {};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-        submitInfo.waitSemaphoreCount = 1;
+        submitInfo.waitSemaphoreCount = m_skipPresent ? 0u : 1u;
         submitInfo.pWaitSemaphores = waitSemaphores;
         submitInfo.pWaitDstStageMask = waitStages;
         submitInfo.commandBufferCount = 1;
         submitInfo.pCommandBuffers = &frameInfo.commandBuffer;
-        submitInfo.signalSemaphoreCount = 1;
+        submitInfo.signalSemaphoreCount = m_skipPresent ? 0u : 1u;
         submitInfo.pSignalSemaphores = signalSemaphores;
 
         // 提交命令缓冲区
@@ -259,6 +268,13 @@ namespace StarryEngine {
 
         // 该槽位完成一次完整 submit：此后读它的时间戳池才是安全的
         mFrameData[frameInfo.frameIndex].hasSubmittedFirstFrame = true;
+
+        if (m_skipPresent) {
+            // 离线无呈现：不调用 vkQueuePresentKHR（present 会卡住后续读回拷贝的排队）
+            m_lastFrameIndex = mCurrentFrameIndex;
+            mCurrentFrameIndex = (mCurrentFrameIndex + 1) % mConfig.frameCount;
+            return VK_SUCCESS;
+        }
 
         // 呈现图像（通过回调）
         VkResult presentResult = presentFunc(graphicsQueue, frameInfo.imageIndex, frameInfo.renderFinishedSemaphore);
