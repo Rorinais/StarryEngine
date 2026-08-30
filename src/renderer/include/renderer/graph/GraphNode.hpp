@@ -1,0 +1,161 @@
+#pragma once
+#include <string>
+#include <vector>
+#include <memory>
+#include <set>
+#include <unordered_map>
+#include <functional>
+#include <renderer/graph/Types.hpp>
+#include <renderer/graph/SubpassBuilder.hpp>
+#include <renderer/passExecutor/IPassExecutor.hpp>
+
+namespace StarryEngine::RenderGraph {
+
+    class IPassExecutor;
+
+    struct PhysicalTextureInfo {
+        RHI::TextureHandle handle;
+        std::vector<void*> views;
+    };
+
+    struct LayoutTransition {
+        int32_t srcPassIdx;
+        uint32_t dstPassIdx;
+        TextureId texId;
+        RHI::ImageLayout srcLayout;
+        RHI::ImageLayout dstLayout;
+        RHI::PipelineStage srcStage;
+        RHI::PipelineStage dstStage;
+        RHI::AccessFlag srcAccess;
+        RHI::AccessFlag dstAccess;
+        uint32_t aspectMask;
+    };
+
+    struct BufferTransition {
+        int32_t srcPassIdx;
+        uint32_t dstPassIdx;
+        BufferId bufferId;
+        RHI::PipelineStage srcStage;
+        RHI::PipelineStage dstStage;
+        RHI::AccessFlag srcAccess;
+        RHI::AccessFlag dstAccess;
+    };
+
+    enum class PassType { Graphics, Compute };
+
+    // ── 渲染图节点抽象：双模渲染后端 ──
+    // PassNode（传统 render pass + framebuffer）与 RenderNode（动态渲染 VK_KHR_dynamic_rendering）
+    // 共同实现本接口；RenderGraph 按设备能力创建对应类型。
+    // pass 层（GraphicsPass/ShadowPass/ComputePass）只依赖本接口 + addSubpass（两节点都以
+    // SubpassBuilder 形式提供"段"，动态路径在编译时将其 executors 扁平化）。
+    class GraphNode {
+    public:
+        virtual ~GraphNode() = default;
+
+        PassType getType() const { return m_type; }
+
+        // ── Graphics Pass 接口 ──
+        virtual std::string addColorOutput(TextureId texId, const AttachmentParams& params = AttachmentParams()) = 0;
+        virtual std::string addDepthOutput(TextureId texId, const AttachmentParams& params = AttachmentParams()) = 0;
+        virtual std::string addInput(TextureId texId, const AttachmentParams& params = AttachmentParams()) = 0;
+        virtual std::string addResolve(TextureId texId, const AttachmentParams& params = AttachmentParams()) = 0;
+        virtual std::string addPreserve(TextureId texId) = 0;
+        virtual SubpassBuilder& addSubpass(const std::string& subpassName) = 0;
+        virtual void setPassExecutor(uint32_t index, std::shared_ptr<StarryEngine::IPassExecutor> rec) = 0;
+        virtual void setRenderArea(uint32_t width, uint32_t height) = 0;
+
+        // ── Compute Pass 接口 ──
+        virtual void addReadTexture(TextureId t) = 0;
+        virtual void addWriteTexture(TextureId t) = 0;
+        virtual void addReadBuffer(BufferId b) = 0;
+        virtual void addWriteBuffer(BufferId b) = 0;
+        virtual void setComputeExecutor(std::shared_ptr<StarryEngine::IPassExecutor> r) = 0;
+
+        // 启用/禁用
+        virtual void setEnabled(bool e) = 0;
+        virtual bool isEnabled() const = 0;
+
+        virtual const std::set<TextureId>& getReadTextures() const = 0;
+        virtual const std::set<TextureId>& getWriteTextures() const = 0;
+        virtual const std::set<BufferId>& getReadBuffers() const = 0;
+        virtual const std::set<BufferId>& getWriteBuffers() const = 0;
+
+        virtual bool compile(std::shared_ptr<RHI::ResourceManager> resMgr,
+            const std::unordered_map<TextureId, PhysicalTextureInfo>& texMap,
+            const std::unordered_map<TextureId, RHI::TextureDesc>& texDescMap,
+            const std::unordered_map<BufferId, RHI::BufferHandle>& bufMap) = 0;
+
+        // 传统 render pass 执行（PassNode）
+        virtual void execute(RHI::RHICommandEncoder* encoder,
+            const RenderContext& context,
+            uint32_t frameIndex,
+            RHI::FramebufferHandle framebuffer,
+            uint32_t frameSlot = 0) = 0;
+
+        // 动态渲染执行（RenderNode）
+        virtual void executeDynamic(RHI::RHICommandEncoder* encoder,
+            const RenderContext& context,
+            uint32_t frameIndex,
+            const std::vector<void*>& attachmentViews,
+            uint32_t frameSlot = 0,
+            void* depthView = nullptr) = 0;
+
+        // 传统并行录制（PassNode）
+        virtual void beginPassOnPrimary(RHI::RHICommandEncoder* encoder,
+            RHI::FramebufferHandle framebuffer,
+            RHI::SubpassContents contents) = 0;
+        virtual void nextSubpassOnPrimary(RHI::RHICommandEncoder* encoder, RHI::SubpassContents contents) = 0;
+        virtual void endPassOnPrimary(RHI::RHICommandEncoder* encoder) = 0;
+        virtual void recordBody(RHI::RHICommandEncoder* encoder,
+            const RenderContext& context,
+            uint32_t frameIndex,
+            RHI::FramebufferHandle framebuffer,
+            uint32_t subpassIndex,
+            uint32_t frameSlot = 0) = 0;
+
+        // 动态并行录制（RenderNode）
+        virtual void beginRenderingOnPrimary(RHI::RHICommandEncoder* encoder,
+            const std::vector<RHI::RenderingAttachmentInfo>& colorAttachments,
+            const RHI::RenderingAttachmentInfo& depthAttachment,
+            bool hasDepth) = 0;
+        virtual void endRenderingOnPrimary(RHI::RHICommandEncoder* encoder) = 0;
+
+        // ── 查询接口 ──
+        virtual const std::string& getName() const = 0;
+        virtual RHI::RenderPassHandle getRenderPassHandle() const = 0;
+        virtual uint32_t getWidth() const = 0;
+        virtual uint32_t getHeight() const = 0;
+        virtual const std::vector<std::string>& getAttachmentNames() const = 0;
+        virtual TextureId getTextureIdForAttachmentKey(const std::string& key) const = 0;
+        virtual std::pair<RHI::ImageLayout, RHI::ImageLayout> getTextureLayout(TextureId texId) const = 0;
+        virtual uint32_t getSubpassCount() const = 0;
+        virtual RHI::ImageLayout getFinalLayout(TextureId texId) const = 0;
+        virtual void addDependency(const RHI::SubpassDependency& dep) = 0;
+        virtual void resolveInferredAttachments(const std::function<bool(TextureId)>& isFirstWriter) = 0;
+
+        // 动态路径：颜色附件 key 列表（收集附件视图用）
+        virtual const std::vector<std::string>& getColorAttachmentNames() const = 0;
+        // 动态路径：深度附件 key 列表（纯深度 pass 如 ShadowPass）
+        virtual const std::vector<std::string>& getDepthAttachmentNames() const = 0;
+
+        // 动态路径：并行录制主缓冲需要 loadOp/clear 值（与 getColorAttachmentNames 对齐）
+        virtual const std::vector<RHI::AttachmentLoadOp>& getColorLoadOps() const {
+            static const std::vector<RHI::AttachmentLoadOp> empty;
+            return empty;
+        }
+        virtual const std::vector<RHI::AttachmentLoadOp>& getDepthLoadOps() const {
+            static const std::vector<RHI::AttachmentLoadOp> empty;
+            return empty;
+        }
+        virtual const std::vector<RHI::ClearValue>& getClearValues() const {
+            static const std::vector<RHI::ClearValue> empty;
+            return empty;
+        }
+
+        static bool isDepthFormat(RHI::Format format);
+
+    protected:
+        PassType m_type = PassType::Graphics;
+    };
+
+} // namespace StarryEngine::RenderGraph

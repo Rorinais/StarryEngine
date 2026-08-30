@@ -12,11 +12,15 @@ namespace StarryEngine::Assets {
         size_t stateHash;
         RHI::RenderPassHandle renderPass;
         uint32_t subpassIndex;
+        RHI::Format colorFormat = RHI::Format::Undefined;
+        RHI::Format depthFormat = RHI::Format::Undefined;
 
         bool operator==(const PipelineCacheKey& other) const {
             return stateHash == other.stateHash &&
                 renderPass == other.renderPass &&
-                subpassIndex == other.subpassIndex;
+                subpassIndex == other.subpassIndex &&
+                colorFormat == other.colorFormat &&
+                depthFormat == other.depthFormat;
         }
     };
 }
@@ -28,6 +32,8 @@ namespace std {
             StarryEngine::Utils::hash_combine(seed, key.stateHash);
             StarryEngine::Utils::hash_combine(seed, key.renderPass);
             StarryEngine::Utils::hash_combine(seed, key.subpassIndex);
+            StarryEngine::Utils::hash_combine(seed, key.colorFormat);
+            StarryEngine::Utils::hash_combine(seed, key.depthFormat);
             return seed;
         }
     };
@@ -42,7 +48,9 @@ namespace StarryEngine::Assets {
             RHI::ResourceManager* resMgr,
             const GraphicsPipelineState& state,
             RHI::RenderPassHandle renderPass,
-            uint32_t subpassIndex);
+            uint32_t subpassIndex,
+            RHI::Format colorFormat = RHI::Format::Undefined,
+            RHI::Format depthFormat = RHI::Format::Undefined);
 
         static void clearCache();
         static void invalidateAll(RHI::ResourceManager* resMgr);

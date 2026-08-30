@@ -33,11 +33,12 @@ namespace StarryEngine::Assets {
         RHI::ResourceManager* resMgr,
         const GraphicsPipelineState& state,
         RHI::RenderPassHandle renderPass,
-        uint32_t subpassIndex) {
+        uint32_t subpassIndex,
+        RHI::Format colorFormat,
+        RHI::Format depthFormat) {
 
         size_t stateHash = std::hash<GraphicsPipelineState>{}(state);
-        Key key{ stateHash, renderPass, subpassIndex };
-
+        Key key{ stateHash, renderPass, subpassIndex, colorFormat, depthFormat };
         std::lock_guard<std::mutex> lock(s_mutex);
 
         auto it = s_cache.find(key);
@@ -52,6 +53,10 @@ namespace StarryEngine::Assets {
         desc.pipelineLayoutHandle = state.layout;
         desc.renderPass = renderPass;
         desc.subpass = subpassIndex;
+        // 动态渲染：renderPass 无效时用格式建管线
+        desc.useDynamicRendering = !renderPass.isValid();
+        desc.colorFormat = colorFormat;
+        desc.depthFormat = depthFormat;
         desc.rasterizer.cullMode = state.cullMode;
         desc.rasterizer.frontFace = state.frontFace;
         desc.rasterizer.lineWidth = state.lineWidth;

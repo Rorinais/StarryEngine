@@ -31,12 +31,12 @@ namespace StarryEngine {
                          const std::string& defaultTag) override;
 
         const std::vector<SubpassDesc>& getSubpassDescs() const { return m_subpasses; }
-        RenderGraph::PassNode* getPassNode() const { return m_passNode; }
+        RenderGraph::GraphNode* getPassNode() const { return m_passNode; }
 
     private:
         std::string m_name;
         std::vector<SubpassDesc> m_subpasses;
-        RenderGraph::PassNode* m_passNode = nullptr;
+        RenderGraph::GraphNode* m_passNode = nullptr;
     };
 
 } // namespace StarryEngine

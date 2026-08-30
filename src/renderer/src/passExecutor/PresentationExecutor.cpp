@@ -41,8 +41,10 @@ namespace StarryEngine {
         pso.vertexInput = {};
         RHI::BlendAttachmentState blend; blend.blendEnable = false;
         pso.attachments = { blend };
+        RHI::Format presentColorFmt = ctx.rhi ? ctx.rhi->getSwapChainImageFormat() : RHI::Format::BGRA8_UNorm;
         m_pipeline = Assets::PipelineCache::getOrCreateGraphicsPipeline(
-            m_resMgr.get(), pso, ctx.renderPass, ctx.subpassIndex);
+            m_resMgr.get(), pso, ctx.renderPass, ctx.subpassIndex,
+            presentColorFmt, RHI::Format::Undefined);
 
         m_globalSets = ctx.globalDescSets;
 

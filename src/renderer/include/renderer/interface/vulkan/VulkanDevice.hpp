@@ -90,6 +90,7 @@ namespace StarryEngine {
             VkBool32 tessellationShader = VK_FALSE;
             VkBool32 fillModeNonSolid = VK_FALSE;
             VkBool32 wideLines = VK_FALSE;
+            VkBool32 dynamicRendering = VK_FALSE;   // 动态渲染（VK_KHR_dynamic_rendering）
 
             // 队列配置
             float queuePriority = 1.0f;
@@ -371,6 +372,8 @@ namespace StarryEngine {
         VkPhysicalDeviceType getDeviceType() const { return mProperties.deviceType; }
         uint32_t getVendorId() const { return mProperties.vendorID; }
         uint32_t getDeviceId() const { return mProperties.deviceID; }
+        // 动态渲染能力（Vulkan 1.3 核心 / VK_KHR_dynamic_rendering）
+        bool supportsDynamicRendering() const { return m_supportsDynamicRendering; }
         uint32_t getSupportedApiVersion() const { return mProperties.apiVersion; }
         uint32_t getRequestedApiVersion() const { return mInstanceApiVersion; }
         uint32_t getSupportedApiMajor() const { return VK_VERSION_MAJOR(mProperties.apiVersion); }
@@ -461,6 +464,9 @@ namespace StarryEngine {
         VkPhysicalDeviceMemoryProperties mMemoryProperties{};
         QueueFamilyIndices mQueueFamilyIndices;
         std::unordered_set<std::string> mSupportedExtensions;
+
+        // 动态渲染（Vulkan 1.3 / VK_KHR_dynamic_rendering）是否可用
+        bool m_supportsDynamicRendering = false;
 
         // 逻辑设备
         VkDevice mLogicalDevice = VK_NULL_HANDLE;

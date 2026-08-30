@@ -81,6 +81,7 @@ namespace StarryEngine{
 
         void* getInstance() const override { return mDevice->getInstance()->getHandle(); }
         void* getPhysicalDevice() const override { return mDevice->getPhysicalDevice(); }
+        bool supportsDynamicRendering() const override { return mDevice->supportsDynamicRendering(); }
         void* getDevice()const override { return mDevice->getLogicalDevice(); }
         uint32_t getGraphicsQueueFamilyIndex()const override { return mDevice->getGraphicsQueueFamilyIndex(); }
         void* getGraphicsQueue()const override { return mDevice->getGraphicsQueue(); }

@@ -143,6 +143,10 @@ namespace StarryEngine::RHI {
         void nextSubpass(SubpassContents contents = SubpassContents::Inline)override;
         void endRenderPass()override;
 
+        // 动态渲染（VK_KHR_dynamic_rendering）
+        void beginRendering(const RenderingInfo& renderingInfo) override;
+        void endRendering() override;
+
         // secondary 命令缓冲：以继承信息开始录制（并行命令录制用）
         void beginSecondary(const SecondaryCommandBufferBeginInfo& beginInfo)override;
 

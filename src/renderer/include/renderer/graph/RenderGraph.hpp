@@ -11,6 +11,8 @@
 #include <renderer/interface/RHIHandles.hpp>
 #include <renderer/interface/vulkan/VulkanRHI.hpp>
 #include <renderer/graph/PassNode.hpp>
+#include <renderer/graph/RenderNode.hpp>
+#include <renderer/graph/GraphNode.hpp>
 #include <renderer/graph/ParallelRecording.hpp>
 
 namespace StarryEngine::RenderGraph {
@@ -55,14 +57,14 @@ namespace StarryEngine::RenderGraph {
 
         BufferId createVirtualBuffer(const RHI::BufferDesc& desc, const std::string& name = "");
 
-        PassNode* addGraphicsPassNode(const std::string& name);
+        GraphNode* addGraphicsPassNode(const std::string& name);
 
-        PassNode* addGraphicsPassNodeShared(const std::string& name, const std::string& dedupKey);
+        GraphNode* addGraphicsPassNodeShared(const std::string& name, const std::string& dedupKey);
 
-        PassNode* addComputePassNode(const std::string& name);
+        GraphNode* addComputePassNode(const std::string& name);
 
         // 按名字查找节点（cullUnusedPasses 可能删除节点 → 持有旧指针的 pass 需重新解析）
-        PassNode* findNode(const std::string& name);
+        GraphNode* findNode(const std::string& name);
 
         void dependencyAnalysis();
         void cullUnusedPasses();
@@ -79,10 +81,15 @@ namespace StarryEngine::RenderGraph {
         RHI::TextureHandle getPhysicalTextureHandle(TextureId id) const;
         RHI::BufferHandle getPhysicalBuffer(BufferId id) const;
 
-        const std::vector<PassNode*>& getSortedPasses() const { return m_sortedPasses; }
+        const std::vector<GraphNode*>& getSortedPasses() const { return m_sortedPasses; }
 
-        std::vector<std::unique_ptr<PassNode>>& getPasses() { return m_passes; }
-        const std::vector<std::unique_ptr<PassNode>>& getPasses() const { return m_passes; }
+        // 动态渲染：pass 的颜色附件视图（[pass][交换链图像索引]）
+        const std::vector<void*>& getAttachmentViewsForPass(size_t passIndex, uint32_t imageIndex) const;
+        // 动态渲染：pass 的深度附件视图（纯深度 pass 如 ShadowPass；无深度返回 nullptr）
+        void* getDepthAttachmentViewForPass(size_t passIndex, uint32_t imageIndex) const;
+
+        std::vector<std::unique_ptr<GraphNode>>& getPasses() { return m_passes; }
+        const std::vector<std::unique_ptr<GraphNode>>& getPasses() const { return m_passes; }
         size_t getPassCount() const { return m_passes.size(); }
 
         TextureId getTextureId(const std::string& name) const;
@@ -145,6 +152,8 @@ namespace StarryEngine::RenderGraph {
 
     private:
         std::shared_ptr<RHI::IRHI> m_rhi;
+        // 双模渲染：设备支持动态渲染（VK_KHR_dynamic_rendering）→ RenderNode；否则传统 render pass → PassNode
+        bool m_useDynamicRendering = false;
         std::shared_ptr<RHI::ResourceManager> m_resMgr;
         uint32_t m_swapchainImageCount = 0;
 
@@ -156,12 +165,14 @@ namespace StarryEngine::RenderGraph {
         std::unordered_map<std::string, BufferId> m_nameToBufferId;
         uint32_t m_nextBufferId = 1;
 
-        std::vector<std::unique_ptr<PassNode>> m_passes;
+        std::vector<std::unique_ptr<GraphNode>> m_passes;
+        std::vector<std::vector<std::vector<void*>>> m_perPassAttachmentViews;   // [pass][图像索引][附件视图]
+        std::vector<std::vector<void*>> m_perPassDepthViews;                     // [pass][图像索引] 深度视图
 
         // 共享图形 pass 节点注册表：dedupKey → 节点（addGraphicsPassNodeShared 用）
-        std::unordered_map<std::string, PassNode*> m_sharedGraphicsNodes;
+        std::unordered_map<std::string, GraphNode*> m_sharedGraphicsNodes;
 
-        std::vector<PassNode*> m_sortedPasses;
+        std::vector<GraphNode*> m_sortedPasses;
         std::unordered_map<TextureId, PhysicalTextureInfo> m_textureMap;  // 虚拟 -> 物理信息
         std::unordered_map<BufferId, RHI::BufferHandle> m_bufferMap;
 

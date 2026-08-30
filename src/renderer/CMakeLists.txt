@@ -1,8 +1,10 @@
 add_library(renderer STATIC
-    src/Renderer.cpp
+    src/BaseRenderer.cpp
+    src/RasterRenderer.cpp
     src/SceneAnalyzer.cpp
     src/graph/PassNode.cpp
     src/graph/RenderGraph.cpp
+    src/graph/RenderNode.cpp
     src/graph/RenderPassBuilder.cpp
     src/graph/SubpassBuilder.cpp
     src/interface/RHIManager.cpp
@@ -24,6 +26,7 @@ add_library(renderer STATIC
     src/passes/ShadowPass.cpp
     src/renderPaths/BaseRenderPath.cpp
     src/renderPaths/DeferredRenderPath.cpp
+    src/renderPaths/RayTracingRenderPath.cpp
     src/utils/FrameCapture.cpp
 )
 

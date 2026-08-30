@@ -106,6 +106,11 @@ namespace StarryEngine::RHI {
         virtual void beginRenderPass(const RenderPassBeginInfo& beginInfo,SubpassContents contents = SubpassContents::Inline) = 0;
         virtual void nextSubpass(SubpassContents contents = SubpassContents::Inline) = 0;
         virtual void endRenderPass() = 0;
+
+        // 动态渲染（VK_KHR_dynamic_rendering）：无 render pass / framebuffer 对象
+        virtual void beginRendering(const RenderingInfo& renderingInfo) = 0;
+        virtual void endRendering() = 0;
+
         virtual void beginSecondary(const SecondaryCommandBufferBeginInfo& beginInfo) = 0;
         virtual void executeCommands(const std::vector<void*>& nativeCommandBuffers) = 0;
 

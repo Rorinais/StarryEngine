@@ -1600,8 +1600,29 @@ namespace StarryEngine {
         }
 
         // ==================== 创建设备 ====================
+        // 动态渲染（Vulkan 1.3 核心 / VK_KHR_dynamic_rendering）：
+        // 先查询能力，仅当支持时通过 VkPhysicalDeviceVulkan13Features 链启用；
+        // 不支持则回退传统 render pass（双模兼容）。
+        m_supportsDynamicRendering = false;
+        VkPhysicalDeviceVulkan13Features queried13{};
+        queried13.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+        VkPhysicalDeviceFeatures2 queryF2{};
+        queryF2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2;
+        queryF2.pNext = &queried13;
+        vkGetPhysicalDeviceFeatures2(mPhysicalDevice, &queryF2);
+        if (mConfig.dynamicRendering && queried13.dynamicRendering) {
+            m_supportsDynamicRendering = true;
+        }
+
+        VkPhysicalDeviceVulkan13Features vulkan13Features{};
+        vulkan13Features.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_3_FEATURES;
+        vulkan13Features.dynamicRendering = m_supportsDynamicRendering ? VK_TRUE : VK_FALSE;
+
         VkDeviceCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+        if (m_supportsDynamicRendering) {
+            createInfo.pNext = &vulkan13Features;
+        }
         createInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
         createInfo.pQueueCreateInfos = queueCreateInfos.data();
         createInfo.pEnabledFeatures = &deviceFeatures;

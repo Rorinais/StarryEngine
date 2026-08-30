@@ -70,6 +70,9 @@ namespace StarryEngine::RHI {
         virtual uint32_t getSwapChainImageCount()  const = 0;
         virtual void* getSwapChainImageView(uint32_t index) const = 0;
 
+        // 动态渲染能力（Vulkan 1.3 / VK_KHR_dynamic_rendering）；false → 传统 render pass
+        virtual bool supportsDynamicRendering() const = 0;
+
         // 帧槽位 / 在飞帧（per-slot 数据缓冲索引的依据）：
         virtual uint32_t getCurrentFrameIndex() const = 0;
         virtual uint32_t getCurrentImageIndex() const = 0;

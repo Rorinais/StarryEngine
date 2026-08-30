@@ -84,7 +84,9 @@ namespace StarryEngine {
                                    const std::string& defaultTag) {
         if (!m_passNode) return;
         RHI::RenderPassHandle rp = m_passNode->getRenderPassHandle();
-        if (!rp.isValid()) return;
+        // 动态渲染：rp 无效但仍需建管线（用附件格式）；传统模式 rp 必须有效
+        const bool dynamicMode = !rp.isValid();
+        if (!dynamicMode && !rp.isValid()) return;
 
         for (auto& sp : m_subpasses) {
             if (sp.executor) sp.executor->clearDrawItems();
@@ -106,7 +108,9 @@ namespace StarryEngine {
             std::unordered_map<uint32_t, RHI::PipelineHandle> mapping;
             for (uint32_t idx : usedIndices) {
                 auto pipeline = Assets::PipelineCache::getOrCreateGraphicsPipeline(
-                    ctx.resMgr.get(), *sceneData.PSO[idx], rp, i);
+                    ctx.resMgr.get(), *sceneData.PSO[idx], rp, i,
+                    RHI::Format::RGBA16_Float,            // SceneColor（动态渲染颜色格式）
+                    RHI::Format::D24_UNorm_S8_UInt);      // Depth（动态渲染深度格式）
                 if (pipeline.isValid()) mapping[idx] = pipeline;
             }
             m_subpasses[i].executor->setPipelineMapping(std::move(mapping));

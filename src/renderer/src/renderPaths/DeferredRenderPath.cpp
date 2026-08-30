@@ -1,6 +1,10 @@
 #include <renderer/renderPaths/DeferredRenderPath.hpp>
 #include <renderer/passes/GraphicsPass.hpp>
+#include <renderer/passes/MeshPass.hpp>
+#include <renderer/passes/ShadowPass.hpp>
 #include <renderer/passes/ParticlePass.hpp>
+#include <renderer/passes/PassWrapper.hpp>
+#include <renderer/passExecutor/SceneDrawExecutor.hpp>
 #include <renderer/passExecutor/ParticleRenderExecutor.hpp>
 #include <logging/Logger.hpp>
 #include <ui/ImGuiManager.hpp>
@@ -13,7 +17,81 @@ namespace StarryEngine {
     // ──── DeferredRenderPath ──────────────────────────────────────
 
     DeferredRenderPath::DeferredRenderPath(std::shared_ptr<RHI::IRHI> rhi, uint32_t width, uint32_t height)
-        : BaseRenderPath(rhi, width, height) {}
+        : DeferredRenderPath(rhi, width, height, Config{}) {}
+
+    DeferredRenderPath::DeferredRenderPath(std::shared_ptr<RHI::IRHI> rhi, uint32_t width, uint32_t height,
+        const Config& cfg)
+        : BaseRenderPath(rhi, width, height), m_cfg(cfg) {
+        buildDefaultPipeline();
+    }
+
+    // ── 内建标准 PBR 管线：填充默认槽位（demo 无需手拼 PassList）──
+    void DeferredRenderPath::buildDefaultPipeline() {
+        auto colorDesc = PassWrapper::createColorTextureDesc({m_width, m_height, 1}, RHI::Format::RGBA16_Float);
+        auto depthDesc = PassWrapper::createDepthTextureDesc({m_width, m_height, 1}, RHI::Format::D24_UNorm_S8_UInt);
+        auto swapDesc   = PassWrapper::createColorTextureDesc({m_width, m_height, 1}, RHI::Format::BGRA8_sRGB);
+        auto shadowMapDesc = PassWrapper::createDepthTextureDesc({ShadowPass::kShadowMapSize, ShadowPass::kShadowMapSize, 1}, RHI::Format::D24_UNorm_S8_UInt);
+        addTextureDesc("SceneColor",  colorDesc);
+        addTextureDesc("Depth",       depthDesc);
+        addTextureDesc("Swapchain",   swapDesc);
+        addTextureDesc("ShadowMap",   shadowMapDesc);
+
+        if (m_cfg.shadows) {
+            setDefaultSlot(RenderPassEvent::Shadow, std::make_shared<ShadowPass>("ShadowPass"), "ShadowPass");
+        }
+
+        auto forwardPass = std::make_shared<MeshPass>("ForwardPass", "Forward_Opaque", RHI::Color::Transparent());
+        forwardPass->addReadTextureByName("ShadowMap");
+        setDefaultSlot(RenderPassEvent::Opaque, forwardPass, "Forward_Opaque");
+
+        if (m_cfg.skybox || m_cfg.grid) {
+            auto postPass = std::make_shared<GraphicsPass>("PostProcessPass");
+            if (m_cfg.skybox) {
+                SubpassDesc sky;
+                sky.tag = "PostProcess_Skybox";
+                sky.executor = std::make_shared<SceneDrawExecutor>();
+                sky.colorAttachments.push_back({"SceneColor"});
+                sky.depthAttachment = {"Depth"};
+                postPass->addSubpass(sky);
+            }
+            if (m_cfg.grid) {
+                SubpassDesc grid;
+                grid.tag = "PostProcess_Grid";
+                grid.executor = std::make_shared<SceneDrawExecutor>();
+                grid.colorAttachments.push_back({"SceneColor"});
+                grid.depthAttachment = {"Depth"};
+                postPass->addSubpass(grid);
+            }
+            setDefaultSlot(RenderPassEvent::Post, postPass, "PostProcess");
+        }
+
+        if (m_cfg.stencilOutline) {
+            auto stencilPass = std::make_shared<GraphicsPass>("StencilPass");
+            RenderGraph::AttachmentParams ds;
+            ds.clearDepth = 1.0f;
+            ds.clearStencil = 0;
+
+            SubpassDesc sw;
+            sw.tag = "StencilWrite";
+            sw.executor = std::make_shared<SceneDrawExecutor>();
+            sw.colorAttachments.push_back({ "SceneColor", RenderGraph::AttachmentParams{} });
+            sw.depthAttachment = { "Depth", ds };
+            stencilPass->addSubpass(sw);
+
+            SubpassDesc st;
+            st.tag = "StencilTest";
+            st.executor = std::make_shared<SceneDrawExecutor>();
+            st.colorAttachments.push_back({ "SceneColor", RenderGraph::AttachmentParams{} });
+            st.depthAttachment = { "Depth", ds };
+            stencilPass->addSubpass(st);
+
+            setDefaultSlot(RenderPassEvent::Stencil, stencilPass, "Stencil");
+        }
+
+        if (m_cfg.particles) {
+            setDefaultSlot(RenderPassEvent::Particles, std::make_shared<ParticlePass>("Particles", "Particles"), "Particles");
+        }
+    }
 
     void DeferredRenderPath::setConfig(const RenderPathConfig&) {}
 
@@ -31,6 +109,9 @@ namespace StarryEngine {
     void DeferredRenderPath::buildConfigPasses(
         std::unordered_map<std::string, RenderGraph::TextureId>& texIdMap)
     {
+        // 槽位 → pass 列表（启用且有序）
+        assemblePassList();
+
         for (auto& pass : m_passes) {
             pass->setDataProvider(&m_blackboard);
 

@@ -78,7 +78,9 @@ namespace StarryEngine {
     void ShadowPass::onSceneData(const AnalysisSceneResult& sceneData,const IPass::CompileContext& ctx,const std::string& /*defaultTag*/) {
         if (!m_passNode) return;
         RHI::RenderPassHandle rp = m_passNode->getRenderPassHandle();
-        if (!rp.isValid()) return;
+        // 动态渲染：rp 无效但仍需建管线（用附件格式）；传统模式 rp 必须有效
+        const bool dynamicMode = !rp.isValid();
+        if (!dynamicMode && !rp.isValid()) return;
 
         if (!ensureShaders(ctx.resMgr)) return;
 
@@ -96,7 +98,9 @@ namespace StarryEngine {
         for (uint32_t idx : usedIndices) {
             GraphicsPipelineState shadow = buildShadowPSO(*sceneData.PSO[idx]);
             auto pipeline = Assets::PipelineCache::getOrCreateGraphicsPipeline(
-                ctx.resMgr.get(), shadow, rp, 0);
+                ctx.resMgr.get(), shadow, rp, 0,
+                RHI::Format::Undefined,               // 纯深度 pass：无颜色
+                RHI::Format::D24_UNorm_S8_UInt);      // ShadowMap 深度格式
             if (pipeline.isValid()) mapping[idx] = pipeline;
         }
         m_executor->setPipelineMapping(std::move(mapping));

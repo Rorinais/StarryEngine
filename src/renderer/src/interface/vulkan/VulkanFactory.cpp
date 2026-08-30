@@ -19,12 +19,14 @@ namespace StarryEngine::RHI {
         RHIShaderModule* rhiVertexShader,
         RHIShaderModule* rhiFragmentShader,
         RHIRenderPass* renderPassObj) {
-        if (!layoutObj || !rhiVertexShader || !rhiFragmentShader || !renderPassObj) return nullptr;
+        // 动态渲染（VK_KHR_dynamic_rendering）：renderPassObj 可为空（desc.useDynamicRendering）
+        if (!layoutObj || !rhiVertexShader || !rhiFragmentShader) return nullptr;
 
         auto layout = static_cast<VkPipelineLayout>(layoutObj->getNativeHandle());
         auto vertexShader = static_cast<VkShaderModule>(rhiVertexShader->getNativeHandle());
         auto fragmentShader = static_cast<VkShaderModule>(rhiFragmentShader->getNativeHandle());
-        auto renderPass = static_cast<VkRenderPass>(renderPassObj->getNativeHandle());
+        auto renderPass = renderPassObj ? static_cast<VkRenderPass>(renderPassObj->getNativeHandle())
+                                        : VK_NULL_HANDLE;
 
         std::vector<VkPipelineShaderStageCreateInfo> shaderStage{
             mDevice->createShaderStageInfo(vertexShader, func::RHI_TO_VK_ShaderStageFlag(rhiVertexShader->getStage()), rhiVertexShader->getEntryPoint().c_str()),

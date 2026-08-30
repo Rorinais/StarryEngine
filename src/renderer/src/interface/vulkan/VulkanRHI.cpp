@@ -70,6 +70,7 @@ namespace StarryEngine {
         config.tessellationShader = rhiConfig.deviceFeatures.tessellationShader ? VK_TRUE : VK_FALSE;
         config.fillModeNonSolid = rhiConfig.deviceFeatures.fillModeNonSolid ? VK_TRUE : VK_FALSE;
         config.wideLines = rhiConfig.deviceFeatures.wideLines ? VK_TRUE : VK_FALSE;
+        config.dynamicRendering = rhiConfig.deviceFeatures.dynamicRendering ? VK_TRUE : VK_FALSE;
 
         config.queuePriority = rhiConfig.queuePriority;
         config.enableValidation = rhiConfig.enableDebug;

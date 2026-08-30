@@ -41,7 +41,7 @@ namespace StarryEngine {
 
     private:
         ComputePassDesc m_desc;
-        RenderGraph::PassNode* m_passNode = nullptr;
+        RenderGraph::GraphNode* m_passNode = nullptr;
         RHI::ShaderHandle m_shader;
         RHI::DescriptorSetLayoutHandle m_descLayout;
         RHI::PipelineLayoutHandle m_pipelineLayout;

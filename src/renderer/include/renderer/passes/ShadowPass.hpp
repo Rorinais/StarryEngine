@@ -33,7 +33,7 @@ namespace StarryEngine {
         static bool isSkinnedInput(const GraphicsPipelineState& pso);
 
         std::string m_name;
-        RenderGraph::PassNode* m_passNode = nullptr;
+        RenderGraph::GraphNode* m_passNode = nullptr;
         std::shared_ptr<SceneDrawExecutor> m_executor;
 
         RHI::ShaderHandle m_shadowVS;

@@ -36,7 +36,7 @@ namespace StarryEngine {
             std::shared_ptr<Scene::ParticleEmitter> emitter;
             RenderGraph::BufferId bufferId;
             std::shared_ptr<ComputePass> computePass;
-            RenderGraph::PassNode* renderPassNode = nullptr;
+            RenderGraph::GraphNode* renderPassNode = nullptr;
             uint32_t renderSubpassIndex = 0;
             std::shared_ptr<IPassExecutor> executor;
 
@@ -51,7 +51,7 @@ namespace StarryEngine {
 
         std::string m_name;
         std::string m_passTag;
-        RenderGraph::PassNode* m_renderPassNode = nullptr;
+        RenderGraph::GraphNode* m_renderPassNode = nullptr;
         std::vector<EmitterState> m_emitterStates;
 
         std::shared_ptr<Assets::MaterialInstance> m_defaultMaterial;

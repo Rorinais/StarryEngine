@@ -282,4 +282,56 @@ namespace StarryEngine {
         rec->onPrepare(ctx);
     }
 
+    // ── 路径槽位（Unity URP ScriptableRenderer 模型）──
+
+    void BaseRenderPath::setDefaultSlot(RenderPassEvent ev, std::shared_ptr<IPass> pass, const std::string& tag) {
+        PassSlot slot;
+        slot.event = ev;
+        slot.tag = tag;
+        slot.pass = std::move(pass);
+        slot.enabled = true;
+        // 保持按事件顺序：插到第一个事件 > ev 的槽之前
+        auto it = std::find_if(m_slots.begin(), m_slots.end(),
+            [ev](const PassSlot& s) { return static_cast<int>(s.event) > static_cast<int>(ev); });
+        m_slots.insert(it, std::move(slot));
+    }
+
+    void BaseRenderPath::insertPass(RenderPassEvent ev, std::shared_ptr<IPass> pass, const std::string& tag) {
+        PassSlot slot;
+        slot.event = ev;
+        slot.tag = tag;
+        slot.pass = std::move(pass);
+        slot.enabled = true;
+        auto it = std::find_if(m_slots.begin(), m_slots.end(),
+            [ev](const PassSlot& s) { return static_cast<int>(s.event) > static_cast<int>(ev); });
+        m_slots.insert(it, std::move(slot));
+    }
+
+    void BaseRenderPath::overrideSlot(RenderPassEvent ev, std::shared_ptr<IPass> pass) {
+        for (auto& slot : m_slots) {
+            if (slot.event == ev) {
+                slot.pass = std::move(pass);
+                slot.enabled = true;
+                return;
+            }
+        }
+        // 无默认槽 → 直接插入
+        insertPass(ev, std::move(pass));
+    }
+
+    void BaseRenderPath::setSlotEnabled(RenderPassEvent ev, bool enabled) {
+        for (auto& slot : m_slots) {
+            if (slot.event == ev) slot.enabled = enabled;
+        }
+    }
+
+    void BaseRenderPath::assemblePassList() {
+        PassList passes;
+        for (auto& slot : m_slots) {
+            if (!slot.enabled || !slot.pass) continue;
+            passes.push_back(slot.pass);
+        }
+        setPassList(std::move(passes));
+    }
+
 } // namespace StarryEngine

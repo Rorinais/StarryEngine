@@ -158,7 +158,9 @@ namespace StarryEngine {
             if (st.computePass) st.computePass->onAfterCompile(ctx);
 
             RHI::RenderPassHandle rp = st.renderPassNode ? st.renderPassNode->getRenderPassHandle() : RHI::RenderPassHandle{};
-            if (!rp.isValid()) continue;
+            // 动态渲染：rp 无效但仍需建管线（用附件格式）；传统模式 rp 必须有效
+            const bool dynamicMode = !rp.isValid();
+            if (!dynamicMode && !rp.isValid()) continue;
             auto* mat = em->material ? em->material.get() : ensureDefaultMaterial(ctx).get();
             if (!mat) continue;
 
@@ -182,7 +184,8 @@ namespace StarryEngine {
             pso.vertexInput = {};
             pso.attachments = mat->getAttachments();  
             auto pipeline = Assets::PipelineCache::getOrCreateGraphicsPipeline(
-                resMgr.get(), pso, rp, st.renderSubpassIndex);
+                resMgr.get(), pso, rp, st.renderSubpassIndex,
+                RHI::Format::RGBA16_Float, RHI::Format::D24_UNorm_S8_UInt);
             if (!pipeline.isValid()) { LOG_ERROR("[{}] pipeline failed", em->name); continue; }
 
             // set1：粒子 buffer

@@ -328,6 +328,63 @@ namespace StarryEngine::RHI {
 		vkCmdEndRenderPass(getVkCommandBuffer());
     }
 
+    // ── 动态渲染（VK_KHR_dynamic_rendering）：vkCmdBeginRendering / vkCmdEndRendering ──
+    void VulkanCommandEncoder::beginRendering(const RenderingInfo& renderingInfo) {
+        VkCommandBuffer cmdBuf = getVkCommandBuffer();
+        if (cmdBuf == VK_NULL_HANDLE) return;
+
+        VkRenderingInfo vkInfo{};
+        vkInfo.sType = VK_STRUCTURE_TYPE_RENDERING_INFO;
+        vkInfo.renderArea.offset.x = renderingInfo.renderArea.offset.x;
+        vkInfo.renderArea.offset.y = renderingInfo.renderArea.offset.y;
+        vkInfo.renderArea.extent.width = renderingInfo.renderArea.extent.width;
+        vkInfo.renderArea.extent.height = renderingInfo.renderArea.extent.height;
+        vkInfo.layerCount = renderingInfo.layerCount;
+        vkInfo.viewMask = renderingInfo.viewMask;
+
+        std::vector<VkRenderingAttachmentInfo> vkColorAttachments;
+        vkColorAttachments.reserve(renderingInfo.colorAttachments.size());
+        for (const auto& att : renderingInfo.colorAttachments) {
+            VkRenderingAttachmentInfo vkAtt{};
+            vkAtt.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+            vkAtt.imageView = static_cast<VkImageView>(att.imageView);
+            vkAtt.imageLayout = func::RHI_TO_VK_ImageLayout(att.imageLayout);
+            vkAtt.loadOp = func::RHI_TO_VK_AttachmentLoadOp(att.loadOp);
+            vkAtt.storeOp = func::RHI_TO_VK_AttachmentStoreOp(att.storeOp);
+            if (att.loadOp == AttachmentLoadOp::Clear) {
+                vkAtt.clearValue.color = { att.clearValue.color.r, att.clearValue.color.g,
+                                           att.clearValue.color.b, att.clearValue.color.a };
+            }
+            vkColorAttachments.push_back(vkAtt);
+        }
+        vkInfo.colorAttachmentCount = static_cast<uint32_t>(vkColorAttachments.size());
+        vkInfo.pColorAttachments = vkColorAttachments.data();
+
+        VkRenderingAttachmentInfo vkDepth{};
+        vkDepth.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+        if (renderingInfo.hasDepth && renderingInfo.depthAttachment.imageView) {
+            vkDepth.imageView = static_cast<VkImageView>(renderingInfo.depthAttachment.imageView);
+            vkDepth.imageLayout = func::RHI_TO_VK_ImageLayout(renderingInfo.depthAttachment.imageLayout);
+            vkDepth.loadOp = func::RHI_TO_VK_AttachmentLoadOp(renderingInfo.depthAttachment.loadOp);
+            vkDepth.storeOp = func::RHI_TO_VK_AttachmentStoreOp(renderingInfo.depthAttachment.storeOp);
+            // Vulkan 1.3：depth/stencil 共享 loadOp/storeOp（stencil 无独立字段）。
+            // StencilPass 依赖此语义：首写（Clear）清 0，后续（Load）保留 StencilWrite 写入值。
+            if (renderingInfo.depthAttachment.loadOp == AttachmentLoadOp::Clear) {
+                vkDepth.clearValue.depthStencil.depth = renderingInfo.depthAttachment.clearValue.depth;
+                vkDepth.clearValue.depthStencil.stencil = renderingInfo.depthAttachment.clearValue.stencil;
+            }
+            vkInfo.pDepthAttachment = &vkDepth;
+        }
+
+        vkCmdBeginRendering(cmdBuf, &vkInfo);
+    }
+
+    void VulkanCommandEncoder::endRendering() {
+        VkCommandBuffer cmdBuf = getVkCommandBuffer();
+        if (cmdBuf == VK_NULL_HANDLE) return;
+        vkCmdEndRendering(cmdBuf);
+    }
+
     // secondary 命令缓冲开始录制：RENDER_PASS_CONTINUE_BIT + 继承信息（并行命令录制用）
     void VulkanCommandEncoder::beginSecondary(const SecondaryCommandBufferBeginInfo& beginInfo) {
         VkCommandBuffer cmdBuf = getVkCommandBuffer();
@@ -342,7 +399,20 @@ namespace StarryEngine::RHI {
 
         VkCommandBufferInheritanceInfo vkInheritInfo{};
         vkInheritInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_INFO;
-        if (beginInfo.renderPassContinue) {
+
+        // 动态渲染继承（VK_KHR_dynamic_rendering secondary）
+        VkCommandBufferInheritanceRenderingInfo vkInheritRendering{};
+        if (beginInfo.useDynamicRendering) {
+            vkBeginInfo.flags |= VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
+            vkInheritRendering.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_RENDERING_INFO;
+            VkFormat colorFmt = func::RHI_TO_VK_Format(beginInfo.colorFormat);
+            vkInheritRendering.colorAttachmentCount = (colorFmt != VK_FORMAT_UNDEFINED) ? 1u : 0u;
+            vkInheritRendering.pColorAttachmentFormats = (colorFmt != VK_FORMAT_UNDEFINED) ? &colorFmt : nullptr;
+            vkInheritRendering.depthAttachmentFormat = func::RHI_TO_VK_Format(beginInfo.depthFormat);
+            vkInheritRendering.stencilAttachmentFormat = VK_FORMAT_UNDEFINED;
+            vkInheritInfo.pNext = &vkInheritRendering;
+        }
+        else if (beginInfo.renderPassContinue) {
             vkBeginInfo.flags |= VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
             vkInheritInfo.renderPass = static_cast<VkRenderPass>(
                 mResourceManager->getRenderPass(beginInfo.renderPass)->getNativeHandle());
@@ -630,6 +700,44 @@ namespace StarryEngine::RHI {
     void VulkanCommandEncoder::clearAttachments(
         const std::vector<ClearAttachment>& attachments,
         const std::vector<ClearRect>& rects) {
+        VkCommandBuffer cmdBuf = getVkCommandBuffer();
+        if (cmdBuf == VK_NULL_HANDLE && mCommandBuffer != nullptr) {
+            cmdBuf = reinterpret_cast<VkCommandBuffer>(mCommandBuffer->getNativeHandle());
+        }
+        if (cmdBuf == VK_NULL_HANDLE || attachments.empty() || rects.empty()) return;
+
+        std::vector<VkClearAttachment> vkAttachments;
+        vkAttachments.reserve(attachments.size());
+        for (const auto& att : attachments) {
+            VkClearAttachment vkAtt{};
+            vkAtt.aspectMask = func::RHI_TO_VK_ImageAspect(att.aspectMask);
+            vkAtt.colorAttachment = att.colorAttachment;
+            if (att.aspectMask == ImageAspect::Color) {
+                vkAtt.clearValue.color.float32[0] = att.clearValue.color.r;
+                vkAtt.clearValue.color.float32[1] = att.clearValue.color.g;
+                vkAtt.clearValue.color.float32[2] = att.clearValue.color.b;
+                vkAtt.clearValue.color.float32[3] = att.clearValue.color.a;
+            } else {
+                vkAtt.clearValue.depthStencil.depth = att.clearValue.depth;
+                vkAtt.clearValue.depthStencil.stencil = att.clearValue.stencil;
+            }
+            vkAttachments.push_back(vkAtt);
+        }
+
+        std::vector<VkClearRect> vkRects;
+        vkRects.reserve(rects.size());
+        for (const auto& rect : rects) {
+            VkClearRect vkRect{};
+            vkRect.rect.offset = { rect.rect.offset.x, rect.rect.offset.y };
+            vkRect.rect.extent = { rect.rect.extent.width, rect.rect.extent.height };
+            vkRect.baseArrayLayer = rect.baseArrayLayer;
+            vkRect.layerCount = rect.layerCount;
+            vkRects.push_back(vkRect);
+        }
+
+        vkCmdClearAttachments(cmdBuf,
+            static_cast<uint32_t>(vkAttachments.size()), vkAttachments.data(),
+            static_cast<uint32_t>(vkRects.size()), vkRects.data());
     }
 
     // 填充缓冲区

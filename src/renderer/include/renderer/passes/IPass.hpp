@@ -16,7 +16,7 @@ namespace StarryEngine {
         std::string tag;
         uint32_t subpassIndex = 0;
         std::shared_ptr<IPassExecutor> executor;
-        RenderGraph::PassNode* passNode = nullptr;
+        RenderGraph::GraphNode* passNode = nullptr;
     };
 
     class IPass {
@@ -50,7 +50,7 @@ namespace StarryEngine {
         void addReadTextureByName(const std::string& texName) { m_readTextureNames.push_back(texName); }
 
     protected:
-        void resolveReadTextures(RenderGraph::PassNode* node,
+        void resolveReadTextures(RenderGraph::GraphNode* node,
                                  const std::unordered_map<std::string, RenderGraph::TextureId>& texIdMap) {
             if (!node) return;
             for (auto& name : m_readTextureNames) {

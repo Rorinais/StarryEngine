@@ -390,6 +390,28 @@ namespace StarryEngine::RHI {
         }
     };
 
+    // ==================== 动态渲染（VK_KHR_dynamic_rendering） ====================
+
+    // 动态渲染附件描述（对应 VkRenderingAttachmentInfo）
+    struct RenderingAttachmentInfo {
+        void* imageView = nullptr;          ///< 原生 VkImageView（交换链视图 / 纹理默认视图）
+        ImageLayout imageLayout = ImageLayout::ColorAttachment;  ///< 附件布局
+        AttachmentLoadOp loadOp = AttachmentLoadOp::Clear;       ///< 加载操作
+        AttachmentStoreOp storeOp = AttachmentStoreOp::Store;    ///< 存储操作
+        ClearValue clearValue;              ///< 清除值（loadOp=Clear 时有效）
+    };
+
+    // 动态渲染信息（对应 VkRenderingInfo）
+    struct RenderingInfo {
+        Rect2D renderArea;                               ///< 渲染区域
+        uint32_t layerCount = 1;                         ///< 层数
+        uint32_t viewMask = 0;                           ///< 视图掩码（多视图）
+        std::vector<RenderingAttachmentInfo> colorAttachments;   ///< 颜色附件
+        RenderingAttachmentInfo depthAttachment;         ///< 深度附件（imageView=nullptr 表示无）
+        bool hasDepth = false;                           ///< 是否有深度附件
+        std::vector<RenderingAttachmentInfo> resolveAttachments; ///< 解析附件
+    };
+
     /**
      * @brief 次命令缓冲区开始信息（并行命令录制用）
      * @details renderPassContinue=true 时带 VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT
@@ -401,6 +423,11 @@ namespace StarryEngine::RHI {
         FramebufferHandle framebuffer;     
         uint32_t subpass = 0;            ///< 继承的子通道索引
         bool renderPassContinue = true;  ///< false = 独立 compute secondary（无继承）
+
+        // 动态渲染 secondary（VK_KHR_dynamic_rendering 继承信息）
+        bool useDynamicRendering = false;
+        Format colorFormat = Format::Undefined;   ///< 颜色附件格式（Undefined=无颜色）
+        Format depthFormat = Format::Undefined;   ///< 深度附件格式（Undefined=无深度）
     };
 
     /**
@@ -1581,14 +1608,22 @@ namespace StarryEngine::RHI {
         // 管线布局
         PipelineLayoutHandle pipelineLayoutHandle;
 
-        // 渲染子通道
+        // 渲染子通道（传统 render pass）
 		RenderPassHandle renderPass;
         uint32_t subpass = 0;
+
+        // 动态渲染（VK_KHR_dynamic_rendering）：renderPass 无效时用 colorFormat/depthFormat
+        bool useDynamicRendering = false;
+        Format colorFormat = Format::Undefined;   ///< 颜色附件格式（Undefined=无颜色）
+        Format depthFormat = Format::Undefined;   ///< 深度附件格式（Undefined=无深度）
 
         std::string debugName;
 
         auto operator==(const GraphicsPipelineDesc& other) const {
-            return vertexInput == other.vertexInput &&
+            return useDynamicRendering == other.useDynamicRendering &&
+                colorFormat == other.colorFormat &&
+                depthFormat == other.depthFormat &&
+                vertexInput == other.vertexInput &&
                 topology == other.topology &&
                 rasterizer == other.rasterizer &&
                 depthStencil == other.depthStencil &&

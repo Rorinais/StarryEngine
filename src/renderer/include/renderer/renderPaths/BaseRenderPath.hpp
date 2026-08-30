@@ -18,6 +18,25 @@ namespace StarryEngine {
         std::shared_ptr<IPassExecutor> executor;
     };
 
+    // ── 路径槽位（Unity URP ScriptableRenderer 模型）──
+    // 核心管线固定顺序，自定义 pass 插到命名注入点；默认槽可替换/禁用。
+    enum class RenderPassEvent {
+        BeforeShadow, Shadow, AfterShadow,
+        BeforeOpaque, Opaque, AfterOpaque,
+        BeforePost, Post, AfterPost,
+        BeforeStencil, Stencil, AfterStencil,
+        BeforeParticles, Particles, AfterParticles,
+        BeforePresent,
+        Count
+    };
+
+    struct PassSlot {
+        RenderPassEvent event = RenderPassEvent::Opaque;
+        std::string tag;
+        std::shared_ptr<IPass> pass;
+        bool enabled = true;
+    };
+
     class BaseRenderPath : public IRenderPath {
     public:
         BaseRenderPath(std::shared_ptr<RHI::IRHI> rhi, uint32_t width, uint32_t height);
@@ -32,6 +51,12 @@ namespace StarryEngine {
         void setTextureDescs(const std::unordered_map<std::string, RHI::TextureDesc>& descs);
         void setPresentationDescriptorData(RHI::DescriptorSetLayoutHandle globalSetLayout,
             std::vector<RHI::DescriptorSetHandle> globalDescSets);
+
+        // ── 槽位操作（demo 注入/覆盖/启停）──
+        void insertPass(RenderPassEvent ev, std::shared_ptr<IPass> pass, const std::string& tag = "");
+        void overrideSlot(RenderPassEvent ev, std::shared_ptr<IPass> pass);
+        void setSlotEnabled(RenderPassEvent ev, bool enabled);
+        void clearSlots() { m_slots.clear(); }
 
         void setPresentClearColor(const RHI::Color& color) { m_presentClearColor = color; }
         // 呈现 pass 的输入纹理（默认 SceneColor；软光追+降噪时切 SceneColorFiltered，
@@ -51,6 +76,13 @@ namespace StarryEngine {
         void setParallelRecording(const ParallelRecordingContext* parallel) override { m_parallel = parallel; }
 
     protected:
+        // 子类建默认管线时注册默认槽
+        void setDefaultSlot(RenderPassEvent ev, std::shared_ptr<IPass> pass, const std::string& tag = "");
+        // 将启用的槽位按序组装为 m_passes（buildConfigPasses 调用）
+        void assemblePassList();
+
+        std::vector<PassSlot> m_slots;
+
         virtual void buildConfigPasses(std::unordered_map<std::string, RenderGraph::TextureId>& texIdMap) = 0;
 
         virtual void doRebuildResources(const AnalysisSceneResult& sceneData) = 0;
@@ -85,7 +117,7 @@ namespace StarryEngine {
 
         // 子通道 → PassNode 映射（子类构建 config pass 时填充）
         std::unordered_map<std::string, SubpassTarget> m_tagToSubpass;
-        std::unordered_map<std::string, RenderGraph::PassNode*> m_tagToPassNode;
+        std::unordered_map<std::string, RenderGraph::GraphNode*> m_tagToPassNode;
 
         RHI::DescriptorSetLayoutHandle  m_globalSetLayout;
         std::vector<RHI::DescriptorSetHandle> m_globalDescSets;

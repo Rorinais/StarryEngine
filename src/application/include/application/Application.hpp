@@ -22,7 +22,7 @@
 #include <logging/Logger.hpp>
 #include <core/FrameMonitor.hpp>
 #include <core/Clock.hpp>
-#include <renderer/Renderer.hpp>
+#include <renderer/IRenderer.hpp>
 #include <renderer/graph/RenderGraph.hpp>
 #include <renderer/interface/RHIFactory.hpp>
 #include <renderer/interface/RHIEnums.hpp>
@@ -71,7 +71,7 @@ namespace StarryEngine {
 
         void createDescriptorPool();
         void initEventDispatcher();
-        void setRenderer(std::shared_ptr<Renderer> renderer) { m_renderer = renderer; }
+        void setRenderer(std::shared_ptr<IRenderer> renderer) { m_renderer = renderer; }
         void setScene(std::shared_ptr<Scene::Scene> scene) { m_scene = scene; }
 
         using UpdateCallback = std::function<void(float deltaTime)>;
@@ -100,7 +100,7 @@ namespace StarryEngine {
         uint32_t m_flightFrame = 2;
 
         std::shared_ptr<Scene::Scene> m_scene;
-        std::shared_ptr<Renderer> m_renderer;
+        std::shared_ptr<IRenderer> m_renderer;
         UpdateCallback m_updateCallback;
         PostRenderCallback m_postRenderCallback;
 

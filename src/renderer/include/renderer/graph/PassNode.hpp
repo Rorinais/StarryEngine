@@ -9,37 +9,16 @@
 #include <optional>
 #include <functional>
 #include <renderer/graph/Types.hpp>
+#include <renderer/graph/GraphNode.hpp>
 #include <renderer/graph/RenderPassBuilder.hpp>
 #include <renderer/graph/SubpassBuilder.hpp>
 
 namespace StarryEngine::RenderGraph {
 
-    class IPassExecutor;
-
-    struct PhysicalTextureInfo {
-        RHI::TextureHandle handle;
-        std::vector<void*> views;
-    };
-
-    struct LayoutTransition {
-        int32_t srcPassIdx;  
-        uint32_t dstPassIdx;
-        TextureId texId;
-        RHI::ImageLayout srcLayout;
-        RHI::ImageLayout dstLayout;
-        RHI::PipelineStage srcStage;
-        RHI::PipelineStage dstStage;
-        RHI::AccessFlag srcAccess;
-        RHI::AccessFlag dstAccess;
-        uint32_t aspectMask;
-    };
-
-    enum class PassType { Graphics, Compute };
-
-    class PassNode {
+    class PassNode : public GraphNode {
     public:
         explicit PassNode(const std::string& name, PassType type = PassType::Graphics);
-        ~PassNode();
+        ~PassNode() override;
 
         PassType getType() const { return m_type; }
 
@@ -81,7 +60,15 @@ namespace StarryEngine::RenderGraph {
             const RenderContext& context,
             uint32_t frameIndex,
             RHI::FramebufferHandle framebuffer,
-            uint32_t frameSlot = 0);
+            uint32_t frameSlot = 0) override;
+
+        // 动态渲染：PassNode 为传统路径，动态方法 no-op（仅满足 GraphNode 接口）
+        void executeDynamic(RHI::RHICommandEncoder*, const RenderContext&, uint32_t,
+            const std::vector<void*>&, uint32_t = 0, void* = nullptr) override {}
+        void beginRenderingOnPrimary(RHI::RHICommandEncoder*,
+            const std::vector<RHI::RenderingAttachmentInfo>&,
+            const RHI::RenderingAttachmentInfo&, bool) override {}
+        void endRenderingOnPrimary(RHI::RHICommandEncoder*) override {}
 
         void beginPassOnPrimary(RHI::RHICommandEncoder* encoder,
             RHI::FramebufferHandle framebuffer,
@@ -101,6 +88,8 @@ namespace StarryEngine::RenderGraph {
         uint32_t getWidth() const { return m_width; }
         uint32_t getHeight() const { return m_height; }
         const std::vector<std::string>& getAttachmentNames() const;
+        const std::vector<std::string>& getColorAttachmentNames() const override;
+        const std::vector<std::string>& getDepthAttachmentNames() const override;
         TextureId getTextureIdForAttachmentKey(const std::string& key) const;
         std::pair<RHI::ImageLayout, RHI::ImageLayout> getTextureLayout(TextureId texId) const;
         // 当前已添加的 subpass 数量（供共享 pass 时确定新 subpass 的索引）
@@ -136,6 +125,8 @@ namespace StarryEngine::RenderGraph {
 
         RHI::RenderPassHandle m_renderPassHandle;
         std::vector<RHI::ClearValue> m_clearValues;
+        mutable std::vector<std::string> m_colorKeysCache;   // 颜色附件 key 缓存
+        mutable std::vector<std::string> m_depthKeysCache;
         std::vector<std::shared_ptr<StarryEngine::IPassExecutor>> m_passExecutors;
         std::unordered_map<std::string, uint32_t> m_attachmentNameToIndex;
         std::unordered_map<std::string, RHI::ClearValue> m_clearValueMap;
@@ -145,7 +136,6 @@ namespace StarryEngine::RenderGraph {
         std::unordered_map<TextureId, RHI::ImageLayout> m_finalLayouts;
 
         bool m_enabled = true;
-        PassType m_type = PassType::Graphics;
 
         // ── Compute 专用 ──
         std::shared_ptr<StarryEngine::IPassExecutor> m_computeRecorder;

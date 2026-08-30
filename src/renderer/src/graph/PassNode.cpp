@@ -17,7 +17,8 @@ namespace StarryEngine::RenderGraph {
     }
 
     PassNode::PassNode(const std::string& name, PassType type)
-        : m_name(name), m_builder(name), m_type(type) {
+        : m_name(name), m_builder(name) {
+        m_type = type;
     }
 
     PassNode::~PassNode() {
@@ -365,6 +366,21 @@ namespace StarryEngine::RenderGraph {
             throw std::runtime_error("PassNode not built yet: " + m_name);
         }
         return m_cachedBuildResult->attachmentNames;
+    }
+
+    const std::vector<std::string>& PassNode::getColorAttachmentNames() const {
+        // 动态视图收集仅在动态模式调用（PassNode 传统模式不参与），延迟缓存到成员避免 static 竞争
+        m_colorKeysCache.clear();
+        m_colorKeysCache.reserve(m_colorOutputKeyByTex.size());
+        for (const auto& [texId, key] : m_colorOutputKeyByTex) m_colorKeysCache.push_back(key);
+        return m_colorKeysCache;
+    }
+
+    const std::vector<std::string>& PassNode::getDepthAttachmentNames() const {
+        m_depthKeysCache.clear();
+        m_depthKeysCache.reserve(m_depthOutputKeyByTex.size());
+        for (const auto& [texId, key] : m_depthOutputKeyByTex) m_depthKeysCache.push_back(key);
+        return m_depthKeysCache;
     }
 
     TextureId PassNode::getTextureIdForAttachmentKey(const std::string& key) const {

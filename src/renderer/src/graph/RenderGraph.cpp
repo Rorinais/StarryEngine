@@ -13,6 +13,18 @@ namespace StarryEngine::RenderGraph {
 
     RenderGraph::RenderGraph(std::shared_ptr<RHI::IRHI> rhi)
         : m_rhi(rhi), m_resMgr(rhi->getResourceManager()) {
+        // 双模渲染：默认传统 render pass（PassNode）——动态渲染（RenderNode）问题较多，暂不默认启用。
+        // STARRY_DYNAMIC_RENDERING=1 可显式开启动态渲染（VK_KHR_dynamic_rendering）。
+        m_useDynamicRendering = false;
+        if (std::getenv("STARRY_DYNAMIC_RENDERING")) {
+            m_useDynamicRendering = rhi && rhi->supportsDynamicRendering();
+        }
+        if (std::getenv("STARRY_FORCE_RENDER_PASS")) m_useDynamicRendering = false;
+        if (m_useDynamicRendering) {
+            LOG_INFO("[RenderGraph] 使用动态渲染（RenderNode，VK_KHR_dynamic_rendering）");
+        } else {
+            LOG_INFO("[RenderGraph] 使用传统 render pass（PassNode）");
+        }
     }
 
     RenderGraph::~RenderGraph() {
@@ -103,29 +115,33 @@ namespace StarryEngine::RenderGraph {
         return id;
     }
 
-    PassNode* RenderGraph::addGraphicsPassNode(const std::string& name) {
-        auto pass = std::make_unique<PassNode>(name);
-        PassNode* ptr = pass.get();
-        m_passes.push_back(std::move(pass));
+    GraphNode* RenderGraph::addGraphicsPassNode(const std::string& name) {
+        std::unique_ptr<GraphNode> node;
+        if (m_useDynamicRendering) node = std::make_unique<RenderNode>(name);
+        else node = std::make_unique<PassNode>(name);
+        GraphNode* ptr = node.get();
+        m_passes.push_back(std::move(node));
         return ptr;
     }
 
-    PassNode* RenderGraph::addGraphicsPassNodeShared(const std::string& name, const std::string& dedupKey) {
+    GraphNode* RenderGraph::addGraphicsPassNodeShared(const std::string& name, const std::string& dedupKey) {
         auto it = m_sharedGraphicsNodes.find(dedupKey);
         if (it != m_sharedGraphicsNodes.end()) return it->second;  // 复用已有节点
-        PassNode* node = addGraphicsPassNode(name);
+        GraphNode* node = addGraphicsPassNode(name);
         m_sharedGraphicsNodes[dedupKey] = node;
         return node;
     }
 
-    PassNode* RenderGraph::addComputePassNode(const std::string& name) {
-        auto pass = std::make_unique<PassNode>(name, PassType::Compute);
-        PassNode* ptr = pass.get();
-        m_passes.push_back(std::move(pass));
+    GraphNode* RenderGraph::addComputePassNode(const std::string& name) {
+        std::unique_ptr<GraphNode> node;
+        if (m_useDynamicRendering) node = std::make_unique<RenderNode>(name, PassType::Compute);
+        else node = std::make_unique<PassNode>(name, PassType::Compute);
+        GraphNode* ptr = node.get();
+        m_passes.push_back(std::move(node));
         return ptr;
     }
 
-    PassNode* RenderGraph::findNode(const std::string& name) {
+    GraphNode* RenderGraph::findNode(const std::string& name) {
         for (auto& pass : m_passes) {
             if (pass->getName() == name) return pass.get();
         }
@@ -350,6 +366,58 @@ namespace StarryEngine::RenderGraph {
 
         createFrameBuffer();
 
+        // 动态渲染：收集每 pass 的颜色/深度附件视图（[pass][交换链图像索引]）
+        if (m_useDynamicRendering) {
+            m_perPassAttachmentViews.clear();
+            m_perPassAttachmentViews.reserve(m_sortedPasses.size());
+            m_perPassDepthViews.clear();
+            m_perPassDepthViews.reserve(m_sortedPasses.size());
+            for (auto* pass : m_sortedPasses) {
+                if (pass->getType() == PassType::Compute) {
+                    m_perPassAttachmentViews.push_back({});
+                    m_perPassDepthViews.push_back({});
+                    continue;
+                }
+                const auto colorKeys = pass->getColorAttachmentNames();
+                std::vector<std::vector<void*>> viewsPerImage;
+                viewsPerImage.reserve(m_swapchainImageCount);
+                for (uint32_t imgIdx = 0; imgIdx < m_swapchainImageCount; ++imgIdx) {
+                    std::vector<void*> imageViews;
+                    for (const auto& key : colorKeys) {
+                        TextureId texId = pass->getTextureIdForAttachmentKey(key);
+                        auto it = m_textureMap.find(texId);
+                        if (it == m_textureMap.end()) continue;
+                        const auto& texInfo = it->second;
+                        if (texInfo.handle.isValid() && !texInfo.views.empty()) {
+                            imageViews.push_back(texInfo.views[0]);
+                        }
+                        else if (!texInfo.handle.isValid()) {
+                            if (texInfo.views.size() == 1) imageViews.push_back(texInfo.views[0]);
+                            else if (imgIdx < texInfo.views.size()) imageViews.push_back(texInfo.views[imgIdx]);
+                        }
+                    }
+                    viewsPerImage.push_back(std::move(imageViews));
+                }
+                m_perPassAttachmentViews.push_back(std::move(viewsPerImage));
+
+                // 深度附件视图（纯深度 pass 如 ShadowPass）
+                std::vector<void*> depthViews;
+                const auto depthKeys = pass->getDepthAttachmentNames();
+                for (uint32_t imgIdx = 0; imgIdx < m_swapchainImageCount; ++imgIdx) {
+                    void* depthView = nullptr;
+                    if (!depthKeys.empty()) {
+                        TextureId texId = pass->getTextureIdForAttachmentKey(depthKeys[0]);
+                        auto it = m_textureMap.find(texId);
+                        if (it != m_textureMap.end() && !it->second.views.empty()) {
+                            depthView = it->second.views[0];
+                        }
+                    }
+                    depthViews.push_back(depthView);
+                }
+                m_perPassDepthViews.push_back(std::move(depthViews));
+            }
+        }
+
         struct PassLayoutInfo {
             RHI::ImageLayout initial;
             RHI::ImageLayout final;
@@ -378,17 +446,24 @@ namespace StarryEngine::RenderGraph {
             int32_t firstUseIdx = infoIt->second.firstUserIndex;
             if (firstUseIdx != -1) {
                 const auto& firstLayoutInfo = layouts[firstUseIdx];
-                if (firstLayoutInfo.initial != RHI::ImageLayout::Undefined) {
+                // 首用目标：initial 非空用 initial；动态渲染无 render pass 时，首用即写入
+                // （initial=Undefined + final 非空）也要显式转换（传统模式由 render pass 隐式处理）
+                RHI::ImageLayout firstTarget = firstLayoutInfo.initial;
+                if (m_useDynamicRendering && firstTarget == RHI::ImageLayout::Undefined
+                    && firstLayoutInfo.final != RHI::ImageLayout::Undefined) {
+                    firstTarget = firstLayoutInfo.final;
+                }
+                if (firstTarget != RHI::ImageLayout::Undefined) {
                     auto texIt = std::find_if(m_virtualTextures.begin(), m_virtualTextures.end(),
                         [texId](const VirtualTexture& vt) { return vt.id == texId; });
                     RHI::Format format = (texIt != m_virtualTextures.end()) ? texIt->desc.format : RHI::Format::Undefined;
                     bool computeReader = m_sortedPasses[firstUseIdx]->getType() == PassType::Compute;
                     auto [srcStage, srcAccess] = getStageAccessFromLayout(RHI::ImageLayout::Undefined);
-                    auto [dstStage, dstAccess] = getReadStageAccess(firstLayoutInfo.initial, computeReader);
+                    auto [dstStage, dstAccess] = getReadStageAccess(firstTarget, computeReader);
                     uint32_t aspect = getAspectMask(format);
                     m_layoutTransitions.push_back({
                         -1, static_cast<uint32_t>(firstUseIdx), texId,
-                        RHI::ImageLayout::Undefined, firstLayoutInfo.initial,
+                        RHI::ImageLayout::Undefined, firstTarget,
                         srcStage, dstStage, srcAccess, dstAccess, aspect
                         });
                 }
@@ -440,6 +515,7 @@ namespace StarryEngine::RenderGraph {
     }
 
     void RenderGraph::createFrameBuffer() {
+        if (m_useDynamicRendering) return;   // 动态渲染无需 framebuffer 对象
         if (m_swapchainImageCount == 0) {
             throw std::runtime_error("Swapchain image count not set before compile!");
         }
@@ -507,7 +583,8 @@ namespace StarryEngine::RenderGraph {
     void RenderGraph::execute(RHI::RHICommandEncoder* encoder, const RenderContext& context, uint32_t frameIndex,
         uint32_t frameSlot, const ParallelRecordingContext* parallel) {
         if (m_sortedPasses.empty()) return;
-        if (m_perPassFramebuffers.size() != m_sortedPasses.size()) {
+        // 动态渲染：附件视图替代 framebuffer（不校验 framebuffer 数量）
+        if (!m_useDynamicRendering && m_perPassFramebuffers.size() != m_sortedPasses.size()) {
             throw std::runtime_error("Framebuffer count mismatch in RenderGraph");
         }
 
@@ -525,20 +602,36 @@ namespace StarryEngine::RenderGraph {
 
                 const bool isCompute = (pass->getType() == PassType::Compute);
                 const uint32_t subpassCount = isCompute ? 1u : pass->getSubpassCount();
-                RHI::FramebufferHandle fb = isCompute
-                    ? RHI::FramebufferHandle{}
-                    : m_perPassFramebuffers[i][frameIndex];
 
                 // 继承信息（compute 不需要渲染通道继承）
                 RHI::RenderPassHandle nativeRP = RHI::RenderPassHandle{};
                 RHI::FramebufferHandle nativeFB = RHI::FramebufferHandle{};
-                if (!isCompute) {
+                RHI::Format dynColorFmt = RHI::Format::Undefined;
+                RHI::Format dynDepthFmt = RHI::Format::Undefined;
+                if (!isCompute && !m_useDynamicRendering) {
                     nativeRP = pass->getRenderPassHandle();
-                    nativeFB = fb;
+                    nativeFB = m_perPassFramebuffers[i][frameIndex];
                     if (!nativeRP.isValid() || !nativeFB.isValid()) {
                         LOG_WARN("[{}] 并行录制：renderPass={} fb={} — 跳过", pass->getName(),
                             nativeRP.isValid(), nativeFB.isValid());
                         continue;
+                    }
+                }
+                else if (!isCompute && m_useDynamicRendering) {
+                    // 动态渲染继承：取该 pass 颜色/深度附件格式（与主缓冲 beginRendering 一致）
+                    const auto& colorKeys = pass->getColorAttachmentNames();
+                    if (!colorKeys.empty()) {
+                        TextureId tid = pass->getTextureIdForAttachmentKey(colorKeys[0]);
+                        auto vit = std::find_if(m_virtualTextures.begin(), m_virtualTextures.end(),
+                            [tid](const VirtualTexture& vt) { return vt.id == tid; });
+                        if (vit != m_virtualTextures.end()) dynColorFmt = vit->desc.format;
+                    }
+                    const auto& depthKeys = pass->getDepthAttachmentNames();
+                    if (!depthKeys.empty()) {
+                        TextureId tid = pass->getTextureIdForAttachmentKey(depthKeys[0]);
+                        auto vit = std::find_if(m_virtualTextures.begin(), m_virtualTextures.end(),
+                            [tid](const VirtualTexture& vt) { return vt.id == tid; });
+                        if (vit != m_virtualTextures.end()) dynDepthFmt = vit->desc.format;
                     }
                 }
 
@@ -549,17 +642,22 @@ namespace StarryEngine::RenderGraph {
                     // 执行线程从自己的 per-worker 命令池取 secondary，避免多线程并发录同一池
                     // （验证层 UNASSIGNED-Threading-MultipleThreads-Write → NVIDIA 驱动 submit 段错误）。
                     parallel->jobs->submit(
-                        [pass, alloc = parallel->allocateSecondary, ctx = context, frameIndex, fb, sub,
-                         nativeRP, nativeFB, isCompute, frameSlot, slot = &secondaries[i][sub]]() {
+                        [pass, alloc = parallel->allocateSecondary, ctx = context, frameIndex, sub,
+                         nativeRP, nativeFB, isCompute, useDyn = m_useDynamicRendering,
+                         dynColorFmt, dynDepthFmt, frameSlot, slot = &secondaries[i][sub]]() {
                             auto sec = alloc(JobSystem::currentWorkerIndex());
                             if (!sec) return;
                             if (isCompute) {
                                 sec->beginSecondary({ .renderPassContinue = false });
+                            } else if (useDyn) {
+                                sec->beginSecondary({ .useDynamicRendering = true,
+                                                     .colorFormat = dynColorFmt,
+                                                     .depthFormat = dynDepthFmt });
                             } else {
                                 sec->beginSecondary({ .renderPass = nativeRP, .framebuffer = nativeFB,
                                                      .subpass = sub, .renderPassContinue = true });
                             }
-                            pass->recordBody(sec.get(), ctx, frameIndex, fb, sub, frameSlot);
+                            pass->recordBody(sec.get(), ctx, frameIndex, RHI::FramebufferHandle{}, sub, frameSlot);
                             sec->end();   // vkEndCommandBuffer：Phase 2 才能 executeCommands
                             *slot = sec->getCommandBuffer();   // 存 native 句柄给 Phase 2
                         });
@@ -579,10 +677,11 @@ namespace StarryEngine::RenderGraph {
         for (size_t i = 0; i < m_sortedPasses.size(); ++i) {
 
             auto* pass = m_sortedPasses[i];
-            // Compute Pass 没有 Framebuffer，传空 handle
-            RHI::FramebufferHandle fb = (pass->getType() == PassType::Compute)
-                ? RHI::FramebufferHandle{}
-                : m_perPassFramebuffers[i][frameIndex];
+            // Compute Pass / 动态渲染：无 Framebuffer，传空 handle
+            RHI::FramebufferHandle fb = RHI::FramebufferHandle{};
+            if (!m_useDynamicRendering && pass->getType() != PassType::Compute) {
+                fb = m_perPassFramebuffers[i][frameIndex];
+            }
 
             while (transIt != m_layoutTransitions.end() && transIt->dstPassIdx == i) {
                 const auto& trans = *transIt;
@@ -615,12 +714,81 @@ namespace StarryEngine::RenderGraph {
 
             if (!parallelEnabled) {
                 // ── 原串行路径（软开关第 0 级）：行为与单线程完全一致 ──
-                pass->execute(encoder, context, frameIndex, fb, frameSlot);
+                if (m_useDynamicRendering) {
+                    if (pass->getType() == PassType::Compute) {
+                        pass->recordBody(encoder, context, frameIndex, RHI::FramebufferHandle{}, 0, frameSlot);
+                    } else {
+                        const auto& attViews = getAttachmentViewsForPass(i, frameIndex);
+                        void* depthView = getDepthAttachmentViewForPass(i, frameIndex);
+                        if (attViews.empty() && depthView == nullptr) {
+                            LOG_WARN("[{}] 串行动态：无附件视图 — 跳过", pass->getName());
+                        } else {
+                            pass->executeDynamic(encoder, context, frameIndex, attViews, frameSlot, depthView);
+                        }
+                    }
+                } else {
+                    pass->execute(encoder, context, frameIndex, fb, frameSlot);
+                }
             } else if (pass->getType() == PassType::Compute) {
                 // ── 并行路径：compute pass 直接在主缓冲执行已录好的 secondary ──
                 if (!secondaries[i].empty() && secondaries[i][0] != nullptr) {
                     encoder->executeCommands(secondaries[i]);
                 }
+            } else if (m_useDynamicRendering) {
+                // ── 并行动态：主缓冲 beginRendering + 已录 secondary 主体 ──
+                const auto& attViews = getAttachmentViewsForPass(i, frameIndex);
+                void* depthView = getDepthAttachmentViewForPass(i, frameIndex);
+                if (attViews.empty() && depthView == nullptr) {
+                    LOG_WARN("[{}] 并行动态：无附件视图 — 跳过", pass->getName());
+                    continue;
+                }
+                std::vector<RHI::RenderingAttachmentInfo> colorAtts;
+                colorAtts.reserve(attViews.size());
+                const auto& colorLoadOps = pass->getColorLoadOps();
+                const auto& clearValues = pass->getClearValues();
+                for (size_t vi = 0; vi < attViews.size(); ++vi) {
+                    RHI::RenderingAttachmentInfo att;
+                    att.imageView = attViews[vi];
+                    att.imageLayout = RHI::ImageLayout::ColorAttachment;
+                    att.loadOp = (vi < colorLoadOps.size()) ? colorLoadOps[vi] : RHI::AttachmentLoadOp::Clear;
+                    att.storeOp = RHI::AttachmentStoreOp::Store;
+                    if (att.loadOp == RHI::AttachmentLoadOp::Clear && !clearValues.empty()) {
+                        att.clearValue = clearValues[vi < clearValues.size() ? vi : 0];
+                    }
+                    colorAtts.push_back(att);
+                }
+                RHI::RenderingAttachmentInfo depthAtt;
+                const auto& depthLoadOps = pass->getDepthLoadOps();
+                if (depthView != nullptr) {
+                    depthAtt.imageView = depthView;
+                    depthAtt.imageLayout = RHI::ImageLayout::DepthStencilAttachment;
+                    depthAtt.loadOp = depthLoadOps.empty() ? RHI::AttachmentLoadOp::Clear : depthLoadOps[0];
+                    depthAtt.storeOp = RHI::AttachmentStoreOp::Store;
+                    depthAtt.clearValue = RHI::ClearValue(1.0f, 0u);
+                }
+                pass->beginRenderingOnPrimary(encoder, colorAtts, depthAtt, depthView != nullptr);
+
+                // 传统 render pass 对深度附件无条件 stencilLoadOp=Clear（首用清模板）；
+                // Vulkan 1.3 动态渲染 depth/stencil 共享 loadOp，depth=Load 时模板不会自动清。
+                // StencilPass 依赖"开始时模板=0"，这里补发一次 stencil-only clear（StencilWrite 前清 0）。
+                if (depthView != nullptr && depthAtt.loadOp == RHI::AttachmentLoadOp::Load) {
+                    RHI::ClearAttachment stencilClear;
+                    stencilClear.aspectMask = RHI::ImageAspect::Stencil;
+                    stencilClear.clearValue = RHI::ClearValue(1.0f, 0u);
+                    RHI::ClearRect rect;
+                    rect.rect = { {0, 0}, { pass->getWidth(), pass->getHeight() } };
+                    encoder->clearAttachments({ stencilClear }, { rect });
+                }
+
+                if (secondaries[i].empty()) {
+                    // 禁用 pass：空体 begin/end，保持 loadOp 的 clear 语义
+                } else {
+                    for (uint32_t sub = 0; sub < secondaries[i].size(); ++sub) {
+                        if (secondaries[i][sub] == nullptr) continue;
+                        encoder->executeCommands({ secondaries[i][sub] });
+                    }
+                }
+                pass->endRenderingOnPrimary(encoder);
             } else {
                 if (secondaries[i].empty()) {
                     // 禁用的 graphics pass：Inline 空体 begin/end，保持 loadOp 的 clear 语义
@@ -680,6 +848,21 @@ namespace StarryEngine::RenderGraph {
         return m_perPassFramebuffers[passIndex];
     }
 
+    // 动态渲染：取某 pass 在指定交换链图像索引下的颜色附件视图
+    const std::vector<void*>& RenderGraph::getAttachmentViewsForPass(size_t passIndex, uint32_t imageIndex) const {
+        static const std::vector<void*> empty;
+        if (passIndex >= m_perPassAttachmentViews.size()) return empty;
+        if (imageIndex >= m_perPassAttachmentViews[passIndex].size()) return empty;
+        return m_perPassAttachmentViews[passIndex][imageIndex];
+    }
+
+    // 动态渲染：取某 pass 在指定交换链图像索引下的深度附件视图（无深度返回 nullptr）
+    void* RenderGraph::getDepthAttachmentViewForPass(size_t passIndex, uint32_t imageIndex) const {
+        if (passIndex >= m_perPassDepthViews.size()) return nullptr;
+        if (imageIndex >= m_perPassDepthViews[passIndex].size()) return nullptr;
+        return m_perPassDepthViews[passIndex][imageIndex];
+    }
+
     std::pair<RHI::PipelineStage, RHI::AccessFlag> RenderGraph::getStageAccessFromLayout(RHI::ImageLayout layout) {
         switch (layout) {
         case RHI::ImageLayout::Undefined:
@@ -729,8 +912,8 @@ namespace StarryEngine::RenderGraph {
         }
 
         // 2. 找所有写入"根"纹理的 Pass 作为种子
-        std::set<PassNode*> reachable;
-        std::queue<PassNode*> queue;
+        std::set<GraphNode*> reachable;
+        std::queue<GraphNode*> queue;
 
         for (auto& pass : m_passes) {
             for (auto texId : rootTexIds) {
@@ -771,7 +954,7 @@ namespace StarryEngine::RenderGraph {
         size_t before = m_passes.size();
         m_passes.erase(
             std::remove_if(m_passes.begin(), m_passes.end(),
-                [&reachable](const std::unique_ptr<PassNode>& p) {
+                [&reachable](const std::unique_ptr<GraphNode>& p) {
                     return !reachable.count(p.get());
                 }),
             m_passes.end());

@@ -669,6 +669,22 @@ namespace StarryEngine::RHI {
         memcpy(colorBlending.blendConstants, mDesc.colorBlend.blendConstants.data(), 4 * sizeof(float));
 
         // 12. 创建图形管线
+        // 动态渲染（VK_KHR_dynamic_rendering）：renderPass=Null + VkPipelineRenderingCreateInfo pNext
+        VkPipelineRenderingCreateInfo renderingInfo{};
+        // colorFmt/depthFmt 必须与 renderingInfo 同级（pColorAttachmentFormats 指向它，
+        // 若放在 if 块内会在 vkCreateGraphicsPipelines 前悬垂 → 管线格式垃圾 → draw 无效黑屏）
+        VkFormat colorFmt = VK_FORMAT_UNDEFINED;
+        VkFormat depthFmt = VK_FORMAT_UNDEFINED;
+        if (mDesc.useDynamicRendering) {
+            renderingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
+            colorFmt = func::RHI_TO_VK_Format(mDesc.colorFormat);
+            depthFmt = func::RHI_TO_VK_Format(mDesc.depthFormat);
+            renderingInfo.colorAttachmentCount = (colorFmt != VK_FORMAT_UNDEFINED) ? 1u : 0u;
+            renderingInfo.pColorAttachmentFormats = (colorFmt != VK_FORMAT_UNDEFINED) ? &colorFmt : nullptr;
+            renderingInfo.depthAttachmentFormat = (depthFmt != VK_FORMAT_UNDEFINED) ? depthFmt : VK_FORMAT_UNDEFINED;
+            renderingInfo.stencilAttachmentFormat = VK_FORMAT_UNDEFINED;
+        }
+
         VkGraphicsPipelineCreateInfo pipelineInfo{};
         pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
         pipelineInfo.stageCount = static_cast<uint32_t>(shaderStages.size());
@@ -682,8 +698,9 @@ namespace StarryEngine::RHI {
         pipelineInfo.pColorBlendState = &colorBlending;
         pipelineInfo.pDynamicState = dynamicStates.empty() ? nullptr : &dynamicState;
         pipelineInfo.layout = pipelineLayout;
-        pipelineInfo.renderPass = renderPass;
-        pipelineInfo.subpass = mDesc.subpass;
+        pipelineInfo.renderPass = mDesc.useDynamicRendering ? VK_NULL_HANDLE : renderPass;
+        pipelineInfo.subpass = mDesc.useDynamicRendering ? 0 : mDesc.subpass;
+        if (mDesc.useDynamicRendering) pipelineInfo.pNext = &renderingInfo;
 
         // 调用设备创建管线
         mPipeline = mDevice->createGraphicsPipeline(pipelineInfo);
