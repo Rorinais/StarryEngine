@@ -5,8 +5,7 @@
 namespace StarryEngine::RenderGraph {
 
     RenderNode::RenderNode(const std::string& name, PassType type)
-        : m_name(name) {
-        m_type = type;
+        : GraphNode(name, type) {
     }
 
     RenderNode::~RenderNode() = default;
@@ -286,6 +285,74 @@ namespace StarryEngine::RenderGraph {
             m_passExecutors[subpassIndex]->execute(encoder, context,
                 PassContext(m_resMgr, frameIndex, RHI::FramebufferHandle{}, frameSlot), subpassIndex);
         }
+    }
+
+    // ── 统一并行入口：主缓冲执行已录 secondary ──
+    // compute：无渲染通道，直接执行（barrier 已由 RenderGraph 提前插入）。
+    // graphics：动态渲染框架（beginRendering → stencil clear → 各 secondary → endRendering）。
+    void RenderNode::executeSecondariesOnPrimary(RHI::RHICommandEncoder* encoder,
+        RHI::FramebufferHandle /*framebuffer*/,
+        const std::vector<void*>& attachmentViews,
+        void* depthView,
+        const std::vector<void*>& secondaries) {
+        if (m_type == PassType::Compute) {
+            if (!secondaries.empty() && secondaries[0] != nullptr) {
+                encoder->executeCommands(secondaries);
+            }
+            return;
+        }
+
+        if (attachmentViews.empty() && depthView == nullptr) {
+            LOG_WARN("[{}] executeSecondariesOnPrimary: 无附件视图 — 跳过", m_name);
+            return;
+        }
+
+        // 颜色附件（按 loadOp/clear 推断）
+        std::vector<RHI::RenderingAttachmentInfo> colorAtts;
+        colorAtts.reserve(attachmentViews.size());
+        for (size_t vi = 0; vi < attachmentViews.size(); ++vi) {
+            RHI::RenderingAttachmentInfo att;
+            att.imageView = attachmentViews[vi];
+            att.imageLayout = RHI::ImageLayout::ColorAttachment;
+            att.loadOp = (vi < m_colorLoadOps.size()) ? m_colorLoadOps[vi] : RHI::AttachmentLoadOp::Clear;
+            att.storeOp = RHI::AttachmentStoreOp::Store;
+            if (att.loadOp == RHI::AttachmentLoadOp::Clear && !m_clearValues.empty()) {
+                att.clearValue = m_clearValues[vi < m_clearValues.size() ? vi : 0];
+            }
+            colorAtts.push_back(att);
+        }
+
+        // 深度附件（loadOp 按推断）
+        RHI::RenderingAttachmentInfo depthAtt;
+        if (depthView != nullptr) {
+            depthAtt.imageView = depthView;
+            depthAtt.imageLayout = RHI::ImageLayout::DepthStencilAttachment;
+            depthAtt.loadOp = m_depthLoadOps.empty() ? RHI::AttachmentLoadOp::Clear : m_depthLoadOps[0];
+            depthAtt.storeOp = RHI::AttachmentStoreOp::Store;
+            depthAtt.clearValue = RHI::ClearValue(1.0f, 0u);
+        }
+        beginRenderingOnPrimary(encoder, colorAtts, depthAtt, depthView != nullptr);
+
+        // 传统 render pass 对深度附件无条件 stencilLoadOp=Clear（首用清模板）；
+        // Vulkan 1.3 动态渲染 depth/stencil 共享 loadOp，depth=Load 时模板不会自动清。
+        // StencilPass 依赖"开始时模板=0"，这里补发一次 stencil-only clear（StencilWrite 前清 0）。
+        if (depthView != nullptr && depthAtt.loadOp == RHI::AttachmentLoadOp::Load) {
+            RHI::ClearAttachment stencilClear;
+            stencilClear.aspectMask = RHI::ImageAspect::Stencil;
+            stencilClear.clearValue = RHI::ClearValue(1.0f, 0u);
+            RHI::ClearRect rect;
+            rect.rect = { {0, 0}, { m_width, m_height } };
+            encoder->clearAttachments({ stencilClear }, { rect });
+        }
+
+        // 禁用 pass：空体 begin/end，保持 loadOp 的 clear 语义
+        if (!secondaries.empty()) {
+            for (auto* sec : secondaries) {
+                if (sec == nullptr) continue;
+                encoder->executeCommands({ sec });
+            }
+        }
+        endRenderingOnPrimary(encoder);
     }
 
 } // namespace StarryEngine::RenderGraph

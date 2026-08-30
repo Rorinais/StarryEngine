@@ -220,10 +220,14 @@ namespace StarryEngine::RenderGraph {
             for (uint32_t reader : readers) {
                 if (reader > writer) {
                     if (isDepthStencil) {
-                        addDepthReadAfterWriteDependency(writer, reader);
+                        addAutoDependency(writer, reader,
+                            RHI::PipelineStage::LateFragmentTests, RHI::PipelineStage::FragmentShader,
+                            RHI::AccessFlag::DepthStencilAttachmentWrite, RHI::AccessFlag::InputAttachmentRead);
                     }
                     else {
-                        addColorReadAfterWriteDependency(writer, reader);
+                        addAutoDependency(writer, reader,
+                            RHI::PipelineStage::ColorAttachmentOutput, RHI::PipelineStage::FragmentShader,
+                            RHI::AccessFlag::ColorAttachmentWrite, RHI::AccessFlag::InputAttachmentRead);
                     }
                 }
             }
@@ -233,62 +237,33 @@ namespace StarryEngine::RenderGraph {
         for (size_t i = 0; i < writersVec.size(); ++i) {
             for (size_t j = i + 1; j < writersVec.size(); ++j) {
                 if (isDepthStencil) {
-                    addDepthWriteAfterWriteDependency(writersVec[i], writersVec[j]);
+                    addAutoDependency(writersVec[i], writersVec[j],
+                        RHI::PipelineStage::LateFragmentTests, RHI::PipelineStage::LateFragmentTests,
+                        RHI::AccessFlag::DepthStencilAttachmentWrite,
+                        RHI::AccessFlag::DepthStencilAttachmentRead | RHI::AccessFlag::DepthStencilAttachmentWrite);
                 }
                 else {
-                    addColorWriteAfterWriteDependency(writersVec[i], writersVec[j]);
+                    addAutoDependency(writersVec[i], writersVec[j],
+                        RHI::PipelineStage::ColorAttachmentOutput, RHI::PipelineStage::ColorAttachmentOutput,
+                        RHI::AccessFlag::ColorAttachmentWrite,
+                        RHI::AccessFlag::ColorAttachmentRead | RHI::AccessFlag::ColorAttachmentWrite);
                 }
             }
         }
         generateExternalDependencies(usage, isDepthStencil);
     }
 
-    void RenderPassBuilder::addColorReadAfterWriteDependency(uint32_t src, uint32_t dst) {
+    // 生成一条自动依赖（color/depth 通过参数指定 stage/access 掩码）
+    void RenderPassBuilder::addAutoDependency(uint32_t src, uint32_t dst,
+        RHI::PipelineStage srcStage, RHI::PipelineStage dstStage,
+        RHI::AccessFlag srcAccess, RHI::AccessFlag dstAccess) {
         RHI::SubpassDependency dep{};
         dep.srcSubpass = src;
         dep.dstSubpass = dst;
-        dep.srcStageMask = RHI::PipelineStage::ColorAttachmentOutput;
-        dep.dstStageMask = RHI::PipelineStage::FragmentShader;
-        dep.srcAccessMask = RHI::AccessFlag::ColorAttachmentWrite;
-        dep.dstAccessMask = RHI::AccessFlag::InputAttachmentRead;
-        dep.byRegion = true;
-        m_autoDependencies.push_back(dep);
-    }
-
-    void RenderPassBuilder::addDepthReadAfterWriteDependency(uint32_t src, uint32_t dst) {
-        RHI::SubpassDependency dep{};
-        dep.srcSubpass = src;
-        dep.dstSubpass = dst;
-        dep.srcStageMask = RHI::PipelineStage::LateFragmentTests;
-        dep.dstStageMask = RHI::PipelineStage::FragmentShader;
-        dep.srcAccessMask = RHI::AccessFlag::DepthStencilAttachmentWrite;
-        dep.dstAccessMask = RHI::AccessFlag::InputAttachmentRead;
-        dep.byRegion = true;
-        m_autoDependencies.push_back(dep);
-    }
-
-    void RenderPassBuilder::addColorWriteAfterWriteDependency(uint32_t first, uint32_t second) {
-        RHI::SubpassDependency dep{};
-        dep.srcSubpass = first;
-        dep.dstSubpass = second;
-        dep.srcStageMask = RHI::PipelineStage::ColorAttachmentOutput;
-        dep.dstStageMask = RHI::PipelineStage::ColorAttachmentOutput;
-        dep.srcAccessMask = RHI::AccessFlag::ColorAttachmentWrite;
-        dep.dstAccessMask = RHI::AccessFlag::ColorAttachmentRead |
-            RHI::AccessFlag::ColorAttachmentWrite;
-        dep.byRegion = true;
-        m_autoDependencies.push_back(dep);
-    }
-
-    void RenderPassBuilder::addDepthWriteAfterWriteDependency(uint32_t first, uint32_t second) {
-        RHI::SubpassDependency dep{};
-        dep.srcSubpass = first;
-        dep.dstSubpass = second;
-        dep.srcStageMask = RHI::PipelineStage::LateFragmentTests;
-        dep.dstStageMask = RHI::PipelineStage::LateFragmentTests;
-        dep.srcAccessMask = RHI::AccessFlag::DepthStencilAttachmentWrite;
-        dep.dstAccessMask = RHI::AccessFlag::DepthStencilAttachmentRead |
-            RHI::AccessFlag::DepthStencilAttachmentWrite;
+        dep.srcStageMask = srcStage;
+        dep.dstStageMask = dstStage;
+        dep.srcAccessMask = srcAccess;
+        dep.dstAccessMask = dstAccess;
         dep.byRegion = true;
         m_autoDependencies.push_back(dep);
     }

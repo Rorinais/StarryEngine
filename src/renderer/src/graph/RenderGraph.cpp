@@ -13,12 +13,7 @@ namespace StarryEngine::RenderGraph {
 
     RenderGraph::RenderGraph(std::shared_ptr<RHI::IRHI> rhi)
         : m_rhi(rhi), m_resMgr(rhi->getResourceManager()) {
-        // 双模渲染：默认传统 render pass（PassNode）——动态渲染（RenderNode）问题较多，暂不默认启用。
-        // STARRY_DYNAMIC_RENDERING=1 可显式开启动态渲染（VK_KHR_dynamic_rendering）。
-        m_useDynamicRendering = false;
-        if (std::getenv("STARRY_DYNAMIC_RENDERING")) {
-            m_useDynamicRendering = rhi && rhi->supportsDynamicRendering();
-        }
+        m_useDynamicRendering = rhi && rhi->supportsDynamicRendering();
         if (std::getenv("STARRY_FORCE_RENDER_PASS")) m_useDynamicRendering = false;
         if (m_useDynamicRendering) {
             LOG_INFO("[RenderGraph] 使用动态渲染（RenderNode，VK_KHR_dynamic_rendering）");
@@ -51,24 +46,6 @@ namespace StarryEngine::RenderGraph {
         m_swapchainImageCount = count;
     }
 
-    RHI::TextureDesc RenderGraph::createBaseTextureDesc(
-        uint32_t width, uint32_t height,
-        RHI::Format format,
-        bool allowDepthStencil,
-        bool allowRenderTarget,
-        bool allowInputAttachment,
-        RHI::TextureType type
-    ) {
-        RHI::TextureDesc desc;
-        desc.extent = { width, height, 1 };
-        desc.format = format;
-        desc.type = type;
-        desc.allowRenderTarget = allowRenderTarget;
-        desc.allowDepthStencil = allowDepthStencil;
-        desc.allowInputAttachment = allowInputAttachment;
-        return desc;
-    }
-
     TextureId RenderGraph::createVirtualTexture(const RHI::TextureDesc& desc, const std::string& name) {
         if (!name.empty() && m_nameToTextureId.find(name) != m_nameToTextureId.end()) {
             throw std::runtime_error("Texture name already exists: " + name);
@@ -76,9 +53,9 @@ namespace StarryEngine::RenderGraph {
         TextureId id = TextureId::Create(m_nextTextureId++, 1);
         VirtualTexture vt{ id, desc, name, false, RHI::TextureHandle::Null(), {}, RHI::ImageLayout::Undefined };
         m_virtualTextures.push_back(vt);
+        m_textureFormats.push_back(desc.format);
         if (!name.empty()) {
             m_nameToTextureId[name] = id;
-            m_textureNames[id] = name;
         }
         return id;
     }
@@ -95,9 +72,9 @@ namespace StarryEngine::RenderGraph {
         TextureId id = TextureId::Create(m_nextTextureId++, 1);
         VirtualTexture vt{ id, desc, name, true, externalHandle, imageViews, initialLayout };
         m_virtualTextures.push_back(vt);
+        m_textureFormats.push_back(desc.format);
         if (!name.empty()) {
             m_nameToTextureId[name] = id;
-            m_textureNames[id] = name;
         }
         return id;
     }
@@ -203,48 +180,30 @@ namespace StarryEngine::RenderGraph {
             adj[src].push_back(dst);
             };
 
-        // 根据纹理的读写关系建立依赖：
+        // 根据读写关系建立依赖（纹理与缓冲区逻辑相同）：
         //   - 写后写：多个写 Pass 按 pass 列表顺序串行
         //   - 写后读：reader 只依赖"它之前最近的写者"（不是所有写者——否则中间读者会被
         //     后续写者倒序连成环），且必须在它之后的写者之前完成（否则读到的是覆盖后的内容）
-        for (const auto& [tex, writers] : texWriters) {
-            auto& readers = texReaders[tex];
-            std::vector<uint32_t> wlist(writers.begin(), writers.end());
-            std::sort(wlist.begin(), wlist.end());
+        auto addResourceDeps = [&](auto& writersMap, auto& readersMap) {
+            for (const auto& [res, writers] : writersMap) {
+                auto& readers = readersMap[res];
+                std::vector<uint32_t> wlist(writers.begin(), writers.end());
+                std::sort(wlist.begin(), wlist.end());
 
-            // 写后写
-            for (size_t i = 0; i + 1 < wlist.size(); ++i) {
-                addDependency(wlist[i], wlist[i + 1]);
-            }
-
-            // 写后读
-            for (uint32_t r : readers) {
-                auto it = std::lower_bound(wlist.begin(), wlist.end(), r);  // 第一个 >= r 的写者
-                if (it != wlist.begin()) addDependency(*std::prev(it), r);  // 最近前驱写者 → reader
-                for (auto it2 = it; it2 != wlist.end(); ++it2) {
-                    if (*it2 != r) addDependency(r, *it2);   // reader → 后续写者
+                for (size_t i = 0; i + 1 < wlist.size(); ++i) {
+                    addDependency(wlist[i], wlist[i + 1]);   // 写后写
+                }
+                for (uint32_t r : readers) {
+                    auto it = std::lower_bound(wlist.begin(), wlist.end(), r);  // 第一个 >= r 的写者
+                    if (it != wlist.begin()) addDependency(*std::prev(it), r);  // 最近前驱写者 → reader
+                    for (auto it2 = it; it2 != wlist.end(); ++it2) {
+                        if (*it2 != r) addDependency(r, *it2);   // reader → 后续写者
+                    }
                 }
             }
-        }
-
-        // 根据缓冲区的读写关系建立依赖（逻辑同上）
-        for (const auto& [buf, writers] : bufWriters) {
-            auto& readers = bufReaders[buf];
-            std::vector<uint32_t> wlist(writers.begin(), writers.end());
-            std::sort(wlist.begin(), wlist.end());
-
-            for (size_t i = 0; i + 1 < wlist.size(); ++i) {
-                addDependency(wlist[i], wlist[i + 1]);
-            }
-
-            for (uint32_t r : readers) {
-                auto it = std::lower_bound(wlist.begin(), wlist.end(), r);
-                if (it != wlist.begin()) addDependency(*std::prev(it), r);
-                for (auto it2 = it; it2 != wlist.end(); ++it2) {
-                    if (*it2 != r) addDependency(r, *it2);
-                }
-            }
-        }
+        };
+        addResourceDeps(texWriters, texReaders);
+        addResourceDeps(bufWriters, bufReaders);
 
         auto order = topologicalSort(adj);
         m_sortedPasses.clear();
@@ -254,14 +213,35 @@ namespace StarryEngine::RenderGraph {
     }
 
     bool RenderGraph::compile() {
+        // 依赖分析（pass 顺序 + 纹理生命周期）
         dependencyAnalysis();
 
         // Pass Culling：从最终输出纹理（Swapchain）反向裁剪不可达 Pass
         // 必须在 dependencyAnalysis() 后、物理资源分配前执行
         cullUnusedPasses();
 
+        // 纹理使用分析（first/last user/writer/reader + 跨 pass 输入依赖）
         std::unordered_map<TextureId, TexturePassInfo> texPassInfo;
+        analyzeTextureUsage(texPassInfo);
 
+        // ── Memory Aliasing：贪心复用生命周期不重叠的 transient 纹理内存 ──
+        performMemoryAliasing(texPassInfo);
+
+        // 物理资源分配 + 附件 loadOp 推断 + pass 编译
+        createPhysicalResources(texPassInfo);
+
+        // 传统模式：创建 framebuffer；动态模式：收集附件视图
+        createFrameBuffer();
+        if (m_useDynamicRendering) collectDynamicViews();
+
+        // 布局转换分析（首用/写读间 barrier）
+        buildLayoutTransitions(texPassInfo);
+
+        return true;
+    }
+
+    // 分析纹理使用：记录每个纹理的 first/last user、writer、reader，并生成跨 pass 输入依赖
+    void RenderGraph::analyzeTextureUsage(std::unordered_map<TextureId, TexturePassInfo>& texPassInfo) {
         for (int32_t passIdx = 0; passIdx < static_cast<int32_t>(m_sortedPasses.size()); ++passIdx) {
             auto* pass = m_sortedPasses[passIdx];
             for (auto tex : pass->getWriteTextures()) {
@@ -270,38 +250,33 @@ namespace StarryEngine::RenderGraph {
                 info.lastUserIndex = passIdx;
                 if (info.firstWriterIndex == -1) info.firstWriterIndex = passIdx;
                 info.lastWriterIndex = passIdx;
-                info.writeStage = RHI::PipelineStage::ColorAttachmentOutput;
-                info.writeAccess = RHI::AccessFlag::ColorAttachmentWrite;
             }
             for (auto tex : pass->getReadTextures()) {
                 auto& info = texPassInfo[tex];
                 if (info.firstUserIndex == -1) info.firstUserIndex = passIdx;
                 info.lastUserIndex = passIdx;
-                if (info.firstReaderIndex == -1) {
-                    info.firstReaderIndex = passIdx;
-                    info.readStage = RHI::PipelineStage::FragmentShader;
-                    info.readAccess = RHI::AccessFlag::InputAttachmentRead;
-                }
+                if (info.firstReaderIndex == -1) info.firstReaderIndex = passIdx;
             }
         }
 
+        // 写后跨 pass 读：外部→首个读者 输入依赖（传统 render pass 的 subpass 外部依赖）
         for (const auto& [tex, info] : texPassInfo) {
             if (info.lastWriterIndex != -1 && info.firstReaderIndex != -1 && info.firstReaderIndex > info.lastWriterIndex) {
                 RHI::SubpassDependency dep{};
-                dep.srcSubpass = SUBPASS_EXTERNAL;               
-                dep.dstSubpass = 0;                               
+                dep.srcSubpass = SUBPASS_EXTERNAL;
+                dep.dstSubpass = 0;
                 dep.srcStageMask = RHI::PipelineStage::AllGraphics;
                 dep.dstStageMask = RHI::PipelineStage::FragmentShader;
                 dep.srcAccessMask = RHI::AccessFlag::MemoryWrite;
                 dep.dstAccessMask = RHI::AccessFlag::InputAttachmentRead;
-                dep.byRegion = true;                         
+                dep.byRegion = true;
                 m_sortedPasses[info.firstReaderIndex]->addDependency(dep);
             }
         }
+    }
 
-        // ── Memory Aliasing：贪心复用生命周期不重叠的 transient 纹理内存 ──
-        performMemoryAliasing(texPassInfo);
-
+    // 物理资源分配：纹理/缓冲创建 + 声明式附件 loadOp 推断 + pass 编译
+    void RenderGraph::createPhysicalResources(const std::unordered_map<TextureId, TexturePassInfo>& texPassInfo) {
         // compute 写为 storage image 的纹理需要 STORAGE usage（允许无序访问）
         std::unordered_set<TextureId> storageTexIds;
         for (auto* pass : m_sortedPasses) {
@@ -310,6 +285,7 @@ namespace StarryEngine::RenderGraph {
             }
         }
 
+        // 纹理物理分配
         for (auto& vt : m_virtualTextures) {
             if (vt.imported) {
                 PhysicalTextureInfo info;
@@ -326,11 +302,12 @@ namespace StarryEngine::RenderGraph {
                 auto* texObj = m_resMgr->getTexture(handle);
                 PhysicalTextureInfo info;
                 info.handle = handle;
-                info.views.push_back(texObj->getDefaultView());   
+                info.views.push_back(texObj->getDefaultView());
                 m_textureMap[vt.id] = info;
             }
         }
 
+        // 缓冲物理分配
         for (auto& vb : m_virtualBuffers) {
             if (vb.imported) {
                 m_bufferMap[vb.id] = vb.externalHandle;
@@ -344,6 +321,7 @@ namespace StarryEngine::RenderGraph {
             }
         }
 
+        // 纹理描述映射（pass 编译用）
         std::unordered_map<TextureId, RHI::TextureDesc> texDescMap;
         for (const auto& vt : m_virtualTextures) {
             texDescMap[vt.id] = vt.desc;
@@ -358,66 +336,61 @@ namespace StarryEngine::RenderGraph {
             });
         }
 
+        // pass 编译（渲染通道/管线相关准备）
         for (auto* pass : m_sortedPasses) {
             if (!pass->compile(m_resMgr, m_textureMap, texDescMap, m_bufferMap)) {
                 throw std::runtime_error("Failed to compile pass: " + pass->getName());
             }
         }
+    }
 
-        createFrameBuffer();
-
-        // 动态渲染：收集每 pass 的颜色/深度附件视图（[pass][交换链图像索引]）
-        if (m_useDynamicRendering) {
-            m_perPassAttachmentViews.clear();
-            m_perPassAttachmentViews.reserve(m_sortedPasses.size());
-            m_perPassDepthViews.clear();
-            m_perPassDepthViews.reserve(m_sortedPasses.size());
-            for (auto* pass : m_sortedPasses) {
-                if (pass->getType() == PassType::Compute) {
-                    m_perPassAttachmentViews.push_back({});
-                    m_perPassDepthViews.push_back({});
-                    continue;
-                }
-                const auto colorKeys = pass->getColorAttachmentNames();
-                std::vector<std::vector<void*>> viewsPerImage;
-                viewsPerImage.reserve(m_swapchainImageCount);
-                for (uint32_t imgIdx = 0; imgIdx < m_swapchainImageCount; ++imgIdx) {
-                    std::vector<void*> imageViews;
-                    for (const auto& key : colorKeys) {
-                        TextureId texId = pass->getTextureIdForAttachmentKey(key);
-                        auto it = m_textureMap.find(texId);
-                        if (it == m_textureMap.end()) continue;
-                        const auto& texInfo = it->second;
-                        if (texInfo.handle.isValid() && !texInfo.views.empty()) {
-                            imageViews.push_back(texInfo.views[0]);
-                        }
-                        else if (!texInfo.handle.isValid()) {
-                            if (texInfo.views.size() == 1) imageViews.push_back(texInfo.views[0]);
-                            else if (imgIdx < texInfo.views.size()) imageViews.push_back(texInfo.views[imgIdx]);
-                        }
-                    }
-                    viewsPerImage.push_back(std::move(imageViews));
-                }
-                m_perPassAttachmentViews.push_back(std::move(viewsPerImage));
-
-                // 深度附件视图（纯深度 pass 如 ShadowPass）
-                std::vector<void*> depthViews;
-                const auto depthKeys = pass->getDepthAttachmentNames();
-                for (uint32_t imgIdx = 0; imgIdx < m_swapchainImageCount; ++imgIdx) {
-                    void* depthView = nullptr;
-                    if (!depthKeys.empty()) {
-                        TextureId texId = pass->getTextureIdForAttachmentKey(depthKeys[0]);
-                        auto it = m_textureMap.find(texId);
-                        if (it != m_textureMap.end() && !it->second.views.empty()) {
-                            depthView = it->second.views[0];
-                        }
-                    }
-                    depthViews.push_back(depthView);
-                }
-                m_perPassDepthViews.push_back(std::move(depthViews));
+    // 动态渲染：收集每 pass 的颜色/深度附件视图（[pass][交换链图像索引]）
+    void RenderGraph::collectDynamicViews() {
+        m_perPassViews.clear();
+        m_perPassViews.reserve(m_sortedPasses.size());
+        for (auto* pass : m_sortedPasses) {
+            PassAttachmentViews pv;
+            if (pass->getType() == PassType::Compute) {
+                m_perPassViews.push_back(std::move(pv));
+                continue;
             }
-        }
 
+            // 颜色附件视图：colorViews[交换链图像索引][附件]
+            const auto colorKeys = pass->getColorAttachmentNames();
+            pv.colorViews.reserve(m_swapchainImageCount);
+            for (uint32_t imgIdx = 0; imgIdx < m_swapchainImageCount; ++imgIdx) {
+                std::vector<void*> imageViews;
+                for (const auto& key : colorKeys) {
+                    TextureId texId = pass->getTextureIdForAttachmentKey(key);
+                    auto it = m_textureMap.find(texId);
+                    if (it == m_textureMap.end()) continue;
+                    const auto& texInfo = it->second;
+                    if (texInfo.handle.isValid() && !texInfo.views.empty()) {
+                        imageViews.push_back(texInfo.views[0]);
+                    }
+                    else if (!texInfo.handle.isValid()) {
+                        if (texInfo.views.size() == 1) imageViews.push_back(texInfo.views[0]);
+                        else if (imgIdx < texInfo.views.size()) imageViews.push_back(texInfo.views[imgIdx]);
+                    }
+                }
+                pv.colorViews.push_back(std::move(imageViews));
+            }
+
+            // 深度附件视图（纯深度 pass 如 ShadowPass；无深度 = nullptr）
+            const auto depthKeys = pass->getDepthAttachmentNames();
+            if (!depthKeys.empty()) {
+                TextureId texId = pass->getTextureIdForAttachmentKey(depthKeys[0]);
+                auto it = m_textureMap.find(texId);
+                if (it != m_textureMap.end() && !it->second.views.empty()) {
+                    pv.depthView = it->second.views[0];
+                }
+            }
+            m_perPassViews.push_back(std::move(pv));
+        }
+    }
+
+    // 布局转换分析：生成首用（Undefined→目标）与写读间 barrier
+    void RenderGraph::buildLayoutTransitions(const std::unordered_map<TextureId, TexturePassInfo>& texPassInfo) {
         struct PassLayoutInfo {
             RHI::ImageLayout initial;
             RHI::ImageLayout final;
@@ -426,6 +399,7 @@ namespace StarryEngine::RenderGraph {
         std::unordered_map<TextureId, std::vector<PassLayoutInfo>> texPassLayouts;
         texPassLayouts.reserve(m_virtualTextures.size());
 
+        // 收集每个 pass 对每个纹理的 initial/final 布局
         for (size_t i = 0; i < m_sortedPasses.size(); ++i) {
             auto* pass = m_sortedPasses[i];
             std::set<TextureId> allTex = pass->getReadTextures();
@@ -440,69 +414,71 @@ namespace StarryEngine::RenderGraph {
         }
 
         m_layoutTransitions.clear();
+
+        // 首用转换：Undefined → 首个使用目标（动态渲染需显式转换，传统由 render pass 隐式处理）
         for (const auto& [texId, layouts] : texPassLayouts) {
             auto infoIt = texPassInfo.find(texId);
             if (infoIt == texPassInfo.end()) continue;
             int32_t firstUseIdx = infoIt->second.firstUserIndex;
-            if (firstUseIdx != -1) {
-                const auto& firstLayoutInfo = layouts[firstUseIdx];
-                // 首用目标：initial 非空用 initial；动态渲染无 render pass 时，首用即写入
-                // （initial=Undefined + final 非空）也要显式转换（传统模式由 render pass 隐式处理）
-                RHI::ImageLayout firstTarget = firstLayoutInfo.initial;
-                if (m_useDynamicRendering && firstTarget == RHI::ImageLayout::Undefined
-                    && firstLayoutInfo.final != RHI::ImageLayout::Undefined) {
-                    firstTarget = firstLayoutInfo.final;
-                }
-                if (firstTarget != RHI::ImageLayout::Undefined) {
-                    auto texIt = std::find_if(m_virtualTextures.begin(), m_virtualTextures.end(),
-                        [texId](const VirtualTexture& vt) { return vt.id == texId; });
-                    RHI::Format format = (texIt != m_virtualTextures.end()) ? texIt->desc.format : RHI::Format::Undefined;
-                    bool computeReader = m_sortedPasses[firstUseIdx]->getType() == PassType::Compute;
-                    auto [srcStage, srcAccess] = getStageAccessFromLayout(RHI::ImageLayout::Undefined);
-                    auto [dstStage, dstAccess] = getReadStageAccess(firstTarget, computeReader);
-                    uint32_t aspect = getAspectMask(format);
-                    m_layoutTransitions.push_back({
-                        -1, static_cast<uint32_t>(firstUseIdx), texId,
-                        RHI::ImageLayout::Undefined, firstTarget,
-                        srcStage, dstStage, srcAccess, dstAccess, aspect
-                        });
-                }
+            if (firstUseIdx == -1) continue;
+            const auto& firstLayoutInfo = layouts[firstUseIdx];
+            RHI::ImageLayout firstTarget = firstLayoutInfo.initial;
+            if (m_useDynamicRendering && firstTarget == RHI::ImageLayout::Undefined
+                && firstLayoutInfo.final != RHI::ImageLayout::Undefined) {
+                firstTarget = firstLayoutInfo.final;
             }
+            if (firstTarget == RHI::ImageLayout::Undefined) continue;
+
+            RHI::Format format = getTextureFormat(texId);
+            bool computeReader = m_sortedPasses[firstUseIdx]->getType() == PassType::Compute;
+            auto [srcStage, srcAccess] = getStageAccessFromLayout(RHI::ImageLayout::Undefined);
+            auto [dstStage, dstAccess] = getReadStageAccess(firstTarget, computeReader);
+            uint32_t aspect = getAspectMask(format);
+            m_layoutTransitions.push_back({
+                -1, static_cast<uint32_t>(firstUseIdx), texId,
+                RHI::ImageLayout::Undefined, firstTarget,
+                srcStage, dstStage, srcAccess, dstAccess, aspect
+                });
         }
 
+        // 写读间转换：write pass 之后 read pass 之前。
+        // 只用"最近的写者 → 读者"（writes/reads 按 pass 序递增，lower_bound 定位），
+        // 避免 O(写者数×读者数) 的笛卡尔积产生大量冗余 barrier；同布局写读也在此同步。
         for (const auto& [texId, layouts] : texPassLayouts) {
             std::vector<std::pair<uint32_t, RHI::ImageLayout>> writes;
             std::vector<std::pair<uint32_t, RHI::ImageLayout>> reads;
             for (uint32_t i = 0; i < layouts.size(); ++i) {
                 const auto& info = layouts[i];
                 if (!info.used) continue;
-                if (info.final != RHI::ImageLayout::Undefined) {
-                    writes.emplace_back(i, info.final);
-                }
-                if (info.initial != RHI::ImageLayout::Undefined) {
-                    reads.emplace_back(i, info.initial);
-                }
+                if (info.final != RHI::ImageLayout::Undefined) writes.emplace_back(i, info.final);
+                if (info.initial != RHI::ImageLayout::Undefined) reads.emplace_back(i, info.initial);
             }
-            for (const auto& [writeIdx, writeLayout] : writes) {
-                for (const auto& [readIdx, readLayout] : reads) {
-                    if (writeIdx < readIdx) {
-                        auto texIt = std::find_if(m_virtualTextures.begin(), m_virtualTextures.end(),
-                            [texId](const VirtualTexture& vt) { return vt.id == texId; });
-                        RHI::Format format = (texIt != m_virtualTextures.end()) ? texIt->desc.format : RHI::Format::Undefined;
-                        bool computeReader = m_sortedPasses[readIdx]->getType() == PassType::Compute;
-                        auto [srcStage, srcAccess] = getStageAccessFromLayout(writeLayout);
-                        auto [dstStage, dstAccess] = getReadStageAccess(readLayout, computeReader);
-                        uint32_t aspect = getAspectMask(format);
-                        m_layoutTransitions.push_back({
-                            static_cast<int32_t>(writeIdx), readIdx, texId,
-                            writeLayout, readLayout,
-                            srcStage, dstStage, srcAccess, dstAccess, aspect
-                            });
-                    }
-                }
+            if (writes.empty() || reads.empty()) continue;
+
+            // 纹理格式（循环外查一次）
+            RHI::Format format = getTextureFormat(texId);
+            uint32_t aspect = getAspectMask(format);
+
+            // 对每个 reader 找"它之前最近的 writer"
+            auto wit = writes.begin();
+            for (const auto& [readIdx, readLayout] : reads) {
+                while (wit != writes.end() && wit->first < readIdx) ++wit;
+                if (wit == writes.begin()) continue;          // 前面没有写者
+                auto& [writeIdx, writeLayout] = *std::prev(wit);
+                if (writeIdx >= readIdx) continue;
+
+                bool computeReader = m_sortedPasses[readIdx]->getType() == PassType::Compute;
+                auto [srcStage, srcAccess] = getStageAccessFromLayout(writeLayout);
+                auto [dstStage, dstAccess] = getReadStageAccess(readLayout, computeReader);
+                m_layoutTransitions.push_back({
+                    static_cast<int32_t>(writeIdx), readIdx, texId,
+                    writeLayout, readLayout,
+                    srcStage, dstStage, srcAccess, dstAccess, aspect
+                    });
             }
         }
 
+        // 按目标 pass 排序（execute 顺序应用 barrier）
         std::sort(m_layoutTransitions.begin(), m_layoutTransitions.end(),
             [](const LayoutTransition& a, const LayoutTransition& b) {
                 if (a.dstPassIdx != b.dstPassIdx) return a.dstPassIdx < b.dstPassIdx;
@@ -510,8 +486,6 @@ namespace StarryEngine::RenderGraph {
                 if (a.srcPassIdx != -1 && b.srcPassIdx == -1) return false;
                 return a.srcPassIdx < b.srcPassIdx;
             });
-
-        return true;
     }
 
     void RenderGraph::createFrameBuffer() {
@@ -595,77 +569,10 @@ namespace StarryEngine::RenderGraph {
         // 主缓冲上的布局转换 barrier + executeCommands 保证，与录制先后无关。
         std::vector<std::vector<void*>> secondaries;   // secondaries[i][sub] = pass i subpass sub 的 native secondary 句柄
         if (parallelEnabled) {
-            secondaries.resize(m_sortedPasses.size());
-            for (size_t i = 0; i < m_sortedPasses.size(); ++i) {
-                auto* pass = m_sortedPasses[i];
-                if (!pass->isEnabled()) continue;   // 禁用 pass：Phase 2 用 Inline 空体（保持 clear 语义）
-
-                const bool isCompute = (pass->getType() == PassType::Compute);
-                const uint32_t subpassCount = isCompute ? 1u : pass->getSubpassCount();
-
-                // 继承信息（compute 不需要渲染通道继承）
-                RHI::RenderPassHandle nativeRP = RHI::RenderPassHandle{};
-                RHI::FramebufferHandle nativeFB = RHI::FramebufferHandle{};
-                RHI::Format dynColorFmt = RHI::Format::Undefined;
-                RHI::Format dynDepthFmt = RHI::Format::Undefined;
-                if (!isCompute && !m_useDynamicRendering) {
-                    nativeRP = pass->getRenderPassHandle();
-                    nativeFB = m_perPassFramebuffers[i][frameIndex];
-                    if (!nativeRP.isValid() || !nativeFB.isValid()) {
-                        LOG_WARN("[{}] 并行录制：renderPass={} fb={} — 跳过", pass->getName(),
-                            nativeRP.isValid(), nativeFB.isValid());
-                        continue;
-                    }
-                }
-                else if (!isCompute && m_useDynamicRendering) {
-                    // 动态渲染继承：取该 pass 颜色/深度附件格式（与主缓冲 beginRendering 一致）
-                    const auto& colorKeys = pass->getColorAttachmentNames();
-                    if (!colorKeys.empty()) {
-                        TextureId tid = pass->getTextureIdForAttachmentKey(colorKeys[0]);
-                        auto vit = std::find_if(m_virtualTextures.begin(), m_virtualTextures.end(),
-                            [tid](const VirtualTexture& vt) { return vt.id == tid; });
-                        if (vit != m_virtualTextures.end()) dynColorFmt = vit->desc.format;
-                    }
-                    const auto& depthKeys = pass->getDepthAttachmentNames();
-                    if (!depthKeys.empty()) {
-                        TextureId tid = pass->getTextureIdForAttachmentKey(depthKeys[0]);
-                        auto vit = std::find_if(m_virtualTextures.begin(), m_virtualTextures.end(),
-                            [tid](const VirtualTexture& vt) { return vt.id == tid; });
-                        if (vit != m_virtualTextures.end()) dynDepthFmt = vit->desc.format;
-                    }
-                }
-
-                // 预置槽位：每个 job 只写自己的下标（互不相交），主线程 waitAll 后才读 → 无锁安全
-                secondaries[i].resize(subpassCount, nullptr);
-                for (uint32_t sub = 0; sub < subpassCount; ++sub) {
-                    // 分配 + beginSecondary 都移进 job（在"执行线程"上做）：
-                    // 执行线程从自己的 per-worker 命令池取 secondary，避免多线程并发录同一池
-                    // （验证层 UNASSIGNED-Threading-MultipleThreads-Write → NVIDIA 驱动 submit 段错误）。
-                    parallel->jobs->submit(
-                        [pass, alloc = parallel->allocateSecondary, ctx = context, frameIndex, sub,
-                         nativeRP, nativeFB, isCompute, useDyn = m_useDynamicRendering,
-                         dynColorFmt, dynDepthFmt, frameSlot, slot = &secondaries[i][sub]]() {
-                            auto sec = alloc(JobSystem::currentWorkerIndex());
-                            if (!sec) return;
-                            if (isCompute) {
-                                sec->beginSecondary({ .renderPassContinue = false });
-                            } else if (useDyn) {
-                                sec->beginSecondary({ .useDynamicRendering = true,
-                                                     .colorFormat = dynColorFmt,
-                                                     .depthFormat = dynDepthFmt });
-                            } else {
-                                sec->beginSecondary({ .renderPass = nativeRP, .framebuffer = nativeFB,
-                                                     .subpass = sub, .renderPassContinue = true });
-                            }
-                            pass->recordBody(sec.get(), ctx, frameIndex, RHI::FramebufferHandle{}, sub, frameSlot);
-                            sec->end();   // vkEndCommandBuffer：Phase 2 才能 executeCommands
-                            *slot = sec->getCommandBuffer();   // 存 native 句柄给 Phase 2
-                        });
-                }
-            }
-            parallel->jobs->waitAll();   // 帧 barrier：全部 secondary 录完
+            recordSecondariesParallel(encoder, context, frameIndex, frameSlot, parallel, secondaries);
         }
 
+        // ── Phase 2：主缓冲逐 pass 执行（barrier + 串行/并行双模入口）──
         std::unordered_map<TextureId, RHI::ImageLayout> currentLayouts;
         for (const auto& vt : m_virtualTextures) {
             if (vt.imported) {
@@ -675,138 +582,17 @@ namespace StarryEngine::RenderGraph {
 
         auto transIt = m_layoutTransitions.begin();
         for (size_t i = 0; i < m_sortedPasses.size(); ++i) {
-
-            auto* pass = m_sortedPasses[i];
-            // Compute Pass / 动态渲染：无 Framebuffer，传空 handle
-            RHI::FramebufferHandle fb = RHI::FramebufferHandle{};
-            if (!m_useDynamicRendering && pass->getType() != PassType::Compute) {
-                fb = m_perPassFramebuffers[i][frameIndex];
-            }
-
+            // 当前 pass 前应用其依赖的布局转换
             while (transIt != m_layoutTransitions.end() && transIt->dstPassIdx == i) {
-                const auto& trans = *transIt;
-                auto texIt = m_textureMap.find(trans.texId);
-                if (texIt != m_textureMap.end() && texIt->second.handle.isValid()) {
-                    RHI::ImageLayout srcLayout = trans.srcLayout;
-                    auto curIt = currentLayouts.find(trans.texId);
-                    if (curIt != currentLayouts.end() && curIt->second != RHI::ImageLayout::Undefined) {
-                        srcLayout = curIt->second;
-                    }
-
-                    RHI::ImageBarrier barrier{};
-                    barrier.image = texIt->second.handle;
-                    barrier.oldLayout = srcLayout;
-                    barrier.newLayout = trans.dstLayout;
-                    barrier.srcAccessMask = trans.srcAccess;
-                    barrier.dstAccessMask = trans.dstAccess;
-                    barrier.aspectMask = trans.aspectMask;  
-                    barrier.baseMipLevel = 0;
-                    barrier.levelCount = 1;
-                    barrier.baseArrayLayer = 0;
-                    barrier.layerCount = 1;
-
-                    encoder->pipelineBarrier(trans.srcStage, trans.dstStage, RHI::DependencyFlags::None, {}, {}, { barrier });
-
-                    currentLayouts[trans.texId] = trans.dstLayout;
-                }
+                applyLayoutTransition(encoder, *transIt, currentLayouts);
                 ++transIt;
             }
 
-            if (!parallelEnabled) {
-                // ── 原串行路径（软开关第 0 级）：行为与单线程完全一致 ──
-                if (m_useDynamicRendering) {
-                    if (pass->getType() == PassType::Compute) {
-                        pass->recordBody(encoder, context, frameIndex, RHI::FramebufferHandle{}, 0, frameSlot);
-                    } else {
-                        const auto& attViews = getAttachmentViewsForPass(i, frameIndex);
-                        void* depthView = getDepthAttachmentViewForPass(i, frameIndex);
-                        if (attViews.empty() && depthView == nullptr) {
-                            LOG_WARN("[{}] 串行动态：无附件视图 — 跳过", pass->getName());
-                        } else {
-                            pass->executeDynamic(encoder, context, frameIndex, attViews, frameSlot, depthView);
-                        }
-                    }
-                } else {
-                    pass->execute(encoder, context, frameIndex, fb, frameSlot);
-                }
-            } else if (pass->getType() == PassType::Compute) {
-                // ── 并行路径：compute pass 直接在主缓冲执行已录好的 secondary ──
-                if (!secondaries[i].empty() && secondaries[i][0] != nullptr) {
-                    encoder->executeCommands(secondaries[i]);
-                }
-            } else if (m_useDynamicRendering) {
-                // ── 并行动态：主缓冲 beginRendering + 已录 secondary 主体 ──
-                const auto& attViews = getAttachmentViewsForPass(i, frameIndex);
-                void* depthView = getDepthAttachmentViewForPass(i, frameIndex);
-                if (attViews.empty() && depthView == nullptr) {
-                    LOG_WARN("[{}] 并行动态：无附件视图 — 跳过", pass->getName());
-                    continue;
-                }
-                std::vector<RHI::RenderingAttachmentInfo> colorAtts;
-                colorAtts.reserve(attViews.size());
-                const auto& colorLoadOps = pass->getColorLoadOps();
-                const auto& clearValues = pass->getClearValues();
-                for (size_t vi = 0; vi < attViews.size(); ++vi) {
-                    RHI::RenderingAttachmentInfo att;
-                    att.imageView = attViews[vi];
-                    att.imageLayout = RHI::ImageLayout::ColorAttachment;
-                    att.loadOp = (vi < colorLoadOps.size()) ? colorLoadOps[vi] : RHI::AttachmentLoadOp::Clear;
-                    att.storeOp = RHI::AttachmentStoreOp::Store;
-                    if (att.loadOp == RHI::AttachmentLoadOp::Clear && !clearValues.empty()) {
-                        att.clearValue = clearValues[vi < clearValues.size() ? vi : 0];
-                    }
-                    colorAtts.push_back(att);
-                }
-                RHI::RenderingAttachmentInfo depthAtt;
-                const auto& depthLoadOps = pass->getDepthLoadOps();
-                if (depthView != nullptr) {
-                    depthAtt.imageView = depthView;
-                    depthAtt.imageLayout = RHI::ImageLayout::DepthStencilAttachment;
-                    depthAtt.loadOp = depthLoadOps.empty() ? RHI::AttachmentLoadOp::Clear : depthLoadOps[0];
-                    depthAtt.storeOp = RHI::AttachmentStoreOp::Store;
-                    depthAtt.clearValue = RHI::ClearValue(1.0f, 0u);
-                }
-                pass->beginRenderingOnPrimary(encoder, colorAtts, depthAtt, depthView != nullptr);
+            // pass 主体（串行直接执行 / 并行执行已录 secondary）
+            recordPassOnPrimary(encoder, context, frameIndex, frameSlot, i, secondaries);
 
-                // 传统 render pass 对深度附件无条件 stencilLoadOp=Clear（首用清模板）；
-                // Vulkan 1.3 动态渲染 depth/stencil 共享 loadOp，depth=Load 时模板不会自动清。
-                // StencilPass 依赖"开始时模板=0"，这里补发一次 stencil-only clear（StencilWrite 前清 0）。
-                if (depthView != nullptr && depthAtt.loadOp == RHI::AttachmentLoadOp::Load) {
-                    RHI::ClearAttachment stencilClear;
-                    stencilClear.aspectMask = RHI::ImageAspect::Stencil;
-                    stencilClear.clearValue = RHI::ClearValue(1.0f, 0u);
-                    RHI::ClearRect rect;
-                    rect.rect = { {0, 0}, { pass->getWidth(), pass->getHeight() } };
-                    encoder->clearAttachments({ stencilClear }, { rect });
-                }
-
-                if (secondaries[i].empty()) {
-                    // 禁用 pass：空体 begin/end，保持 loadOp 的 clear 语义
-                } else {
-                    for (uint32_t sub = 0; sub < secondaries[i].size(); ++sub) {
-                        if (secondaries[i][sub] == nullptr) continue;
-                        encoder->executeCommands({ secondaries[i][sub] });
-                    }
-                }
-                pass->endRenderingOnPrimary(encoder);
-            } else {
-                if (secondaries[i].empty()) {
-                    // 禁用的 graphics pass：Inline 空体 begin/end，保持 loadOp 的 clear 语义
-                    pass->beginPassOnPrimary(encoder, fb, RHI::SubpassContents::Inline);
-                    pass->endPassOnPrimary(encoder);
-                } else {
-                    pass->beginPassOnPrimary(encoder, fb, RHI::SubpassContents::SecondaryCommandBuffers);
-                    for (uint32_t sub = 0; sub < secondaries[i].size(); ++sub) {
-                        if (secondaries[i][sub] == nullptr) continue;   // job 分配失败则跳过该 subpass
-                        if (sub > 0) {
-                            pass->nextSubpassOnPrimary(encoder, RHI::SubpassContents::SecondaryCommandBuffers);
-                        }
-                        encoder->executeCommands({ secondaries[i][sub] });
-                    }
-                    pass->endPassOnPrimary(encoder);
-                }
-            }
-
+            // 更新布局跟踪（该 pass 写过的纹理 final 布局）
+            auto* pass = m_sortedPasses[i];
             auto allTex = pass->getReadTextures();
             allTex.insert(pass->getWriteTextures().begin(), pass->getWriteTextures().end());
             for (auto texId : allTex) {
@@ -816,6 +602,142 @@ namespace StarryEngine::RenderGraph {
                 }
             }
         }
+    }
+
+    // Phase 1：并行录制 secondary（每 pass×subpass 一个 job，主线程 waitAll 后读取）
+    void RenderGraph::recordSecondariesParallel(RHI::RHICommandEncoder* encoder, const RenderContext& context,
+        uint32_t frameIndex, uint32_t frameSlot, const ParallelRecordingContext* parallel,
+        std::vector<std::vector<void*>>& secondaries) {
+        secondaries.resize(m_sortedPasses.size());
+        for (size_t i = 0; i < m_sortedPasses.size(); ++i) {
+            auto* pass = m_sortedPasses[i];
+            if (!pass->isEnabled()) continue;   // 禁用 pass：Phase 2 用 Inline 空体（保持 clear 语义）
+
+            const bool isCompute = (pass->getType() == PassType::Compute);
+            const uint32_t subpassCount = isCompute ? 1u : pass->getSubpassCount();
+
+            // 继承信息（compute 不需要渲染通道继承）
+            RHI::RenderPassHandle nativeRP = RHI::RenderPassHandle{};
+            RHI::FramebufferHandle nativeFB = RHI::FramebufferHandle{};
+            RHI::Format dynColorFmt = RHI::Format::Undefined;
+            RHI::Format dynDepthFmt = RHI::Format::Undefined;
+            if (!isCompute && !m_useDynamicRendering) {
+                nativeRP = pass->getRenderPassHandle();
+                nativeFB = m_perPassFramebuffers[i][frameIndex];
+                if (!nativeRP.isValid() || !nativeFB.isValid()) {
+                    LOG_WARN("[{}] 并行录制：renderPass={} fb={} — 跳过", pass->getName(),nativeRP.isValid(), nativeFB.isValid());
+                    continue;
+                }
+            }
+            else if (!isCompute && m_useDynamicRendering) {
+                // 动态渲染继承：取该 pass 颜色/深度附件格式（与主缓冲 beginRendering 一致）
+                const auto& colorKeys = pass->getColorAttachmentNames();
+                if (!colorKeys.empty()) {
+                    TextureId tid = pass->getTextureIdForAttachmentKey(colorKeys[0]);
+                    dynColorFmt = getTextureFormat(tid);
+                }
+                const auto& depthKeys = pass->getDepthAttachmentNames();
+                if (!depthKeys.empty()) {
+                    TextureId tid = pass->getTextureIdForAttachmentKey(depthKeys[0]);
+                    dynDepthFmt = getTextureFormat(tid);
+                }
+            }
+
+            // 预置槽位：每个 job 只写自己的下标（互不相交），主线程 waitAll 后才读 → 无锁安全
+            secondaries[i].resize(subpassCount, nullptr);
+            for (uint32_t sub = 0; sub < subpassCount; ++sub) {
+                // 分配 + beginSecondary 都移进 job（在"执行线程"上做）：
+                // 执行线程从自己的 per-worker 命令池取 secondary，避免多线程并发录同一池
+                // （验证层 UNASSIGNED-Threading-MultipleThreads-Write → NVIDIA 驱动 submit 段错误）。
+                parallel->jobs->submit(
+                    [pass, alloc = parallel->allocateSecondary, ctx = context, frameIndex, sub,
+                     nativeRP, nativeFB, isCompute, useDyn = m_useDynamicRendering,
+                     dynColorFmt, dynDepthFmt, frameSlot, slot = &secondaries[i][sub]]() {
+                        auto sec = alloc(JobSystem::currentWorkerIndex());
+                        if (!sec) return;
+                        if (isCompute) {
+                            sec->beginSecondary({ .renderPassContinue = false });
+                        } else if (useDyn) {
+                            sec->beginSecondary({ .useDynamicRendering = true,
+                                                 .colorFormat = dynColorFmt,
+                                                 .depthFormat = dynDepthFmt });
+                        } else {
+                            sec->beginSecondary({ .renderPass = nativeRP, .framebuffer = nativeFB,
+                                                 .subpass = sub, .renderPassContinue = true });
+                        }
+                        pass->recordBody(sec.get(), ctx, frameIndex, RHI::FramebufferHandle{}, sub, frameSlot);
+                        sec->end();   // vkEndCommandBuffer：Phase 2 才能 executeCommands
+                        *slot = sec->getCommandBuffer();   // 存 native 句柄给 Phase 2
+                    });
+            }
+        }
+        parallel->jobs->waitAll();   // 帧 barrier：全部 secondary 录完
+    }
+
+    // 单 pass 主缓冲执行：串行（直接 execute）或并行（begin + executeCommands + end）
+    void RenderGraph::recordPassOnPrimary(RHI::RHICommandEncoder* encoder, const RenderContext& context,
+        uint32_t frameIndex, uint32_t frameSlot, size_t passIndex,
+        const std::vector<std::vector<void*>>& secondaries) {
+        auto* pass = m_sortedPasses[passIndex];
+
+        // ── 串行路径：统一调 pass 虚接口（compute/graphics 差异在节点内部处理）──
+        if (secondaries.empty()) {
+            if (m_useDynamicRendering) {
+                // RenderNode::executeDynamic 内部：compute → recorder；graphics → beginRendering + executors
+                const auto& attViews = getAttachmentViewsForPass(passIndex, frameIndex);
+                void* depthView = getDepthAttachmentViewForPass(passIndex, frameIndex);
+                pass->executeDynamic(encoder, context, frameIndex, attViews, frameSlot, depthView);
+            } else {
+                // PassNode::execute 内部：compute → recorder；graphics → render pass + executors
+                RHI::FramebufferHandle fb = getFramebufferForPass(passIndex, frameIndex);
+                pass->execute(encoder, context, frameIndex, fb, frameSlot);
+            }
+            return;
+        }
+
+        // ── 并行路径：统一调"主缓冲执行已录 secondary"（compute/graphics 差异在节点内部处理）──
+        RHI::FramebufferHandle fb = getFramebufferForPass(passIndex, frameIndex);
+        const auto& attViews = getAttachmentViewsForPass(passIndex, frameIndex);
+        void* depthView = getDepthAttachmentViewForPass(passIndex, frameIndex);
+        pass->executeSecondariesOnPrimary(encoder, fb, attViews, depthView, secondaries[passIndex]);
+    }
+
+    // 取某 pass 的 framebuffer（传统模式 graphics pass）；compute/动态返回空 handle
+    RHI::FramebufferHandle RenderGraph::getFramebufferForPass(size_t passIndex, uint32_t frameIndex) const {
+        if (m_useDynamicRendering || m_sortedPasses[passIndex]->getType() == PassType::Compute) {
+            return RHI::FramebufferHandle{};
+        }
+        return m_perPassFramebuffers[passIndex][frameIndex];
+    }
+
+    // 单个布局转换 barrier：应用 src→dst 布局/阶段/访问转换到 encoder
+    void RenderGraph::applyLayoutTransition(RHI::RHICommandEncoder* encoder,
+        const LayoutTransition& trans,
+        std::unordered_map<TextureId, RHI::ImageLayout>& currentLayouts) {
+        auto texIt = m_textureMap.find(trans.texId);
+        if (texIt == m_textureMap.end() || !texIt->second.handle.isValid()) return;
+
+        RHI::ImageLayout srcLayout = trans.srcLayout;
+        auto curIt = currentLayouts.find(trans.texId);
+        if (curIt != currentLayouts.end() && curIt->second != RHI::ImageLayout::Undefined) {
+            srcLayout = curIt->second;
+        }
+
+        RHI::ImageBarrier barrier{};
+        barrier.image = texIt->second.handle;
+        barrier.oldLayout = srcLayout;
+        barrier.newLayout = trans.dstLayout;
+        barrier.srcAccessMask = trans.srcAccess;
+        barrier.dstAccessMask = trans.dstAccess;
+        barrier.aspectMask = trans.aspectMask;
+        barrier.baseMipLevel = 0;
+        barrier.levelCount = 1;
+        barrier.baseArrayLayer = 0;
+        barrier.layerCount = 1;
+
+        encoder->pipelineBarrier(trans.srcStage, trans.dstStage, RHI::DependencyFlags::None, {}, {}, { barrier });
+
+        currentLayouts[trans.texId] = trans.dstLayout;
     }
 
     RHI::TextureHandle RenderGraph::getPhysicalTextureHandle(TextureId id) const {
@@ -842,25 +764,18 @@ namespace StarryEngine::RenderGraph {
         return it->second;
     }
 
-    const std::vector<RHI::FramebufferHandle>& RenderGraph::getFramebuffersForPass(size_t passIndex) const {
-        if (passIndex >= m_perPassFramebuffers.size())
-            throw std::runtime_error("Invalid pass index");
-        return m_perPassFramebuffers[passIndex];
-    }
-
     // 动态渲染：取某 pass 在指定交换链图像索引下的颜色附件视图
     const std::vector<void*>& RenderGraph::getAttachmentViewsForPass(size_t passIndex, uint32_t imageIndex) const {
         static const std::vector<void*> empty;
-        if (passIndex >= m_perPassAttachmentViews.size()) return empty;
-        if (imageIndex >= m_perPassAttachmentViews[passIndex].size()) return empty;
-        return m_perPassAttachmentViews[passIndex][imageIndex];
+        if (passIndex >= m_perPassViews.size()) return empty;
+        if (imageIndex >= m_perPassViews[passIndex].colorViews.size()) return empty;
+        return m_perPassViews[passIndex].colorViews[imageIndex];
     }
 
-    // 动态渲染：取某 pass 在指定交换链图像索引下的深度附件视图（无深度返回 nullptr）
-    void* RenderGraph::getDepthAttachmentViewForPass(size_t passIndex, uint32_t imageIndex) const {
-        if (passIndex >= m_perPassDepthViews.size()) return nullptr;
-        if (imageIndex >= m_perPassDepthViews[passIndex].size()) return nullptr;
-        return m_perPassDepthViews[passIndex][imageIndex];
+    // 动态渲染：取某 pass 的深度附件视图（无深度返回 nullptr）
+    void* RenderGraph::getDepthAttachmentViewForPass(size_t passIndex, uint32_t /*imageIndex*/) const {
+        if (passIndex >= m_perPassViews.size()) return nullptr;
+        return m_perPassViews[passIndex].depthView;
     }
 
     std::pair<RHI::PipelineStage, RHI::AccessFlag> RenderGraph::getStageAccessFromLayout(RHI::ImageLayout layout) {
@@ -1123,7 +1038,6 @@ namespace StarryEngine::RenderGraph {
                             targetIt->second.handle != donorIt->second.handle) {
                             m_resMgr->destroy(targetIt->second.handle);
                         }
-                        // 复用 donor 的物理 handle
                         targetIt->second.handle = donorIt->second.handle;
                         targetIt->second.views = donorIt->second.views;
                         aliasCount++;

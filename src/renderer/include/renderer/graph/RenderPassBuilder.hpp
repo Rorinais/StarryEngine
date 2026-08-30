@@ -86,10 +86,9 @@ namespace StarryEngine::RenderGraph {
         void analyzeAttachmentUsage();
         void generateDependenciesFromUsage();
         void generateDependenciesForAttachment(const std::string& key, const AttachmentUsage& usage);
-        void addColorReadAfterWriteDependency(uint32_t src, uint32_t dst);
-        void addDepthReadAfterWriteDependency(uint32_t src, uint32_t dst);
-        void addColorWriteAfterWriteDependency(uint32_t first, uint32_t second);
-        void addDepthWriteAfterWriteDependency(uint32_t first, uint32_t second);
+        void addAutoDependency(uint32_t src, uint32_t dst,
+            RHI::PipelineStage srcStage, RHI::PipelineStage dstStage,
+            RHI::AccessFlag srcAccess, RHI::AccessFlag dstAccess);
         void generateExternalDependencies(const AttachmentUsage& usage, bool isDepthStencil);
 
         bool isDepthStencilFormat(RHI::Format format) const;

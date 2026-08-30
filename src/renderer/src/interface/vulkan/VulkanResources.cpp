@@ -682,7 +682,10 @@ namespace StarryEngine::RHI {
             renderingInfo.colorAttachmentCount = (colorFmt != VK_FORMAT_UNDEFINED) ? 1u : 0u;
             renderingInfo.pColorAttachmentFormats = (colorFmt != VK_FORMAT_UNDEFINED) ? &colorFmt : nullptr;
             renderingInfo.depthAttachmentFormat = (depthFmt != VK_FORMAT_UNDEFINED) ? depthFmt : VK_FORMAT_UNDEFINED;
-            renderingInfo.stencilAttachmentFormat = VK_FORMAT_UNDEFINED;
+            // stencil 附件格式：深度模板格式（D24S8/D32S8）含 stencil → 必须声明，否则管线的 stencil 测试无效
+            renderingInfo.stencilAttachmentFormat =
+                (depthFmt == VK_FORMAT_D24_UNORM_S8_UINT || depthFmt == VK_FORMAT_D32_SFLOAT_S8_UINT)
+                ? depthFmt : VK_FORMAT_UNDEFINED;
         }
 
         VkGraphicsPipelineCreateInfo pipelineInfo{};

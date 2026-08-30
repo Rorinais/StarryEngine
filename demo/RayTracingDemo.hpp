@@ -113,9 +113,9 @@ namespace StarryEngine {
             m_offlineMode = std::getenv("STARRY_OFFLINE") != nullptr;
             m_offlineDenoise = std::getenv("STARRY_DENOISE") != nullptr;
             if (const char* op = std::getenv("STARRY_OFFLINE")) m_offlinePath = op;
-            m_spp = 16u;
+            m_spp = m_offlineMode ? 256u : 64u;   // 交互默认 64 spp（降噪尽早停止滤波，画面更接近离线）；离线默认 256
             if (const char* sp = std::getenv("STARRY_SPP")) { int v = std::atoi(sp); m_spp = (v > 0) ? static_cast<uint32_t>(v) : m_spp; }
-            else if (m_offlineMode) m_spp = m_offlineDenoise ? 1u : 256u;
+            else if (m_offlineMode && m_offlineDenoise) m_spp = 1u;
             m_offlineFrames = m_offlineDenoise ? 1u : 5u;
             if (const char* fr = std::getenv("STARRY_FRAMES")) { int v = std::atoi(fr); m_offlineFrames = (v > 0) ? static_cast<uint32_t>(v) : 1u; }
 

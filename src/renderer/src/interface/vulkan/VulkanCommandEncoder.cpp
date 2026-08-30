@@ -361,19 +361,31 @@ namespace StarryEngine::RHI {
         vkInfo.pColorAttachments = vkColorAttachments.data();
 
         VkRenderingAttachmentInfo vkDepth{};
-        vkDepth.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+        VkRenderingAttachmentInfo vkStencil{};
         if (renderingInfo.hasDepth && renderingInfo.depthAttachment.imageView) {
+            vkDepth.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
             vkDepth.imageView = static_cast<VkImageView>(renderingInfo.depthAttachment.imageView);
             vkDepth.imageLayout = func::RHI_TO_VK_ImageLayout(renderingInfo.depthAttachment.imageLayout);
             vkDepth.loadOp = func::RHI_TO_VK_AttachmentLoadOp(renderingInfo.depthAttachment.loadOp);
             vkDepth.storeOp = func::RHI_TO_VK_AttachmentStoreOp(renderingInfo.depthAttachment.storeOp);
-            // Vulkan 1.3：depth/stencil 共享 loadOp/storeOp（stencil 无独立字段）。
+            // Vulkan 1.3：depth/stencil 共享 loadOp/storeOp（RHI 无独立 stencil 字段）。
             // StencilPass 依赖此语义：首写（Clear）清 0，后续（Load）保留 StencilWrite 写入值。
             if (renderingInfo.depthAttachment.loadOp == AttachmentLoadOp::Clear) {
                 vkDepth.clearValue.depthStencil.depth = renderingInfo.depthAttachment.clearValue.depth;
                 vkDepth.clearValue.depthStencil.stencil = renderingInfo.depthAttachment.clearValue.stencil;
             }
             vkInfo.pDepthAttachment = &vkDepth;
+
+            // D24S8/D32S8 深度模板附件：动态渲染必须同时提供 pStencilAttachment，
+            // 否则管线 stencil 测试（stencilAttachmentFormat 非 UNDEFINED）因 stencil 附件缺失而无效。
+            // 同一 D+S 视图，depth/stencil 各自带 loadOp/storeOp。
+            vkStencil.sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO;
+            vkStencil.imageView = vkDepth.imageView;
+            vkStencil.imageLayout = vkDepth.imageLayout;
+            vkStencil.loadOp = vkDepth.loadOp;
+            vkStencil.storeOp = vkDepth.storeOp;
+            vkStencil.clearValue = vkDepth.clearValue;
+            vkInfo.pStencilAttachment = &vkStencil;
         }
 
         vkCmdBeginRendering(cmdBuf, &vkInfo);
@@ -408,8 +420,12 @@ namespace StarryEngine::RHI {
             VkFormat colorFmt = func::RHI_TO_VK_Format(beginInfo.colorFormat);
             vkInheritRendering.colorAttachmentCount = (colorFmt != VK_FORMAT_UNDEFINED) ? 1u : 0u;
             vkInheritRendering.pColorAttachmentFormats = (colorFmt != VK_FORMAT_UNDEFINED) ? &colorFmt : nullptr;
-            vkInheritRendering.depthAttachmentFormat = func::RHI_TO_VK_Format(beginInfo.depthFormat);
-            vkInheritRendering.stencilAttachmentFormat = VK_FORMAT_UNDEFINED;
+            VkFormat depthFmt = func::RHI_TO_VK_Format(beginInfo.depthFormat);
+            vkInheritRendering.depthAttachmentFormat = (depthFmt != VK_FORMAT_UNDEFINED) ? depthFmt : VK_FORMAT_UNDEFINED;
+            // secondary 继承信息必须声明 stencil 附件格式（与管线创建一致），否则 secondary 里的 stencil 测试无效
+            vkInheritRendering.stencilAttachmentFormat =
+                (depthFmt == VK_FORMAT_D24_UNORM_S8_UINT || depthFmt == VK_FORMAT_D32_SFLOAT_S8_UINT)
+                ? depthFmt : VK_FORMAT_UNDEFINED;
             vkInheritInfo.pNext = &vkInheritRendering;
         }
         else if (beginInfo.renderPassContinue) {

@@ -22,10 +22,6 @@ namespace StarryEngine::RenderGraph {
         int32_t firstWriterIndex = -1;
         int32_t lastWriterIndex = -1;
         int32_t firstReaderIndex = -1;
-        RHI::PipelineStage writeStage = RHI::PipelineStage::None;
-        RHI::AccessFlag writeAccess = RHI::AccessFlag::None;
-        RHI::PipelineStage readStage = RHI::PipelineStage::None;
-        RHI::AccessFlag readAccess = RHI::AccessFlag::None;
     };
 
     class RenderGraph {
@@ -37,14 +33,6 @@ namespace StarryEngine::RenderGraph {
         RenderGraph& operator=(const RenderGraph&) = delete;
 
         void setSwapchainImageCount(uint32_t count);
-
-        RHI::TextureDesc createBaseTextureDesc(
-            uint32_t width, uint32_t height,
-            RHI::Format format = RHI::Format::RGBA8_UNorm,
-            bool allowDepthStencil = true,
-            bool allowRenderTarget = true,
-            bool allowInputAttachment = true,
-            RHI::TextureType type = RHI::TextureType::Texture2D);
 
         TextureId createVirtualTexture(const RHI::TextureDesc& desc, const std::string& name = "");
 
@@ -66,13 +54,7 @@ namespace StarryEngine::RenderGraph {
         // 按名字查找节点（cullUnusedPasses 可能删除节点 → 持有旧指针的 pass 需重新解析）
         GraphNode* findNode(const std::string& name);
 
-        void dependencyAnalysis();
-        void cullUnusedPasses();
-        void exportDot(const std::string& filepath) const;
-
         bool compile();
-
-        void createFrameBuffer();
 
         void execute(RHI::RHICommandEncoder* encoder, const RenderContext& context, uint32_t frameIndex,
             uint32_t frameSlot,
@@ -83,28 +65,11 @@ namespace StarryEngine::RenderGraph {
 
         const std::vector<GraphNode*>& getSortedPasses() const { return m_sortedPasses; }
 
-        // 动态渲染：pass 的颜色附件视图（[pass][交换链图像索引]）
-        const std::vector<void*>& getAttachmentViewsForPass(size_t passIndex, uint32_t imageIndex) const;
-        // 动态渲染：pass 的深度附件视图（纯深度 pass 如 ShadowPass；无深度返回 nullptr）
-        void* getDepthAttachmentViewForPass(size_t passIndex, uint32_t imageIndex) const;
-
-        std::vector<std::unique_ptr<GraphNode>>& getPasses() { return m_passes; }
-        const std::vector<std::unique_ptr<GraphNode>>& getPasses() const { return m_passes; }
-        size_t getPassCount() const { return m_passes.size(); }
-
         TextureId getTextureId(const std::string& name) const;
         BufferId getBufferId(const std::string& name) const;
 
-        const std::vector<RHI::FramebufferHandle>& getFramebuffersForPass(size_t passIndex) const;
-        std::pair<RHI::PipelineStage, RHI::AccessFlag> getStageAccessFromLayout(RHI::ImageLayout layout);
-        std::pair<RHI::PipelineStage, RHI::AccessFlag> getReadStageAccess(RHI::ImageLayout layout, bool computeReader);
-
         bool isDepthOnlyFormat(RHI::Format format) {
             return format == RHI::Format::D16_UNorm || format == RHI::Format::D32_Float;
-        }
-
-        bool isStencilOnlyFormat(RHI::Format format) {
-            return false;
         }
 
         bool isDepthStencilFormat(RHI::Format format) {
@@ -114,9 +79,6 @@ namespace StarryEngine::RenderGraph {
         uint32_t getAspectMask(RHI::Format format) {
             if (isDepthOnlyFormat(format)) {
                 return static_cast<uint32_t>(RHI::ImageAspect::Depth);
-            }
-            else if (isStencilOnlyFormat(format)) {
-                return static_cast<uint32_t>(RHI::ImageAspect::Stencil);
             }
             else if (isDepthStencilFormat(format)) {
                 return static_cast<uint32_t>(RHI::ImageAspect::Depth) |
@@ -150,24 +112,74 @@ namespace StarryEngine::RenderGraph {
 
         void performMemoryAliasing(const std::unordered_map<TextureId, TexturePassInfo>& texPassInfo);
 
+        // ── 图分析 / 编译 ──
+        void dependencyAnalysis();
+        void cullUnusedPasses();
+        void exportDot(const std::string& filepath) const;
+        void createFrameBuffer();
+        // 分析纹理使用（first/last user/writer/reader + 跨 pass 输入依赖）
+        void analyzeTextureUsage(std::unordered_map<TextureId, TexturePassInfo>& texPassInfo);
+        // 物理资源分配（纹理/缓冲）+ 附件 loadOp 推断 + pass 编译
+        void createPhysicalResources(const std::unordered_map<TextureId, TexturePassInfo>& texPassInfo);
+        // 动态渲染：收集每 pass 的颜色/深度附件视图
+        void collectDynamicViews();
+        // 布局转换分析（首用/写读间 barrier 生成）
+        void buildLayoutTransitions(const std::unordered_map<TextureId, TexturePassInfo>& texPassInfo);
+
+        // ── execute() 拆分 ──
+        // Phase 1（并行路径）：预分配 secondary + 逐 (pass×subpass) 提交录制 job
+        void recordSecondariesParallel(RHI::RHICommandEncoder* encoder, const RenderContext& context,
+            uint32_t frameIndex, uint32_t frameSlot, const ParallelRecordingContext* parallel,
+            std::vector<std::vector<void*>>& secondaries);
+        // 单 pass 主缓冲执行（串行/并行双模统一入口）
+        void recordPassOnPrimary(RHI::RHICommandEncoder* encoder, const RenderContext& context,
+            uint32_t frameIndex, uint32_t frameSlot, size_t passIndex,
+            const std::vector<std::vector<void*>>& secondaries);
+        // 单个布局转换 barrier（apply 到 encoder）
+        void applyLayoutTransition(RHI::RHICommandEncoder* encoder,
+            const LayoutTransition& trans,
+            std::unordered_map<TextureId, RHI::ImageLayout>& currentLayouts);
+        // 取某 pass 的 framebuffer（传统模式）或空 handle（compute/动态）
+        RHI::FramebufferHandle getFramebufferForPass(size_t passIndex, uint32_t frameIndex) const;
+
+        // 布局/阶段/访问转换辅助
+        std::pair<RHI::PipelineStage, RHI::AccessFlag> getStageAccessFromLayout(RHI::ImageLayout layout);
+        std::pair<RHI::PipelineStage, RHI::AccessFlag> getReadStageAccess(RHI::ImageLayout layout, bool computeReader);
+
+        // 动态渲染：pass 附件视图访问（[pass] 索引）
+        const std::vector<void*>& getAttachmentViewsForPass(size_t passIndex, uint32_t imageIndex) const;
+        void* getDepthAttachmentViewForPass(size_t passIndex, uint32_t imageIndex) const;
+
     private:
         std::shared_ptr<RHI::IRHI> m_rhi;
-        // 双模渲染：设备支持动态渲染（VK_KHR_dynamic_rendering）→ RenderNode；否则传统 render pass → PassNode
         bool m_useDynamicRendering = false;
         std::shared_ptr<RHI::ResourceManager> m_resMgr;
         uint32_t m_swapchainImageCount = 0;
 
         std::vector<VirtualTexture> m_virtualTextures;
         std::unordered_map<std::string, TextureId> m_nameToTextureId;
+        // 纹理格式按 id 索引（id 从 1 连续递增，vector 下标 = id-1），避免按 texId 线性 find_if
+        std::vector<RHI::Format> m_textureFormats;
         uint32_t m_nextTextureId = 1;
+
+        // 按 texId 取纹理格式（id 有效且已填充时返回格式，否则 Undefined）
+        RHI::Format getTextureFormat(TextureId texId) const {
+            uint32_t idx = texId.id();
+            if (idx == 0 || idx > m_textureFormats.size()) return RHI::Format::Undefined;
+            return m_textureFormats[idx - 1];
+        }
 
         std::vector<VirtualBuffer> m_virtualBuffers;
         std::unordered_map<std::string, BufferId> m_nameToBufferId;
         uint32_t m_nextBufferId = 1;
 
         std::vector<std::unique_ptr<GraphNode>> m_passes;
-        std::vector<std::vector<std::vector<void*>>> m_perPassAttachmentViews;   // [pass][图像索引][附件视图]
-        std::vector<std::vector<void*>> m_perPassDepthViews;                     // [pass][图像索引] 深度视图
+        // 每 pass 的动态渲染附件视图：colorViews[交换链图像索引][附件]，depthView 为深度附件（无深度=nullptr）
+        struct PassAttachmentViews {
+            std::vector<std::vector<void*>> colorViews;
+            void* depthView = nullptr;
+        };
+        std::vector<PassAttachmentViews> m_perPassViews;
 
         // 共享图形 pass 节点注册表：dedupKey → 节点（addGraphicsPassNodeShared 用）
         std::unordered_map<std::string, GraphNode*> m_sharedGraphicsNodes;
@@ -179,8 +191,6 @@ namespace StarryEngine::RenderGraph {
         std::vector<LayoutTransition> m_layoutTransitions;
         // 每个 Pass 的帧缓冲（[passIndex][imageIndex]）
         std::vector<std::vector<RHI::FramebufferHandle>> m_perPassFramebuffers;
-
-        std::unordered_map<TextureId, std::string> m_textureNames;
     };
 
 } // namespace StarryEngine::RenderGraph

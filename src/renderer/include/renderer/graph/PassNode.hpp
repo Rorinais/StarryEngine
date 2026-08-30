@@ -20,8 +20,6 @@ namespace StarryEngine::RenderGraph {
         explicit PassNode(const std::string& name, PassType type = PassType::Graphics);
         ~PassNode() override;
 
-        PassType getType() const { return m_type; }
-
         // ── Graphics Pass 接口 ──
         std::string addColorOutput(TextureId texId, const AttachmentParams& params = AttachmentParams());
         std::string addDepthOutput(TextureId texId, const AttachmentParams& params = AttachmentParams());
@@ -29,28 +27,6 @@ namespace StarryEngine::RenderGraph {
         std::string addResolve(TextureId texId, const AttachmentParams& params = AttachmentParams());
         std::string addPreserve(TextureId texId);
         SubpassBuilder& addSubpass(const std::string& subpassName);
-        void setPassExecutor(uint32_t index, std::shared_ptr<StarryEngine::IPassExecutor> rec) {
-            if (index < m_passExecutors.size()) m_passExecutors[index] = std::move(rec);
-        }
-        void setRenderArea(uint32_t width, uint32_t height) { m_width = width; m_height = height; }
-
-        // ── Compute Pass 接口 ──
-        void addReadTexture(TextureId t)  { m_readTextures.insert(t); }
-        void addWriteTexture(TextureId t) { m_writeTextures.insert(t); m_computeWriteLayouts[t] = RHI::ImageLayout::General; }
-        void addReadBuffer(BufferId b)    { m_readBuffers.insert(b); }
-        void addWriteBuffer(BufferId b)   { m_writeBuffers.insert(b); }
-        // 执行全部交给 executor（绑管线 + 描述符 + push + dispatch），PassNode 只做结构
-        void setComputeExecutor(std::shared_ptr<StarryEngine::IPassExecutor> r) { m_computeRecorder = std::move(r); }
-
-        // Pass 启用/禁用
-        void setEnabled(bool e) { m_enabled = e; }
-        bool isEnabled() const { return m_enabled; }
-
-        const std::set<TextureId>& getReadTextures() const { return m_readTextures; }
-        const std::set<TextureId>& getWriteTextures() const { return m_writeTextures; }
-        const std::set<BufferId>& getReadBuffers() const { return m_readBuffers; }
-        const std::set<BufferId>& getWriteBuffers() const { return m_writeBuffers; }
-
         bool compile(std::shared_ptr<RHI::ResourceManager> resMgr,
             const std::unordered_map<TextureId, PhysicalTextureInfo>& texMap,
             const std::unordered_map<TextureId, RHI::TextureDesc>& texDescMap,
@@ -62,25 +38,19 @@ namespace StarryEngine::RenderGraph {
             RHI::FramebufferHandle framebuffer,
             uint32_t frameSlot = 0) override;
 
-        // 动态渲染：PassNode 为传统路径，动态方法 no-op（仅满足 GraphNode 接口）
-        void executeDynamic(RHI::RHICommandEncoder*, const RenderContext&, uint32_t,
-            const std::vector<void*>&, uint32_t = 0, void* = nullptr) override {}
-        void beginRenderingOnPrimary(RHI::RHICommandEncoder*,
-            const std::vector<RHI::RenderingAttachmentInfo>&,
-            const RHI::RenderingAttachmentInfo&, bool) override {}
-        void endRenderingOnPrimary(RHI::RHICommandEncoder*) override {}
-
-        void beginPassOnPrimary(RHI::RHICommandEncoder* encoder,
-            RHI::FramebufferHandle framebuffer,
-            RHI::SubpassContents contents);
-        void nextSubpassOnPrimary(RHI::RHICommandEncoder* encoder, RHI::SubpassContents contents);
-        void endPassOnPrimary(RHI::RHICommandEncoder* encoder);
         void recordBody(RHI::RHICommandEncoder* encoder,
             const RenderContext& context,
             uint32_t frameIndex,
             RHI::FramebufferHandle framebuffer,
             uint32_t subpassIndex,
             uint32_t frameSlot = 0);
+
+        // 统一并行入口：compute 直接执行已录 secondary；graphics 走传统 render pass 框架
+        void executeSecondariesOnPrimary(RHI::RHICommandEncoder* encoder,
+            RHI::FramebufferHandle framebuffer,
+            const std::vector<void*>& /*attachmentViews*/,
+            void* /*depthView*/,
+            const std::vector<void*>& secondaries) override;
 
         // 查询接口
         const std::string& getName() const { return m_name; }
@@ -102,46 +72,24 @@ namespace StarryEngine::RenderGraph {
         static bool isDepthFormat(RHI::Format format);
 
     private:
-        std::string m_name;
+        // 并行主缓冲框架（仅 executeSecondariesOnPrimary 内部使用）
+        void beginPassOnPrimary(RHI::RHICommandEncoder* encoder,
+            RHI::FramebufferHandle framebuffer,
+            RHI::SubpassContents contents);
+        void nextSubpassOnPrimary(RHI::RHICommandEncoder* encoder, RHI::SubpassContents contents);
+        void endPassOnPrimary(RHI::RHICommandEncoder* encoder);
+
         RenderPassBuilder m_builder;
+        RHI::RenderPassHandle m_renderPassHandle;
         std::unique_ptr<RenderPassBuildResult> m_cachedBuildResult;
 
-        std::set<TextureId> m_readTextures;
-        std::set<TextureId> m_writeTextures;
-        std::set<BufferId> m_readBuffers;
-        std::set<BufferId> m_writeBuffers;
-
-        std::unordered_map<std::string, TextureId> m_keyToTexId;
-        std::unordered_map<std::string, TextureId> m_attachmentKeyToTexId;
-        std::unordered_map<std::string, AttachmentParams> m_keyToParams;
-        // 颜色附件去重：texId → 已注册的颜色附件 key（同纹理+同参数复用，支持多 subpass 共享）
-        std::unordered_map<TextureId, std::string> m_colorOutputKeyByTex;
-        // 深度附件：texId → key（声明式附件推断需要区分颜色/深度以决定默认布局）
-        std::unordered_map<TextureId, std::string> m_depthOutputKeyByTex;
-
-        std::shared_ptr<RHI::ResourceManager> m_resMgr;
-        uint32_t m_width = 0;
-        uint32_t m_height = 0;
-
-        RHI::RenderPassHandle m_renderPassHandle;
-        std::vector<RHI::ClearValue> m_clearValues;
-        mutable std::vector<std::string> m_colorKeysCache;   // 颜色附件 key 缓存
-        mutable std::vector<std::string> m_depthKeysCache;
-        std::vector<std::shared_ptr<StarryEngine::IPassExecutor>> m_passExecutors;
         std::unordered_map<std::string, uint32_t> m_attachmentNameToIndex;
         std::unordered_map<std::string, RHI::ClearValue> m_clearValueMap;
+        mutable std::vector<std::string> m_colorKeysCache;
+        mutable std::vector<std::string> m_depthKeysCache;
+        std::vector<RHI::ClearValue> m_clearValues;
 
         uint32_t m_nextAttachmentKey = 1;
-
-        std::unordered_map<TextureId, RHI::ImageLayout> m_finalLayouts;
-
-        bool m_enabled = true;
-
-        // ── Compute 专用 ──
-        std::shared_ptr<StarryEngine::IPassExecutor> m_computeRecorder;
-        std::unordered_map<TextureId, RHI::ImageLayout> m_computeWriteLayouts;
-
-
     };
 
 } // namespace StarryEngine::RenderGraph

@@ -17,8 +17,7 @@ namespace StarryEngine::RenderGraph {
     }
 
     PassNode::PassNode(const std::string& name, PassType type)
-        : m_name(name), m_builder(name) {
-        m_type = type;
+        : GraphNode(name, type), m_builder(name) {
     }
 
     PassNode::~PassNode() {
@@ -359,6 +358,39 @@ namespace StarryEngine::RenderGraph {
             m_passExecutors[subpassIndex]->execute(encoder, context,
                 PassContext(m_resMgr, frameIndex, framebuffer, frameSlot), subpassIndex);
         }
+    }
+
+    // ── 统一并行入口：主缓冲执行已录 secondary ──
+    // compute：无渲染通道，直接执行（barrier 已由 RenderGraph 提前插入）。
+    // graphics：传统 render pass 框架（begin → 各 subpass secondary → end）。
+    void PassNode::executeSecondariesOnPrimary(RHI::RHICommandEncoder* encoder,
+        RHI::FramebufferHandle framebuffer,
+        const std::vector<void*>& /*attachmentViews*/,
+        void* /*depthView*/,
+        const std::vector<void*>& secondaries) {
+        if (m_type == PassType::Compute) {
+            if (!secondaries.empty() && secondaries[0] != nullptr) {
+                encoder->executeCommands(secondaries);
+            }
+            return;
+        }
+
+        if (secondaries.empty()) {
+            // 禁用的 graphics pass：Inline 空体 begin/end，保持 loadOp 的 clear 语义
+            beginPassOnPrimary(encoder, framebuffer, RHI::SubpassContents::Inline);
+            endPassOnPrimary(encoder);
+            return;
+        }
+
+        beginPassOnPrimary(encoder, framebuffer, RHI::SubpassContents::SecondaryCommandBuffers);
+        for (uint32_t sub = 0; sub < secondaries.size(); ++sub) {
+            if (secondaries[sub] == nullptr) continue;   // job 分配失败则跳过该 subpass
+            if (sub > 0) {
+                nextSubpassOnPrimary(encoder, RHI::SubpassContents::SecondaryCommandBuffers);
+            }
+            encoder->executeCommands({ secondaries[sub] });
+        }
+        endPassOnPrimary(encoder);
     }
 
     const std::vector<std::string>& PassNode::getAttachmentNames() const {

@@ -50,6 +50,8 @@ namespace StarryEngine::RenderGraph {
     // SubpassBuilder 形式提供"段"，动态路径在编译时将其 executors 扁平化）。
     class GraphNode {
     public:
+        explicit GraphNode(std::string name, PassType type = PassType::Graphics)
+            : m_name(std::move(name)), m_type(type) {}
         virtual ~GraphNode() = default;
 
         PassType getType() const { return m_type; }
@@ -61,51 +63,43 @@ namespace StarryEngine::RenderGraph {
         virtual std::string addResolve(TextureId texId, const AttachmentParams& params = AttachmentParams()) = 0;
         virtual std::string addPreserve(TextureId texId) = 0;
         virtual SubpassBuilder& addSubpass(const std::string& subpassName) = 0;
-        virtual void setPassExecutor(uint32_t index, std::shared_ptr<StarryEngine::IPassExecutor> rec) = 0;
-        virtual void setRenderArea(uint32_t width, uint32_t height) = 0;
+        virtual void setPassExecutor(uint32_t index, std::shared_ptr<StarryEngine::IPassExecutor> rec) {
+            if (index < m_passExecutors.size()) m_passExecutors[index] = std::move(rec);
+        }
+        virtual void setRenderArea(uint32_t width, uint32_t height) { m_width = width; m_height = height; }
 
         // ── Compute Pass 接口 ──
-        virtual void addReadTexture(TextureId t) = 0;
-        virtual void addWriteTexture(TextureId t) = 0;
-        virtual void addReadBuffer(BufferId b) = 0;
-        virtual void addWriteBuffer(BufferId b) = 0;
-        virtual void setComputeExecutor(std::shared_ptr<StarryEngine::IPassExecutor> r) = 0;
+        virtual void addReadTexture(TextureId t) { m_readTextures.insert(t); }
+        virtual void addWriteTexture(TextureId t) { m_writeTextures.insert(t); m_computeWriteLayouts[t] = RHI::ImageLayout::General; }
+        virtual void addReadBuffer(BufferId b) { m_readBuffers.insert(b); }
+        virtual void addWriteBuffer(BufferId b) { m_writeBuffers.insert(b); }
+        virtual void setComputeExecutor(std::shared_ptr<StarryEngine::IPassExecutor> r) { m_computeRecorder = std::move(r); }
 
         // 启用/禁用
-        virtual void setEnabled(bool e) = 0;
-        virtual bool isEnabled() const = 0;
+        virtual void setEnabled(bool e) { m_enabled = e; }
+        virtual bool isEnabled() const { return m_enabled; }
 
-        virtual const std::set<TextureId>& getReadTextures() const = 0;
-        virtual const std::set<TextureId>& getWriteTextures() const = 0;
-        virtual const std::set<BufferId>& getReadBuffers() const = 0;
-        virtual const std::set<BufferId>& getWriteBuffers() const = 0;
+        virtual const std::set<TextureId>& getReadTextures() const { return m_readTextures; }
+        virtual const std::set<TextureId>& getWriteTextures() const { return m_writeTextures; }
+        virtual const std::set<BufferId>& getReadBuffers() const { return m_readBuffers; }
+        virtual const std::set<BufferId>& getWriteBuffers() const { return m_writeBuffers; }
 
         virtual bool compile(std::shared_ptr<RHI::ResourceManager> resMgr,
             const std::unordered_map<TextureId, PhysicalTextureInfo>& texMap,
             const std::unordered_map<TextureId, RHI::TextureDesc>& texDescMap,
             const std::unordered_map<BufferId, RHI::BufferHandle>& bufMap) = 0;
 
-        // 传统 render pass 执行（PassNode）
-        virtual void execute(RHI::RHICommandEncoder* encoder,
-            const RenderContext& context,
-            uint32_t frameIndex,
-            RHI::FramebufferHandle framebuffer,
-            uint32_t frameSlot = 0) = 0;
+        // 传统 render pass 执行（PassNode 覆盖；RenderNode no-op）
+        virtual void execute(RHI::RHICommandEncoder*,
+            const RenderContext&, uint32_t,
+            RHI::FramebufferHandle, uint32_t = 0) {}
 
-        // 动态渲染执行（RenderNode）
-        virtual void executeDynamic(RHI::RHICommandEncoder* encoder,
-            const RenderContext& context,
-            uint32_t frameIndex,
-            const std::vector<void*>& attachmentViews,
-            uint32_t frameSlot = 0,
-            void* depthView = nullptr) = 0;
+        // 动态渲染执行（RenderNode 覆盖；PassNode no-op）
+        virtual void executeDynamic(RHI::RHICommandEncoder*,
+            const RenderContext&, uint32_t,
+            const std::vector<void*>&, uint32_t = 0, void* = nullptr) {}
 
-        // 传统并行录制（PassNode）
-        virtual void beginPassOnPrimary(RHI::RHICommandEncoder* encoder,
-            RHI::FramebufferHandle framebuffer,
-            RHI::SubpassContents contents) = 0;
-        virtual void nextSubpassOnPrimary(RHI::RHICommandEncoder* encoder, RHI::SubpassContents contents) = 0;
-        virtual void endPassOnPrimary(RHI::RHICommandEncoder* encoder) = 0;
+        // 并行录制：secondary 侧 pass 主体（不含 begin/end，由主缓冲框架负责）
         virtual void recordBody(RHI::RHICommandEncoder* encoder,
             const RenderContext& context,
             uint32_t frameIndex,
@@ -113,12 +107,17 @@ namespace StarryEngine::RenderGraph {
             uint32_t subpassIndex,
             uint32_t frameSlot = 0) = 0;
 
-        // 动态并行录制（RenderNode）
-        virtual void beginRenderingOnPrimary(RHI::RHICommandEncoder* encoder,
-            const std::vector<RHI::RenderingAttachmentInfo>& colorAttachments,
-            const RHI::RenderingAttachmentInfo& depthAttachment,
-            bool hasDepth) = 0;
-        virtual void endRenderingOnPrimary(RHI::RHICommandEncoder* encoder) = 0;
+        // ── 统一执行入口 ──
+        // 串行：execute / executeDynamic（compute 与 graphics 差异在节点内部处理）。
+        // 并行：executeSecondariesOnPrimary 在主缓冲执行已录好的 secondary——
+        //   compute：无渲染通道，直接 executeCommands；
+        //   graphics：PassNode 做 beginPass→exec→end，RenderNode 做 beginRendering→exec→end。
+        // 这样 RenderGraph 无需区分 pass 类型，compute/graphics 差异收敛到节点内部。
+        virtual void executeSecondariesOnPrimary(RHI::RHICommandEncoder* encoder,
+            RHI::FramebufferHandle framebuffer,
+            const std::vector<void*>& attachmentViews,
+            void* depthView,
+            const std::vector<void*>& secondaries) = 0;
 
         // ── 查询接口 ──
         virtual const std::string& getName() const = 0;
@@ -156,6 +155,29 @@ namespace StarryEngine::RenderGraph {
 
     protected:
         PassType m_type = PassType::Graphics;
+
+        // ── PassNode / RenderNode 公共状态 ──
+        std::string m_name;
+        std::shared_ptr<RHI::ResourceManager> m_resMgr;
+        std::shared_ptr<StarryEngine::IPassExecutor> m_computeRecorder;
+        std::vector<std::shared_ptr<StarryEngine::IPassExecutor>> m_passExecutors;
+
+        std::set<TextureId> m_readTextures;
+        std::set<TextureId> m_writeTextures;
+        std::set<BufferId> m_readBuffers;
+        std::set<BufferId> m_writeBuffers;
+
+        std::unordered_map<std::string, TextureId> m_keyToTexId;
+        std::unordered_map<std::string, TextureId> m_attachmentKeyToTexId;
+        std::unordered_map<std::string, AttachmentParams> m_keyToParams;
+        std::unordered_map<TextureId, std::string> m_colorOutputKeyByTex;
+        std::unordered_map<TextureId, std::string> m_depthOutputKeyByTex;
+        std::unordered_map<TextureId, RHI::ImageLayout> m_computeWriteLayouts;
+        std::unordered_map<TextureId, RHI::ImageLayout> m_finalLayouts;
+
+        bool m_enabled = true;
+        uint32_t m_width = 0;
+        uint32_t m_height = 0;
     };
 
 } // namespace StarryEngine::RenderGraph
