@@ -345,17 +345,17 @@ namespace StarryEngine::Assets {
         copyRegion.imageOffset = { 0, 0, 0 };
         copyRegion.imageExtent = extent;
 
-        tex->copyToBuffer(m_resMgr->getBuffer(stagingBuffer), { copyRegion });
-
-        // 5. 等待拷贝完成
-
-        // 6. 映射 staging buffer 读取数据
         auto* buffer = m_resMgr->getBuffer(stagingBuffer);
         if (!buffer) {
             m_resMgr->destroy(stagingBuffer);
             return false;
         }
 
+        tex->copyToBuffer(buffer, { copyRegion });
+
+        // 5. 等待拷贝完成
+
+        // 6. 映射 staging buffer 读取数据
         void* mappedData = buffer->map();  // 需要 RHIBuffer 支持 map
         if (!mappedData) {
             LOG_ERROR("Failed to map staging buffer");

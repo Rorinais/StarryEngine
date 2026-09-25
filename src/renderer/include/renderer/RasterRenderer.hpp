@@ -25,6 +25,7 @@ namespace StarryEngine {
         void updateInstanceBuffers(const std::vector<std::shared_ptr<Scene::RenderObject>>& objects, uint32_t slot) override;
         void updateDynamicBuffers(const Clock& clock, uint32_t slot) override;
         void doRebuildRenderGraph() override;
+        void onAfterPathResize() override;
 
     private:
         std::unique_ptr<SceneAnalyzer> m_sceneAnalyzer;

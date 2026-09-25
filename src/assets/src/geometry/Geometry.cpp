@@ -37,7 +37,7 @@ namespace StarryEngine::Assets {
         }
 
         auto* vb = m_resMgr->getBuffer(m_vertexBuffer);
-        if (!vb->update(m_vertices.data(), vbDesc.size, 0)) {
+        if (!vb || !vb->update(m_vertices.data(), vbDesc.size, 0)) {
             LOG_ERROR("Failed to upload vertex data (size={})", vbDesc.size);
             m_resMgr->destroy(m_vertexBuffer);
             m_vertexBuffer = RHI::BufferHandle::Null();
@@ -58,7 +58,7 @@ namespace StarryEngine::Assets {
         }
 
         auto* ib = m_resMgr->getBuffer(m_indexBuffer);
-        if (!ib->update(m_indices.data(), ibDesc.size, 0)) {
+        if (!ib || !ib->update(m_indices.data(), ibDesc.size, 0)) {
             LOG_ERROR("Failed to upload index data");
             m_resMgr->destroy(m_indexBuffer);
             m_resMgr->destroy(m_vertexBuffer);

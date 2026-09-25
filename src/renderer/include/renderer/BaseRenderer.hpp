@@ -67,6 +67,9 @@ namespace StarryEngine {
         // 重建渲染图：光栅渲染器覆盖（initialize + rebuildResources(分析结果)）
         virtual void doRebuildRenderGraph();
 
+        // graph 已在 onResize 中重建后回调：子类做管线/资源 remap，勿再整图重建
+        virtual void onAfterPathResize() {}
+
         std::shared_ptr<RHI::IRHI> m_rhi;
         std::shared_ptr<RHI::ResourceManager> m_resMgr;
         std::shared_ptr<IRenderPath> m_renderPath;

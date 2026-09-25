@@ -210,12 +210,15 @@ namespace StarryEngine {
             static float col1[4] = { 1.0f, 0.0f, 0.2f ,1.0f};
 
             if (ImGui::ColorEdit4("color 2", col1)) {
-                 auto block = m_scene->getAllObjects()[0]->materials[0]->getBlock("LightingUBO");
-                if (block)
-                {
-                    block->setVec4("lights.color", glm::vec4(col1[0], col1[1], col1[2], col1[3]));
+                if (m_scene) {
+                    const auto& objects = m_scene->getAllObjects();
+                    if (!objects.empty() && objects[0] && !objects[0]->materials.empty() && objects[0]->materials[0]) {
+                        auto block = objects[0]->materials[0]->getBlock("LightingUBO");
+                        if (block) {
+                            block->setVec4("lights.color", glm::vec4(col1[0], col1[1], col1[2], col1[3]));
+                        }
+                    }
                 }
-
             }
             ImGui::End();
         }
@@ -411,7 +414,7 @@ namespace StarryEngine {
                     return;
                 }
 
-                m_renderer->onResize(m_width, m_height);
+                if (m_renderer) m_renderer->onResize(m_width, m_height);
                 return;
             }
             if (m_width == 0 || m_height == 0) return;
@@ -435,6 +438,8 @@ namespace StarryEngine {
                 drawImGuiPanels(deltaTime);
                 m_imguiManager->endFrame();
             }
+
+            if (!m_renderer) return;
 
             bool success = m_rhi->renderFrame([this](RHI::RHICommandEncoder* encoder, uint32_t imageIndex) {
                 m_renderer->renderFrame(encoder, imageIndex, m_clock);
@@ -506,6 +511,7 @@ namespace StarryEngine {
 
         // 相机切换事件
         GetEventDispatcher().subscribe(EventType::CameraSwitch, [this](IEvent& e) {
+            if (!m_scene) return;
             auto& ev = static_cast<CameraSwitchEvent&>(e);
             uint32_t index = ev.getCameraIndex();
             if (index < m_scene->getCameras().size()) {
@@ -560,7 +566,7 @@ namespace StarryEngine {
             });
 
         // 摄像机控制相关事件（仅在 m_controlActive == true 时有效）
-        if (m_scene->getActiveCamera() && m_enableControl) {
+        if (m_scene && m_scene->getActiveCamera() && m_enableControl) {
             m_cameraController = std::make_unique<CameraController>(m_scene->getActiveCamera());
             m_cameraController->setEnabled(false);
 

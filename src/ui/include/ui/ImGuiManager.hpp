@@ -80,6 +80,8 @@ namespace StarryEngine {
         ImTextureID getSceneTextureID() const { return m_sceneTextureID; }
 
         void registerSceneTexture(RHI::ResourceManager* resMgr);
+        // 在销毁/重建 RenderGraph 之前调用，避免 SceneColor 视图悬空
+        void invalidateSceneTexture();
 
     private:
         void createDescriptorPool(RHI::ResourceManager* resMgr, uint32_t imageCount);
@@ -114,6 +116,9 @@ namespace StarryEngine {
         RHI::SamplerHandle m_defaultSampler;        
         ImTextureID m_sceneTextureID = 0;
         uint32_t m_subpassIndex = 0;
+
+        // PipelineRenderingCreateInfo.pColorAttachmentFormats 必须指向存活内存
+        VkFormat m_pipelineColorFormat = VK_FORMAT_UNDEFINED;
 
         bool m_initInfoStored = false;
     };
