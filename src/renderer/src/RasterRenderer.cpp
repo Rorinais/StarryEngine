@@ -167,4 +167,13 @@ namespace StarryEngine {
         }
     }
 
+    void RasterRenderer::onAfterPathResize() {
+        // graph 已按新尺寸重建；此处只 remap 管线/材质，避免二次 destroy SceneColor
+        if (m_analysisSceneResult && m_renderPath) {
+            m_renderPath->rebuildResources(*m_analysisSceneResult);
+        } else {
+            m_needRebuildGraph = true;
+        }
+    }
+
 } // namespace StarryEngine

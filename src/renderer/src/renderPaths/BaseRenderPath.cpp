@@ -91,6 +91,7 @@ namespace StarryEngine {
 
         if (m_renderGraph) {
             m_rhi->waitIdle();
+            onBeforeGraphDestroy();
             Assets::PipelineCache::invalidateAll(m_resMgr.get());
             m_renderGraph.reset();
         }

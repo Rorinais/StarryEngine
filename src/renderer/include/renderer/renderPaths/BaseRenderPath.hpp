@@ -91,6 +91,9 @@ namespace StarryEngine {
 
         virtual void onAfterCompileImGui() {}
 
+        // 销毁旧 graph 前：子类释放对物理纹理的外部引用（如 ImGui SceneColor）
+        virtual void onBeforeGraphDestroy() {}
+
         bool buildGraph();
         std::unordered_map<std::string, RenderGraph::TextureId> buildTextureIdMap();
         bool hasSceneColorClearPass() const;

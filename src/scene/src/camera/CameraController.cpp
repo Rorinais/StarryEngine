@@ -12,8 +12,8 @@ namespace StarryEngine {
     CameraController::CameraController(std::shared_ptr<Scene::ICamera> camera,
         float moveSpeed,
         float mouseSensitivity)
-        : m_camera(camera)
-        , m_position(camera->getPosition())
+        : m_camera(std::move(camera))
+        , m_position(m_camera ? m_camera->getPosition() : glm::vec3(0.0f))
         , m_moveSpeed(moveSpeed)
         , m_mouseSensitivity(mouseSensitivity) {
     }

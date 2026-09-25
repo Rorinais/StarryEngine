@@ -40,6 +40,7 @@ namespace StarryEngine {
         void doRebuildResources(const AnalysisSceneResult& sceneData) override;
         void onAfterCompile() override;
         void onAfterCompileImGui() override;
+        void onBeforeGraphDestroy() override;
 
     private:
         void updateMaterialTextures(const AnalysisSceneResult& sceneData);

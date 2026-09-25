@@ -81,8 +81,12 @@ namespace StarryEngine {
                 LOG_ERROR("Global descriptor set slot {} is invalid", s);
                 continue;
             }
-            descSet->writeBuffer(0, 0, m_resMgr->getBuffer(m_globalUniformBuffers[s]),
-                0, sizeof(Assets::GlobalUniforms));
+            auto* ubo = m_resMgr->getBuffer(m_globalUniformBuffers[s]);
+            if (!ubo) {
+                LOG_ERROR("Global uniform buffer slot {} lookup failed", s);
+                continue;
+            }
+            descSet->writeBuffer(0, 0, ubo, 0, sizeof(Assets::GlobalUniforms));
             descSet->update();
         }
     }
@@ -92,8 +96,10 @@ namespace StarryEngine {
         if (m_renderPath) {
             m_renderPath->onResize(width, height);
         }
-        // 保留重建标志：resize 重建了 graph（管线已 invalidate），下一帧必须重建资源/mapping
-        m_needRebuildGraph = true;
+        // 注意：这里不要设 m_needRebuildGraph。
+        // onResize 已重建 graph；若下一帧再 doRebuildRenderGraph，会在
+        // ImGui 已把 SceneColor TexID 写入 DrawData 之后销毁纹理 → 放大窗口崩溃。
+        onAfterPathResize();
     }
 
     void BaseRenderer::renderFrame(RHI::RHICommandEncoder* encoder, uint32_t frameIndex, const Clock& clock) {
