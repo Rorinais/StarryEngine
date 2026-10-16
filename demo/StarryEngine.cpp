@@ -29,8 +29,8 @@
 static bool g_clickThrough = true;
 
 namespace {
-    constexpr uint32_t kWinW = 1280;
-    constexpr uint32_t kWinH = 720;
+    constexpr uint32_t kWinW = 800;
+    constexpr uint32_t kWinH = 600;
 
     float computeModelFootY(const std::shared_ptr<StarryEngine::Assets::Geometry>& geometry) {
         if (!geometry) return 0.0f;
@@ -337,7 +337,7 @@ public:
 
         auto perspectiveCamera = std::make_shared<Scene::PerspectiveCamera>();
         perspectiveCamera->setPerspective(glm::radians(45.0f), (float)m_width / m_height, 0.1f, 100.0f);
-        perspectiveCamera->lookAt(glm::vec3(0.0f, 2.0f, 7.0f), glm::vec3(0.0f, 0.8f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        perspectiveCamera->lookAt(glm::vec3(1.57f, 1.53f, 2.77f), glm::vec3(1.65f, 1.45f, 1.78f), glm::vec3(0.01f, 1.0f, -0.07f));
         m_scene->addCamera(perspectiveCamera);
         m_scene->setActiveCamera(perspectiveCamera);
 
@@ -371,7 +371,7 @@ public:
 
     std::shared_ptr<Assets::MaterialInstance> makeStencilQuadMaterial(const std::string& fragPath) {
         auto tmpl = std::make_shared<Assets::DefaultMaterialTemplate>(m_rhi->getResourceManager(), m_descriptorSetLayout);
-        if (!tmpl->loadShaders("assets/shaders/core/shader.vert", fragPath)) {
+        if (!tmpl->loadShaders("assets/shaders/npr_toon/shader.vert", fragPath)) {
             LOG_ERROR("Failed to load stencil quad shaders: {}", fragPath);
             return nullptr;
         }
@@ -393,6 +393,7 @@ public:
 
     void onUpdate(float deltaTime);
     void captureFrame();
+    void updateTitle(GLFWwindow* win, float deltaTime);
 
     void setExitCallback(std::function<void()> cb) { m_requestExit = std::move(cb); }
 private:
@@ -442,7 +443,7 @@ private:
 
 bool PBRDemo::loadModelGeometry(Assets::Geometry& outGeometry,std::vector<Assets::MaterialParams>& outParams,Assets::Skeleton* outSkeleton) {
     Assets::ModelLoader loader(m_rhi->getResourceManager());
-    if (!loader.open("assets/models/fuxuan_Animation3.fbx")) {
+    if (!loader.open("assets/models/fuxuan_Animation2.fbx")) {
         LOG_ERROR("Failed to load model");
         return false;
     }
@@ -467,56 +468,153 @@ bool PBRDemo::loadModelGeometry(Assets::Geometry& outGeometry,std::vector<Assets
     return true;
 }
 
-std::shared_ptr<Assets::MaterialInstance> PBRDemo::makeModelMaterial(
-    const Assets::MaterialParams& param, bool skinned) {
-    std::string fsPath;
-    if (param.name == "face" || param.name == "脸" || param.name == "表情") fsPath = "assets/shaders/core/face.frag";
-    else if (param.name == "hair" || param.name == "髪") fsPath = "assets/shaders/core/hair.frag";
-    else fsPath = "assets/shaders/core/shader.frag";
+std::shared_ptr<Assets::MaterialInstance> PBRDemo::makeModelMaterial(const Assets::MaterialParams& param, bool skinned) {
+    const char* vsPath = skinned ? "assets/shaders/npr_toon/shader_skinned.vert": "assets/shaders/npr_toon/shader.vert";
 
-    const char* vsPath = skinned ? "assets/shaders/core/shader_skinned.vert": "assets/shaders/core/shader.vert";
+    // ── 材质分发表（宏变体方案，数据驱动查表，无 if-else 链）──
+    // FBX 材质名固定：上半身 / 下裙 / 髪 / 顏 / 表情。
+    // 每行 = { 该材质接受的别名, frag, 宏组合(keywords), 贴图槽集(slots) }。
+    // 宏 = 变体开关（keyword 值无意义，#ifdef 判断是否定义），每个材质一个宏组合
+    //   = 一个独立 shader 变体 + 独立描述符布局 → 只绑实际用到的贴图。
+    //   宏名(CPU addKeyword) 须与 .frag 里 #ifdef 一致：
+    //     USE_ILM_MAP      → 启用 uIlmMap   （ilm 光照贴图）
+    //     USE_SDF_MAP      → 启用 uSdfMap   （脸部描边 SDF）
+    //     USE_MASK_MAP     → 启用 uMaskMap  （脸部遮罩）
+    //     USE_RAMP_MAP     → 启用 uRampMap  （卡通色阶 ramp）
+    //     USE_MATCAP_MAP   → 启用 uMatcapMap（matcap 金属）
+    // 槽 = (宏名, 采样器名, 贴图文件名)。宏名为空 = 恒绑定（texSampler binding 0）。
+    // 以后加角色/材质只需在此表增行，不改下面任何逻辑。
+    struct CharTexSlot { const char* kw; const char* sampler; const char* file; };
+    struct CharMatSpec {
+        const char* frag;
+        std::vector<const char*> keywords;
+        std::vector<CharTexSlot> slots;
+        // 别名匹配：首个名字为主键，其余为兼容旧名
+        std::vector<const char*> names;
+    };
+    static const CharMatSpec kCharSpecs[] = {
+        { "assets/shaders/npr_toon/face.frag",
+            { "USE_SDF_MAP", "USE_MASK_MAP" },
+            {
+                { nullptr,        "texSampler", "face_baseColor.png" },
+                { "USE_SDF_MAP",  "uSdfMap",    "face_sdf.tga" },
+                { "USE_MASK_MAP", "uMaskMap",   "face_mask.tga" },
+            },
+            { "顏", "颜", "脸", "face" } },
+        { "assets/shaders/npr_toon/face.frag",
+            { "USE_SDF_MAP", "USE_MASK_MAP" },
+            {
+                { nullptr,        "texSampler", "expression.png" },
+                { "USE_SDF_MAP",  "uSdfMap",    "face_sdf.tga" },
+                { "USE_MASK_MAP", "uMaskMap",   "face_mask.tga" },
+            },
+            { "表情" } },
+        { "assets/shaders/npr_toon/hair.frag",
+            { "USE_ILM_MAP", "USE_RAMP_MAP" },
+            {
+                { nullptr,       "texSampler", "hair_baseColor.png" },
+                { "USE_ILM_MAP", "uIlmMap",    "fair_ilm.tga" },
+                { "USE_RAMP_MAP","uRampMap",   "ramp.png" },
+            },
+            { "髪", "hair" } },
+        { "assets/shaders/npr_toon/shader.frag",
+            { "USE_ILM_MAP", "USE_RAMP_MAP", "USE_MATCAP_MAP" },
+            {
+                { nullptr,          "texSampler", "clothes2_baseColor.png" },
+                { "USE_ILM_MAP",    "uIlmMap",    "clothes2_ilm.tga" },
+                { "USE_RAMP_MAP",   "uRampMap",   "ramp.png" },
+                { "USE_MATCAP_MAP", "uMatcapMap", "matcap_mat.png" },
+            },
+            { "上半身" } },
+        { "assets/shaders/npr_toon/shader.frag",
+            { "USE_ILM_MAP", "USE_RAMP_MAP", "USE_MATCAP_MAP" },
+            {
+                { nullptr,          "texSampler", "clothes1_baseColor.png" },
+                { "USE_ILM_MAP",    "uIlmMap",    "clothes1_ilm.tga" },
+                { "USE_RAMP_MAP",   "uRampMap",   "ramp.png" },
+                { "USE_MATCAP_MAP", "uMatcapMap", "matcap_mat.png" },
+            },
+            { "下裙" } },
+    };
+
+    // 查表：按材质名(含别名)找配置；未命中 → 默认 frag + 白贴图
+    const CharMatSpec* spec = nullptr;
+    for (const auto& cand : kCharSpecs) {
+        for (const char* alias : cand.names) {
+            if (param.name == alias) { spec = &cand; break; }
+        }
+        if (spec) break;
+    }
 
     auto tmpl = std::make_shared<Assets::DefaultMaterialTemplate>(
         m_rhi->getResourceManager(), m_descriptorSetLayout);
-    if (!tmpl->loadShaders(vsPath, fsPath)) {
+    // 宏变体：先定 keyword 组合，loadShaders 只编译该变体（缓存 hash 含宏串，变体间不冲突）
+    if (spec)
+        for (const char* kw : spec->keywords)
+            tmpl->addKeyword(kw);
+    if (!tmpl->loadShaders(vsPath, spec ? spec->frag : "assets/shaders/npr_toon/shader.frag")) {
         LOG_ERROR("Failed to load shaders for material: {}", param.name);
         return nullptr;
     }
 
-    auto instance = std::make_shared<Assets::MaterialInstance>(
-        tmpl, m_descriptorPool, m_rhi->getResourceManager().get(), m_descriptorSet);
+    auto instance = std::make_shared<Assets::MaterialInstance>(tmpl, m_descriptorPool, m_rhi->getResourceManager().get(), m_descriptorSet);
+    instance->setSubpassTag("Forward_Opaque");
+    instance->setDepthTest(true);
+    instance->setDepthWrite(true);
 
     Assets::TextureLoader loader(m_rhi->getResourceManager());
-    if (!param.albedoTexture.empty()) {
-        std::string fileName = param.albedoTexture;
-        auto slashPos = fileName.find_last_of("/\\");
-        if (slashPos != std::string::npos) fileName = fileName.substr(slashPos + 1);
-        std::string texPath = "assets/models/textures/" + m_modelTextureDir + "/" + fileName;
+    if (!spec) {
+        static const uint8_t kWhite[4] = { 255, 255, 255, 255 };
+        auto white = loader.loadTextureFromMemory(kWhite, 1, 1, RHI::Format::RGBA8_UNorm, "White");
+        if (white.texture.isValid()) instance->setTexture("texSampler", white.texture, white.sampler);
+        return instance;
+    }
+
+    // 只加载被本变体激活的槽（kw 为空 = texSampler 恒绑；kw 非空需在本材质 keyword 组合里）
+    auto slotActive = [&](const CharTexSlot& s) {
+        if (!s.kw) return true;
+        for (const char* k : spec->keywords)
+            if (std::strcmp(k, s.kw) == 0) return true;
+        return false;
+    };
+
+    bool boundAny = false;
+    for (const auto& slot : spec->slots) {
+        if (!slotActive(slot)) continue;
+        boundAny = true;
+        std::string texPath = "assets/models/textures/" + m_modelTextureDir + "/" + slot.file;
         auto texResult = loader.loadTexture2D(texPath, RHI::Format::RGBA8_UNorm);
         if (texResult.texture.isValid()) {
-            instance->setTexture("texSampler", texResult.texture, texResult.sampler);
+            instance->setTexture(slot.sampler, texResult.texture, texResult.sampler);
+            LOG_INFO("[char] '{}' 变体[{}] 绑定 {} → {}", param.name,
+                fmt::join(spec->keywords, "+"), slot.sampler, slot.file);
         }
         else {
             LOG_ERROR("Failed to load texture: {}", texPath);
         }
     }
-    else {
+    if (!boundAny) {
         static const uint8_t kWhite[4] = { 255, 255, 255, 255 };
         auto white = loader.loadTextureFromMemory(kWhite, 1, 1, RHI::Format::RGBA8_UNorm, "White");
         if (white.texture.isValid())
             instance->setTexture("texSampler", white.texture, white.sampler);
     }
 
-    instance->setSubpassTag("Forward_Opaque");
-    instance->setDepthTest(true);
-    instance->setDepthWrite(true);
+    auto* lightBlock = instance->getBlock("LightingUBO");
+    if (lightBlock) {
+        lightBlock->setVec4("lights.position", glm::vec4(-0.5f, -1.0f, -0.8f, 0.0f)); 
+        lightBlock->setVec4("lights.color", glm::vec4(3.0f, 2.7f, 2.3f, 1.0f));
+        lightBlock->setFloat("lightCount", 1.0f);
+        lightBlock->setFloat("ambientStrength", 0.15f);
+    }
+    instance->applyAllDirtyBlocks();
     return instance;
 }
 
 std::shared_ptr<Assets::MaterialInstance> PBRDemo::makeOutlineMaterial() {
     auto tmpl = std::make_shared<Assets::DefaultMaterialTemplate>(
         m_rhi->getResourceManager(), m_descriptorSetLayout);
-    if (!tmpl->loadShaders("assets/shaders/core/shader_skinned.vert", "assets/shaders/core/outline.frag")) {
+    if (!tmpl->loadShaders("assets/shaders/npr_toon/shader_skinned.vert", "assets/shaders/npr_toon/outline.frag")) {
         LOG_ERROR("Failed to load outline shaders");
         return nullptr;
     }
@@ -637,6 +735,33 @@ void PBRDemo::onUpdate(float deltaTime) {
     upload(matrices);
 }
 
+// 标题栏实时显示摄像机状态（lookAt 三参数 + 欧拉角 + FOV，可直接粘回代码调参）
+void PBRDemo::updateTitle(GLFWwindow* win, float deltaTime) {
+    static float titleTimer = 0.0f;
+    titleTimer += deltaTime;
+    if (titleTimer < 0.1f) return;
+    titleTimer = 0.0f;
+    auto cam = m_scene ? m_scene->getActiveCamera() : nullptr;
+    if (!cam) return;
+    glm::mat4 view = cam->getViewMatrix();
+    glm::vec3 eye = cam->getPosition();
+    glm::vec3 fwd = -glm::normalize(glm::vec3(view[0][2], view[1][2], view[2][2]));
+    glm::vec3 up  =  glm::normalize(glm::vec3(view[0][1], view[1][1], view[2][1]));
+    glm::vec3 right = glm::normalize(glm::vec3(view[0][0], view[1][0], view[2][0]));
+    glm::vec3 center = eye + fwd;
+    float yaw   = glm::degrees(std::atan2(fwd.z, fwd.x));
+    float pitch = glm::degrees(std::asin(glm::clamp(fwd.y, -1.0f, 1.0f)));
+    float roll  = glm::degrees(std::asin(glm::clamp(glm::dot(right, glm::vec3(0.0f, 1.0f, 0.0f)), -1.0f, 1.0f)));
+    float fovDeg = 60.0f;
+    if (auto pc = std::dynamic_pointer_cast<Scene::PerspectiveCamera>(cam)) fovDeg = glm::degrees(pc->getFov());
+    char title[256];
+    std::snprintf(title, sizeof(title),
+        "StarryEngine PBR | lookAt((%.2f,%.2f,%.2f),(%.2f,%.2f,%.2f),(%.2f,%.2f,%.2f)) | yaw=%.1f pitch=%.1f roll=%.1f | fov=%.0f",
+        eye.x, eye.y, eye.z, center.x, center.y, center.z, up.x, up.y, up.z,
+        yaw, pitch, roll, fovDeg);
+    glfwSetWindowTitle(win, title);
+}
+
 void PBRDemo::captureFrame() {
     if (!m_frameCapture) return;
     auto graph = m_renderPath ? m_renderPath->getRenderGraph() : nullptr;
@@ -745,6 +870,7 @@ int main() {
             if (autoQuitFrames > 0 && ++frameCounter >= autoQuitFrames) app.shutdown();
         });
         app.setUpdateCallback([demo, &app, &perfLog](float deltaTime) {
+            demo->updateTitle(app.getWindow()->getHandle(), deltaTime);
             demo->onUpdate(deltaTime);
             perfLog();
         });

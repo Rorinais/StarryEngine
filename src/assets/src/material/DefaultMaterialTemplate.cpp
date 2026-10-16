@@ -31,8 +31,8 @@ namespace StarryEngine::Assets {
 
     bool DefaultMaterialTemplate::loadShaders(const std::string& vsPath, const std::string& fsPath) {
         Assets::ShaderLoader loader(m_resMgr);
-        auto vertInfo = loader.loadFromFile(vsPath, RHI::ShaderStage::Vertex);
-        auto fragInfo = loader.loadFromFile(fsPath, RHI::ShaderStage::Fragment);
+        auto vertInfo = loader.loadFromFile(vsPath, RHI::ShaderStage::Vertex, m_macros);
+        auto fragInfo = loader.loadFromFile(fsPath, RHI::ShaderStage::Fragment, m_macros);
         if (!vertInfo || !fragInfo) return false;
 
         m_vertexShader = vertInfo->module;
@@ -124,8 +124,8 @@ namespace StarryEngine::Assets {
         auto oldFSRefl = std::move(m_fsReflection);
 
         Assets::ShaderLoader loader(m_resMgr);
-        auto vertInfo = loader.loadFromFile(vsPath, RHI::ShaderStage::Vertex);
-        auto fragInfo = loader.loadFromFile(fsPath, RHI::ShaderStage::Fragment);
+        auto vertInfo = loader.loadFromFile(vsPath, RHI::ShaderStage::Vertex, m_macros);
+        auto fragInfo = loader.loadFromFile(fsPath, RHI::ShaderStage::Fragment, m_macros);
         if (!vertInfo || !fragInfo) {
             m_vertexShader = oldVert;
             m_fragmentShader = oldFrag;

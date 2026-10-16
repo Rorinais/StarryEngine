@@ -110,6 +110,8 @@ namespace StarryEngine::Assets {
 
         // 逆绑定矩阵 = 绑定姿势全局变换的逆（由节点层级计算）。
         // 顶点已按节点层级预变换到全局(root)空间，invBind 与该空间一致 → 绑定姿势蒙皮恒等。
+        // 这是对"节点树 rest pose 与网格 offset 一致"的干净文件的默认值；
+        // 随后被网格 aiBone::mOffsetMatrix（权威绑定，Blender/Unity 同款）覆写。
         for (size_t i = 0; i < out.bones.size(); ++i) {
             auto& bone = out.bones[i];
             glm::mat4 g = (bone.parentIndex >= 0)
@@ -118,7 +120,63 @@ namespace StarryEngine::Assets {
             bone.globalTransform = g;
             bone.inverseBindMatrix = glm::inverse(g);
         }
-        LOG_INFO("[Skeleton] {} bones from node hierarchy", out.bones.size());
+
+        // ★ 权威逆绑定：网格 aiBone::mOffsetMatrix 是"mesh 局部 → 骨骼空间"的绑定矩阵，
+        // 与网格顶点绑定一致（Blender/Unity 都读它）。若 fbx 的节点树 rest pose 与网格
+        // 绑定不一致（如导出时骨架停在非 rest 姿势），从节点树反推的 invBind 会错位
+        // （顶点绕错误中心旋转 → 肢体拉长/飞离）。这里用 offset 修正：
+        //   顶点预变换到 root 用的矩阵是 mesh 挂载节点 global(M_mesh)，
+        //   invBind_root = offset * inverse(M_mesh)。M_mesh = I 时即 offset 本身。
+        {
+            // 1) 每个 mesh 挂载节点的 root 空间 global（与 loadGeometry 顶点预变换一致）
+            std::unordered_map<const aiMesh*, glm::mat4> meshMountGlobal;
+            std::function<void(aiNode*, const glm::mat4&)> scanMount =
+                [&](aiNode* node, const glm::mat4& parentTransform) {
+                    glm::mat4 global = parentTransform * toGlm(node->mTransformation);
+                    for (unsigned k = 0; k < node->mNumMeshes; ++k)
+                        meshMountGlobal[m_scene->mMeshes[node->mMeshes[k]]] = global;
+                    for (unsigned c = 0; c < node->mNumChildren; ++c)
+                        scanMount(node->mChildren[c], global);
+                };
+            scanMount(m_scene->mRootNode, glm::mat4(1.0f));
+
+            // 2) 用 offset 覆写被 mesh 引用的骨骼（同骨骼多 mesh 结果应一致）
+            std::unordered_map<uint32_t, glm::mat4> offsetInvBind;
+            std::unordered_map<uint32_t, double> offsetDiff;
+            for (unsigned m = 0; m < m_scene->mNumMeshes; ++m) {
+                aiMesh* me = m_scene->mMeshes[m];
+                auto itM = meshMountGlobal.find(me);
+                glm::mat4 invM = (itM != meshMountGlobal.end()) ? glm::inverse(itM->second) : glm::mat4(1.0f);
+                for (unsigned b = 0; b < me->mNumBones; ++b) {
+                    aiBone* bone = me->mBones[b];
+                    uint32_t idx = out.getBoneIndex(bone->mName.C_Str());
+                    if (idx == UINT32_MAX) continue;
+                    glm::mat4 ib = toGlm(bone->mOffsetMatrix) * invM;
+                    auto o = offsetInvBind.find(idx);
+                    if (o == offsetInvBind.end()) {
+                        offsetInvBind[idx] = ib;
+                    }
+                    else {
+                        double d = 0.0;
+                        for (int c = 0; c < 4; ++c)
+                            for (int r = 0; r < 4; ++r)
+                                d = std::max(d, static_cast<double>(std::abs(o->second[c][r] - ib[c][r])));
+                        if (d > 1e-3)
+                            offsetDiff[idx] = std::max(offsetDiff[idx], d);
+                    }
+                }
+            }
+            for (auto& [idx, ib] : offsetInvBind)
+                out.bones[idx].inverseBindMatrix = ib;
+            if (!offsetDiff.empty()) {
+                for (auto& [idx, d] : offsetDiff)
+                    LOG_WARN("[Skeleton] 骨骼 '{}' 被多 mesh 引用且 offset 不一致(diff={:.5f})，取首个",
+                        out.bones[idx].name, d);
+            }
+            if (!offsetInvBind.empty())
+                LOG_INFO("[Skeleton] {} bones, {} use authoritative mOffsetMatrix (bind-consistent)",
+                    out.bones.size(), offsetInvBind.size());
+        }
     }
 
     void ModelLoader::ensureSkeleton() {
