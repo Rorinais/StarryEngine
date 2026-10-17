@@ -83,7 +83,9 @@ namespace StarryEngine {
             rhiConfig.swapChainImages = flightFrame;
             // 软光追模式（RT shader 已内置 Reinhard+gamma 编码）→ 交换链必须 UNorm；
             // 否则 sRGB 硬件二次编码 → 画面发白、饱和度丢失。PBR 管线保持 sRGB（shader 输出线性）。
-            rhiConfig.srgb = (std::getenv("STARRY_RT") == nullptr && std::getenv("STARRY_OFFLINE") == nullptr);
+            // PBR 管线用 sRGB（shader 输出线性）。软光追模式需改为 false（RT shader 已内置
+            // Reinhard+gamma 编码，再走 sRGB 会二次编码发白）—— 由使用方在 RT 模式下覆盖。
+            rhiConfig.srgb = true;
             rhiConfig.frameBuffering = flightFrame;
             rhiConfig.usePersistentCommandBuffers = true;
             rhiConfig.enableTimestamps = true;

@@ -173,6 +173,12 @@ namespace StarryEngine::RenderGraph {
             }
         }
 
+        // 重建前先释放旧句柄：否则每次 compile 都会泄漏一个 render pass，
+        // 密集 resize / 反复重建时最终会让 createRenderPass 失败。
+        if (m_renderPassHandle.isValid()) {
+            m_resMgr->destroy(m_renderPassHandle);
+            m_renderPassHandle = RHI::RenderPassHandle::Null();
+        }
         m_renderPassHandle = resMgr->createRenderPass(m_cachedBuildResult->renderPassDesc, m_name);
         if (!m_renderPassHandle.isValid()) {
             throw std::runtime_error("Failed to create RenderPass: " + m_name);

@@ -79,6 +79,11 @@ namespace StarryEngine {
         std::array<RHI::BufferHandle, RHI::kMaxFramesInFlight> m_globalUniformBuffers;
 
         std::shared_ptr<Scene::Scene> m_scene;
+        // 帧内并行 / 帧间解耦开关（原为 STARRY_PARALLEL_RECORD、STARRY_JOB_WORKERS、STARRY_FRAME_IN_FLIGHT
+        // 环境变量，现改为成员，默认关闭）
+        bool     m_parallelRecord = false;      ///< 帧内并行录制：false=关闭
+        bool     m_parallelThreaded = true;     ///< 并行时是否用线程池（否则 inline）
+        uint32_t m_jobWorkers = 0;              ///< 线程数：0 = 用 JobSystem 默认值
         bool m_needRebuildGraph = false;
 
         std::unique_ptr<JobSystem> m_jobSystem;

@@ -97,6 +97,13 @@ namespace StarryEngine {
         std::unordered_map<std::string, RenderGraph::TextureId> buildTextureIdMap();
         bool hasSceneColorClearPass() const;
 
+        /// 交换链重建后，其 image view 已变，需要把新的视图刷进渲染图（纹理名不变）
+        void refreshSwapchainImport();
+
+        /// 是否启用"尺寸相关资源增量重建"（默认启用）。关掉即回到整图全量重建。
+        void setIncrementalResize(bool enabled) { m_incrementalResize = enabled; }
+        bool incrementalResize() const { return m_incrementalResize; }
+
         void buildPresentationPasses(std::unordered_map<std::string, RenderGraph::TextureId>& texIdMap);
         void buildPresentationPass(std::unordered_map<std::string, RenderGraph::TextureId>& texIdMap);
         bool compileAndFinalize(std::unordered_map<std::string, RenderGraph::TextureId>& texIdMap);
@@ -105,6 +112,7 @@ namespace StarryEngine {
         std::shared_ptr<RHI::IRHI> m_rhi;
         std::shared_ptr<RHI::ResourceManager> m_resMgr;
         std::shared_ptr<RenderGraph::RenderGraph> m_renderGraph;
+        bool m_incrementalResize = true;                    ///< 尺寸变化时只重建尺寸相关资源
 
         RenderPathConfig m_config;
         std::vector<OverlayPassDesc> m_overlayPasses;

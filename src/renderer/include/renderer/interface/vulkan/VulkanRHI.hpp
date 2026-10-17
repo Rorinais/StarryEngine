@@ -43,6 +43,8 @@ namespace StarryEngine{
 
         bool lastFrameSkipped() const override { return mLastFrameSkipped; }
 
+        void waitFramesInFlight() override;
+
         bool recreateSwapChain(uint32_t width, uint32_t height)override;
 
         void setupFramebuffers(RHI::RenderPassHandle renderPass);

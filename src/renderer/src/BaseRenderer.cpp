@@ -13,25 +13,22 @@ namespace StarryEngine {
         std::shared_ptr<Scene::Scene> scene)
         : m_rhi(rhi), m_resMgr(rhi->getResourceManager()),
         m_globalPool(globalPool), m_scene(scene) {
-        const char* env = std::getenv("STARRY_PARALLEL_RECORD");
-        if (env) {
-            const bool threaded = (std::strcmp(env, "threads") == 0 || std::strcmp(env, "1") == 0);
+        // 开关来自成员（原环境变量已移除）：m_parallelRecord / m_jobWorkers / m_frameInFlight
+        if (m_parallelRecord) {
+            const bool threaded = m_parallelThreaded;
             JobSystem::Config jcfg;
             jcfg.enableThreads = threaded;
-            if (const char* workersEnv = std::getenv("STARRY_JOB_WORKERS"))
-                jcfg.workerCount = static_cast<uint32_t>(std::atoi(workersEnv));
+            if (m_jobWorkers > 0) jcfg.workerCount = m_jobWorkers;
             m_jobSystem = std::make_unique<JobSystem>(jcfg);
             LOG_INFO("[render] 帧内并行: {}（数据 job + 录制 job，worker={}）",threaded ? "threads" : "inline", m_jobSystem->workerCount());
         }
 
-        m_frameInFlight = (std::getenv("STARRY_FRAME_IN_FLIGHT") != nullptr);
         if (m_frameInFlight && !m_jobSystem) {
             JobSystem::Config jcfg;
             jcfg.enableThreads = true;
-            if (const char* workersEnv = std::getenv("STARRY_JOB_WORKERS"))
-                jcfg.workerCount = static_cast<uint32_t>(std::atoi(workersEnv));
+            if (m_jobWorkers > 0) jcfg.workerCount = m_jobWorkers;
             m_jobSystem = std::make_unique<JobSystem>(jcfg);
-            LOG_INFO("[render] 帧间解耦(FID): 无 STARRY_PARALLEL_RECORD，隐式开线程池（worker={}）",m_jobSystem->workerCount());
+            LOG_INFO("[render] 帧间解耦(FID): 隐式开线程池（worker={}）",m_jobSystem->workerCount());
         }
     }
 

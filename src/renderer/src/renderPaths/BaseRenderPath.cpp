@@ -54,7 +54,8 @@ namespace StarryEngine {
     }
 
     void BaseRenderPath::onResize(uint32_t width, uint32_t height) {
-        if (width == 0 || height == 0) return;
+        // <=1 是窗口最小化时的退化尺寸（X11 报 1x1），重建毫无意义且代价极高
+        if (width <= 1 || height <= 1) return;
 
         // 尺寸没变就不要重建。窗口管理器在拖拽过程中会反复派发同一个尺寸，
         // 每次都走全量重建会让帧循环彻底跟不上（实测密集拖拽时 60 秒内重建 448 次）。
@@ -74,9 +75,50 @@ namespace StarryEngine {
         // 否则每次拖拽都要重新编译几十条管线，既卡顿又会让交换链被拖入卡死状态。
         const bool prevFlag = m_resizeRebuild;
         m_resizeRebuild = true;
+
+        // ── 首选：增量 resize ──
+        // 只重分配跟随视口尺寸的纹理/framebuffer，并更新 pass 渲染区域；pass / 管线 /
+        // render pass / 描述符布局 / 拓扑全部保留。任何不变量不满足则安全回落到下面的全量重建。
+        // 是否走增量路径由成员开关决定（默认启用）；增量路径内部任何不变量不满足时
+        // 会自动回落到下面的全量重建。需要走旧路径时调用 setIncrementalResize(false)。
+        if (m_renderGraph && m_incrementalResize) {
+            refreshSwapchainImport();                       // 交换链重建后其 image view 已变
+            if (m_renderGraph->resizeViewport(width, height)) {
+                // 材质等绑定的是图的物理纹理句柄，句柄换了要重新绑定一次
+                if (m_cachedSceneData) {
+                    try { doRebuildResources(*m_cachedSceneData); }
+                    catch (const std::exception& e) { LOG_WARN("resize 后重新绑定资源失败: {}", e.what()); }
+                }
+                // ImGui 后端缓存了 SceneColor 的视图/描述符（m_sceneTextureID）。蓝图重分配后
+                // 旧视图已销毁，不重新注册就会引用悬空视图 → 设备丢失。
+                try { onAfterCompileImGui(); }
+                catch (const std::exception& e) { LOG_WARN("resize 后刷新 ImGui 场景纹理失败: {}", e.what()); }
+                m_resizeRebuild = prevFlag;
+                return;
+            }
+            LOG_WARN("增量 resize 不可用，回落全量重建渲染图");
+        }
+
+        // ── 兜底：全量重建（与原来行为一致）──
         bool ok = initialize();
         m_resizeRebuild = prevFlag;
         if (!ok) { LOG_ERROR("Failed to rebuild on resize"); return; }
+    }
+
+    void BaseRenderPath::refreshSwapchainImport() {
+        if (!m_renderGraph) return;
+        auto it = m_textureDescs.find(m_swapchainTextureName);
+        if (it == m_textureDescs.end()) return;
+
+        std::vector<void*> views;
+        views.reserve(m_rhi->getSwapChainImageCount());
+        for (uint32_t i = 0; i < m_rhi->getSwapChainImageCount(); ++i) {
+            views.push_back(m_rhi->getSwapChainImageView(i));
+        }
+        // 图像数量也必须同步：交换链重建后可能是 2 张也可能是 3 张，
+        // 若图里仍记着旧数量，收集附件视图时会漏视图 → 零颜色附件 → 设备丢失。
+        m_renderGraph->setSwapchainImageCount(m_rhi->getSwapChainImageCount());
+        m_renderGraph->updateImportedTexture(m_swapchainTextureName, views, it->second);
     }
 
     void BaseRenderPath::render(RHI::RHICommandEncoder* encoder, uint32_t frameIndex) {
@@ -112,8 +154,7 @@ namespace StarryEngine {
             //  · 旧版 render pass 路径：管线绑定在 render pass 对象上，重建渲染图会生成新对象
             //    （句柄可能被回收复用），复用缓存会拿到指向已销毁对象的管线，因此必须照旧失效。
             // 着色器热重载等真正换管线的场景由 RasterRenderer::reloadShader 里的失效逻辑负责。
-            const bool dynamicRendering = m_rhi && m_rhi->supportsDynamicRendering()
-                && std::getenv("STARRY_FORCE_RENDER_PASS") == nullptr;
+            const bool dynamicRendering = m_renderGraph && m_renderGraph->usesDynamicRendering();
             if (!m_resizeRebuild || !dynamicRendering) {
                 Assets::PipelineCache::invalidateAll(m_resMgr.get());
             }
@@ -121,6 +162,7 @@ namespace StarryEngine {
         }
         m_renderGraph = std::make_shared<RenderGraph::RenderGraph>(m_rhi);
         m_renderGraph->setSwapchainImageCount(m_rhi->getSwapChainImageCount());
+        m_renderGraph->setViewportSize(m_width, m_height);   // 供 resizeViewport 判断哪些纹理跟随视口
 
         auto texIdMap = buildTextureIdMap();
 

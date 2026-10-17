@@ -66,6 +66,8 @@ namespace StarryEngine {
 
         void initialize();
         void step();
+
+        bool tryRecreateSwapChain();
         void shutdown();
         bool isWindowOpen() const;
 
@@ -76,6 +78,13 @@ namespace StarryEngine {
 
         using UpdateCallback = std::function<void(float deltaTime)>;
         void setUpdateCallback(UpdateCallback cb) { m_updateCallback = std::move(cb); }
+
+        using WorldFactory = std::function<void()>;
+        void setWorldFactory(WorldFactory f) { m_worldFactory = std::move(f); }
+
+        bool recoverFromDeviceLoss();
+
+        void simulateDeviceLossForTest();
 
         using PostRenderCallback = std::function<void()>;
         void setPostRenderCallback(PostRenderCallback cb) { m_postRenderCallback = std::move(cb); }
@@ -97,10 +106,21 @@ namespace StarryEngine {
         const char* m_title = "StarryEngine";
         const char* m_icon_path = "assets/icons/window_icon.png";
         bool m_framebufferResized = false;
+        std::chrono::steady_clock::time_point m_lastSwapchainRecreate{};   ///< 上次重建交换链的时刻
+        std::chrono::milliseconds m_resizeThrottle{600};                   ///< 重建节流间隔(默认 600ms)
+        bool m_deviceLost = false;                           ///< 本帧渲染抛出致命异常(疑似设备丢失)
+        uint32_t m_skippedFrames = 0;                        ///< 连续拿不到交换链图像的帧数(遮挡探测)
+        double   m_lastPresentProbe = 0.0;
+        double   m_lastPendingResizeFrame = 0.0;
+        double   m_lastResizeEventTime = 0.0;
+        double   m_pausedSince = 0.0;
+        double   m_lastPresentedFrameTime = 0.0;             ///< 最近一次真正成功出帧的时刻(看门狗)                        ///< 进入"不可呈现暂停"的时刻(0=未暂停)                ///< 最近一次窗口尺寸变化的时刻             ///< 待重建期间的渲染限速(last frame time)                   ///< 暂停期间上次探测时刻
         uint32_t m_flightFrame = 2;
 
         std::shared_ptr<Scene::Scene> m_scene;
         std::shared_ptr<IRenderer> m_renderer;
+        WorldFactory m_worldFactory;                        ///< 设备丢失后重建世界的钩子
+        bool         m_transparent = false;                 ///< 创建 RHI 时用的透明标志（软重启需一致）
         UpdateCallback m_updateCallback;
         PostRenderCallback m_postRenderCallback;
 

@@ -34,6 +34,23 @@ namespace StarryEngine::RenderGraph {
 
         void setSwapchainImageCount(uint32_t count);
 
+        /// 强制使用旧版 render pass 路径（原 STARRY_FORCE_RENDER_PASS 环境变量，现为成员）
+        void setForceRenderPass(bool v) { m_forceRenderPass = v; }
+        bool usesDynamicRendering() const { return m_useDynamicRendering; }
+
+        /// 记录当前视口尺寸（buildGraph 时由渲染路径调用），供 resizeViewport 判断哪些纹理跟随视口。
+        void setViewportSize(uint32_t w, uint32_t h) { m_viewportWidth = w; m_viewportHeight = h; }
+
+        /// 更新已导入外部纹理的视图（交换链重建后 image view 会变，纹理名不变）。
+        bool updateImportedTexture(const std::string& name, const std::vector<void*>& imageViews,
+            const RHI::TextureDesc& desc);
+
+        /// 增量 resize：只重分配"跟随视口尺寸"的纹理与 framebuffer，保留 pass / 管线 /
+        /// render pass / 渲染图拓扑。窗口尺寸变化与这些资源无关，重建它们既昂贵（实测每次
+        /// 约 1 秒、密集拖拽时把交换链拖入卡死状态），又完全没有必要。
+        /// 返回 false 表示增量路径不可用，调用方应回落到全量 initialize()。
+        bool resizeViewport(uint32_t width, uint32_t height);
+
         TextureId createVirtualTexture(const RHI::TextureDesc& desc, const std::string& name = "");
 
         // 导入外部纹理
@@ -120,7 +137,11 @@ namespace StarryEngine::RenderGraph {
         // 分析纹理使用（first/last user/writer/reader + 跨 pass 输入依赖）
         void analyzeTextureUsage(std::unordered_map<TextureId, TexturePassInfo>& texPassInfo);
         // 物理资源分配（纹理/缓冲）+ 附件 loadOp 推断 + pass 编译
-        void createPhysicalResources(const std::unordered_map<TextureId, TexturePassInfo>& texPassInfo);
+        // recompilePasses=false：只补分配物理资源，不重编译 pass。
+        // 增量 resize 用它 —— pass 的 render pass 只含格式/loadOp（与尺寸无关），
+        // 而 PassNode::compile() 会新建 render pass，每次调用都是一次资源churn。
+        void createPhysicalResources(const std::unordered_map<TextureId, TexturePassInfo>& texPassInfo,
+            bool recompilePasses = true);
         // 动态渲染：收集每 pass 的颜色/深度附件视图
         void collectDynamicViews();
         // 布局转换分析（首用/写读间 barrier 生成）
@@ -153,6 +174,7 @@ namespace StarryEngine::RenderGraph {
     private:
         std::shared_ptr<RHI::IRHI> m_rhi;
         bool m_useDynamicRendering = false;
+        bool m_forceRenderPass = false;         ///< 强制旧版 render pass 路径
         std::shared_ptr<RHI::ResourceManager> m_resMgr;
         uint32_t m_swapchainImageCount = 0;
 
@@ -191,6 +213,11 @@ namespace StarryEngine::RenderGraph {
         std::vector<LayoutTransition> m_layoutTransitions;
         // 每个 Pass 的帧缓冲（[passIndex][imageIndex]）
         std::vector<std::vector<RHI::FramebufferHandle>> m_perPassFramebuffers;
+
+        // 当前视口尺寸与编译完成标记（resizeViewport 用来判断哪些纹理跟随视口）
+        uint32_t m_viewportWidth = 0;
+        uint32_t m_viewportHeight = 0;
+        bool m_compiled = false;
     };
 
 } // namespace StarryEngine::RenderGraph

@@ -446,6 +446,20 @@ namespace StarryEngine {
         (void)slot;
     }
 
+    void VulkanRHI::waitFramesInFlight() {
+        // 与 waitIdle 的区别：不做全设备等待，只确保"在飞帧"完成。
+        //  · 先对每个帧槽位的 fence 做短超时等待（跳过帧的槽位栅栏仍处于已触发状态，立即返回；
+        //    启动初期栅栏未触发也会在 10ms 内返回，不会卡住）；
+        //  · 收尾用 vkQueueWaitIdle(图形队列)：绘制与呈现都提交在该队列
+        //    （见 renderFrame：submitFrame(..., getGraphicsQueue(), mPresentFunc)），
+        //    因此这一步即覆盖"在飞的呈现"，足以安全销毁/重建尺寸相关资源。
+        if (!mDevice) { waitIdle(); return; }
+        // 逐槽位探测在语义上多余（队列排空已覆盖全部在飞工作），
+        // 且 10ms 超时会打出一堆 "waitForFrame failed result: 2(VK_TIMEOUT)" 误导性错误日志
+        // （实测被误读成"设备丢失"，浪费了两轮排查）。因此只做队列排空。
+        vkQueueWaitIdle(mDevice->getGraphicsQueue());
+    }
+
     bool VulkanRHI::renderFrame(const std::function<void(RHI::RHICommandEncoder*, uint32_t)>& drawFunc) {
         mLastFrameSkipped = false;
         VulkanFrameContext::FrameInfo frameInfo = mFrameContext->beginFrame(mAcquireFunc);
@@ -518,6 +532,9 @@ namespace StarryEngine {
             return false;
         }
 
+        // 销毁交换链必须确保"没有任何在飞工作引用它的图像/视图"。
+        // 实测：换成轻量 waitFramesInFlight 后，随机窗口操作压测出现设备丢失并 6/6 崩溃；
+        // 退回全设备等待后恢复稳定。轻量等待仍用于渲染图 resize 路径（那里只换纹理）。
         mDevice->waitIdle();
         if (!mSwapChain->recreate(width, height)) return false;
 

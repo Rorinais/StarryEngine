@@ -14,7 +14,7 @@ namespace StarryEngine::RenderGraph {
     RenderGraph::RenderGraph(std::shared_ptr<RHI::IRHI> rhi)
         : m_rhi(rhi), m_resMgr(rhi->getResourceManager()) {
         m_useDynamicRendering = rhi && rhi->supportsDynamicRendering();
-        if (std::getenv("STARRY_FORCE_RENDER_PASS")) m_useDynamicRendering = false;
+        if (m_forceRenderPass) m_useDynamicRendering = false;
         if (m_useDynamicRendering) {
             LOG_INFO("[RenderGraph] 使用动态渲染（RenderNode，VK_KHR_dynamic_rendering）");
         } else {
@@ -237,6 +237,143 @@ namespace StarryEngine::RenderGraph {
         // 布局转换分析（首用/写读间 barrier）
         buildLayoutTransitions(texPassInfo);
 
+        m_compiled = true;
+        return true;
+    }
+
+    bool RenderGraph::updateImportedTexture(const std::string& name, const std::vector<void*>& imageViews,
+        const RHI::TextureDesc& desc) {
+        auto nameIt = m_nameToTextureId.find(name);
+        if (nameIt == m_nameToTextureId.end()) return false;
+        const TextureId id = nameIt->second;
+
+        for (auto& vt : m_virtualTextures) {
+            if (vt.id == id) {
+                vt.externalViews = imageViews;
+                vt.desc = desc;
+                break;
+            }
+        }
+        auto mapIt = m_textureMap.find(id);
+        if (mapIt != m_textureMap.end()) {
+            mapIt->second.views = imageViews;      // 交换链视图变了，附件视图必须跟着换
+        }
+        return true;
+    }
+
+    bool RenderGraph::resizeViewport(uint32_t width, uint32_t height) {
+        if (width <= 1 || height <= 1) return false;   // 退化尺寸不做增量重建
+        if (!m_compiled || m_sortedPasses.empty()) return false;
+        if (width == m_viewportWidth && height == m_viewportHeight) return true;   // 尺寸没变，无事可做
+
+        // ── 1) 只更新"跟随旧视口尺寸"的纹理 ──
+        // 阴影图等固定尺寸资源保持原样：它们与窗口尺寸无关（原 onResize 用的是同一判据）。
+        std::vector<TextureId> needRealloc;
+        for (auto& vt : m_virtualTextures) {
+            if (vt.imported) continue;
+            const bool followsViewport =
+                (vt.desc.extent.width == m_viewportWidth && vt.desc.extent.height == m_viewportHeight);
+            if (!followsViewport) continue;
+            vt.desc.extent.width = width;
+            vt.desc.extent.height = height;
+            needRealloc.push_back(vt.id);
+        }
+
+        const uint32_t oldW = m_viewportWidth, oldH = m_viewportHeight;
+        m_viewportWidth = width;
+        m_viewportHeight = height;
+
+        if (needRealloc.empty()) return true;
+
+        // ── 2) 先等在飞的帧：马上就要销毁/重建在飞帧可能仍在引用的资源 ──
+        // 没有这一步会直接触发设备丢失（实测）：命令缓冲里还引用着旧 framebuffer/纹理视图。
+        // 工业做法是只等 in-flight 的 fence（见后续优化），此处先用全设备等待保证正确性。
+        if (m_rhi) m_rhi->waitFramesInFlight();
+
+        // ── 2) 摘掉被替换纹理的记录（等于标记"需要重新分配"）──
+        // 旧句柄先收集起来：成功后才延迟回收；失败则原样放回。
+        // 绝不能在尝试之前就安排销毁 —— 一旦回落全量重建，句柄会被复用，
+        // 延迟销毁就会打到新资源上（use-after-free，实测会 SIGSEGV）。
+        std::vector<std::pair<TextureId, PhysicalTextureInfo>> oldInfos;
+        for (TextureId id : needRealloc) {
+            auto it = m_textureMap.find(id);
+            if (it == m_textureMap.end()) continue;
+            oldInfos.push_back({ id, it->second });
+            m_textureMap.erase(it);
+        }
+
+        // ── 3) 释放旧 framebuffer（尺寸相关；动态渲染下为空）──
+        for (auto& passFbs : m_perPassFramebuffers) {
+            for (auto fb : passFbs) {
+                if (fb.isValid()) m_resMgr->destroy(fb);
+            }
+        }
+        m_perPassFramebuffers.clear();
+        m_perPassViews.clear();
+        m_layoutTransitions.clear();
+
+        // ── 3.5) pass 的渲染区域也要跟着视口走（这一步漏掉就是"设备丢失/数量不匹配"的真因）──
+        // createFrameBuffer() 用 pass->getWidth()/getHeight() 建 framebuffer，动态渲染也用
+        // 渲染区域与附件视图尺寸做校验；若只换了附件纹理而没换渲染区域，就会出现
+        // "渲染区域与附件尺寸不一致"：传统路径建 framebuffer 中途抛异常（随后报
+        // Framebuffer count mismatch），动态渲染路径则直接导致设备丢失。
+        // 判据与纹理保持一致：渲染区域正好等于旧视口尺寸的 pass 才跟随；阴影图等固定尺寸 pass 不动。
+        for (auto* pass : m_sortedPasses) {
+            if (pass->getWidth() == oldW && pass->getHeight() == oldH) {
+                pass->setRenderArea(width, height);
+            }
+        }
+
+        // ── 4) 重新分配：只补上被抹掉的那些，其余纹理因句柄仍有效而被跳过 ──
+        // 刻意不重跑 dependencyAnalysis/cullUnusedPasses，也不重建 pass：拓扑与尺寸无关，
+        // 而 PassNode::compile() 会销毁并重建 render pass 对象（旧版路径下会让管线句柄失效）。
+        try {
+            std::unordered_map<TextureId, TexturePassInfo> texPassInfo;
+            analyzeTextureUsage(texPassInfo);
+            createPhysicalResources(texPassInfo, /*recompilePasses=*/false);
+            createFrameBuffer();
+            if (m_useDynamicRendering) collectDynamicViews();
+            buildLayoutTransitions(texPassInfo);
+
+            // 不变量校验：任何一条不满足就抛出去，由 catch 回滚并让调用方回落全量重建，
+            // 绝不允许带着坏状态继续跑（那样会在 execute() 里炸、或者直接把设备搞丢）。
+            if (!m_useDynamicRendering) {
+                if (m_perPassFramebuffers.size() != m_sortedPasses.size()) {
+                    throw std::runtime_error("framebuffer count != pass count");
+                }
+            }
+            else if (m_perPassViews.size() != m_sortedPasses.size()) {
+                throw std::runtime_error("attachment view set count != pass count");
+            }
+            else {
+                for (size_t i = 0; i < m_perPassViews.size(); ++i) {
+                    if (m_sortedPasses[i]->getType() == PassType::Compute) continue;
+                    if (m_perPassViews[i].colorViews.size() != m_swapchainImageCount) {
+                        throw std::runtime_error("attachment view count != swapchain image count");
+                    }
+                }
+            }
+        }
+        catch (const std::exception& e) {
+            LOG_ERROR("[RenderGraph] 增量 resize 失败({}x{} -> {}x{}): {}",
+                oldW, oldH, width, height, e.what());
+            // 事务性回滚：把旧句柄放回图里，交给随后的整图销毁统一回收，
+            // 避免它们变成没人管的野句柄（也避免句柄被复用后误销毁）。
+            for (auto& [id, info] : oldInfos) m_textureMap[id] = info;
+            m_compiled = false;
+            return false;                              // 交给调用方回落全量重建
+        }
+
+        // 成功：旧句柄延迟 2 帧回收（在飞帧可能仍在引用它们）
+        for (auto& [id, info] : oldInfos) {
+            if (!info.handle.isValid()) continue;
+            auto mgr = m_resMgr;
+            RHI::TextureHandle old = info.handle;
+            m_resMgr->scheduleDestroy([mgr, old]() { mgr->destroy(old); }, 2);
+        }
+
+        LOG_INFO("[RenderGraph] 增量 resize {}x{} -> {}x{}：只重分配 {} 个纹理，pass/管线/拓扑全部保留",
+            oldW, oldH, width, height, needRealloc.size());
         return true;
     }
 
@@ -276,7 +413,8 @@ namespace StarryEngine::RenderGraph {
     }
 
     // 物理资源分配：纹理/缓冲创建 + 声明式附件 loadOp 推断 + pass 编译
-    void RenderGraph::createPhysicalResources(const std::unordered_map<TextureId, TexturePassInfo>& texPassInfo) {
+    void RenderGraph::createPhysicalResources(const std::unordered_map<TextureId, TexturePassInfo>& texPassInfo,
+        bool recompilePasses) {
         // compute 写为 storage image 的纹理需要 STORAGE usage（允许无序访问）
         std::unordered_set<TextureId> storageTexIds;
         for (auto* pass : m_sortedPasses) {
@@ -294,6 +432,10 @@ namespace StarryEngine::RenderGraph {
                 m_textureMap[vt.id] = info;
             }
             else {
+                // 增量 resize 复用：句柄仍然有效，说明该纹理尺寸没变（或不在重分配集合里），跳过重建。
+                auto existing = m_textureMap.find(vt.id);
+                if (existing != m_textureMap.end() && existing->second.handle.isValid()) continue;
+
                 if (storageTexIds.count(vt.id)) vt.desc.allowUnorderedAccess = true;
                 RHI::TextureHandle handle = m_resMgr->createTexture(vt.desc);
                 if (!handle.isValid()) {
@@ -313,6 +455,12 @@ namespace StarryEngine::RenderGraph {
                 m_bufferMap[vb.id] = vb.externalHandle;
             }
             else {
+                // 与纹理同理：句柄仍有效说明已经分配过，直接复用。
+                // 图的虚拟 buffer（粒子系统）尺寸只与粒子数有关、与视口无关，可安全跳过；
+                // 否则增量 resize 会反复重建同名 buffer 并因重名失败，导致每次 resize 都回落全量重建。
+                auto existingBuf = m_bufferMap.find(vb.id);
+                if (existingBuf != m_bufferMap.end() && existingBuf->second.isValid()) continue;
+
                 RHI::BufferHandle handle = m_resMgr->createBuffer(vb.desc, vb.name);
                 if (!handle.isValid()) {
                     throw std::runtime_error("Failed to create physical buffer: " + vb.name);
@@ -337,6 +485,8 @@ namespace StarryEngine::RenderGraph {
         }
 
         // pass 编译（渲染通道/管线相关准备）
+        // 增量 resize 传 false：这些内容只与附件格式/拓扑有关，与窗口尺寸无关。
+        if (!recompilePasses) return;
         for (auto* pass : m_sortedPasses) {
             if (!pass->compile(m_resMgr, m_textureMap, texDescMap, m_bufferMap)) {
                 throw std::runtime_error("Failed to compile pass: " + pass->getName());

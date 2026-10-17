@@ -62,6 +62,11 @@ namespace StarryEngine::RHI {
         // 等待设备空闲
         virtual void waitIdle() = 0;
 
+        /// 只排空"在飞的帧"，不等待无关队列/资源 —— 比 waitIdle 轻得多，
+        /// 用于 resize / 交换链重建这类"只需确保在飞工作完成"的场景。
+        /// 默认实现回落到 waitIdle，既有后端行为不变。
+        virtual void waitFramesInFlight() { waitIdle(); }
+
         virtual void printDeviceInfo() = 0;
         virtual void printResourceStatistics() = 0;
 

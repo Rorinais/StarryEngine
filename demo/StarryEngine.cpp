@@ -1,4 +1,5 @@
 #include <renderer/passes/PassWrapper.hpp>
+#include "DemoSwitches.hpp"
 #include <renderer/passes/GraphicsPass.hpp>
 #include <renderer/passes/MeshPass.hpp>
 #include <renderer/passes/ParticlePass.hpp>
@@ -103,15 +104,14 @@ public:
             m_renderer->setLightViewProj(proj * view);
         }
 
-        if (const char* dumpDir = std::getenv("STARRY_FRAME_DUMP")) {
-            const char* cnt = std::getenv("STARRY_FRAME_COUNT");
-            const char* idx = std::getenv("STARRY_FRAME_INDEX");
-            uint32_t n = cnt ? static_cast<uint32_t>(std::atoi(cnt)) : 1u;
-            uint32_t fi = idx ? static_cast<uint32_t>(std::atoi(idx)) : UINT32_MAX;
-            m_frameExit = std::getenv("STARRY_FRAME_EXIT") != nullptr;
+        if (DemoSwitches::kFrameDump) {
+            const uint32_t n = DemoSwitches::kFrameCount;
+            const uint32_t fi = (DemoSwitches::kFrameIndex < 0)
+                ? UINT32_MAX : static_cast<uint32_t>(DemoSwitches::kFrameIndex);
+            m_frameExit = DemoSwitches::kFrameExit;
             m_frameExitTarget = (fi != UINT32_MAX) ? 1u : (n > 0 ? n : UINT32_MAX);
             m_frameCapture = std::make_shared<FrameCapture>(m_rhi);
-            if (!m_frameCapture->initialize({ dumpDir, n, fi })) {
+            if (!m_frameCapture->initialize({ DemoSwitches::kFrameDumpDir, n, fi })) {
                 m_frameCapture.reset();
             }
         }
@@ -270,7 +270,7 @@ public:
                 mat->setStencilOps(write, write);
             }
 
-            bool outlineOn = (std::getenv("STARRY_NO_OUTLINE") == nullptr);
+            bool outlineOn = !DemoSwitches::kNoOutline;
             m_outlineMaterial = outlineOn ? makeOutlineMaterial() : nullptr;
             if (m_outlineMaterial && m_modelGeometry) {
                 auto outline = std::make_shared<Scene::RenderObject>();
@@ -663,7 +663,7 @@ void PBRDemo::addGriseoModel() {
     obj->transform = glm::translate(glm::mat4(1.0f), glm::vec3(2.0f, 0.0f, 0.0f));
     m_scene->addObject(obj);
 
-    if (const char* ec = std::getenv("STARRY_EXTRA_CHARS")) {
+    if (const char* ec = DemoSwitches::kExtraChars; ec && ec[0]) {
         uint32_t n = std::strtoul(ec, nullptr, 10);
         for (uint32_t i = 0; i < n; ++i) {
             auto clone = std::make_shared<Scene::RenderObject>();
@@ -685,7 +685,7 @@ void PBRDemo::addGriseoModel() {
 
         AsyncBoneProducer::Config cfg;
         const bool poolActive = (m_renderer && m_renderer->getJobSystem() != nullptr);
-        cfg.enableThread = !poolActive && (std::getenv("STARRY_ASYNC_BONES") != nullptr);
+        cfg.enableThread = !poolActive && DemoSwitches::kAsyncBones;
         m_boneProducer = std::make_unique<AsyncBoneProducer>(m_modelSkeleton, m_modelClip, cfg);
         LOG_INFO("[async] 骨骼动画: {}",poolActive ? "池（帧内并行 job）": (cfg.enableThread ? "ON（独立线程）" : "OFF（同步内联）"));
 
@@ -807,25 +807,20 @@ int main() {
     cfg.width = kWinW;
     cfg.height = kWinH;
 
-    if (const char* w = std::getenv("STARRY_WIN_W")) cfg.width = std::strtoul(w, nullptr, 10);
-    if (const char* h = std::getenv("STARRY_WIN_H")) cfg.height = std::strtoul(h, nullptr, 10);
     cfg.title = "Transparent Window Smoke Test";
     //cfg.resizable = false;
     //cfg.transparent = false;
     //cfg.borderless = true;
     //cfg.alwaysOnTop = true;
 
-    //cfg.clickThrough = (std::getenv("STARRY_NO_CLICKTHROUGH") == nullptr);
-    //cfg.nativeWayland = (std::getenv("STARRY_FORCE_X11") == nullptr);
     //LOG_INFO("[demo] 平台: {}（STARRY_FORCE_X11 强制 X11）", cfg.nativeWayland ? "原生 Wayland" : "X11");
     StarryEngine::Application app(cfg);
 
     // demo 选择：STARRY_RT / STARRY_OFFLINE → 软光追 demo（RayTracingRenderer + RayTracingRenderPath）；
     // 否则 PBR demo（RasterRenderer + DeferredRenderPath）。渲染器按技术分化（IRenderer/BaseRenderer 共享）。
-    const bool rtMode = std::getenv("STARRY_RT") != nullptr || std::getenv("STARRY_OFFLINE") != nullptr;
+    const bool rtMode = DemoSwitches::kUseRayTracing;
 
-    const char* autoQuitEnv = std::getenv("STARRY_AUTO_QUIT");
-    uint64_t autoQuitFrames = autoQuitEnv ? std::strtoull(autoQuitEnv, nullptr, 10) : 0;
+    const uint64_t autoQuitFrames = DemoSwitches::kAutoQuitFrames;
     uint64_t frameCounter = 0;
     auto perfLast = std::chrono::steady_clock::now();
     uint64_t perfLastFrames = 0;
@@ -846,35 +841,44 @@ int main() {
                  s.averageCPUTime, s.averageGPUTime);
     };
 
-    if (rtMode) {
-        auto demo = std::make_shared<RayTracingDemo>(app.getRenderHardwareInterface(), app.getGlobalDescriptorPool(), app.getWidth(), app.getHeight());
-        demo->setExitCallback([&app]() { app.shutdown(); });
-        app.setRenderer(demo->getRenderer());
-        app.setScene(demo->getScene());
-        app.setPostRenderCallback([demo, &app, &frameCounter, autoQuitFrames]() {
-            demo->offlineCapture();   // 离线读回（交互 RT 下为空操作）
-            if (std::getenv("STARRY_FRAME_DUMP")) { auto rp = demo->getRenderer()->getRenderPath(); }
-            if (autoQuitFrames > 0 && ++frameCounter >= autoQuitFrames) app.shutdown();
-        });
-        app.setUpdateCallback([demo, &app, &perfLog](float deltaTime) {
-            demo->updateTitle(app.getWindow()->getHandle(), deltaTime);
-            perfLog();
-        });
-    } else {
-        auto demo = std::make_shared<PBRDemo>(app.getRenderHardwareInterface(), app.getGlobalDescriptorPool(), app.getWidth(), app.getHeight());
-        demo->setExitCallback([&app]() { app.shutdown(); });
-        app.setRenderer(demo->getRenderer());
-        app.setScene(demo->getScene());
-        app.setPostRenderCallback([demo, &app, &frameCounter, autoQuitFrames]() {
-            demo->captureFrame();
-            if (autoQuitFrames > 0 && ++frameCounter >= autoQuitFrames) app.shutdown();
-        });
-        app.setUpdateCallback([demo, &app, &perfLog](float deltaTime) {
-            demo->updateTitle(app.getWindow()->getHandle(), deltaTime);
-            demo->onUpdate(deltaTime);
-            perfLog();
-        });
-    }
+    // ── 世界构建（可重复调用：设备丢失软重启时由 Application 再次回调）──
+    // 把 demo 对象与回调注册包进 lambda，软重启时用新 RHI 重建整个世界。
+    static std::shared_ptr<RayTracingDemo> rtDemo;
+    static std::shared_ptr<PBRDemo> pbrDemo;
+
+    auto setupWorld = [&]() {
+        if (rtMode) {
+            rtDemo = std::make_shared<RayTracingDemo>(app.getRenderHardwareInterface(), app.getGlobalDescriptorPool(), app.getWidth(), app.getHeight());
+            rtDemo->setExitCallback([&app]() { app.shutdown(); });
+            app.setRenderer(rtDemo->getRenderer());
+            app.setScene(rtDemo->getScene());
+            app.setPostRenderCallback([&app, &frameCounter, autoQuitFrames]() {
+                rtDemo->offlineCapture();   // 离线读回（交互 RT 下为空操作）
+                if (DemoSwitches::kFrameDump) { auto rp = rtDemo->getRenderer()->getRenderPath(); }
+                if (autoQuitFrames > 0 && ++frameCounter >= autoQuitFrames) app.shutdown();
+            });
+            app.setUpdateCallback([&app, &perfLog](float deltaTime) {
+                rtDemo->updateTitle(app.getWindow()->getHandle(), deltaTime);
+                perfLog();
+            });
+        } else {
+            pbrDemo = std::make_shared<PBRDemo>(app.getRenderHardwareInterface(), app.getGlobalDescriptorPool(), app.getWidth(), app.getHeight());
+            pbrDemo->setExitCallback([&app]() { app.shutdown(); });
+            app.setRenderer(pbrDemo->getRenderer());
+            app.setScene(pbrDemo->getScene());
+            app.setPostRenderCallback([&app, &frameCounter, autoQuitFrames]() {
+                pbrDemo->captureFrame();
+                if (autoQuitFrames > 0 && ++frameCounter >= autoQuitFrames) app.shutdown();
+            });
+            app.setUpdateCallback([&app, &perfLog](float deltaTime) {
+                pbrDemo->updateTitle(app.getWindow()->getHandle(), deltaTime);
+                pbrDemo->onUpdate(deltaTime);
+                perfLog();
+            });
+        }
+    };
+    setupWorld();
+    app.setWorldFactory(setupWorld);   // 设备丢失后由 Application 回调，用新 RHI 重建世界
     app.initEventDispatcher();
 
     GetEventDispatcher().subscribe(EventType::KeyPressed, [&app](IEvent& e) {
