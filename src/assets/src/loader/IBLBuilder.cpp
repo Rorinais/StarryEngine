@@ -191,6 +191,7 @@ namespace StarryEngine::Assets {
         if (!descSet.isValid()) return descSet;
 
         auto* setObj = m_resMgr->getDescriptorSet(descSet);
+        if (!setObj) return RHI::DescriptorSetHandle::Null();
         setObj->writeTexture(0, 0,m_resMgr->getTexture(inputTex),m_resMgr->getSampler(sampler),RHI::ImageLayout::ShaderReadOnly);
         setObj->writeTexture(1, 0,m_resMgr->getTexture(outputTex),nullptr,outputLayout);
         return descSet;
@@ -241,6 +242,13 @@ namespace StarryEngine::Assets {
             m_resMgr.get(), m_vs, m_fs, m_pipelineLayout, renderPass);
 
         std::vector<RHI::FramebufferHandle> framebuffers(6);
+
+        auto* cubemapObj = m_resMgr->getTexture(cubemap);
+        if (!cubemapObj) {
+            LOG_ERROR("equirectToCubemap: cubemap texture missing");
+            return RHI::TextureHandle::Null();
+        }
+
         for (int face = 0; face < 6; ++face) {
             RHI::ImageSubresourceRange range;
             range.aspectMask = RHI::ImageAspect::Color;
@@ -248,8 +256,8 @@ namespace StarryEngine::Assets {
             range.levelCount = 1;
             range.baseArrayLayer = static_cast<uint32_t>(face);
             range.layerCount = 1;
-            void* viewKey = m_resMgr->getTexture(cubemap)->createView(range, RHI::ImageViewType::Texture2D);
-            void* nativeView = m_resMgr->getTexture(cubemap)->getNativeHandleFromView(viewKey);
+            void* viewKey = cubemapObj->createView(range, RHI::ImageViewType::Texture2D);
+            void* nativeView = cubemapObj->getNativeHandleFromView(viewKey);
 
             RHI::FramebufferDesc fbDesc;
             fbDesc.extent = { faceSize, faceSize };
@@ -483,6 +491,10 @@ namespace StarryEngine::Assets {
             m_resMgr.get(), irradVS, irradFS, plLayout, renderPass);
 
         std::vector<RHI::FramebufferHandle> framebuffers(6);
+
+        auto* irradObj = m_resMgr->getTexture(irradMap);
+        if (!irradObj) return RHI::TextureHandle::Null();
+
         for (int face = 0; face < 6; ++face) {
             RHI::ImageSubresourceRange range;
             range.aspectMask = RHI::ImageAspect::Color;
@@ -490,8 +502,8 @@ namespace StarryEngine::Assets {
             range.levelCount = 1;
             range.baseArrayLayer = static_cast<uint32_t>(face);
             range.layerCount = 1;
-            void* vk = m_resMgr->getTexture(irradMap)->createView(range, RHI::ImageViewType::Texture2D);
-            void* nv = m_resMgr->getTexture(irradMap)->getNativeHandleFromView(vk);
+            void* vk = irradObj->createView(range, RHI::ImageViewType::Texture2D);
+            void* nv = irradObj->getNativeHandleFromView(vk);
             RHI::FramebufferDesc fbDesc;
             fbDesc.extent = { outputSize, outputSize };
             fbDesc.layers = 1;
@@ -597,7 +609,11 @@ namespace StarryEngine::Assets {
             OneTimeCommandExecutor executor(m_rhi.get(), m_resMgr.get());
             auto* cmd = executor.get();
 
-            float sourceFaceSize = static_cast<float>(m_resMgr->getTexture(envCubemap)->getExtent().width);
+            auto* envTex = m_resMgr->getTexture(envCubemap);
+            auto* prefTex = m_resMgr->getTexture(prefilteredMap);
+            if (!envTex || !prefTex) return RHI::TextureHandle::Null();
+            float sourceFaceSize = static_cast<float>(envTex->getExtent().width);
+
             for (uint32_t mip = 0; mip < mipLevels; ++mip) {
                 uint32_t mipSize = baseSize >> mip;
                 float roughness = float(mip) / float(mipLevels - 1);
@@ -608,8 +624,8 @@ namespace StarryEngine::Assets {
                     range.levelCount = 1;
                     range.baseArrayLayer = static_cast<uint32_t>(face);
                     range.layerCount = 1;
-                    void* vk = m_resMgr->getTexture(prefilteredMap)->createView(range, RHI::ImageViewType::Texture2D);
-                    void* nv = m_resMgr->getTexture(prefilteredMap)->getNativeHandleFromView(vk);
+                    void* vk = prefTex->createView(range, RHI::ImageViewType::Texture2D);
+                    void* nv = prefTex->getNativeHandleFromView(vk);
                     tempViews.push_back(vk);
 
                     RHI::FramebufferDesc fbDesc;
@@ -640,7 +656,9 @@ namespace StarryEngine::Assets {
         }
 
         for (auto& fb : tempFBs) m_resMgr->destroy(fb);
-        for (auto& vk : tempViews) m_resMgr->getTexture(prefilteredMap)->destroyView(vk);
+        if (auto* prefTex = m_resMgr->getTexture(prefilteredMap)) {
+            for (auto& vk : tempViews) prefTex->destroyView(vk);
+        }
         m_resMgr->destroy(renderPass);
         m_resMgr->destroy(pipeline);
         m_resMgr->destroy(plLayout);
@@ -686,8 +704,12 @@ namespace StarryEngine::Assets {
         range.levelCount = 1;
         range.baseArrayLayer = 0;
         range.layerCount = 1;
-        void* vk = m_resMgr->getTexture(brdfLut)->createView(range, RHI::ImageViewType::Texture2D);
-        void* nv = m_resMgr->getTexture(brdfLut)->getNativeHandleFromView(vk);
+
+        auto* lutTex = m_resMgr->getTexture(brdfLut);
+        if (!lutTex) return RHI::TextureHandle::Null();
+        void* vk = lutTex->createView(range, RHI::ImageViewType::Texture2D);
+        void* nv = lutTex->getNativeHandleFromView(vk);
+        
         RHI::FramebufferDesc fbDesc;
         fbDesc.extent = { size, size };
         fbDesc.layers = 1;
@@ -1355,8 +1377,13 @@ namespace StarryEngine::Assets {
         setDesc.descriptorSetLayout = descLayout;
         setDesc.descriptorPool = pool;
         auto descSet = m_resMgr->createDescriptorSet(setDesc);
-        m_resMgr->getDescriptorSet(descSet)->writeTexture(0, 0,
-            m_resMgr->getTexture(brdfLut), nullptr, RHI::ImageLayout::General);
+        auto* setObj = m_resMgr->getDescriptorSet(descSet);
+        auto* lutObj = m_resMgr->getTexture(brdfLut);
+        if (!setObj || !lutObj) {
+            LOG_ERROR("generateBrdfLUT: descriptor/texture lookup failed");
+            return RHI::TextureHandle::Null();
+        }
+        setObj->writeTexture(0, 0, lutObj, nullptr, RHI::ImageLayout::General);
 
         RHI::ImageSubresourceRange range{};
         range.aspectMask = RHI::ImageAspect::Color;
@@ -1369,7 +1396,7 @@ namespace StarryEngine::Assets {
             OneTimeCommandExecutor executor(m_rhi.get(), m_resMgr.get());
             auto* cmd = executor.get();
 
-            m_resMgr->getTexture(brdfLut)->transitionLayout(
+            lutObj->transitionLayout(
                 RHI::ImageLayout::General,
                 RHI::PipelineStage::TopOfPipe,
                 RHI::PipelineStage::ComputeShader,
@@ -1377,7 +1404,7 @@ namespace StarryEngine::Assets {
                 RHI::AccessFlag::ShaderWrite,
                 range);
 
-            m_resMgr->getDescriptorSet(descSet)->update();
+            setObj->update();
 
             cmd->bindComputePipeline(pipeline);
             cmd->bindDescriptorSets(RHI::PipelineBindPoint::Compute,
@@ -1389,7 +1416,7 @@ namespace StarryEngine::Assets {
         }
 
         m_rhi->waitIdle();
-        m_resMgr->getTexture(brdfLut)->transitionLayout(
+        lutObj->transitionLayout(
             RHI::ImageLayout::ShaderReadOnly,
             RHI::PipelineStage::ComputeShader,
             RHI::PipelineStage::AllCommands,

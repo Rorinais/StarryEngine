@@ -55,6 +55,11 @@ namespace StarryEngine {
 
     void BaseRenderPath::onResize(uint32_t width, uint32_t height) {
         if (width == 0 || height == 0) return;
+
+        // 尺寸没变就不要重建。窗口管理器在拖拽过程中会反复派发同一个尺寸，
+        // 每次都走全量重建会让帧循环彻底跟不上（实测密集拖拽时 60 秒内重建 448 次）。
+        if (m_renderGraph && width == m_width && height == m_height) return;
+
         uint32_t oldW = m_width, oldH = m_height;
         m_width = width; m_height = height;
         for (auto& [name, desc] : m_textureDescs) {
@@ -63,7 +68,15 @@ namespace StarryEngine {
                 desc.extent.width = width; desc.extent.height = height;
             }
         }
-        if (!initialize()) { LOG_ERROR("Failed to rebuild on resize"); return; }
+
+        // 标记：这次重建由窗口尺寸变化引起。管线与窗口尺寸无关（动态渲染下缓存键里的
+        // renderPass 始终无效、格式也不变），因此不应在 resize 时丢弃管线缓存 ——
+        // 否则每次拖拽都要重新编译几十条管线，既卡顿又会让交换链被拖入卡死状态。
+        const bool prevFlag = m_resizeRebuild;
+        m_resizeRebuild = true;
+        bool ok = initialize();
+        m_resizeRebuild = prevFlag;
+        if (!ok) { LOG_ERROR("Failed to rebuild on resize"); return; }
     }
 
     void BaseRenderPath::render(RHI::RHICommandEncoder* encoder, uint32_t frameIndex) {
@@ -91,7 +104,19 @@ namespace StarryEngine {
 
         if (m_renderGraph) {
             m_rhi->waitIdle();
-            Assets::PipelineCache::invalidateAll(m_resMgr.get());
+            onBeforeGraphDestroy();
+            // 管线缓存的失效策略必须区分两条渲染路径：
+            //  · 动态渲染（VK_KHR_dynamic_rendering）：管线只绑定附件格式，与渲染图对象无关，
+            //    缓存键里的 renderPass 恒为无效句柄 —— resize 引起的重建可以安全复用管线，
+            //    于是重建变成一次查表（否则每次拖拽都要重编译几十条管线 → 卡顿并拖死交换链）。
+            //  · 旧版 render pass 路径：管线绑定在 render pass 对象上，重建渲染图会生成新对象
+            //    （句柄可能被回收复用），复用缓存会拿到指向已销毁对象的管线，因此必须照旧失效。
+            // 着色器热重载等真正换管线的场景由 RasterRenderer::reloadShader 里的失效逻辑负责。
+            const bool dynamicRendering = m_rhi && m_rhi->supportsDynamicRendering()
+                && std::getenv("STARRY_FORCE_RENDER_PASS") == nullptr;
+            if (!m_resizeRebuild || !dynamicRendering) {
+                Assets::PipelineCache::invalidateAll(m_resMgr.get());
+            }
             m_renderGraph.reset();
         }
         m_renderGraph = std::make_shared<RenderGraph::RenderGraph>(m_rhi);

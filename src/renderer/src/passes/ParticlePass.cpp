@@ -163,6 +163,11 @@ namespace StarryEngine {
             if (!dynamicMode && !rp.isValid()) continue;
             auto* mat = em->material ? em->material.get() : ensureDefaultMaterial(ctx).get();
             if (!mat) continue;
+            auto tmpl = mat->getTemplate();
+            if (!tmpl) {
+                LOG_ERROR("[{}] material template missing", em->name);
+                continue;
+            }
 
             RHI::DescriptorSetLayoutDesc set1Desc;
             set1Desc.bindings = {{0, RHI::DescriptorType::StorageBuffer, 1, RHI::ShaderStage::Vertex}};
@@ -173,8 +178,8 @@ namespace StarryEngine {
             st.renderLayout = resMgr->createPipelineLayout(plDesc);
 
             GraphicsPipelineState pso;
-            pso.vertexShader = mat->getTemplate()->getVertexShader();
-            pso.fragmentShader = mat->getTemplate()->getFragmentShader();
+            pso.vertexShader = tmpl->getVertexShader();
+            pso.fragmentShader = tmpl->getFragmentShader();
             pso.layout = st.renderLayout;
             pso.cullMode = mat->getCullMode();
             pso.depthTestEnable = false;
@@ -189,7 +194,7 @@ namespace StarryEngine {
             if (!pipeline.isValid()) { LOG_ERROR("[{}] pipeline failed", em->name); continue; }
 
             // set1：粒子 buffer
-            if (physBuf.isValid()) {
+            if (physBuf.isValid() && bufObj) {
                 RHI::DescriptorPoolDesc poolDesc;
                 poolDesc.maxSets = 2;
                 poolDesc.poolSizes = {{RHI::DescriptorType::UniformBuffer, 1},
@@ -201,8 +206,10 @@ namespace StarryEngine {
                 st.particleDescSet = resMgr->createDescriptorSet(dsDesc);
                 if (st.particleDescSet.isValid()) {
                     auto* ds = resMgr->getDescriptorSet(st.particleDescSet);
-                    ds->writeBuffer(0, 0, bufObj, 0, em->particleCount * em->perParticleFloats * sizeof(float));
-                    ds->update();
+                    if (ds) {
+                        ds->writeBuffer(0, 0, bufObj, 0, em->particleCount * em->perParticleFloats * sizeof(float));
+                        ds->update();
+                    }
                 }
             }
 

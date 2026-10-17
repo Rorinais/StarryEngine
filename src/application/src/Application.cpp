@@ -210,12 +210,15 @@ namespace StarryEngine {
             static float col1[4] = { 1.0f, 0.0f, 0.2f ,1.0f};
 
             if (ImGui::ColorEdit4("color 2", col1)) {
-                 auto block = m_scene->getAllObjects()[0]->materials[0]->getBlock("LightingUBO");
-                if (block)
-                {
-                    block->setVec4("lights.color", glm::vec4(col1[0], col1[1], col1[2], col1[3]));
+                if (m_scene) {
+                    const auto& objects = m_scene->getAllObjects();
+                    if (!objects.empty() && objects[0] && !objects[0]->materials.empty() && objects[0]->materials[0]) {
+                        auto block = objects[0]->materials[0]->getBlock("LightingUBO");
+                        if (block) {
+                            block->setVec4("lights.color", glm::vec4(col1[0], col1[1], col1[2], col1[3]));
+                        }
+                    }
                 }
-
             }
             ImGui::End();
         }
@@ -361,6 +364,14 @@ namespace StarryEngine {
         glfwPollEvents();
         m_monitor->tick();
 
+        if (m_window) {
+            GLFWwindow* win = m_window->getHandle();
+            if (glfwGetWindowAttrib(win, GLFW_ICONIFIED) != 0 || m_width == 0 || m_height == 0) {
+                glfwWaitEventsTimeout(0.05);
+                return;
+            }
+        }
+
             auto now = std::chrono::steady_clock::now();
             if (now - m_lastFileCheck > std::chrono::milliseconds(500)) {
                 m_lastFileCheck = now;
@@ -411,7 +422,7 @@ namespace StarryEngine {
                     return;
                 }
 
-                m_renderer->onResize(m_width, m_height);
+                if (m_renderer) m_renderer->onResize(m_width, m_height);
                 return;
             }
             if (m_width == 0 || m_height == 0) return;
@@ -440,6 +451,8 @@ namespace StarryEngine {
                 m_renderer->renderFrame(encoder, imageIndex, m_clock);
             });
 
+            if (!m_renderer) return;
+
             if (!success) {
                 m_rhi->waitIdle();
                 if (m_rhi->recreateSwapChain(m_width, m_height)) {
@@ -451,7 +464,9 @@ namespace StarryEngine {
             }
 
             // 渲染+呈现成功：通知后处理挂钩（帧读回等；本帧 GPU 命令已提交，读回走同队列序）
-            if (m_postRenderCallback) {
+            // 注意：lastFrameSkipped() 为真时本帧只是"没画"（最小化/遮挡），
+            // 读回会重复捕获上一帧内容，故跳过。
+            if (m_postRenderCallback && !m_rhi->lastFrameSkipped()) {
                 m_postRenderCallback();
             }
 
@@ -506,6 +521,8 @@ namespace StarryEngine {
 
         // 相机切换事件
         GetEventDispatcher().subscribe(EventType::CameraSwitch, [this](IEvent& e) {
+            if (!m_scene) return;
+
             auto& ev = static_cast<CameraSwitchEvent&>(e);
             uint32_t index = ev.getCameraIndex();
             if (index < m_scene->getCameras().size()) {
@@ -547,6 +564,10 @@ namespace StarryEngine {
                 if (m_cameraController) {
                     m_cameraController->setEnabled(true);
                     m_cameraController->resetMouse();
+                    // 开启原始鼠标运动：位移直接取设备增量，不受光标屏幕边界与系统加速影响。
+                    // 否则光标被推到屏幕边缘后位置增量归零 —— 表现为"按住右键转不动画面"。
+                    if (glfwRawMouseMotionSupported())
+                        glfwSetInputMode(m_window->getHandle(), GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
                     // 仅在确实有相机控制器时才 warp 指针（Wayland 不支持，无控制器时空转也免了）
                     glfwSetCursorPos(m_window->getHandle(), m_width / 2, m_height / 2);
                     glfwSetInputMode(m_window->getHandle(), GLFW_CURSOR, GLFW_CURSOR_DISABLED);
@@ -554,13 +575,15 @@ namespace StarryEngine {
             }
             else if (ev.getAction() == GLFW_RELEASE) {
                 m_controlActive = false;
+                if (glfwRawMouseMotionSupported())
+                    glfwSetInputMode(m_window->getHandle(), GLFW_RAW_MOUSE_MOTION, GLFW_FALSE);
                 glfwSetInputMode(m_window->getHandle(), GLFW_CURSOR, GLFW_CURSOR_NORMAL);
                 if (m_cameraController) m_cameraController->setEnabled(false);
             }
             });
 
         // 摄像机控制相关事件（仅在 m_controlActive == true 时有效）
-        if (m_scene->getActiveCamera() && m_enableControl) {
+        if (m_scene && m_scene->getActiveCamera() && m_enableControl) {
             m_cameraController = std::make_unique<CameraController>(m_scene->getActiveCamera());
             m_cameraController->setEnabled(false);
 
@@ -613,6 +636,23 @@ namespace StarryEngine {
         m_scene.reset();
         m_renderer.reset();
         m_monitor.reset();
+
+        // ── Wayland WSI 修复（实测：不加这段 vkDestroySwapchainKHR 会阻塞 ~38 秒）──
+        // 该调用需要与合成器做 WSI 往返（归还交换链图像/缓冲区）；主循环退出后
+        // 若不再 glfwPollEvents，合成器不响应，调用只能等到超时。
+        // 先隐藏窗口并泵几次事件，让合成器释放所有 buffer，销毁即瞬时完成（~25ms）。
+        if (m_window) {
+            glfwHideWindow(m_window->getHandle());
+            for (int i = 0; i < 8; ++i) {
+                glfwPollEvents();
+                glfwWaitEventsTimeout(0.008);   // 泵事件 + 最多 8ms 等待，不会死等
+            }
+        }
+
+        // 提前释放 demo（回调持有它，而它持有 RHI 的最后一份引用）：
+        // 让 RHI/交换链的销毁发生在析构体内，顺序可控可观测，而不是拖到成员析构阶段。
+        m_updateCallback = nullptr;
+        m_postRenderCallback = nullptr;
 
         if (m_rhi) m_rhi->waitIdle();
         m_rhi.reset();          // 提前释放引擎自身持有的 RHI 引用

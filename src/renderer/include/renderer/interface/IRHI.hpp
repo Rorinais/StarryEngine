@@ -32,6 +32,11 @@ namespace StarryEngine::RHI {
         // 每帧渲染
         virtual bool renderFrame(const std::function<void(RHI::RHICommandEncoder*, uint32_t imageIndex)>& drawFunc) = 0;
 
+        /// 上一帧是否被"跳过"（拿不到交换链图像：窗口最小化/被遮挡/尺寸未就绪）。
+        /// 跳过时 renderFrame 返回 true 且未执行 drawFunc —— post-render 读回等钩子应据此跳过，
+        /// 避免把上一帧的旧内容当成新帧捕获。默认 false（不影响既有实现）。
+        virtual bool lastFrameSkipped() const { return false; }
+
         // 重建交换链（窗口大小改变时）
         virtual bool recreateSwapChain(uint32_t width, uint32_t height) = 0;
 

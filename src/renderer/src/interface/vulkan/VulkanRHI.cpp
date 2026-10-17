@@ -17,6 +17,17 @@
 #include <string>
 
 namespace StarryEngine {
+
+    // 交换链图像获取超时（100ms）：正常帧节奏为 16ms 以内，100ms 足够覆盖；
+    // 超时说明窗口当前无法出图（被遮挡/最小化/resize 中），此时跳过本帧而不是无限等待，
+    // 以免主线程停止响应 X 事件、被窗口管理器判定为"无响应"。
+    static constexpr uint64_t kAcquireTimeoutNs = 100000000ull;
+
+    // 连续 acquire 超时多少次后判定"交换链卡死"并重建：100ms × 5 = 0.5 秒内自愈。
+    // 若重建后仍超时（例如窗口确实被遮挡），阈值倍增退避到上限，避免无谓重建。
+    static constexpr uint32_t kTimeoutRecreateThresholdStart = 5;
+    static constexpr uint32_t kTimeoutRecreateThresholdMax = 100;
+
     VulkanInstance::Config ConfigConverter::convertInstanceConfig(const RHI::RHIInitConfig& rhiConfig) {
         VulkanInstance::Config config;
         config.appName = rhiConfig.appName;
@@ -315,8 +326,13 @@ namespace StarryEngine {
         mWidth = swapChainConfig.width;
         mHeight = swapChainConfig.height;
 
+        // acquire 使用有限超时：窗口被遮挡/最小化时合成器不会归还交换链图像，
+        // 若用 UINT64_MAX，主线程会永久阻塞在 vkAcquireNextImageKHR —— 不再处理 X 事件，
+        // 窗口管理器数秒后判定"应用程序无响应"并弹出强制退出提示。
+        // 超时后本帧被跳过（beginFrame 已保证跳过时不留下未触发的栅栏），主线程继续跑事件循环，
+        // 窗口重新可见后自动恢复出图。
         mAcquireFunc = [this](VkSemaphore semaphore, VkFence fence, uint32_t& index) {
-            return mSwapChain->acquireNextImage(semaphore, fence, UINT64_MAX, index);
+            return mSwapChain->acquireNextImage(semaphore, fence, kAcquireTimeoutNs, index);
         };
         mPresentFunc = [this](VkQueue queue, uint32_t index, VkSemaphore semaphore) {
             return mSwapChain->present(queue, index, semaphore);
@@ -431,7 +447,27 @@ namespace StarryEngine {
     }
 
     bool VulkanRHI::renderFrame(const std::function<void(RHI::RHICommandEncoder*, uint32_t)>& drawFunc) {
+        mLastFrameSkipped = false;
         VulkanFrameContext::FrameInfo frameInfo = mFrameContext->beginFrame(mAcquireFunc);
+
+        // 图像暂不可得（超时/未就绪）：本帧什么都不做，返回"成功"。
+        // 但连续超时必须升级为重建：单纯跳帧永远不会让卡死的交换链恢复 ——
+        // 实测密集 resize 之后画面会永久冻结在最后一帧（FPS 恒定 ~10 = 1/超时）。
+        // 阈值倍增退避：真卡死时约 0.5 秒即可自愈；只是被遮挡时重建频率会迅速降到很低。
+        if (frameInfo.acquireResult == VK_TIMEOUT || frameInfo.acquireResult == VK_NOT_READY) {
+            mLastFrameSkipped = true;
+            if (++mConsecutiveAcquireTimeouts >= mTimeoutRecreateThreshold) {
+                mConsecutiveAcquireTimeouts = 0;
+                if (mTimeoutRecreateThreshold < kTimeoutRecreateThresholdMax) {
+                    mTimeoutRecreateThreshold *= 2;
+                }
+                mFramebufferResized = true;
+                return false;   // 交给 Application：waitIdle + recreateSwapChain
+            }
+            return true;
+        }
+        mConsecutiveAcquireTimeouts = 0;
+        mTimeoutRecreateThreshold = kTimeoutRecreateThresholdStart;
 
         if (frameInfo.needsRecreate || frameInfo.acquireResult != VK_SUCCESS) {
             if (frameInfo.needsRecreate) mFramebufferResized = true;

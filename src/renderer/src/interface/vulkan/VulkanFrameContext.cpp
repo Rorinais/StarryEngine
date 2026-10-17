@@ -135,9 +135,7 @@ namespace StarryEngine {
         frameInfo.frameIndex = mCurrentFrameIndex; 
         FrameData& frameData = mFrameData[mCurrentFrameIndex];
 
-        // 重置栅栏
-        resetFrame(mCurrentFrameIndex);
-
+        // 注意：栅栏（inFlightFence）的重置必须放在 acquire 成功之后，见下方说明。
         // 获取图像（通过回调）；离线无呈现模式：首次真实 acquire 后固定复用
         uint32_t imageIndex = 0;
         VkResult acquireResult = VK_SUCCESS;
@@ -161,8 +159,14 @@ namespace StarryEngine {
             if (acquireResult != VK_TIMEOUT && acquireResult != VK_NOT_READY) {
                 frameInfo.needsRecreate = true;
             }
+            // 关键：本帧没有提交任何工作，栅栏保持"已触发"状态，
+            // 下一帧 waitForFrame() 会立即放行。若在此前重置栅栏，它永远不会被触发，
+            // 而 waitForFrame 的默认超时是 UINT64_MAX —— 下一帧会永久阻塞在主线程。
             return frameInfo;
         }
+
+        // 重置栅栏：只在确认本帧会提交工作之后才重置（提交时会重新触发它）
+        resetFrame(mCurrentFrameIndex);
 
         frameInfo.imageIndex = imageIndex;
         frameInfo.commandBuffer = frameData.commandBuffer;

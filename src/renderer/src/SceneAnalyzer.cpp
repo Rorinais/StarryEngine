@@ -124,11 +124,14 @@ namespace StarryEngine {
         const Assets::InstancingLayout* instLayout)
     {
         GraphicsPipelineState pso;
+        if (!materialInst || !geometry) return pso;
+        auto tmpl = materialInst->getTemplate();
+        if (!tmpl) return pso;
         pso.vertexInput = geometry->getVertexInputStateWithInstancing(instLayout);
         pso.topology = geometry->getPrimitiveTopology();
-        pso.vertexShader = materialInst->getTemplate()->getVertexShader();
-        pso.fragmentShader = materialInst->getTemplate()->getFragmentShader();
-        pso.layout = materialInst->getTemplate()->getPipelineLayout(m_resMgr);
+        pso.vertexShader = tmpl->getVertexShader();
+        pso.fragmentShader = tmpl->getFragmentShader();
+        pso.layout = tmpl->getPipelineLayout(m_resMgr);
         pso.cullMode = materialInst->getCullMode();
         pso.depthTestEnable = materialInst->isDepthTestEnable();
         pso.depthWriteEnable = materialInst->isDepthWriteEnable();
@@ -142,9 +145,12 @@ namespace StarryEngine {
 
     GraphicsPipelineState SceneAnalyzer::buildProceduralPSO(const std::shared_ptr<Assets::MaterialInstance>& material){
         GraphicsPipelineState pso;
-        pso.vertexShader = material->getTemplate()->getVertexShader();
-        pso.fragmentShader = material->getTemplate()->getFragmentShader();
-        pso.layout = material->getTemplate()->getPipelineLayout(m_resMgr);
+        if (!material) return pso;
+        auto tmpl = material->getTemplate();
+        if (!tmpl) return pso;
+        pso.vertexShader = tmpl->getVertexShader();
+        pso.fragmentShader = tmpl->getFragmentShader();
+        pso.layout = tmpl->getPipelineLayout(m_resMgr);
         pso.vertexInput = {};
         pso.topology = RHI::PrimitiveTopology::TriangleList;
         pso.cullMode = material->getCullMode();
@@ -159,13 +165,16 @@ namespace StarryEngine {
     }
 
     std::array<std::unordered_map<uint32_t, RHI::DescriptorSetHandle>, RHI::kMaxFramesInFlight> SceneAnalyzer::buildDescriptorSetMap(const std::shared_ptr<Assets::MaterialInstance>& materialInst){
-        for (const auto& [setIdx, layout] : materialInst->getTemplate()->getLayouts()) {
+        std::array<std::unordered_map<uint32_t, RHI::DescriptorSetHandle>, RHI::kMaxFramesInFlight> descSets;
+        if (!materialInst) return descSets;
+        auto tmpl = materialInst->getTemplate();
+        if (!tmpl) return descSets;
+        for (const auto& [setIdx, layout] : tmpl->getLayouts()) {
             if (setIdx != 0) materialInst->getOrCreateSet(setIdx);
         }
-        std::array<std::unordered_map<uint32_t, RHI::DescriptorSetHandle>, RHI::kMaxFramesInFlight> descSets;
         for (uint32_t s = 0; s < RHI::kMaxFramesInFlight; ++s) {
             descSets[s][0] = m_globalDescriptorSets[s];
-            for (const auto& [setIdx, layout] : materialInst->getTemplate()->getLayouts()) {
+            for (const auto& [setIdx, layout] : tmpl->getLayouts()) {
                 if (setIdx != 0) {
                     auto h = materialInst->getSet(setIdx, s);
                     if (h.isValid()) descSets[s][setIdx] = h;

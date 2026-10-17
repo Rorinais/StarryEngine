@@ -63,6 +63,7 @@ namespace StarryEngine {
 
         bool isGlfwReady() const { return m_glfwInitialized; }
 
+
         bool isVulkanReady() const { return m_vulkanBackendReady; }
 
         static void SetCurrent(ImGuiManager* mgr) {
@@ -80,6 +81,8 @@ namespace StarryEngine {
         ImTextureID getSceneTextureID() const { return m_sceneTextureID; }
 
         void registerSceneTexture(RHI::ResourceManager* resMgr);
+
+        void invalidateSceneTexture();
 
     private:
         void createDescriptorPool(RHI::ResourceManager* resMgr, uint32_t imageCount);
@@ -114,6 +117,8 @@ namespace StarryEngine {
         RHI::SamplerHandle m_defaultSampler;        
         ImTextureID m_sceneTextureID = 0;
         uint32_t m_subpassIndex = 0;
+
+        VkFormat m_pipelineColorFormat = VK_FORMAT_UNDEFINED;
 
         bool m_initInfoStored = false;
     };

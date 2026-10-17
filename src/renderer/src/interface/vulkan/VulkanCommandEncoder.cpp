@@ -125,12 +125,14 @@ namespace StarryEngine::RHI {
     // 管线绑定
     void VulkanCommandEncoder::bindGraphicPipeline(PipelineHandle pipeline) {
         auto* rhiPipeline = mResourceManager->getPipeline(pipeline);
+        if (!rhiPipeline) return;
         auto vkPipeline = static_cast<VkPipeline>(rhiPipeline->getNativeHandle());
         vkCmdBindPipeline(getVkCommandBuffer(), VK_PIPELINE_BIND_POINT_GRAPHICS, vkPipeline);
     }
 
     void VulkanCommandEncoder::bindComputePipeline(PipelineHandle pipeline) {
         auto* rhiPipeline = mResourceManager->getPipeline(pipeline);
+        if (!rhiPipeline) return;
         auto vkPipeline = static_cast<VkPipeline>(rhiPipeline->getNativeHandle());
         vkCmdBindPipeline(getVkCommandBuffer(), VK_PIPELINE_BIND_POINT_COMPUTE, vkPipeline);
     }
@@ -139,9 +141,12 @@ namespace StarryEngine::RHI {
         uint32_t firstBinding,
         const std::vector<BufferHandle>& buffers,
         const std::vector<uint64_t>& offsets) {
+        if (buffers.empty() || offsets.size() < buffers.size()) return;
         std::vector<VkBuffer> vkBuffers;
+        vkBuffers.reserve(buffers.size());
         for (const auto& buf : buffers) {
             auto* rhiBuf = mResourceManager->getBuffer(buf);
+            if (!rhiBuf) return;
             vkBuffers.push_back(static_cast<VkBuffer>(rhiBuf->getNativeHandle()));
         }
         vkCmdBindVertexBuffers(getVkCommandBuffer(), firstBinding, static_cast<uint32_t>(vkBuffers.size()), vkBuffers.data(), offsets.data());
@@ -152,6 +157,7 @@ namespace StarryEngine::RHI {
         uint64_t offset,
         IndexType indexType) {
         auto* rhiBuf = mResourceManager->getBuffer(buffer);
+        if (!rhiBuf) return;
         VkBuffer vkBuffer = static_cast<VkBuffer>(rhiBuf->getNativeHandle());
         VkIndexType vkIndexType = (indexType == IndexType::UInt16) ? VK_INDEX_TYPE_UINT16 : VK_INDEX_TYPE_UINT32;
         vkCmdBindIndexBuffer(getVkCommandBuffer(), vkBuffer, offset, vkIndexType);
@@ -167,6 +173,7 @@ namespace StarryEngine::RHI {
         if (!layout || descriptorSets.empty()) return;
 
         auto* rhiLayout = mResourceManager->getPipelineLayout(layout);
+        if (!rhiLayout) return;
         auto vkLayout = static_cast<VkPipelineLayout>(rhiLayout->getNativeHandle());
         std::vector<VkDescriptorSet> vkSets;
         for (auto handle : descriptorSets) {
@@ -200,7 +207,8 @@ namespace StarryEngine::RHI {
         uint32_t offset,
         uint32_t size,
         const void* values) {
-        auto* rhiLayout = static_cast<VulkanPipelineLayout*>(mResourceManager->getPipelineLayout(layout));
+        auto* rhiLayout = mResourceManager->getPipelineLayout(layout);
+        if (!rhiLayout) return;
         auto vkLayout = static_cast<VkPipelineLayout>(rhiLayout->getNativeHandle());
         vkCmdPushConstants(getVkCommandBuffer(), vkLayout, static_cast<VkShaderStageFlags>(stage), offset, size, values);
     }
@@ -301,12 +309,14 @@ namespace StarryEngine::RHI {
             vkClearValues.push_back(vkCv);
         }
 
+        auto* rpObj = mResourceManager->getRenderPass(beginInfo.renderPass);
+        auto* fbObj = mResourceManager->getFramebuffer(beginInfo.framebuffer);
+        if (!rpObj || !fbObj) return;
+
         VkRenderPassBeginInfo vkBeginInfo{};
         vkBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        vkBeginInfo.renderPass = static_cast<VkRenderPass>(
-            mResourceManager->getRenderPass(beginInfo.renderPass)->getNativeHandle());
-        vkBeginInfo.framebuffer = static_cast<VkFramebuffer>(
-            mResourceManager->getFramebuffer(beginInfo.framebuffer)->getNativeHandle());
+        vkBeginInfo.renderPass = static_cast<VkRenderPass>(rpObj->getNativeHandle());
+        vkBeginInfo.framebuffer = static_cast<VkFramebuffer>(fbObj->getNativeHandle());
         vkBeginInfo.renderArea.offset.x = beginInfo.renderArea.offset.x;
         vkBeginInfo.renderArea.offset.y = beginInfo.renderArea.offset.y;
         vkBeginInfo.renderArea.extent.width = beginInfo.renderArea.extent.width;
@@ -429,12 +439,13 @@ namespace StarryEngine::RHI {
             vkInheritInfo.pNext = &vkInheritRendering;
         }
         else if (beginInfo.renderPassContinue) {
+            auto* rpObj = mResourceManager->getRenderPass(beginInfo.renderPass);
+            auto* fbObj = mResourceManager->getFramebuffer(beginInfo.framebuffer);
+            if (!rpObj || !fbObj) return;
             vkBeginInfo.flags |= VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT;
-            vkInheritInfo.renderPass = static_cast<VkRenderPass>(
-                mResourceManager->getRenderPass(beginInfo.renderPass)->getNativeHandle());
+            vkInheritInfo.renderPass = static_cast<VkRenderPass>(rpObj->getNativeHandle());
             vkInheritInfo.subpass = beginInfo.subpass;
-            vkInheritInfo.framebuffer = static_cast<VkFramebuffer>(
-                mResourceManager->getFramebuffer(beginInfo.framebuffer)->getNativeHandle());
+            vkInheritInfo.framebuffer = static_cast<VkFramebuffer>(fbObj->getNativeHandle());
         }
 
         vkBeginInfo.pInheritanceInfo = &vkInheritInfo;
@@ -502,11 +513,9 @@ namespace StarryEngine::RHI {
             vkBb.dstAccessMask = static_cast<VkAccessFlags>(bb.dstAccessMask);
             vkBb.srcQueueFamilyIndex = bb.srcQueueFamilyIndex;
             vkBb.dstQueueFamilyIndex = bb.dstQueueFamilyIndex;
-            // 需要从 BufferHandle 获取 VkBuffer
             RHIBuffer* bufObj = mResourceManager->getBuffer(bb.buffer);
-            if (bufObj) {
-                vkBb.buffer = static_cast<VkBuffer>(bufObj->getNativeHandle());
-            }
+            if (!bufObj) continue;
+            vkBb.buffer = static_cast<VkBuffer>(bufObj->getNativeHandle());
             vkBb.offset = bb.offset;
             vkBb.size = bb.size;
             vkBufferBarriers.push_back(vkBb);
@@ -560,7 +569,10 @@ namespace StarryEngine::RHI {
         BufferHandle src, BufferHandle dst,
         const std::vector<BufferCopyRegion>& regions)
     {
-        if (!src || !dst) return;
+        if (!src || !dst || regions.empty()) return;
+        auto* srcBuf = mResourceManager->getBuffer(src);
+        auto* dstBuf = mResourceManager->getBuffer(dst);
+        if (!srcBuf || !dstBuf) return;
 
         std::vector<VkBufferCopy> vkRegions;
         for (auto& r : regions) {
@@ -573,8 +585,8 @@ namespace StarryEngine::RHI {
 
         vkCmdCopyBuffer(
             getVkCommandBuffer(),
-            static_cast<VkBuffer>(mResourceManager->getBuffer(src)->getNativeHandle()),
-            static_cast<VkBuffer>(mResourceManager->getBuffer(dst)->getNativeHandle()),
+            static_cast<VkBuffer>(srcBuf->getNativeHandle()),
+            static_cast<VkBuffer>(dstBuf->getNativeHandle()),
             static_cast<uint32_t>(vkRegions.size()),
             vkRegions.data()
         );
@@ -644,14 +656,15 @@ namespace StarryEngine::RHI {
         const std::vector<ImageBlitRegion>& regions,
         Filter filter)
     {
-        // 假设 m_handle 是当前录制的 VkCommandBuffer
-        VkCommandBuffer cmdBuf = getVkCommandBuffer();  // 根据实际情况获取
+        VkCommandBuffer cmdBuf = getVkCommandBuffer();
+        if (cmdBuf == VK_NULL_HANDLE || regions.empty()) return;
 
-        // 获取底层 VkImage 对象（需要 RHITexture 提供相应方法）
-        VkImage srcImage = static_cast<VkImage>(mResourceManager->getTexture(src)->getImageHandle());
-        VkImage dstImage = static_cast<VkImage>(mResourceManager->getTexture(dst)->getImageHandle());
+        auto* srcTex = mResourceManager->getTexture(src);
+        auto* dstTex = mResourceManager->getTexture(dst);
+        if (!srcTex || !dstTex) return;
+        VkImage srcImage = static_cast<VkImage>(srcTex->getImageHandle());
+        VkImage dstImage = static_cast<VkImage>(dstTex->getImageHandle());
 
-        // 转换 RHI 布局枚举到 VkImageLayout（假设一一对应或使用转换函数）
         VkImageLayout vkSrcLayout = func::RHI_TO_VK_ImageLayout(srcLayout);
         VkImageLayout vkDstLayout = func::RHI_TO_VK_ImageLayout(dstLayout);
 

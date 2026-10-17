@@ -86,16 +86,22 @@ namespace StarryEngine {
         m_descSet = resMgr->createDescriptorSet(dsDesc);
         if (m_descSet.isValid()) {
             auto* ds = resMgr->getDescriptorSet(m_descSet);
+            if (!ds) {
+                LOG_ERROR("[{}] descriptor set lookup failed", m_desc.name);
+                return;
+            }
             for (auto& r : m_desc.resources) {
                 switch (r.type) {
                 case RHI::DescriptorType::StorageBuffer: {
                     auto phys = ctx.renderGraph->getPhysicalBuffer(ctx.renderGraph->getBufferId(r.resourceName));
-                    ds->writeBuffer(r.binding, 0, resMgr->getBuffer(phys), 0, r.bufferSize);
+                    auto* buf = resMgr->getBuffer(phys);
+                    if (buf) ds->writeBuffer(r.binding, 0, buf, 0, r.bufferSize);
                     break;
                 }
                 case RHI::DescriptorType::StorageImage: {
                     auto phys = ctx.renderGraph->getPhysicalTextureHandle(ctx.renderGraph->getTextureId(r.resourceName));
-                    ds->writeTexture(r.binding, 0, resMgr->getTexture(phys), nullptr, RHI::ImageLayout::General);
+                    auto* tex = resMgr->getTexture(phys);
+                    if (tex) ds->writeTexture(r.binding, 0, tex, nullptr, RHI::ImageLayout::General);
                     break;
                 }
                 case RHI::DescriptorType::CombinedImageSampler: {
@@ -106,8 +112,9 @@ namespace StarryEngine {
                         sd.magFilter = RHI::SamplerFilter::Linear;
                         m_sampler = resMgr->createSampler(sd);
                     }
-                    ds->writeTexture(r.binding, 0, resMgr->getTexture(phys), resMgr->getSampler(m_sampler),
-                                     RHI::ImageLayout::ShaderReadOnly);
+                    auto* tex = resMgr->getTexture(phys);
+                    auto* samp = resMgr->getSampler(m_sampler);
+                    if (tex) ds->writeTexture(r.binding, 0, tex, samp, RHI::ImageLayout::ShaderReadOnly);
                     break;
                 }
                 default:

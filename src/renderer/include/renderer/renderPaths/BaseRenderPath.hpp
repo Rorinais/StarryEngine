@@ -91,6 +91,8 @@ namespace StarryEngine {
 
         virtual void onAfterCompileImGui() {}
 
+        virtual void onBeforeGraphDestroy() {}
+
         bool buildGraph();
         std::unordered_map<std::string, RenderGraph::TextureId> buildTextureIdMap();
         bool hasSceneColorClearPass() const;
@@ -110,6 +112,9 @@ namespace StarryEngine {
         uint32_t m_width, m_height;
         const ParallelRecordingContext* m_parallel = nullptr;   
         bool m_resourceStatsPrinted = false;
+        /// 本次 buildGraph 是否由窗口尺寸变化触发：为真时保留管线缓存
+        /// （管线与尺寸无关，重建代价高，且密集重建会把交换链拖入卡死状态）
+        bool m_resizeRebuild = false;
         RHI::SamplerHandle m_defaultSampler;
         std::string m_swapchainTextureName = "Swapchain";
         std::string m_presentInputTexture = "SceneColor";

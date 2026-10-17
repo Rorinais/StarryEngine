@@ -2,6 +2,9 @@
 #include <core/Window.hpp>
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_vulkan.h>
+#include <renderer/interface/vulkan/VulkanConversion.hpp>
+#include <logging/Logger.hpp>
+#include <algorithm>
 #include <cstring>
 
 namespace StarryEngine {
@@ -76,20 +79,38 @@ namespace StarryEngine {
         uint32_t                imageCount)
     {
         if (m_vulkanBackendReady) return true;
-        if (!m_glfwInitialized)  return false;
+        if (!m_glfwInitialized || !rhi || !resMgr) return false;
 
         m_rhi = rhi;
         m_vkDevice = static_cast<VkDevice>(rhi->getDevice());
         m_graphicsQueueFamily = rhi->getGraphicsQueueFamilyIndex();
         m_graphicsQueue = static_cast<VkQueue>(rhi->getGraphicsQueue());
-        
+
+        auto* poolObj = resMgr->getDescriptorPool(m_descriptorPool);
+        if (!poolObj) {
+            LOG_ERROR("ImGui descriptor pool invalid");
+            return false;
+        }
 
         VkInstance       instance = static_cast<VkInstance>(rhi->getInstance());
         VkPhysicalDevice physicalDevice = static_cast<VkPhysicalDevice>(rhi->getPhysicalDevice());
-        VkDescriptorPool nativePool = static_cast<VkDescriptorPool>(
-            resMgr->getDescriptorPool(m_descriptorPool)->getNativeHandle());
-        VkRenderPass     nativeRP = static_cast<VkRenderPass>(
-            resMgr->getRenderPass(guiRenderPass)->getNativeHandle());
+        VkDescriptorPool nativePool = static_cast<VkDescriptorPool>(poolObj->getNativeHandle());
+
+        // 动态渲染路径下 RenderNode 没有 VkRenderPass；有有效 handle 时走传统 render pass
+        VkRenderPass nativeRP = VK_NULL_HANDLE;
+        const bool useDynamicRendering = !guiRenderPass.isValid();
+        if (!useDynamicRendering) {
+            auto* rpObj = resMgr->getRenderPass(guiRenderPass);
+            if (!rpObj) {
+                LOG_ERROR("ImGui render pass invalid");
+                return false;
+            }
+            nativeRP = static_cast<VkRenderPass>(rpObj->getNativeHandle());
+        }
+
+        // ImageCount 应对齐交换链图像数，而不是 frames-in-flight
+        const uint32_t swapImageCount = std::max(imageCount, rhi->getSwapChainImageCount());
+        const uint32_t minImageCount = std::max(2u, swapImageCount);
 
         ImGui::SetCurrentContext(m_context);
 
@@ -101,21 +122,45 @@ namespace StarryEngine {
         initInfo.Queue = m_graphicsQueue;
         initInfo.PipelineCache = VK_NULL_HANDLE;
         initInfo.DescriptorPool = nativePool;
-        initInfo.MinImageCount = imageCount;
-        initInfo.ImageCount = imageCount;
+        initInfo.MinImageCount = minImageCount;
+        initInfo.ImageCount = swapImageCount;
         initInfo.Allocator = nullptr;
         initInfo.CheckVkResultFn = nullptr;
 
-        initInfo.PipelineInfoMain.RenderPass = nativeRP;
         initInfo.PipelineInfoMain.Subpass = 0;
         initInfo.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
 
+        if (useDynamicRendering) {
+#ifdef IMGUI_IMPL_VULKAN_HAS_DYNAMIC_RENDERING
+            m_pipelineColorFormat = func::RHI_TO_VK_Format(rhi->getSwapChainImageFormat());
+            if (m_pipelineColorFormat == VK_FORMAT_UNDEFINED) {
+                LOG_ERROR("ImGui dynamic rendering: invalid swapchain format");
+                return false;
+            }
+
+            initInfo.UseDynamicRendering = true;
+            initInfo.PipelineInfoMain.RenderPass = VK_NULL_HANDLE;
+            initInfo.PipelineInfoMain.PipelineRenderingCreateInfo = {};
+            initInfo.PipelineInfoMain.PipelineRenderingCreateInfo.sType =
+                VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR;
+            initInfo.PipelineInfoMain.PipelineRenderingCreateInfo.colorAttachmentCount = 1;
+            initInfo.PipelineInfoMain.PipelineRenderingCreateInfo.pColorAttachmentFormats =
+                &m_pipelineColorFormat;
+#else
+            LOG_ERROR("ImGui built without dynamic rendering support");
+            return false;
+#endif
+        } else {
+            initInfo.UseDynamicRendering = false;
+            initInfo.PipelineInfoMain.RenderPass = nativeRP;
+        }
+
         if (!ImGui_ImplVulkan_Init(&initInfo)) {
+            LOG_ERROR("ImGui_ImplVulkan_Init failed");
             return false;
         }
 
         m_vulkanBackendReady = true;
-
         return true;
     }
 
@@ -215,7 +260,7 @@ namespace StarryEngine {
     }
 
     void ImGuiManager::onMouseMoveEvent(float x, float y) {
-        if (!m_glfwInitialized) return;
+        if (!m_glfwInitialized || !m_window) return;
         ImGui::SetCurrentContext(m_context);
         ImGui_ImplGlfw_CursorPosCallback(m_window->getHandle(), x, y);
     }
@@ -264,6 +309,15 @@ namespace StarryEngine {
         }
     }
 
+    void ImGuiManager::invalidateSceneTexture() {
+        if (m_sceneTextureID != 0 && m_vulkanBackendReady) {
+            ImGui::SetCurrentContext(m_context);
+            ImGui_ImplVulkan_RemoveTexture(reinterpret_cast<VkDescriptorSet>(m_sceneTextureID));
+            m_sceneTextureID = 0;
+        }
+        m_rdg.reset();
+    }
+
     void ImGuiManager::registerSceneTexture(RHI::ResourceManager* resMgr) {
         if (!m_rdg || !m_vulkanBackendReady || !resMgr) return;
 
@@ -272,18 +326,39 @@ namespace StarryEngine {
             m_sceneTextureID = 0;
         }
 
-        auto texId = m_rdg->getTextureId("SceneColor");
+        // getTextureId 找不到会抛异常；resize/重建过程中要吞掉，避免整进程崩
+        RenderGraph::TextureId texId;
+        try {
+            texId = m_rdg->getTextureId("SceneColor");
+        } catch (const std::exception& e) {
+            LOG_ERROR("SceneColor not in render graph: {}", e.what());
+            return;
+        }
+
         RHI::TextureHandle scHandle = m_rdg->getPhysicalTextureHandle(texId);
         if (!scHandle.isValid()) {
             LOG_ERROR("SceneColor texture not available");
             return;
         }
         auto* tex = resMgr->getTexture(scHandle);
+        if (!tex) {
+            LOG_ERROR("SceneColor texture object not found");
+            return;
+        }
         VkImageView view = static_cast<VkImageView>(tex->getDefaultView());
+        if (view == VK_NULL_HANDLE) {
+            LOG_ERROR("SceneColor default view is null");
+            return;
+        }
 
         VkSampler sampler = VK_NULL_HANDLE;
         if (m_defaultSampler.isValid()) {
-            sampler = static_cast<VkSampler>(resMgr->getSampler(m_defaultSampler)->getNativeHandle());
+            auto* samplerObj = resMgr->getSampler(m_defaultSampler);
+            if (!samplerObj) {
+                LOG_ERROR("Default sampler object not found for ImGui scene texture");
+                return;
+            }
+            sampler = static_cast<VkSampler>(samplerObj->getNativeHandle());
         }
         else {
             LOG_ERROR("Default sampler not set for ImGui scene texture");

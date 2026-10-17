@@ -41,6 +41,8 @@ namespace StarryEngine{
 
         bool renderFrame(const std::function<void(RHI::RHICommandEncoder*, uint32_t imageIndex)>& drawFunc)override;
 
+        bool lastFrameSkipped() const override { return mLastFrameSkipped; }
+
         bool recreateSwapChain(uint32_t width, uint32_t height)override;
 
         void setupFramebuffers(RHI::RenderPassHandle renderPass);
@@ -127,7 +129,10 @@ namespace StarryEngine{
         std::function<VkResult(VkSemaphore, VkFence, uint32_t&)> mAcquireFunc;
         std::function<VkResult(VkQueue, uint32_t, VkSemaphore)> mPresentFunc;
         uint32_t mWidth = 0, mHeight = 0;
-        bool mFramebufferResized = false; 
+        bool mFramebufferResized = false;
+        bool mLastFrameSkipped = false;   ///< 上一帧因交换链图像不可得被跳过（窗口最小化/遮挡） 
+        uint32_t mConsecutiveAcquireTimeouts = 0;   ///< 连续 acquire 超时计数（用于识别卡死的交换链）
+        uint32_t mTimeoutRecreateThreshold = 5;     ///< 达到该计数即重建交换链（倍增退避，见实现）
 
         std::shared_ptr<RHI::ResourceManager> mResourceManager;
 

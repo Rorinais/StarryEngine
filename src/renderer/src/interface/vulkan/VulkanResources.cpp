@@ -785,7 +785,8 @@ namespace StarryEngine::RHI {
     }
 
     VkCommandBuffer VulkanCommandPool::allocateCommandBuffer(CommandBufferLevel level) {
-		return allocateCommandBuffers(0,level)[0];
+        auto buffers = allocateCommandBuffers(1, level);
+        return buffers.empty() ? VK_NULL_HANDLE : buffers[0];
     }
     void VulkanCommandPool::freeCommandBuffer(const VkCommandBuffer& commandBuffer) {
 		freeCommandBuffers({ commandBuffer });

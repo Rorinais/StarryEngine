@@ -190,14 +190,23 @@ namespace StarryEngine {
         }
     }
 
+    void DeferredRenderPath::onBeforeGraphDestroy() {
+        if (m_imguiManager) {
+            m_imguiManager->invalidateSceneTexture();
+        }
+    }
+
     void DeferredRenderPath::onAfterCompileImGui() {
         if (!m_imguiManager) return;
         m_imguiManager->setRenderGraph(m_renderGraph);
         if (!m_imguiManager->isVulkanReady()) {
             auto it = m_tagToSubpass.find("ImGui");
             if (it != m_tagToSubpass.end()) {
-                m_imguiManager->initializeVulkanBackend(m_rhi.get(), m_resMgr.get(),
-                    it->second.renderPass, m_imguiImageCount);
+                // 动态渲染时 renderPass 为空（RenderNode）；ImGuiManager 会改走 dynamic rendering
+                if (!m_imguiManager->initializeVulkanBackend(m_rhi.get(), m_resMgr.get(),
+                    it->second.renderPass, m_imguiImageCount)) {
+                    LOG_ERROR("Failed to initialize ImGui Vulkan backend");
+                }
             }
         }
         m_imguiManager->setDefaultSampler(m_defaultSampler);
