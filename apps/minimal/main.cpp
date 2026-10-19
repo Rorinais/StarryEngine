@@ -8,9 +8,15 @@
 #include <application/Application.hpp>
 #include <renderer/RasterRenderer.hpp>
 #include <scene/Scene.hpp>
-#include <content/creation/SceneBuilder.hpp>
-#include <content/creation/RenderPathRegistry.hpp>
+#include <content/scene/SceneBuilder.hpp>
+#include <content/renderpath/RenderPathRegistry.hpp>
 #include <renderer/utils/FrameCapture.hpp>
+#include <assets/loader/ModelLoader.hpp>
+#include <assets/material/MaterialInstance.hpp>
+#include <assets/loader/MaterialDesc.hpp>
+#include <content/render/materials/CharacterMaterials.hpp>
+#include <renderer/renderPaths/LayerRegistry.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include <logging/Logger.hpp>
 
 int main(int argc, char** argv) {
@@ -33,8 +39,7 @@ int main(int argc, char** argv) {
     auto scene    = std::make_shared<StarryEngine::Scene::Scene>();
     auto renderer = std::make_shared<StarryEngine::RasterRenderer>(rhi, pool, scene);
 
-    StarryEngine::Content::SceneResources res{ rhi, pool,
-        renderer->getGlobalSetLayout(), renderer->getGlobalDescriptorSet(0) };
+    StarryEngine::Content::SceneResources res{ rhi, pool,renderer->getGlobalSetLayout(), renderer->getGlobalDescriptorSet(0) };
     StarryEngine::Content::SceneBuilder(scene, res)
         .addSkybox()
         .addGrid(10.0f, 10)
@@ -42,9 +47,41 @@ int main(int argc, char** argv) {
                      {0.0f, 1.2f, 4.0f}, {0.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f} })
         .build();
 
-    // 2) 渲染路径：映射表按名创建（"deferred" / "raytrace" / 自定义名）
-    auto renderPath = StarryEngine::Content::RenderPathRegistry::instance().create(
-        "deferred", rhi, app.getWidth(), app.getHeight());
+    // 2) 加模型：资产(ModelDesc) 与 材质策略(MaterialSetDesc) 分离，各自可替换
+    {
+        StarryEngine::Assets::ModelDesc md;
+        md.name       = "fuxuan";
+        md.file       = "assets/models/fuxuan_Animation2.fbx";
+        md.textureDir = "assets/models/textures/fuxuan";
+        md.skeleton   = true;
+        md.position   = glm::vec3(-1.2f, 0.0f, 1.0f);
+
+        // 材质策略：内容层给出（换 shader 只改这里，不动模型）
+        StarryEngine::Assets::MaterialSetDesc mset =StarryEngine::Content::makeCharacterMaterialSet(res);
+
+        StarryEngine::Assets::ModelInstance mi;
+        if (StarryEngine::Assets::ModelFactory::load(rhi->getResourceManager(),app.getGlobalDescriptorPool(), md, mset, mi)) {
+            auto obj = std::make_shared<StarryEngine::Scene::RenderObject>();
+            obj->geometry = mi.geometry;
+            for (auto& [name, m] : mi.parts) obj->materials.push_back(m);
+            obj->transform = glm::translate(glm::mat4(1.0f), md.position);
+            scene->addObject(obj);
+
+            if (mi.outlineMaterial) {
+                auto outline = std::make_shared<StarryEngine::Scene::RenderObject>();
+                outline->geometry = mi.geometry;
+                outline->materials.assign(mi.parts.size(), mi.outlineMaterial);
+                outline->transform = glm::translate(glm::mat4(1.0f), md.position)
+                                   * glm::scale(glm::mat4(1.0f), glm::vec3(mset.outlineScale));
+                scene->addObject(outline);
+            }
+        } else {
+            LOG_ERROR("[minimal] 模型装配失败");
+        }
+    }
+
+    // 3) 渲染路径：映射表按名创建（"deferred" / "raytrace" / 自定义名）
+    auto renderPath = StarryEngine::Content::RenderPathRegistry::instance().create("deferred", rhi, app.getWidth(), app.getHeight());
 
     // 3) 一步注册 + 跑循环
     app.setRenderer(renderer, renderPath);

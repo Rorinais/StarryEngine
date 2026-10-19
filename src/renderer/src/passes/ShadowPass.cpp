@@ -27,7 +27,7 @@ namespace StarryEngine {
         auto key = m_passNode->addDepthOutput(tid->second, depth);
 
         auto& sb = m_passNode->addSubpass(m_name + "_Depth");
-        sb.setTag(m_name + "_Depth");
+
         sb.addDepthStencilAttachmentRef(key);
         m_executor = std::make_shared<SceneDrawExecutor>();
         sb.setExecutor(m_executor);
@@ -36,7 +36,7 @@ namespace StarryEngine {
 
     std::vector<PassSubpassInfo> ShadowPass::getSubpasses() const {
         std::vector<PassSubpassInfo> result;
-        result.push_back({m_name + "_Depth", RenderLayers::Background, 0, 0, m_executor, m_passNode});
+        result.push_back({RenderLayers::Background, 0, 0, m_executor, m_passNode});
         return result;
     }
 
@@ -76,7 +76,7 @@ namespace StarryEngine {
         return pso;
     }
 
-    void ShadowPass::onSceneData(const AnalysisSceneResult& sceneData,const IPass::CompileContext& ctx,const std::string& /*defaultTag*/) {
+    void ShadowPass::onSceneData(const AnalysisSceneResult& sceneData,const IPass::CompileContext& ctx) {
         if (!m_passNode) return;
         RHI::RenderPassHandle rp = m_passNode->getRenderPassHandle();
         // 动态渲染：rp 无效但仍需建管线（用附件格式）；传统模式 rp 必须有效

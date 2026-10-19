@@ -12,7 +12,6 @@ namespace StarryEngine::Scene {
 
     struct ParticleEmitter {
         std::string name = "ParticleEmitter";
-        std::string passTag = "Particles";         
         glm::mat4 transform = glm::mat4(1.0f);     
 
         uint32_t particleCount = 1024;

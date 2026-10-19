@@ -30,6 +30,10 @@ struct MaterialTextureSlot {
     RHI::TextureHandle    texture = RHI::TextureHandle::Null();
     RHI::SamplerHandle    sampler = RHI::SamplerHandle::Null();
     RHI::Format           format = RHI::Format::RGBA8_sRGB;   ///< 路径加载时使用
+    /// 无文件时用内存数据（如 1x1 白色）：非空则优先于 path 走 loadTextureFromMemory
+    std::vector<uint8_t>  inlineData;
+    uint32_t              inlineWidth = 1;
+    uint32_t              inlineHeight = 1;
     // 按 (set,binding) 直接绑定（name 为空时使用）
     uint32_t              set = 0xFFFFFFFFu;
     uint32_t              binding = 0xFFFFFFFFu;
@@ -84,16 +88,13 @@ struct MaterialDesc {
     RHI::StencilOpState          stencilBack;
     std::vector<RHI::BlendAttachmentState> attachments;
     bool                         deferred = false;
-    std::string                  subpassTag;
     int                          renderLayer = -1;   ///< RenderLayers 索引（-1=未指定）
     int                          renderQueue = 0;    ///< 同层绘制顺序
     uint32_t                     currentSlot = 0xFFFFFFFFu;
 };
 
-/// 材质工厂：唯一创建入口
 class MaterialFactory {
 public:
-    /// 由 desc 创建完整材质实例；失败返回 nullptr（原因写日志）。
     static std::shared_ptr<MaterialInstance> create(const std::shared_ptr<RHI::ResourceManager>& resMgr,
                                                     RHI::DescriptorPoolHandle pool,
                                                     const MaterialDesc& desc);

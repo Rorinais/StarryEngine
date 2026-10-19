@@ -68,7 +68,6 @@ namespace StarryEngine {
 
         std::vector<std::shared_ptr<Scene::ParticleEmitter>> emitters;
         for (auto& em : scene->getParticleEmitters()) {
-            if (resolveEmitterTag(*em) != m_passTag) continue;
             emitters.push_back(em);
         }
         if (emitters.empty()) return true;
@@ -79,7 +78,7 @@ namespace StarryEngine {
         colorParams.initialLayout = RHI::ImageLayout::ShaderReadOnly;
         colorParams.finalLayout = RHI::ImageLayout::ShaderReadOnly;
         auto scId = graph.getTextureId("SceneColor");
-        m_renderPassNode = graph.addGraphicsPassNodeShared(m_name + "_Render", "particle:" + m_passTag);
+        m_renderPassNode = graph.addGraphicsPassNodeShared(m_name + "_Render", m_name);
         m_renderPassNode->setRenderArea(width, height);
         std::string colorKey = m_renderPassNode->addColorOutput(scId, colorParams);
 
@@ -117,10 +116,10 @@ namespace StarryEngine {
 
             m_renderPassNode->addReadBuffer(st.bufferId);
             st.renderSubpassIndex = m_renderPassNode->getSubpassCount();
-            std::string subpassTag = em->name + "_Draw";
-            auto& subpass = m_renderPassNode->addSubpass(subpassTag);
+            const int queueIndex = static_cast<int>(st.renderSubpassIndex);
+            auto& subpass = m_renderPassNode->addSubpass(StarryEngine::subpassName(RenderLayers::Particles, queueIndex));
             subpass.addColorAttachmentRef(colorKey);
-            subpass.setTag(subpassTag);
+
             st.executor = std::make_shared<ParticleRenderExecutor>(
                 RHI::PipelineHandle{}, RHI::PipelineLayoutHandle{},
                 std::vector<RHI::DescriptorSetHandle>{}, RHI::DescriptorSetHandle{}, em->particleCount);  // 占位，onAfterCompile 替换
@@ -137,7 +136,7 @@ namespace StarryEngine {
         std::vector<PassSubpassInfo> result;
         int queue = 0;   // 同一层内每个发射器一个段号
         for (auto& st : m_emitterStates) {
-            result.push_back({st.emitter->name + "_Draw", RenderLayers::Particles, queue++, st.renderSubpassIndex, st.executor, st.renderPassNode});
+            result.push_back({RenderLayers::Particles, queue++, st.renderSubpassIndex, st.executor, st.renderPassNode});
         }
         return result;
     }

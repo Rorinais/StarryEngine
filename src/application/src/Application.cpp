@@ -61,7 +61,7 @@ namespace StarryEngine {
         m_imguiExecutor = std::make_shared<ImGuiExecutor>(m_imguiManager.get());
 
         if (m_renderer) {
-            m_renderer->addOverlayPass(makeUIOverlay("ImGui", m_imguiExecutor));
+            m_renderer->addOverlayPass(makeUIOverlay(m_imguiExecutor));   // (UI,0)
             m_renderer->setImGuiManager(m_imguiManager.get(), m_flightFrame);
             m_renderer->setNeedRebuildGraph();
         }
@@ -802,26 +802,14 @@ namespace StarryEngine {
         m_imguiManager.reset();
         m_imguiExecutor.reset();
 
-        // 析构顺序必须保证：RHI 在窗口(wayland 连接)之前销毁。
-        // Renderer/Scene/Monitor/更新回调(捕获 demo) 都持有 RHI 资源的引用；
-        // 释放 RHI 最后引用发生在成员析构阶段，此时 GLFW 若已 terminate，
-        // 原生 Wayland + NVIDIA 下 vkDestroySwapchainKHR 会在死连接上 marshal 而段错误。
-        // 因此绝不能在这里 reset m_window —— m_window 是第一个成员、最后析构，
-        // 它活着，wayland 连接就活着，RHI 无论何时销毁都是安全的。
         m_scene.reset();
         m_renderer.reset();
         m_monitor.reset();
 
-        // 注：此前的 "Wayland WSI 修复"（隐藏窗口 + 泵事件）已移除 ——
-        // 它声称能把 vkDestroySwapchainKHR 的 ~38 秒阻塞降到 ~25ms，但实测在当前
-        // X11 后端并无收益（关闭仍需数十秒才退出），属于无效代码。
-
-        // 提前释放 demo（回调持有它，而它持有 RHI 的最后一份引用）：
-        // 让 RHI/交换链的销毁发生在析构体内，顺序可控可观测，而不是拖到成员析构阶段。
         m_updateCallback = nullptr;
         m_postRenderCallback = nullptr;
 
         if (m_rhi) m_rhi->waitIdle();
-        m_rhi.reset();          // 提前释放引擎自身持有的 RHI 引用
+        m_rhi.reset();          
     }
 }

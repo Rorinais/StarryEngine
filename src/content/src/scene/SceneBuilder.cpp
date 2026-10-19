@@ -1,5 +1,5 @@
-#include <content/creation/SceneBuilder.hpp>
-#include <content/materials/BuiltinMaterials.hpp>
+#include <content/scene/SceneBuilder.hpp>
+#include <content/render/materials/BuiltinMaterials.hpp>
 #include <assets/geometry/GeometryGenerator.hpp>
 #include <scene/camera/PerspectiveCamera.hpp>
 #include <logging/Logger.hpp>

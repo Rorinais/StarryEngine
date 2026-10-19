@@ -1,4 +1,4 @@
-#include <assets/material/MaterialDesc.hpp>
+#include <assets/loader/MaterialDesc.hpp>
 #include <assets/material/MaterialInstance.hpp>
 #include <assets/material/DefaultMaterialTemplate.hpp>
 #include <assets/loader/TextureLoader.hpp>
@@ -53,7 +53,6 @@ std::shared_ptr<MaterialInstance> MaterialFactory::create(const std::shared_ptr<
     }
     if (!desc.attachments.empty()) mat->setAttachments(desc.attachments);
     mat->setDeferred(desc.deferred);
-    if (!desc.subpassTag.empty()) mat->setSubpassTag(desc.subpassTag);
     mat->setRenderLayer(desc.renderLayer);
     mat->setRenderQueue(desc.renderQueue);
     if (desc.currentSlot != 0xFFFFFFFFu) mat->setCurrentSlot(desc.currentSlot);
@@ -69,6 +68,14 @@ std::shared_ptr<MaterialInstance> MaterialFactory::create(const std::shared_ptr<
         }
         RHI::TextureHandle tex = slot.texture;
         RHI::SamplerHandle smp = slot.sampler;
+        // 内存贴图（如 1x1 白色）优先于文件路径
+        if (!tex.isValid() && !slot.inlineData.empty()) {
+            auto loaded = texLoader.loadTextureFromMemory(
+                slot.inlineData.data(), slot.inlineWidth, slot.inlineHeight,
+                slot.format, desc.name + ":" + slot.name);
+            tex = loaded.texture;
+            if (!smp.isValid()) smp = loaded.sampler;
+        }
         if (!tex.isValid() && !slot.path.empty()) {
             // 相对文件名按 textureDir 解析
             std::string full = slot.path;

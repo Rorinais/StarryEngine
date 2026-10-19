@@ -22,8 +22,7 @@ namespace StarryEngine {
         std::vector<PassSubpassInfo> getSubpasses() const override;
 
         void onSceneData(const AnalysisSceneResult& sceneData,
-                         const IPass::CompileContext& ctx,
-                         const std::string& defaultTag) override;
+                         const IPass::CompileContext& ctx) override;
 
         const std::string& getName() const override { return m_name; }
 

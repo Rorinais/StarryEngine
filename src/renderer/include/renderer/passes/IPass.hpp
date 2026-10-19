@@ -13,7 +13,6 @@ namespace StarryEngine {
     class IPassExecutor;
 
     struct PassSubpassInfo {
-        std::string tag;
         int layer = -1;         ///< 所属渲染层（-1=未声明）
         int queue = 0;          ///< 同层段号
         uint32_t subpassIndex = 0;
@@ -45,7 +44,7 @@ namespace StarryEngine {
 
         virtual void onAfterCompile(const CompileContext& ) {}
 
-        virtual void onSceneData(const AnalysisSceneResult& ,const CompileContext& ,const std::string& ) {}
+        virtual void onSceneData(const AnalysisSceneResult& ,const CompileContext& ) {}
 
         virtual const std::string& getName() const = 0;
 

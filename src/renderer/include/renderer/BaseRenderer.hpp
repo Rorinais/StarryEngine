@@ -27,7 +27,6 @@ namespace StarryEngine {
         void setRenderPath(std::shared_ptr<IRenderPath> newRenderPath) override;
         std::shared_ptr<IRenderPath> getRenderPath() override { return m_renderPath; }
 
-        void addOverlayPass(const std::string& tag, std::shared_ptr<IPassExecutor> executor) override;
         void addOverlayPass(const OverlayPassDesc& desc) override;
         void removeOverlayPass(const std::string& tag) override;
         void clearOverlayPasses() override;

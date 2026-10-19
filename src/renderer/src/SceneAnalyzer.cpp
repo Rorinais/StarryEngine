@@ -169,16 +169,13 @@ namespace StarryEngine {
         if (!materialInst) return descSets;
         auto tmpl = materialInst->getTemplate();
         if (!tmpl) return descSets;
-        for (const auto& [setIdx, layout] : tmpl->getLayouts()) {
-            if (setIdx != 0) materialInst->getOrCreateSet(setIdx);
-        }
+        // 每个帧槽：set0 = 渲染器全局集；set>=1 = 材质私有集（按槽惰性创建，返回值即句柄）
         for (uint32_t s = 0; s < RHI::kMaxFramesInFlight; ++s) {
             descSets[s][0] = m_globalDescriptorSets[s];
             for (const auto& [setIdx, layout] : tmpl->getLayouts()) {
-                if (setIdx != 0) {
-                    auto h = materialInst->getSet(setIdx, s);
-                    if (h.isValid()) descSets[s][setIdx] = h;
-                }
+                if (setIdx == 0) continue;
+                auto h = materialInst->getOrCreateSet(setIdx, s);
+                if (h.isValid()) descSets[s][setIdx] = h;
             }
         }
         return descSets;
@@ -201,7 +198,6 @@ namespace StarryEngine {
         item->indexCount = submesh.indexCount;
         item->descriptorSets = std::move(descSets);
         item->pipelineIndex = pipelineIdx;
-        item->passTag = obj->materials[submesh.materialIndex]->getSubpassTag();
         item->renderLayer = obj->materials[submesh.materialIndex]->getRenderLayer();
         item->renderQueue = obj->materials[submesh.materialIndex]->getRenderQueue();
 
@@ -232,7 +228,10 @@ namespace StarryEngine {
         item->firstInstance = 0;
         item->descriptorSets = std::move(descSets);
         item->pipelineIndex = pipelineIdx;
-        item->passTag = effect->material->getSubpassTag();
+        if (effect && effect->material) {
+            item->renderLayer = effect->material->getRenderLayer();
+            item->renderQueue = effect->material->getRenderQueue();
+        }
         return item;
     }
 

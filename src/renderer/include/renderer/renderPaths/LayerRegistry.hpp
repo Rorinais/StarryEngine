@@ -12,6 +12,7 @@
 //
 // pass 挂在层上，渲染路径按层索引升序执行。
 #include <renderer/passes/GraphicsPass.hpp>
+#include <renderer/passes/PassWrapper.hpp>
 #include <functional>
 #include <array>
 #include <memory>
@@ -25,9 +26,7 @@ namespace StarryEngine {
     struct PassBuildContext {
         uint32_t width = 0;
         uint32_t height = 0;
-        std::function<void(int layer, std::shared_ptr<IPass>, const std::string&)> setSlot;
-        std::function<std::shared_ptr<GraphicsPass>(const std::string&)> getGroupPass;
-        std::unordered_set<std::string> slotTags;
+        std::function<void(int layer, std::shared_ptr<IPass>)> setSlot;
     };
 
     using PassFactory = std::function<void(PassBuildContext&)>;
@@ -40,6 +39,7 @@ namespace StarryEngine {
             Surface     = 2,   ///< 天空盒 / 网格地面
             Outline     = 3,   ///< 描边(stencil)
             Particles   = 4,   ///< 粒子/透明
+            UI          = 5,   ///< 叠加层(ImGui 等)
             FirstUser   = 8,   ///< 用户自定义起点（Unity 同样从 8 开始）
             LayerCount  = 32,
         };

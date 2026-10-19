@@ -11,7 +11,6 @@ namespace StarryEngine {
     };
 
     struct SubpassDesc {
-        std::string tag;           // 兼容：字符串标识（后续由 layer+queue 取代）
         int layer = -1;            ///< 所属渲染层（RenderLayers 索引，-1=未声明）
         int queue = 0;             ///< 同层内的段号/顺序
         
@@ -22,6 +21,9 @@ namespace StarryEngine {
         std::vector<SubpassAttachment> resolveAttachments;
         std::vector<std::string> preserveAttachments;
     };
+
+    /// (layer,queue) → 渲染图 subpass 名（标识用，不再有用户起名）
+    inline std::string subpassName(int layer, int queue) { return "L" + std::to_string(layer) + "_Q" + std::to_string(queue); }
 
     struct PassDesc {
         std::string name;

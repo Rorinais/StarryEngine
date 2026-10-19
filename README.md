@@ -85,6 +85,75 @@ STARRY_VERBOSE=1 ./DeferredRender_demo  # 看帧数据/动画键统计
   ```
 - **`.vscode/c_cpp_properties.json`**：已写好引擎模块 + vendored 头的 `includePath` 与关键宏（`GLFW_INCLUDE_NONE`、`FMT_HEADER_ONLY`、`SPDLOG_HEADER_ONLY` 等）。若构建目录不是 `build/`，把文件里 assimp 的两条 `build/_deps/...` 路径改成实际目录，然后运行 "C/C++: Reset IntelliSense Database"。
 
+## 架构文档
+
+| 文档 | 内容 |
+|---|---|
+| [docs/架构流程图-一页版.md](docs/架构流程图-一页版.md) | **一页图**：装配 / 每帧 / 材质 / 渲染路径 / 分派 / 管线 / 扩展点 |
+| [docs/架构流程图.md](docs/架构流程图.md) | 完整版：分层依赖、各子系统流程、与原始笔记的偏差校正表 |
+| [docs/架构细明.md](docs/架构细明.md) | 原始笔记（保留，未修正） |
+
+### 一页图（摘要）
+
+**装配**（`main` 只做连接）：
+
+```
+AppConfig::load → Application app(cfg)            // Window(GLFW) + VulkanRHI + 描述符池
+scene    = make_shared<Scene>()
+renderer = RasterRenderer(rhi, pool, scene)        // 自包含：全局布局/UBO/默认材质
+SceneBuilder(scene, res).addSkybox().addGrid().addCamera().build()
+renderPath = RenderPathRegistry::create("deferred", rhi, w, h)
+app.setRenderer(renderer, renderPath) → renderer->setRenderPath
+app.setScene(scene)                   → path->setScene
+app.initEventDispatcher()             → 相机控制绑定
+app.run()
+```
+
+**每帧**：
+
+```
+step → rhi->renderFrame(λ encoder, imageIndex)
+         └► renderer->renderFrame
+               ├ buildSceneResources()        材质纹理/实例缓冲
+               ├ updateGlobals(slot)          全局 UBO(view/proj/lightVP/time)
+               ├ renderPath->render(imageIndex) → RenderGraph::execute → executor->execute
+               └ submitFrameDataJobs(nextSlot)  帧间解耦
+```
+
+**渲染路径**（声明 → 定义 → 执行 → 建图）：
+
+```
+① 声明  StandardPipeline::declare(w,h)
+          ├ RenderLayers::setPass(层 → pass 工厂)
+          └ RenderTextures::define(name → TextureDesc)
+② 定义  RenderPathRegistry::create("deferred" | "raytrace" | 自定义)
+③ 执行  DeferredRenderPath::buildDefaultPipeline()
+          ├ 同步 RenderTextures → m_textureDescs
+          └ RenderLayers::build(ctx = { w, h, setSlot(layer, pass) })
+④ 建图  buildGraph：纹理节点 → GraphicsPass::configure（按 (layer,queue) 建 subpass）
+          → 呈现链/ImGui(UI,0) → compile + PipelineCache
+```
+
+**分派**（`layer = 一个 render pass`，`queue = 该 pass 内的 subpass`）：
+
+```
+材质 setRenderLayer(N) / setRenderQueue(Q) → DrawItem{renderLayer, renderQueue}
+   └► key = (layer<<32)|queue ─► m_keyToSubpass（构建期校验）
+                              └► GraphicsPass::onSceneData 按 key 分派 → executor->addDrawItem
+未声明层归入 (Opaque,0)；key 缺失 → 构建期 LOG_ERROR
+```
+
+**扩展点**：
+
+| 需求 | 接口 |
+|---|---|
+| 换某层的 pass | `RenderLayers::setPass(layer, factory, true)` |
+| 新增自定义层 | `setUserLayer(8, "X")` + `setPass(8, factory)` |
+| 新增/覆盖附件 | `RenderTextures::define(name, desc, true)` |
+| 新增自定义路径 | `RenderPathRegistry::registerPath(name, factory, true)` |
+| 材质层/队列 | `material->setRenderLayer(N); setRenderQueue(Q);` |
+| 自定义绘制 | 实现 `IPassExecutor` + 在 subpass 里 `setExecutor` |
+
 ## 依赖解析策略（vendored 伪包）
 
 每个依赖都是一个 CMake 包：vendored 依赖在 `external/<dep>/lib/cmake/<Pkg>/` 提供自己的
@@ -116,6 +185,7 @@ src/<模块>/src/                           实现
 external/<dep>/include/  +  lib/          vendored 依赖官方安装布局（头 include/，库/伪包 lib/cmake/）
 external/vulkan/                         vendored Vulkan SDK 子集
 external/header_libs/                    单头库合集（stb_image / vk_mem_alloc / nlohmann_json）
-demo/                                    demo 可执行程序
+apps/                                    demo 可执行程序（starry / minimal）
+docs/                                    架构文档（流程图 / 设计说明）
 assets/                                  资源（shaders/models/textures/...）
 ```

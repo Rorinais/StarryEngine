@@ -21,16 +21,14 @@ namespace StarryEngine::Content {
             RHI::DescriptorPoolHandle pool,
             RHI::DescriptorSetHandle globalSet,
             RHI::TextureHandle envCubemap,
-            RHI::SamplerHandle cubeSampler,
-            const std::string& subpassTag = "PostProcess_Skybox");
+            RHI::SamplerHandle cubeSampler);
 
         /** 网格地面：编辑器/调试用基础件，无贴图，深度写入。 */
         static std::shared_ptr<Assets::MaterialInstance> createGrid(
             std::shared_ptr<RHI::ResourceManager> resMgr,
             RHI::DescriptorSetLayoutHandle globalSetLayout,
             RHI::DescriptorPoolHandle pool,
-            RHI::DescriptorSetHandle globalSet,
-            const std::string& subpassTag = "PostProcess_Grid");
+            RHI::DescriptorSetHandle globalSet);
     };
 
 } // namespace StarryEngine::Content

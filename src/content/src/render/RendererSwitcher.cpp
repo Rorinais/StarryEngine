@@ -1,6 +1,6 @@
-#include <content/creation/SceneSwitcher.hpp>
-#include <content/pbr/PbrScene.hpp>
-#include <content/raytrace/RayTraceScene.hpp>
+#include <content/render/RendererSwitcher.hpp>
+#include <content/scenes/pbr/PbrScene.hpp>
+#include <content/scenes/raytrace/RayTraceScene.hpp>
 #include <app/RuntimeSettings.hpp>
 #include <app/Diagnostics.hpp>
 #include <application/Application.hpp>
@@ -12,7 +12,7 @@ static std::shared_ptr<PBRDemo> g_pbr;
 static std::shared_ptr<RayTracingDemo> g_rt;
 static StarryEngine::App::Diagnostics g_diag;
 
-bool SceneSwitcher::install(StarryEngine::Application& app, const StarryEngine::App::AppConfig& cfg) {
+bool RendererSwitcher::install(StarryEngine::Application& app, const StarryEngine::App::AppConfig& cfg) {
     auto& S = StarryEngine::App::runtimeSettings();
     // 命令行帧捕获 → 运行时开关（替代原环境变量）
     S.frameDump   = cfg.dumpFrames;

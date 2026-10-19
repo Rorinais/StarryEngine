@@ -1,6 +1,6 @@
 // PbrMaterials.cpp — PBRDemo 的职责分片（工作区）
-#include <content/pbr/PbrScene.hpp>
-#include <assets/material/MaterialDesc.hpp>
+#include <content/scenes/pbr/PbrScene.hpp>
+#include <assets/loader/MaterialDesc.hpp>
 #include <assets/loader/TextureLoader.hpp>
 
     std::shared_ptr<Assets::MaterialInstance> PBRDemo::makeParticleMaterial() {

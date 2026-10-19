@@ -1,7 +1,8 @@
-// PbrScene.cpp — PBRDemo 的职责分片（工作区）
-#include <content/pbr/PbrScene.hpp>
-#include <content/creation/RenderPathRegistry.hpp>
-#include <assets/material/MaterialDesc.hpp>
+#include <assets/loader/MaterialDesc.hpp>
+#include <content/scenes/pbr/PbrScene.hpp>
+#include <renderer/renderPaths/LayerRegistry.hpp>
+#include <content/renderpath/RenderPathRegistry.hpp>
+#include <assets/loader/MaterialDesc.hpp>
 #include <assets/loader/TextureLoader.hpp>
 
     void PBRDemo::createRenderer() {
@@ -15,7 +16,7 @@
         m_descriptorSetLayout = m_renderer->getGlobalSetLayout();
         m_descriptorSet = m_renderer->getGlobalDescriptorSet(0);
 
-        StarryEngine::Content::registerStandardPasses();   // 默认 pass 由内容层注册
+        StarryEngine::Content::StandardPipeline::declare(m_width, m_height);   // 标准管线：pass + 附件
         auto renderPath = std::make_shared<DeferredRenderPath>(m_rhi, m_width, m_height);
         renderPath->setScene(m_scene.get());
         m_renderPath = renderPath;
@@ -100,7 +101,8 @@ makeCharMaterialTable() {
         d.fragmentShaderPath = frag;
         for (auto k : keywords) d.variants.push_back(k);
         d.textures.assign(slots.begin(), slots.end());
-        d.subpassTag = "Forward_Opaque";
+        d.renderLayer = RenderLayers::Opaque;
+        d.renderQueue = 0;
         d.depthTest = true;
         d.depthWrite = true;
         std::vector<std::string> a;
@@ -178,7 +180,8 @@ std::shared_ptr<Assets::MaterialInstance> PBRDemo::makeModelMaterial(const Asset
         fallback.name = param.name;
         fallback.vertexShaderPath = vsPath;
         fallback.fragmentShaderPath = "assets/shaders/npr_toon/shader.frag";
-        fallback.subpassTag = "Forward_Opaque";
+        fallback.renderLayer = RenderLayers::Opaque;
+        fallback.renderQueue = 0;
         fallback.baseSetLayout = m_descriptorSetLayout;
         auto instance = Assets::MaterialFactory::create(m_rhi->getResourceManager(), m_descriptorPool, fallback);
         if (!instance) return nullptr;
@@ -228,7 +231,8 @@ std::shared_ptr<Assets::MaterialInstance> PBRDemo::makeOutlineMaterial() {
     if (white.texture.isValid())
         mat->setTexture("texSampler", white.texture, white.sampler);
 
-    mat->setSubpassTag("StencilTest");
+    mat->setRenderLayer(RenderLayers::Outline);
+    mat->setRenderQueue(1);
     mat->setDepthTest(true);
     mat->setDepthWrite(false);
 

@@ -99,19 +99,12 @@ namespace StarryEngine::Assets {
         std::shared_ptr<MaterialTemplate> getTemplate() const { return m_template; }
         const std::unordered_map<std::string, DependencyInfo>& getTextureDependencies() const {return m_textureDependencies;}
 
-        bool hasSubpassTag() const { return m_hasTag; }
-        const std::string& getSubpassTag() const { return m_subpassTag; }
-
-        /// 渲染层（RenderLayers 索引，-1 = 未指定，沿用 subpassTag 旧路由）
+        /// 渲染层（RenderLayers 索引，-1 = 未指定 → 归入默认层 (Opaque,0)）
         int  getRenderLayer() const { return m_renderLayer; }
         void setRenderLayer(int layer) { m_renderLayer = layer; }
         /// 渲染队列（同层内的绘制顺序，越小越先画；默认 0）
         int  getRenderQueue() const { return m_renderQueue; }
         void setRenderQueue(int queue) { m_renderQueue = queue; }
-        void setSubpassTag(const std::string& tag) {
-            m_subpassTag = tag;
-            m_hasTag = true;
-        }
 
         static std::shared_ptr<DefaultMaterialTemplate> createDefaultTemplate(
             std::shared_ptr<RHI::ResourceManager> resMgr, 
@@ -208,10 +201,8 @@ namespace StarryEngine::Assets {
         RHI::StencilOpState m_stencilBack;
         bool m_isDeferred = false;
 
-        std::string m_subpassTag;
         int m_renderLayer = -1;
         int m_renderQueue = 0;
-        bool m_hasTag = false;
 
         std::string m_debugName;
     };

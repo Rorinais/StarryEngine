@@ -21,7 +21,8 @@ namespace StarryEngine {
     struct ParallelRecordingContext;
 
     struct OverlayPassDesc {
-        std::string tag;
+        int layer = 5;                   ///< 叠加层所在的渲染层（默认 UI=5）
+        int queue = 0;                   ///< 层内段号
         std::shared_ptr<IPassExecutor> executor;
 
         std::vector<std::pair<std::string, RenderGraph::AttachmentParams>> colorOutputs;
@@ -29,9 +30,9 @@ namespace StarryEngine {
         std::vector<std::pair<std::string, RenderGraph::AttachmentParams>> inputAttachments;
     };
 
-    inline OverlayPassDesc makeUIOverlay(const std::string& tag,
-                                         std::shared_ptr<IPassExecutor> executor) {
-        OverlayPassDesc desc{tag, executor};
+    inline OverlayPassDesc makeUIOverlay(std::shared_ptr<IPassExecutor> executor,
+                                         int layer = 5, int queue = 0) {
+        OverlayPassDesc desc{layer, queue, executor};
         RenderGraph::AttachmentParams scParams;
         scParams.loadOp = RHI::AttachmentLoadOp::Clear;
         scParams.storeOp = RHI::AttachmentStoreOp::Store;
@@ -66,8 +67,13 @@ namespace StarryEngine {
         virtual void clearOverlayPasses() = 0;
         virtual const std::vector<OverlayPassDesc>& getOverlayPasses() const = 0;
 
-        void addOverlayPass(const std::string& tag,std::shared_ptr<IPassExecutor> executor) {
-            addOverlayPass({ tag, std::move(executor) });
+        void addOverlayPass(std::shared_ptr<IPassExecutor> executor,
+                            int layer = 5, int queue = 0) {
+            OverlayPassDesc desc;
+            desc.layer = layer;
+            desc.queue = queue;
+            desc.executor = std::move(executor);
+            addOverlayPass(desc);
         }
 
         RenderBlackboard& getBlackboard() { return m_blackboard; }

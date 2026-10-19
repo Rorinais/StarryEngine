@@ -12,7 +12,7 @@ namespace StarryEngine { class Application; }
 
 namespace StarryEngine::Content {
 
-class SceneSwitcher {
+class RendererSwitcher {
 public:
     /// 按 cfg.sceneId 选择渲染场景并挂到 app（含 update/post 回调、退出回调、诊断）。
     /// 可在设备丢失恢复时重复调用（用新 RHI 重建内容）。

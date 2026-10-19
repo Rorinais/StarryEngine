@@ -1,4 +1,5 @@
 #include <assets/material/MaterialInstance.hpp>
+#include <renderer/renderPaths/LayerRegistry.hpp>
 #include <logging/Logger.hpp>
 #include <cstring>
 
@@ -462,7 +463,8 @@ namespace StarryEngine::Assets {
 
         auto material = std::make_shared<MaterialInstance>(tmpl, pool, resMgr.get(), globalSet);
 
-        material->setSubpassTag("Forward_Opaque");
+        material->setRenderLayer(RenderLayers::Opaque);
+        material->setRenderQueue(0);
         return material;
     }
 
@@ -477,7 +479,8 @@ namespace StarryEngine::Assets {
         
         auto material = std::make_shared<MaterialInstance>(tmpl, pool, resMgr.get(), globalSet);
 
-        material->setSubpassTag("Forward_Opaque");
+        material->setRenderLayer(RenderLayers::Opaque);
+        material->setRenderQueue(0);
         return material;
     }
 

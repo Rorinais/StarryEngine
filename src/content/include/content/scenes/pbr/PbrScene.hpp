@@ -9,19 +9,19 @@
 #include <renderer/passes/ShadowPass.hpp>
 #include <renderer/passes/ComputePass.hpp>
 #include <renderer/RasterRenderer.hpp>
-#include <content/raytrace/RayTraceScene.hpp>
+#include <content/scenes/raytrace/RayTraceScene.hpp>
 #include <scene/ParticleEmitter.hpp>
 #include <renderer/renderPaths/DeferredRenderPath.hpp>
 #include <renderer/passExecutor/SceneDrawExecutor.hpp>
 #include <assets/geometry/GeometryGenerator.hpp>
-#include <content/materials/BuiltinMaterials.hpp>
+#include <content/render/materials/BuiltinMaterials.hpp>
 
 #include <application/Application.hpp>
 #include <core/JobSystem.hpp>
 #include <event/Events.hpp>
 #include <renderer/interface/vulkan/VulkanFrameContext.hpp>
 #include <renderer/utils/FrameCapture.hpp>
-#include <content/pbr/AsyncBoneProducer.hpp>
+#include <content/scenes/pbr/AsyncBoneProducer.hpp>
 
 #include <stb_image_write.h>
 #include <glm/gtc/packing.hpp>

@@ -1,5 +1,6 @@
 #include <renderer/renderPaths/BaseRenderPath.hpp>
 #include <renderer/renderPaths/LayerRegistry.hpp>
+#include <renderer/renderPaths/TextureRegistry.hpp>
 #include <renderer/passExecutor/PresentationExecutor.hpp>
 #include <renderer/passes/GraphicsPass.hpp>
 #include <renderer/passes/ComputePass.hpp>
@@ -36,7 +37,7 @@ namespace StarryEngine {
 
     void BaseRenderPath::removeOverlayPass(const std::string& tag) {
         auto it = std::find_if(m_overlayPasses.begin(), m_overlayPasses.end(),
-            [&tag](const OverlayPassDesc& desc) { return desc.tag == tag; });
+            [&tag](const OverlayPassDesc& desc) { return subpassName(desc.layer, desc.queue) == tag; });
         if (it != m_overlayPasses.end()) {
             m_overlayPasses.erase(it);
             LOG_INFO("Removed overlay pass: {}", tag);
@@ -55,44 +56,30 @@ namespace StarryEngine {
     }
 
     void BaseRenderPath::onResize(uint32_t width, uint32_t height) {
-        // <=1 是窗口最小化时的退化尺寸（X11 报 1x1），重建毫无意义且代价极高
         if (width <= 1 || height <= 1) return;
 
-        // 尺寸没变就不要重建。窗口管理器在拖拽过程中会反复派发同一个尺寸，
-        // 每次都走全量重建会让帧循环彻底跟不上（实测密集拖拽时 60 秒内重建 448 次）。
         if (m_renderGraph && width == m_width && height == m_height) return;
 
         uint32_t oldW = m_width, oldH = m_height;
         m_width = width; m_height = height;
         for (auto& [name, desc] : m_textureDescs) {
-            //只更新跟随窗口变化的纹理，阴影纹理大小不跟新
             if (desc.extent.width == oldW && desc.extent.height == oldH) {
                 desc.extent.width = width; desc.extent.height = height;
             }
         }
 
-        // 标记：这次重建由窗口尺寸变化引起。管线与窗口尺寸无关（动态渲染下缓存键里的
-        // renderPass 始终无效、格式也不变），因此不应在 resize 时丢弃管线缓存 ——
-        // 否则每次拖拽都要重新编译几十条管线，既卡顿又会让交换链被拖入卡死状态。
         const bool prevFlag = m_resizeRebuild;
         m_resizeRebuild = true;
 
-        // ── 首选：增量 resize ──
-        // 只重分配跟随视口尺寸的纹理/framebuffer，并更新 pass 渲染区域；pass / 管线 /
-        // render pass / 描述符布局 / 拓扑全部保留。任何不变量不满足则安全回落到下面的全量重建。
-        // 是否走增量路径由成员开关决定（默认启用）；增量路径内部任何不变量不满足时
-        // 会自动回落到下面的全量重建。需要走旧路径时调用 setIncrementalResize(false)。
         if (m_renderGraph && m_incrementalResize) {
             refreshSwapchainImport();                       // 交换链重建后其 image view 已变
             if (m_renderGraph->resizeViewport(width, height)) {
-                // 材质等绑定的是图的物理纹理句柄，句柄换了要重新绑定一次
                 if (m_cachedSceneData) {
-                    try { doRebuildResources(*m_cachedSceneData); }
+                    try { doRebuildResources(*m_cachedSceneData); } //子类实现
                     catch (const std::exception& e) { LOG_WARN("resize 后重新绑定资源失败: {}", e.what()); }
                 }
-                // ImGui 后端缓存了 SceneColor 的视图/描述符（m_sceneTextureID）。蓝图重分配后
-                // 旧视图已销毁，不重新注册就会引用悬空视图 → 设备丢失。
-                try { onAfterCompileImGui(); }
+
+                try { onAfterCompileImGui(); } //子类实现
                 catch (const std::exception& e) { LOG_WARN("resize 后刷新 ImGui 场景纹理失败: {}", e.what()); }
                 m_resizeRebuild = prevFlag;
                 return;
@@ -131,7 +118,7 @@ namespace StarryEngine {
     }
 
     void BaseRenderPath::rebuildResources(const AnalysisSceneResult& sceneData) {
-        doRebuildResources(sceneData);
+        doRebuildResources(sceneData);//子类实现
         m_cachedSceneData = std::make_shared<AnalysisSceneResult>(sceneData);
         if (!m_resourceStatsPrinted) {
             m_rhi->printResourceStatistics();
@@ -142,19 +129,12 @@ namespace StarryEngine {
     // ──── Build Graph ──────────────────────────────────────────────
 
     bool BaseRenderPath::buildGraph() {
-        m_tagToSubpass.clear();
-        m_tagToPassNode.clear();
+        m_keyToSubpass.clear();
+        m_keyToPassNode.clear();
 
         if (m_renderGraph) {
             m_rhi->waitIdle();
-            onBeforeGraphDestroy();
-            // 管线缓存的失效策略必须区分两条渲染路径：
-            //  · 动态渲染（VK_KHR_dynamic_rendering）：管线只绑定附件格式，与渲染图对象无关，
-            //    缓存键里的 renderPass 恒为无效句柄 —— resize 引起的重建可以安全复用管线，
-            //    于是重建变成一次查表（否则每次拖拽都要重编译几十条管线 → 卡顿并拖死交换链）。
-            //  · 旧版 render pass 路径：管线绑定在 render pass 对象上，重建渲染图会生成新对象
-            //    （句柄可能被回收复用），复用缓存会拿到指向已销毁对象的管线，因此必须照旧失效。
-            // 着色器热重载等真正换管线的场景由 RasterRenderer::reloadShader 里的失效逻辑负责。
+            onBeforeGraphDestroy();//子类实现
             const bool dynamicRendering = m_renderGraph && m_renderGraph->usesDynamicRendering();
             if (!m_resizeRebuild || !dynamicRendering) {
                 Assets::PipelineCache::invalidateAll(m_resMgr.get());
@@ -163,7 +143,7 @@ namespace StarryEngine {
         }
         m_renderGraph = std::make_shared<RenderGraph::RenderGraph>(m_rhi);
         m_renderGraph->setSwapchainImageCount(m_rhi->getSwapChainImageCount());
-        m_renderGraph->setViewportSize(m_width, m_height);   // 供 resizeViewport 判断哪些纹理跟随视口
+        m_renderGraph->setViewportSize(m_width, m_height);   
 
         auto texIdMap = buildTextureIdMap();
 
@@ -200,7 +180,10 @@ namespace StarryEngine {
 
     std::unordered_map<std::string, RenderGraph::TextureId> BaseRenderPath::buildTextureIdMap() {
         std::unordered_map<std::string, RenderGraph::TextureId> texIdMap;
-        for (const auto& [name, desc] : m_textureDescs) {
+        // 合并外部注册表（RenderTextures）与路径自身描述：本地优先
+        std::unordered_map<std::string, RHI::TextureDesc> allDescs = RenderTextures::instance().all();
+        for (auto& [n, d] : m_textureDescs) allDescs[n] = d;
+        for (const auto& [name, desc] : allDescs) {
             try {
                 if (name == m_swapchainTextureName) {
                     std::vector<void*> views;
@@ -229,7 +212,7 @@ namespace StarryEngine {
             bg.finalLayout = RHI::ImageLayout::ShaderReadOnly;
             bg.clearColor = m_presentClearColor;
             SubpassDesc sp;
-            sp.tag = "AutoClear";
+            sp.layer = RenderLayers::Background; sp.queue = 99;
             sp.colorAttachments.push_back({ "SceneColor", bg });
             clearPass->addSubpass(sp);
             m_passes.insert(m_passes.begin(), clearPass);
@@ -244,31 +227,41 @@ namespace StarryEngine {
     void BaseRenderPath::buildPresentationPasses(std::unordered_map<std::string, RenderGraph::TextureId>& texIdMap) {
         if (!m_overlayPasses.empty()) {
             for (const auto& overlay : m_overlayPasses) {
-                auto* passNode = m_renderGraph->addGraphicsPassNode(overlay.tag + "Pass");
+                auto* passNode = m_renderGraph->addGraphicsPassNode(subpassName(overlay.layer, overlay.queue) + "Pass");
                 passNode->setRenderArea(m_width, m_height);
-                auto& subpassBuilder = passNode->addSubpass(overlay.tag);
-                subpassBuilder.setTag(overlay.tag);
+                auto& subpassBuilder = passNode->addSubpass(subpassName(overlay.layer, overlay.queue));
+                subpassBuilder.setLayer(overlay.layer);
+                subpassBuilder.setQueue(overlay.queue);
 
                 // 颜色输出（每个 overlay 自己声明）
                 for (auto& [texName, params] : overlay.colorOutputs) {
-                    std::string key = passNode->addColorOutput(texIdMap.at(texName), params);
+                    auto texIt = texIdMap.find(texName);
+                    if (texIt == texIdMap.end()) { LOG_ERROR("[path] overlay 颜色输出纹理 '{}' 未声明", texName); continue; }
+                    std::string key = passNode->addColorOutput(texIt->second, params);
                     subpassBuilder.addColorAttachmentRef(key);
                 }
                 // 深度输出（可选）
                 if (overlay.depthOutput) {
-                    std::string key = passNode->addDepthOutput(
-                        texIdMap.at(overlay.depthOutput->first), overlay.depthOutput->second);
-                    subpassBuilder.addDepthStencilAttachmentRef(key);
+                    auto dIt = texIdMap.find(overlay.depthOutput->first);
+                    if (dIt == texIdMap.end()) {
+                        LOG_ERROR("[path] overlay 深度输出纹理 '{}' 未声明", overlay.depthOutput->first);
+                    } else {
+                        std::string depthKey = passNode->addDepthOutput(dIt->second, overlay.depthOutput->second);
+                        subpassBuilder.addDepthStencilAttachmentRef(depthKey);
+                    }
                 }
                 // 输入附件
                 for (auto& [texName, params] : overlay.inputAttachments) {
-                    std::string key = passNode->addInput(texIdMap.at(texName), params);
+                    auto inIt = texIdMap.find(texName);
+                    if (inIt == texIdMap.end()) { LOG_ERROR("[path] overlay 输入纹理 '{}' 未声明", texName); continue; }
+                    std::string key = passNode->addInput(inIt->second, params);
                     subpassBuilder.addInputAttachmentRef(key);
                 }
 
                 subpassBuilder.setExecutor(overlay.executor);
-                m_tagToSubpass[overlay.tag] = SubpassTarget{ {}, 0, overlay.executor };
-                m_tagToPassNode[overlay.tag] = passNode;
+                const long long key = (static_cast<long long>(overlay.layer) << 32) | (overlay.queue & 0xFFFFFFFFLL);
+                m_keyToSubpass[key] = SubpassTarget{ {}, 0, overlay.executor };
+                m_keyToPassNode[key] = passNode;
             }
         } else {
             buildPresentationPass(texIdMap);
@@ -280,7 +273,7 @@ namespace StarryEngine {
         auto* passNode = m_renderGraph->addGraphicsPassNode("PresentationPass");
         passNode->setRenderArea(m_width, m_height);
         auto& subpassBuilder = passNode->addSubpass("PresentBlit");
-        subpassBuilder.setTag(tag);
+
 
         RenderGraph::AttachmentParams scParams;
         scParams.loadOp = RHI::AttachmentLoadOp::Clear;
@@ -288,7 +281,9 @@ namespace StarryEngine {
         scParams.initialLayout = RHI::ImageLayout::Undefined;
         scParams.finalLayout = RHI::ImageLayout::PresentSrc;
         scParams.clearColor = m_presentClearColor;
-        auto swapchainTexId = texIdMap.at(m_swapchainTextureName);
+        auto scIt = texIdMap.find(m_swapchainTextureName);
+        if (scIt == texIdMap.end()) { LOG_ERROR("[path] 交换链纹理 '{}' 未声明", m_swapchainTextureName); return; }
+        auto swapchainTexId = scIt->second;
         std::string scKey = passNode->addColorOutput(swapchainTexId, scParams);
         subpassBuilder.addColorAttachmentRef(scKey);
 
@@ -297,15 +292,17 @@ namespace StarryEngine {
         inputParams.storeOp = RHI::AttachmentStoreOp::DontCare;
         inputParams.initialLayout = RHI::ImageLayout::ShaderReadOnly;
         inputParams.finalLayout = RHI::ImageLayout::ShaderReadOnly;
-        auto sceneColorTexId = texIdMap.at(m_presentInputTexture);
+        auto pIt = texIdMap.find(m_presentInputTexture);
+        if (pIt == texIdMap.end()) { LOG_ERROR("[path] 呈现输入纹理 '{}' 未声明", m_presentInputTexture); return; }
+        auto sceneColorTexId = pIt->second;
         std::string inputKey = passNode->addInput(sceneColorTexId, inputParams);
         subpassBuilder.addInputAttachmentRef(inputKey);
 
         auto rec = std::make_shared<PresentationExecutor>();
         rec->setInputTextureName(m_presentInputTexture);
         subpassBuilder.setExecutor(rec);
-        m_tagToSubpass[tag] = SubpassTarget{ {}, 0, rec };
-        m_tagToPassNode[tag] = passNode;
+        m_keyToSubpass[presentKey()] = SubpassTarget{ {}, 0, rec };
+        m_keyToPassNode[presentKey()] = passNode;
         LOG_INFO("Built PresentationPass (no overlay)");
     }
 
@@ -314,18 +311,18 @@ namespace StarryEngine {
     bool BaseRenderPath::compileAndFinalize(std::unordered_map<std::string, RenderGraph::TextureId>& texIdMap) {
         if (!m_renderGraph->compile()) { LOG_ERROR("RenderGraph compile failed"); return false; }
 
-        for (auto& [tag, target] : m_tagToSubpass) {
-            auto passIt = m_tagToPassNode.find(tag);
-            if (passIt != m_tagToPassNode.end())
+        for (auto& [key, target] : m_keyToSubpass) {
+            auto passIt = m_keyToPassNode.find(key);
+            if (passIt != m_keyToPassNode.end())
                 target.renderPass = passIt->second->getRenderPassHandle();
         }
 
-        if (m_tagToSubpass.count("Presentation")) {
+        if (m_keyToSubpass.count(presentKey())) {
             preparePresentationExecutor();
         }
 
         onAfterCompile();   // 子类扩展（如粒子管线）
-        onAfterCompileImGui();  // ImGui 初始化（需要 renderPass handle）
+        onAfterCompileImGui();  //子类实现
 
         m_textureIdMap = std::move(texIdMap);
         return true;
@@ -333,8 +330,8 @@ namespace StarryEngine {
 
     // 呈现 executor 自建管线：把编译好的 render pass + 全局描述符数据交给 PresentationExecutor::onPrepare
     void BaseRenderPath::preparePresentationExecutor() {
-        auto it = m_tagToSubpass.find("Presentation");
-        if (it == m_tagToSubpass.end() || !it->second.executor) return;
+        auto it = m_keyToSubpass.find(presentKey());
+        if (it == m_keyToSubpass.end() || !it->second.executor) return;
 
         auto* rec = dynamic_cast<PresentationExecutor*>(it->second.executor.get());
         if (!rec) return;
@@ -376,10 +373,19 @@ namespace StarryEngine {
         }
     }
 
-    void BaseRenderPath::setDefaultSlot(int layer, std::shared_ptr<IPass> pass, const std::string& tag) {
+    void BaseRenderPath::setDefaultSlot(int layer, std::shared_ptr<IPass> pass) {
+        for (auto& s : m_slots) {
+            if (s.layer != layer) continue;
+            if (s.pass && s.pass != pass) {
+                LOG_WARN("[path] 层 {} 已有其它 pass（'{}'），将被新 pass 替换",
+                         layer, s.pass->getName());
+            }
+            s.pass = std::move(pass);
+            s.enabled = true;
+            return;
+        }
         PassSlot slot;
         slot.layer = layer;
-        slot.tag = tag;
         slot.pass = std::move(pass);
         slot.enabled = true;
         auto it = std::find_if(m_slots.begin(), m_slots.end(),
@@ -387,29 +393,29 @@ namespace StarryEngine {
         m_slots.insert(it, std::move(slot));
     }
 
-    void BaseRenderPath::setDefaultSlot(const std::string& layerName, std::shared_ptr<IPass> pass, const std::string& tag) {
+    void BaseRenderPath::setDefaultSlot(const std::string& layerName, std::shared_ptr<IPass> pass) {
         int layer = RenderLayers::instance().find(layerName);
         if (layer < 0) {
             LOG_WARN("[layer] 未定义的渲染层 '{}'，退回 Opaque", layerName);
             layer = RenderLayers::Opaque;
         }
-        setDefaultSlot(layer, std::move(pass), tag);
+        setDefaultSlot(layer, std::move(pass));
     }
 
-    void BaseRenderPath::setDefaultSlot(RenderPassEvent ev, std::shared_ptr<IPass> pass, const std::string& tag) {
-        setDefaultSlot(legacyLayerOf(ev), std::move(pass), tag);
+    void BaseRenderPath::setDefaultSlot(RenderPassEvent ev, std::shared_ptr<IPass> pass) {
+        setDefaultSlot(legacyLayerOf(ev), std::move(pass));
     }
 
-    void BaseRenderPath::insertPass(int layer, std::shared_ptr<IPass> pass, const std::string& tag) {
-        setDefaultSlot(layer, std::move(pass), tag);
+    void BaseRenderPath::insertPass(int layer, std::shared_ptr<IPass> pass) {
+        setDefaultSlot(layer, std::move(pass));
     }
 
-    void BaseRenderPath::insertPass(const std::string& layerName, std::shared_ptr<IPass> pass, const std::string& tag) {
-        setDefaultSlot(layerName, std::move(pass), tag);
+    void BaseRenderPath::insertPass(const std::string& layerName, std::shared_ptr<IPass> pass) {
+        setDefaultSlot(layerName, std::move(pass));
     }
 
-    void BaseRenderPath::insertPass(RenderPassEvent ev, std::shared_ptr<IPass> pass, const std::string& tag) {
-        setDefaultSlot(ev, std::move(pass), tag);
+    void BaseRenderPath::insertPass(RenderPassEvent ev, std::shared_ptr<IPass> pass) {
+        setDefaultSlot(ev, std::move(pass));
     }
 
     void BaseRenderPath::overrideSlot(const std::string& layerName, std::shared_ptr<IPass> pass) {

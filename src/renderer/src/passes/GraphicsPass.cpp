@@ -15,16 +15,41 @@ namespace StarryEngine {
 
         // 附件 key 去重（同一纹理只注册一次到 PassNode）
         std::unordered_map<RenderGraph::TextureId, std::string> colorKeys, depthKeys,inputKeys, resolveKeys, preserveKeys;
+        // (layer,queue) 是 subpass 的唯一身份：本 pass 内重复即配置错误
+        std::unordered_set<long long> usedKeys;
+
+        // 附件纹理解析：未声明直接报错返回（不再抛 out_of_range）
+        auto resolveTex = [&texIdMap, this](const std::string& texName, RenderGraph::TextureId& out) {
+            auto it = texIdMap.find(texName);
+            if (it == texIdMap.end()) {
+                LOG_ERROR("[pass '{}'] 附件纹理 '{}' 未声明（先 RenderTextures::define / StandardPipeline::declare）",
+                          m_name, texName);
+                return false;
+            }
+            out = it->second;
+            return true;
+        };
 
         for (size_t idx = 0; idx < m_subpasses.size(); ++idx) {
             const auto& sp = m_subpasses[idx];
-            auto& sb = m_passNode->addSubpass(sp.tag);
-            sb.setTag(sp.tag);
+            if (sp.layer < 0) {
+                LOG_ERROR("[pass '{}'] subpass(index={}) 未声明 layer，已跳过（无法路由）", m_name, idx);
+                continue;
+            }
+            const long long subKey = (static_cast<long long>(sp.layer) << 32) | (sp.queue & 0xFFFFFFFFLL);
+            if (!usedKeys.insert(subKey).second) {
+                LOG_ERROR("[pass '{}'] (layer={}, queue={}) 重复，已跳过第二个 subpass", m_name, sp.layer, sp.queue);
+                continue;
+            }
+            auto& sb = m_passNode->addSubpass(subpassName(sp.layer, sp.queue));
+            sb.setLayer(sp.layer);
+            sb.setQueue(sp.queue);
 
             // 颜色
             std::vector<std::string> ck;
             for (auto& att : sp.colorAttachments) {
-                auto tid = texIdMap.at(att.textureName);
+                RenderGraph::TextureId tid{};
+                if (!resolveTex(att.textureName, tid)) return false;
                 auto& key = colorKeys[tid];
                 if (key.empty()) key = m_passNode->addColorOutput(tid, att.params);
                 ck.push_back(key);
@@ -32,7 +57,8 @@ namespace StarryEngine {
             // 深度
             std::string dk;
             if (sp.depthAttachment) {
-                auto tid = texIdMap.at(sp.depthAttachment->textureName);
+                RenderGraph::TextureId tid{};
+                if (!resolveTex(sp.depthAttachment->textureName, tid)) return false;
                 auto& key = depthKeys[tid];
                 if (key.empty()) key = m_passNode->addDepthOutput(tid, sp.depthAttachment->params);
                 dk = key;
@@ -40,20 +66,23 @@ namespace StarryEngine {
             // 输入
             std::vector<std::string> ik;
             for (auto& att : sp.inputAttachments) {
-                auto tid = texIdMap.at(att.textureName);
+                RenderGraph::TextureId tid{};
+                if (!resolveTex(att.textureName, tid)) return false;
                 auto& key = inputKeys[tid];
                 if (key.empty()) key = m_passNode->addInput(tid, att.params);
                 ik.push_back(key);
             }
             // 解析
             for (auto& att : sp.resolveAttachments) {
-                auto tid = texIdMap.at(att.textureName);
+                RenderGraph::TextureId tid{};
+                if (!resolveTex(att.textureName, tid)) return false;
                 auto& key = resolveKeys[tid];
                 if (key.empty()) key = m_passNode->addResolve(tid, att.params);
             }
             // 保留
             for (auto& texName : sp.preserveAttachments) {
-                auto tid = texIdMap.at(texName);
+                RenderGraph::TextureId tid{};
+                if (!resolveTex(texName, tid)) return false;
                 auto& key = preserveKeys[tid];
                 if (key.empty()) key = m_passNode->addPreserve(tid);
             }
@@ -73,29 +102,35 @@ namespace StarryEngine {
         std::vector<PassSubpassInfo> result;
         uint32_t idx = 0;
         for (auto& sp : m_subpasses) {
-            result.push_back({sp.tag, sp.layer, sp.queue, idx, sp.executor, m_passNode});
+            result.push_back({sp.layer, sp.queue, idx, sp.executor, m_passNode});
             ++idx;
         }
         return result;
     }
 
     void GraphicsPass::onSceneData(const AnalysisSceneResult& sceneData,
-                                   const IPass::CompileContext& ctx,
-                                   const std::string& defaultTag) {
+                                   const IPass::CompileContext& ctx) {
         if (!m_passNode) return;
         RHI::RenderPassHandle rp = m_passNode->getRenderPassHandle();
-        // 动态渲染：rp 无效但仍需建管线（用附件格式）；传统模式 rp 必须有效
         const bool dynamicMode = !rp.isValid();
         if (!dynamicMode && !rp.isValid()) return;
 
         for (auto& sp : m_subpasses) {
             if (sp.executor) sp.executor->clearDrawItems();
         }
+        // 分派：优先按 (layer, queue) 键匹配本 pass 的 subpass；未声明层的 item 退回 tag/默认段
         for (auto& item : sceneData.drawItems) {
-            std::string tag = item->passTag.empty() ? defaultTag : item->passTag;
-            for (auto& sp : m_subpasses) {
-                if (sp.executor && sp.tag == tag) { sp.executor->addDrawItem(item); break; }
+            bool routed = false;
+            if (item->renderLayer >= 0) {
+                const long long key = (static_cast<long long>(item->renderLayer) << 32) | (item->renderQueue & 0xFFFFFFFFLL);
+                for (auto& sp : m_subpasses) {
+                    const long long spKey = (static_cast<long long>(sp.layer) << 32) | (sp.queue & 0xFFFFFFFFLL);
+                    if (sp.executor && sp.layer >= 0 && spKey == key) {
+                        sp.executor->addDrawItem(item); routed = true; break;
+                    }
+                }
             }
+            (void)routed;   // 未声明层已在路径层统一归入 (Opaque,0)，不会走到这里
         }
 
         for (uint32_t i = 0; i < m_subpasses.size(); ++i) {

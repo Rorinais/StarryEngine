@@ -7,9 +7,9 @@
 #include <renderer/passes/ShadowPass.hpp>
 #include <renderer/passes/ComputePass.hpp>
 #include <renderer/RasterRenderer.hpp>
-#include <content/raytrace/RayTraceScene.hpp>
-#include <content/creation/SceneSwitcher.hpp>
-#include <content/pbr/PbrScene.hpp>
+#include <content/scenes/raytrace/RayTraceScene.hpp>
+#include <content/render/RendererSwitcher.hpp>
+#include <content/scenes/pbr/PbrScene.hpp>
 #include <scene/ParticleEmitter.hpp>
 #include <renderer/renderPaths/DeferredRenderPath.hpp>
 #include <renderer/passExecutor/SceneDrawExecutor.hpp>
@@ -20,7 +20,7 @@
 #include <event/Events.hpp>
 #include <renderer/interface/vulkan/VulkanFrameContext.hpp>
 #include <renderer/utils/FrameCapture.hpp>
-#include <content/pbr/AsyncBoneProducer.hpp>
+#include <content/scenes/pbr/AsyncBoneProducer.hpp>
 
 #include <stb_image_write.h>
 #include <glm/gtc/packing.hpp>
@@ -70,9 +70,9 @@ int main(int argc, char** argv) {
     static std::shared_ptr<PBRDemo> pbrDemo;
 
 
-    // 场景/渲染器切换交给内容层（SceneSwitcher）；设备丢失恢复时用同一入口重建
-    StarryEngine::Content::SceneSwitcher::install(app, appConfig);
-    app.setWorldFactory([&app, &appConfig]() { StarryEngine::Content::SceneSwitcher::install(app, appConfig); });
+    // 场景/渲染器切换交给内容层（RendererSwitcher）；设备丢失恢复时用同一入口重建
+    StarryEngine::Content::RendererSwitcher::install(app, appConfig);
+    app.setWorldFactory([&app, &appConfig]() { StarryEngine::Content::RendererSwitcher::install(app, appConfig); });
     app.initEventDispatcher();
 
     GetEventDispatcher().subscribe(EventType::KeyPressed, [&app](IEvent& e) {

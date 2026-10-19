@@ -1,6 +1,7 @@
 // PbrWorld.cpp — PBRDemo 的职责分片（工作区）
-#include <content/pbr/PbrScene.hpp>
-#include <assets/material/MaterialDesc.hpp>
+#include <content/scenes/pbr/PbrScene.hpp>
+#include <renderer/renderPaths/LayerRegistry.hpp>
+#include <assets/loader/MaterialDesc.hpp>
 #include <assets/loader/TextureLoader.hpp>
 
     void PBRDemo::createScene() {
@@ -54,7 +55,8 @@
         {
             for (auto& mat : m_skinnedMaterials) {
                 if (!mat) continue;
-                mat->setSubpassTag("StencilWrite");
+                mat->setRenderLayer(RenderLayers::Outline);
+                mat->setRenderQueue(0);
                 RHI::StencilOpState write;
                 write.failOp = RHI::StencilOp::Keep;
                 write.passOp = RHI::StencilOp::Replace; 

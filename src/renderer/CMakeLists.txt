@@ -20,6 +20,7 @@ add_library(renderer STATIC
     src/passExecutor/ParticleRenderExecutor.cpp
     src/passExecutor/PresentationExecutor.cpp
     src/renderPaths/LayerRegistry.cpp
+    src/renderPaths/TextureRegistry.cpp
     src/passes/ComputePass.cpp
     src/passes/GraphicsPass.cpp
     src/passes/ParticlePass.cpp

@@ -13,7 +13,6 @@ namespace StarryEngine {
         std::shared_ptr<Scene::Scene> scene)
         : m_rhi(rhi), m_resMgr(rhi->getResourceManager()),
         m_globalPool(globalPool), m_scene(scene) {
-        // 开关来自成员（原环境变量已移除）：m_parallelRecord / m_jobWorkers / m_frameInFlight
         if (m_parallelRecord) {
             const bool threaded = m_parallelThreaded;
             JobSystem::Config jcfg;
@@ -99,14 +98,14 @@ namespace StarryEngine {
         if (m_renderPath) {
             m_renderPath->onResize(width, height);
         }
-        onAfterPathResize();
+        onAfterPathResize();//子类实现
     }
 
     void BaseRenderer::renderFrame(RHI::RHICommandEncoder* encoder, uint32_t frameIndex, const Clock& clock) {
 
         if (m_frameInFlight && m_jobSystem) {
             m_jobSystem->waitAll();
-            buildSceneResources();
+            buildSceneResources();//子类实现
             ensureParallelRecording();
 
             uint32_t slot = m_rhi->getCurrentFrameIndex();
@@ -114,7 +113,7 @@ namespace StarryEngine {
             uint32_t nextSlot = (slot + 1) % RHI::kMaxFramesInFlight;
 
             if (!m_fidHasKicked) {
-                submitFrameDataJobs(slot);
+                submitFrameDataJobs(slot);//子类实现
                 updateGlobals(clock, slot);
                 m_jobSystem->waitAll();
             } else {
@@ -126,20 +125,20 @@ namespace StarryEngine {
                 m_renderPath->render(encoder, frameIndex);
             }
 
-            submitFrameDataJobs(nextSlot);
+            submitFrameDataJobs(nextSlot);//子类实现
             if (m_boneProvider) m_boneProvider(nextSlot);
             m_fidHasKicked = true;
             return;
         }
 
-        buildSceneResources();
+        buildSceneResources();//子类实现
         ensureParallelRecording();
 
         uint32_t slot = m_rhi->getCurrentFrameIndex();
         if (slot >= RHI::kMaxFramesInFlight) slot = 0;
 
         if (m_jobSystem) {
-            submitFrameDataJobs(slot);
+            submitFrameDataJobs(slot);//子类实现
             updateGlobals(clock, slot);
             m_jobSystem->waitAll();
         } else {
@@ -195,7 +194,7 @@ namespace StarryEngine {
         }
     }
 
-    void BaseRenderer::doRebuildRenderGraph() {
+    void BaseRenderer::doRebuildRenderGraph() {//子类重写
         rebuildRenderGraph();
     }
 
@@ -218,12 +217,6 @@ namespace StarryEngine {
         }
 
         m_needRebuildGraph = true;
-    }
-
-    void BaseRenderer::addOverlayPass(const std::string& tag, std::shared_ptr<IPassExecutor> executor) {
-        if (m_renderPath) {
-            m_renderPath->addOverlayPass(tag, std::move(executor));
-        }
     }
 
     void BaseRenderer::addOverlayPass(const OverlayPassDesc& desc) {

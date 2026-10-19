@@ -1,6 +1,7 @@
 // PbrEnvironment.cpp — PBRDemo 的职责分片（工作区）
-#include <content/pbr/PbrScene.hpp>
-#include <assets/material/MaterialDesc.hpp>
+#include <content/scenes/pbr/PbrScene.hpp>
+#include <renderer/renderPaths/LayerRegistry.hpp>
+#include <assets/loader/MaterialDesc.hpp>
 #include <assets/loader/TextureLoader.hpp>
 
     void PBRDemo::initIBL() {
@@ -55,7 +56,8 @@
         tmpl->loadShaders("assets/shaders/pbr/shpere_pbr.vert", "assets/shaders/pbr/shpere_pbr (2).frag");
 
         auto material = std::make_shared<Assets::MaterialInstance>(tmpl, m_descriptorPool, m_rhi->getResourceManager().get(), m_descriptorSet);
-        material->setSubpassTag("Forward_Opaque");
+        material->setRenderLayer(RenderLayers::Opaque);
+        material->setRenderQueue(0);
         material->enableDepthTest(true);
         material->enableDepthWrite(true);
 

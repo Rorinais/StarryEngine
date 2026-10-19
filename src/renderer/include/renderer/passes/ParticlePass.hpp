@@ -10,16 +10,10 @@ namespace StarryEngine {
 
     class ParticlePass : public IPass {
     public:
-        ParticlePass(std::string name, std::string passTag = "Particles")
-            : m_name(std::move(name)), m_passTag(std::move(passTag)) {}
+        explicit ParticlePass(std::string name) : m_name(std::move(name)) {}
 
         const std::string& getName() const override { return m_name; }
-        const std::string& getPassTag() const { return m_passTag; }
 
-        static std::string resolveEmitterTag(const Scene::ParticleEmitter& em) {
-            if (!em.passTag.empty()) return em.passTag;
-            return "Particles";
-        }
 
         bool configure(RenderGraph::RenderGraph& graph,
                        std::unordered_map<std::string, RenderGraph::TextureId>& texIdMap,
@@ -50,7 +44,6 @@ namespace StarryEngine {
         std::shared_ptr<Assets::MaterialInstance> ensureDefaultMaterial(const CompileContext& ctx);
 
         std::string m_name;
-        std::string m_passTag;
         RenderGraph::GraphNode* m_renderPassNode = nullptr;
         std::vector<EmitterState> m_emitterStates;
 

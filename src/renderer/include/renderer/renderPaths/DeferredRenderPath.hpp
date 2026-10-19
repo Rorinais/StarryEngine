@@ -24,8 +24,7 @@ namespace StarryEngine {
         };
 
         DeferredRenderPath(std::shared_ptr<RHI::IRHI> rhi, uint32_t width, uint32_t height);
-        DeferredRenderPath(std::shared_ptr<RHI::IRHI> rhi, uint32_t width, uint32_t height,
-                           const Config& cfg);
+        DeferredRenderPath(std::shared_ptr<RHI::IRHI> rhi, uint32_t width, uint32_t height,const Config& cfg);
         ~DeferredRenderPath() override = default;
 
         void setConfig(const RenderPathConfig&) override;
@@ -40,7 +39,6 @@ namespace StarryEngine {
         void onAfterCompile() override;
         void onAfterCompileImGui() override;
         void onBeforeGraphDestroy() override;
-
 
     private:
         void updateMaterialTextures(const AnalysisSceneResult& sceneData);

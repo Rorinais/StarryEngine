@@ -22,7 +22,7 @@ struct WindowConfig {
 
 struct AppConfig {
     WindowConfig window;
-    std::string  sceneId = "pbr";   ///< "pbr" | "raytrace"（由 SceneSwitcher 使用）
+    std::string  sceneId = "pbr";   ///< "pbr" | "raytrace"（由 RendererSwitcher 使用）
     bool         valid   = true;
 
     // 帧捕获（诊断用；替代原 STARRY_FRAME_DUMP 系列环境变量）

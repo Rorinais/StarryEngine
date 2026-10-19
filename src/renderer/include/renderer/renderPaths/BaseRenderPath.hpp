@@ -1,4 +1,5 @@
 #pragma once
+#include <renderer/renderPaths/LayerRegistry.hpp>
 #include <renderer/renderPaths/IRenderPath.hpp>
 #include <renderer/graph/RenderGraph.hpp>
 #include <scene/Scene.hpp>
@@ -32,13 +33,15 @@ namespace StarryEngine {
 
     struct PassSlot {
         int         layer = 1;          ///< 渲染层索引（见 RenderLayers；0 背景 … 8+ 用户自定义）
-        std::string tag;
         std::shared_ptr<IPass> pass;
         bool enabled = true;
     };
 
     class BaseRenderPath : public IRenderPath {
     public:
+        /// 呈现层/叠加层 subpass 的键（UI 层=5, queue 0）——替代旧 "Presentation"/"ImGui" 字符串
+        static long long presentKey() { return (static_cast<long long>(RenderLayers::UI) << 32); }
+
         BaseRenderPath(std::shared_ptr<RHI::IRHI> rhi, uint32_t width, uint32_t height);
         ~BaseRenderPath() override = default;
 
@@ -53,9 +56,9 @@ namespace StarryEngine {
             std::vector<RHI::DescriptorSetHandle> globalDescSets);
 
         // ── 槽位操作（demo 注入/覆盖/启停）──
-        void insertPass(int layer, std::shared_ptr<IPass> pass, const std::string& tag = "");
-        void insertPass(const std::string& layerName, std::shared_ptr<IPass> pass, const std::string& tag = "");
-        void insertPass(RenderPassEvent ev, std::shared_ptr<IPass> pass, const std::string& tag = "");
+        void insertPass(int layer, std::shared_ptr<IPass> pass);
+        void insertPass(const std::string& layerName, std::shared_ptr<IPass> pass);
+        void insertPass(RenderPassEvent ev, std::shared_ptr<IPass> pass);
         void overrideSlot(const std::string& layerName, std::shared_ptr<IPass> pass);
         void overrideSlot(RenderPassEvent ev, std::shared_ptr<IPass> pass);
         void setSlotEnabled(const std::string& layerName, bool enabled);
@@ -82,11 +85,11 @@ namespace StarryEngine {
     protected:
         // 子类建默认管线时注册默认槽
         /// 挂到任意渲染层（Unity Layer 风格）：层索引固定，路径按层索引升序执行
-        void setDefaultSlot(int layer, std::shared_ptr<IPass> pass, const std::string& tag = "");
+        void setDefaultSlot(int layer, std::shared_ptr<IPass> pass);
         /// 按层名挂载（系统层名或用户自定义层名）
-        void setDefaultSlot(const std::string& layerName, std::shared_ptr<IPass> pass, const std::string& tag = "");
+        void setDefaultSlot(const std::string& layerName, std::shared_ptr<IPass> pass);
         /// 兼容旧枚举槽位（映射到系统层）
-        void setDefaultSlot(RenderPassEvent ev, std::shared_ptr<IPass> pass, const std::string& tag = "");
+        void setDefaultSlot(RenderPassEvent ev, std::shared_ptr<IPass> pass);
         // 将启用的槽位按序组装为 m_passes（buildConfigPasses 调用）
         void assemblePassList();
 
@@ -138,9 +141,8 @@ namespace StarryEngine {
         RHI::Color m_presentClearColor = { 0.1f, 0.15f, 0.3f, 1.0f };
 
         // 子通道 → PassNode 映射（子类构建 config pass 时填充）
-        std::unordered_map<std::string, SubpassTarget> m_tagToSubpass;
-        std::unordered_map<long long, std::string> m_layerQueueToTag;   ///< (layer<<32|queue) → subpass tag
-        std::unordered_map<std::string, RenderGraph::GraphNode*> m_tagToPassNode;
+        std::unordered_map<long long, SubpassTarget> m_keyToSubpass;   ///< (layer<<32|queue) → subpass
+        std::unordered_map<long long, RenderGraph::GraphNode*> m_keyToPassNode;
 
         RHI::DescriptorSetLayoutHandle  m_globalSetLayout;
         std::vector<RHI::DescriptorSetHandle> m_globalDescSets;

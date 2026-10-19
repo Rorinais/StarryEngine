@@ -1,5 +1,6 @@
 #include <renderer/renderPaths/DeferredRenderPath.hpp>
 #include <renderer/renderPaths/LayerRegistry.hpp>
+#include <renderer/renderPaths/TextureRegistry.hpp>
 #include <renderer/passes/GraphicsPass.hpp>
 #include <renderer/passes/MeshPass.hpp>
 #include <renderer/passes/ShadowPass.hpp>
@@ -23,40 +24,24 @@ namespace StarryEngine {
     DeferredRenderPath::DeferredRenderPath(std::shared_ptr<RHI::IRHI> rhi, uint32_t width, uint32_t height,
         const Config& cfg)
         : BaseRenderPath(rhi, width, height), m_cfg(cfg) {
-        buildDefaultPipeline();
+        buildDefaultPipeline();   // 构造即挂 pass / 声明纹理（建图在 initialize）
     }
 
     // ── 内建标准 PBR 管线：填充默认槽位（demo 无需手拼 PassList）──
     void DeferredRenderPath::buildDefaultPipeline() {
-        auto colorDesc = PassWrapper::createColorTextureDesc({m_width, m_height, 1}, RHI::Format::RGBA16_Float);
-        auto depthDesc = PassWrapper::createDepthTextureDesc({m_width, m_height, 1}, RHI::Format::D24_UNorm_S8_UInt);
-        auto swapDesc   = PassWrapper::createColorTextureDesc({m_width, m_height, 1}, RHI::Format::BGRA8_sRGB);
-        auto shadowMapDesc = PassWrapper::createDepthTextureDesc({ShadowPass::kShadowMapSize, ShadowPass::kShadowMapSize, 1}, RHI::Format::D24_UNorm_S8_UInt);
-        addTextureDesc("SceneColor",  colorDesc);
-        addTextureDesc("Depth",       depthDesc);
-        addTextureDesc("Swapchain",   swapDesc);
-        addTextureDesc("ShadowMap",   shadowMapDesc);
+        auto& textures = RenderTextures::instance();
+        for (auto& [name, desc] : textures.all()) {
+            if (!m_textureDescs.count(name)) addTextureDesc(name, desc);
+        }
 
-        // 标准 PBR 管线的各段由 PassRegistry 映射表构建（默认表：shadow/forward/skybox/grid/stencil/particles）
-        std::unordered_map<std::string, std::shared_ptr<GraphicsPass>> groups;
-        auto slotTags = std::make_shared<std::unordered_set<std::string>>();
 
         PassBuildContext ctx;
         ctx.width = m_width;
         ctx.height = m_height;
-        ctx.setSlot = [this, slotTags](int layer, std::shared_ptr<IPass> pass, const std::string& tag) {
-            if (tag.empty() || slotTags->count(tag)) return;
-            slotTags->insert(tag);
-            setDefaultSlot(layer, std::move(pass), tag);
+        // 约定：一层 = 一个 render pass（同层重复挂载为替换）；层内多段用 subpass 的 queue 区分
+        ctx.setSlot = [this](int layer, std::shared_ptr<IPass> pass) {
+            setDefaultSlot(layer, std::move(pass));
         };
-        ctx.getGroupPass = [&groups](const std::string& name) -> std::shared_ptr<GraphicsPass> {
-            auto it = groups.find(name);
-            if (it != groups.end()) return it->second;
-            auto pass = std::make_shared<GraphicsPass>(name);
-            groups[name] = pass;
-            return pass;
-        };
-
         // 层 = pass 注册表：按层索引升序执行各层工厂
         auto& layers = RenderLayers::instance();
         if (m_cfg.layers.empty()) {
@@ -96,39 +81,21 @@ namespace StarryEngine {
             }
 
             for (auto& info : pass->getSubpasses()) {
-                m_tagToSubpass[info.tag] = SubpassTarget{{}, info.subpassIndex, info.executor};
-                m_tagToPassNode[info.tag] = info.passNode;
-
-                // (layer,queue) 索引：同一 (layer,queue) 只允许一个 subpass
                 if (info.layer >= 0) {
                     const long long key = (static_cast<long long>(info.layer) << 32) | (info.queue & 0xFFFFFFFFLL);
-                    auto it = m_layerQueueToTag.find(key);
-                    if (it != m_layerQueueToTag.end() && it->second != info.tag) {
-                        LOG_ERROR("[path] (layer={}, queue={}) 已被 subpass '{}' 占用，'{}' 请换 queue",
-                                  info.layer, info.queue, it->second, info.tag);
-                    } else {
-                        m_layerQueueToTag[key] = info.tag;
+                    auto it = m_keyToSubpass.find(key);
+                    if (it != m_keyToSubpass.end()) {
+                        LOG_ERROR("[path] (layer={}, queue={}) 已被另一个 subpass 占用，请换 queue",info.layer, info.queue);
+                        continue;
                     }
+                    m_keyToSubpass[key] = SubpassTarget{{}, info.subpassIndex, info.executor};
+                    m_keyToPassNode[key] = info.passNode;
+                } else {
+                    LOG_DEBUG("[path] subpass (layer={}, queue={}) 未声明 layer，跳过路由注册", info.layer, info.queue);
                 }
             }
         }
 
-        {
-            std::unordered_set<std::string> particleTags;
-            for (auto& pass : m_passes)
-                if (auto* pp = dynamic_cast<ParticlePass*>(pass.get())) particleTags.insert(pp->getPassTag());
-
-            auto* scene = m_blackboard.get<Scene::Scene*>() ? *m_blackboard.get<Scene::Scene*>() : nullptr;
-            if (scene && !particleTags.empty()) {
-                for (auto& em : scene->getParticleEmitters()) {
-                    std::string tag = ParticlePass::resolveEmitterTag(*em);
-                    if (!particleTags.count(tag)) {
-                        LOG_WARN("[Particle] emitter '{}' 路由 tag '{}' 没匹配任何粒子 pass（现有 {} 个），将被丢弃",
-                                 em->name, tag, particleTags.size());
-                    }
-                }
-            }
-        }
 
         if (m_imguiManager) m_imguiManager->setRenderGraph(nullptr);
     }
@@ -145,34 +112,20 @@ namespace StarryEngine {
         ctx.globalDescSets = m_globalDescSets;
         ctx.globalSetLayout = m_globalSetLayout;
 
-        std::string defaultTag;
-        if (!m_passes.empty()) {
-            auto subs = m_passes.front()->getSubpasses();
-            if (!subs.empty()) defaultTag = subs.front().tag;
-        }
-
-        std::unordered_set<std::string> allTags;
-        for (auto& pass : m_passes)
-            for (auto& info : pass->getSubpasses())
-                allTags.insert(info.tag);
         for (auto& item : sceneData.drawItems) {
-            // 优先 (renderLayer, renderQueue) 路由；未声明层则沿用旧 tag
-            if (item->renderLayer >= 0) {
-                const long long key = (static_cast<long long>(item->renderLayer) << 32) | (item->renderQueue & 0xFFFFFFFFLL);
-                auto it = m_layerQueueToTag.find(key);
-                if (it != m_layerQueueToTag.end()) {
-                    item->passTag = it->second;
-                } else {
-                    LOG_ERROR("材质 (layer={}, queue={}) 没有对应 subpass，退回 tag '{}'",
-                              item->renderLayer, item->renderQueue, item->passTag);
-                }
+            // 未声明层的材质默认放到 (Opaque, 0) —— 不再依赖字符串默认 tag
+            if (item->renderLayer < 0) {
+                item->renderLayer = RenderLayers::Opaque;
+                item->renderQueue = 0;
             }
-            std::string tag = item->passTag.empty() ? defaultTag : item->passTag;
-            if (!allTags.count(tag)) LOG_ERROR("No subpass for tag '{}'", tag);
+            const long long key = (static_cast<long long>(item->renderLayer) << 32) | (item->renderQueue & 0xFFFFFFFFLL);
+            if (!m_keyToSubpass.count(key)) {
+                LOG_ERROR("材质 (layer={}, queue={}) 没有对应 subpass", item->renderLayer, item->renderQueue);
+            }
         }
 
         for (auto& pass : m_passes)
-            pass->onSceneData(sceneData, ctx, defaultTag);
+            pass->onSceneData(sceneData, ctx);
     }
 
     void DeferredRenderPath::onAfterCompile() {
@@ -198,8 +151,8 @@ namespace StarryEngine {
         if (!m_imguiManager) return;
         m_imguiManager->setRenderGraph(m_renderGraph);
         if (!m_imguiManager->isVulkanReady()) {
-            auto it = m_tagToSubpass.find("ImGui");
-            if (it != m_tagToSubpass.end()) {
+            auto it = m_keyToSubpass.find(presentKey());
+            if (it != m_keyToSubpass.end()) {
                 // 动态渲染时 renderPass 为空（RenderNode）；ImGuiManager 会改走 dynamic rendering
                 if (!m_imguiManager->initializeVulkanBackend(m_rhi.get(), m_resMgr.get(),
                     it->second.renderPass, m_imguiImageCount)) {

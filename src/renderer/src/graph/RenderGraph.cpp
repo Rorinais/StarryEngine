@@ -258,6 +258,11 @@ namespace StarryEngine::RenderGraph {
         if (mapIt != m_textureMap.end()) {
             mapIt->second.views = imageViews;      // 交换链视图变了，附件视图必须跟着换
         }
+        // 附件视图表是编译期缓存：导入纹理视图变化后必须重建，否则后续帧继续用旧视图
+        // （debug 验证层会报 VUID-VkRenderingAttachmentInfo-imageView-parameter）
+        if (m_compiled && !m_sortedPasses.empty()) {
+            collectDynamicViews();
+        }
         return true;
     }
 
@@ -515,12 +520,13 @@ namespace StarryEngine::RenderGraph {
                     auto it = m_textureMap.find(texId);
                     if (it == m_textureMap.end()) continue;
                     const auto& texInfo = it->second;
-                    if (texInfo.handle.isValid() && !texInfo.views.empty()) {
+                    // 交换链等导入纹理有多张视图：必须按本帧图像索引取，不能用 views[0] 兜底
+                    // （否则第 2/3 张交换链图像会拿到第 0 张的视图 → debug 验证层报
+                    //  VUID-VkRenderingAttachmentInfo-imageView-parameter，release 静默错帧）
+                    if (texInfo.views.size() == 1) {
                         imageViews.push_back(texInfo.views[0]);
-                    }
-                    else if (!texInfo.handle.isValid()) {
-                        if (texInfo.views.size() == 1) imageViews.push_back(texInfo.views[0]);
-                        else if (imgIdx < texInfo.views.size()) imageViews.push_back(texInfo.views[imgIdx]);
+                    } else if (imgIdx < texInfo.views.size()) {
+                        imageViews.push_back(texInfo.views[imgIdx]);
                     }
                 }
                 pv.colorViews.push_back(std::move(imageViews));

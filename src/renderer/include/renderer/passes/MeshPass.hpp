@@ -1,17 +1,18 @@
 #pragma once
 #include <renderer/passes/GraphicsPass.hpp>
+#include <renderer/renderPaths/LayerRegistry.hpp>
 #include <renderer/passExecutor/SceneDrawExecutor.hpp>
 
 namespace StarryEngine {
 
     class MeshPass : public GraphicsPass {
     public:
-        MeshPass(std::string name, std::string tag,
-                 const RHI::Color& clearColor = { 0.0f, 0.0f, 0.0f, 1.0f })
+        MeshPass(std::string name,const RHI::Color& clearColor = { 0.0f, 0.0f, 0.0f, 1.0f })
             : GraphicsPass(std::move(name)) {
 
             SubpassDesc sp;
-            sp.tag = std::move(tag);
+            sp.layer = RenderLayers::Opaque;   
+            sp.queue = 0;
             sp.executor = std::make_shared<SceneDrawExecutor>();
 
             RenderGraph::AttachmentParams color;
