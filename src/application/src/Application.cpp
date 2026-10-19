@@ -342,9 +342,7 @@ namespace StarryEngine {
         {
             int fbW, fbH;
             glfwGetFramebufferSize(m_window->getHandle(), &fbW, &fbH);
-            // 注意：窗口最小化时 X11 会把帧缓冲报成 1x1（不是 0）。必须把这种退化尺寸
-            // 当作"不可呈现"，否则会把渲染图与交换链反复重建到 1x1 再重建回来 ——
-            // 实测这是资源风暴、设备丢失与风暴后卡住的真正来源。
+
             if (fbW > 1 && fbH > 1 && (static_cast<uint32_t>(fbW) != m_width || static_cast<uint32_t>(fbH) != m_height)) {
                 m_width = static_cast<uint32_t>(fbW);
                 m_height = static_cast<uint32_t>(fbH);
@@ -353,8 +351,6 @@ namespace StarryEngine {
             }
         }
 
-        // 初始帧缓冲尺寸与交换链不一致时（如 HiDPI）同步重建，避免依赖实时节奏的 200ms 防抖
-        // （否则 Python 步进等高频驱动会一直卡在防抖里，交换链永不重建）
         if (m_framebufferResized && m_width > 0 && m_height > 0) {
             if (m_rhi->recreateSwapChain(m_width, m_height)) {
                 if (m_renderer) m_renderer->onResize(m_width, m_height);
@@ -379,10 +375,8 @@ namespace StarryEngine {
         }
         LOG_WARN("[Application] 设备丢失：开始软重启 RHI + Renderer");
 
-        // 1) 先释放上层世界：Renderer/Scene/材质持有 RHI 句柄，必须先于 RHI 释放
         m_monitor.reset();
         if (m_imguiManager) {
-            // 先释放 ImGui 的 Vulkan 后端（它持有 RHI 句柄），再销毁管理器本身
             try { m_imguiManager->shutdownVulkanBackend(); } catch (...) {}
             if (m_resMgr) { try { m_imguiManager->shutdown(m_resMgr.get()); } catch (...) {} }
             m_imguiManager.reset();
@@ -390,28 +384,24 @@ namespace StarryEngine {
         m_renderer.reset();
         m_scene.reset();
 
-        // 2) 销毁 RHI（设备一旦丢失即不可修复，只能整体重建）
-        //    VulkanRHI 的析构负责 clear()；接口层没有 clear，直接释放即可。
+
         m_rhi.reset();
         m_resMgr.reset();
 
-        // 3) 重建 RHI 与描述符池（参数与构造函数严格一致）
         m_rhi = VulkanRHIFactory::createDefault(RHI::API::Vulkan, m_window, m_width, m_height, m_flightFrame, m_transparent);
         if (!m_rhi) { LOG_ERROR("[Application] 软重启失败：RHI 重建失败"); return false; }
         m_resMgr = m_rhi->getResourceManager();
         createDescriptorPool();
 
-        // 4) 让上层用新 RHI 重建 Renderer/Scene/材质/回调（必须在 initialize 之前：
-        //    ImGui 后端初始化依赖 renderer 的渲染路径）
+
         try { m_worldFactory(); }
         catch (const std::exception& e) { LOG_ERROR("[Application] 软重启失败：重建世界异常: {}", e.what()); return false; }
 
-        // 5) 重建 Monitor / ImGui / 尺寸对齐（沿用 initialize 的完整流程）
         try { initialize(); }
         catch (const std::exception& e) { LOG_ERROR("[Application] 软重启失败：initialize 异常: {}", e.what()); return false; }
 
         m_deviceLost = false;
-        m_framebufferResized = true;        // 重新对齐尺寸
+        m_framebufferResized = true;        
         m_lastPresentedFrameTime = glfwGetTime();
         m_skippedFrames = 0;
         m_pausedSince = 0.0;
@@ -423,7 +413,7 @@ namespace StarryEngine {
         const auto now = std::chrono::steady_clock::now();
         if (m_lastSwapchainRecreate.time_since_epoch().count() != 0 &&
             (now - m_lastSwapchainRecreate) < m_resizeThrottle) {
-            return false;                      // 节流窗口内：不重建，但调用方照常继续渲染
+            return false;                   
         }
         if (m_width == 0 || m_height == 0) return false;
 
@@ -453,12 +443,9 @@ namespace StarryEngine {
                 return;
             }
 
-            // ── 遮挡/不可呈现时暂停出帧（工业级 resize 目标项 3）──
-            // 判据：上一帧是否拿到交换链图像（VulkanRHI 的有限超时负责探测，超时自愈仍作为安全网）。
-            // 连续多帧拿不到，说明窗口当前根本无法呈现（被完全遮挡等），此时继续做完整帧
-            // 只是白烧 CPU/GPU；改为只泵事件 + 限速探测，拿回图像后立即自动恢复。
-            constexpr uint32_t kSkipFramesBeforePause = 5;        // 100ms × 5 ≈ 0.5 秒
-            constexpr double   kPresentProbeInterval  = 0.1;      // 暂停期间每 100ms 放行一帧探测
+
+            constexpr uint32_t kSkipFramesBeforePause = 5;        
+            constexpr double   kPresentProbeInterval  = 0.1;      
             if (m_rhi->lastFrameSkipped()) {
                 if (m_skippedFrames < 1000000u) ++m_skippedFrames;
             } else {
@@ -468,16 +455,19 @@ namespace StarryEngine {
                 const double now = glfwGetTime();
                 if (m_pausedSince == 0.0) m_pausedSince = now;
 
-                // 卡死升级：暂停超过 1.5 秒仍取不到图，说明不是"暂时不可呈现"（遮挡/最小化），
-                // 而是交换链已卡死 —— 继续暂停会永久停在"画面不动"（实测压测后末帧率 2~21 FPS）。
-                // 此时清掉节流、强制重建一次交换链，让它重新开始出帧。
-                constexpr double kStuckEscalateSeconds = 1.5;
-                if (now - m_pausedSince > kStuckEscalateSeconds) {
-                    m_pausedSince = 0.0;
+
+                constexpr double kStuckEscalateBase  = 1.5;
+                constexpr double kStuckEscalateMax   = 30.0;
+                const double backoff = std::min(kStuckEscalateBase * std::pow(2.0, static_cast<double>(m_stuckEscalations)),
+                                                kStuckEscalateMax);
+                if (now - m_pausedSince > backoff) {
+                    m_pausedSince = now;               // 从本次尝试重新计时
+                    ++m_stuckEscalations;
                     m_lastSwapchainRecreate = {};
                     if (tryRecreateSwapChain()) {
                         m_skippedFrames = 0;
-                        LOG_WARN("[Application] 交换链疑似卡死，已强制重建交换链并恢复出帧");
+                        LOG_WARN("[Application] 交换链疑似卡死，重建一次（第 {} 次，下次至少 {:.0f}s 后）",
+                                 m_stuckEscalations, std::min(backoff * 2.0, kStuckEscalateMax));
                     }
                 }
 
@@ -489,6 +479,7 @@ namespace StarryEngine {
             }
             else {
                 m_pausedSince = 0.0;               // 恢复正常出帧
+                m_stuckEscalations = 0;            // 重置卡死退避
             }
         }
 
@@ -525,25 +516,17 @@ namespace StarryEngine {
                 }
             }
 
-            // 窗口尺寸变化处理
-            // 关键：节流只限制"重建交换链"的频率，绝不再整帧跳过 ——
-            // 原来的 `m_framebufferResized = true; return;` 会让拖拽期间帧率塌到 ~5 FPS。
-            // 未到重建间隔时照常渲染（合成器会拉伸上一帧，最多持续一个节流周期），
-            // 到点后重建一次，尺寸稳定后自然收敛。
+
             if (m_framebufferResized) {
-                if (m_width <= 1 || m_height <= 1) return;   // 退化尺寸：不做任何重建，等恢复可见
-                // 实测设备丢失的唯一触发源是"高频尺寸变化导致的交换链重建风暴"
-                // （只做最大化/最小化/恢复的对照组 2/2 完全正常）。因此拖拽中不急着重建：
-                //  · 尺寸稳定（距最后一次尺寸事件 ≥120ms）→ 立即补一次最终尺寸的重建；
-                //  · 仍在拖拽中 → 按更宽的节流间隔（默认 600ms）兜底，避免重建风暴。
+                if (m_width <= 1 || m_height <= 1) return;  
+
                 constexpr double kResizeSettleSeconds = 0.12;
                 if ((glfwGetTime() - m_lastResizeEventTime) >= kResizeSettleSeconds) {
-                    m_lastSwapchainRecreate = {};          // 清除节流，强制重建一次
+                    m_lastSwapchainRecreate = {};        
+                    m_stuckEscalations = 0;               
                 }
                 if (!tryRecreateSwapChain()) {
-                    // 节流窗口内不重建，但也不要对着"已过期"的交换链满速呈现：
-                    // 实测拖拽期帧率可达 1000+ FPS（既白烧 CPU/GPU，也更容易把驱动拖到设备丢失）。
-                    // 限速到约 120Hz 后继续渲染；画面由合成器拉伸，最多持续一个节流周期。
+
                     constexpr double kPendingResizeFrameInterval = 1.0 / 120.0;
                     const double pendingNow = glfwGetTime();
                     if (pendingNow - m_lastPendingResizeFrame < kPendingResizeFrameInterval) {
@@ -575,10 +558,7 @@ namespace StarryEngine {
                 m_imguiManager->endFrame();
             }
 
-            // 设备丢失等致命错误目前以异常形式跨 RHI 接口抛出（VulkanFrameContext::beginFrame），
-            // 无人捕获会直接 std::terminate → abort（实测随机窗口操作下 6/6 复现）。
-            // 工业做法是返回错误状态并走受控恢复；在没有设备重建能力之前，这里至少保证
-            // 不崩溃：记录原因后优雅退出，而不是把进程炸掉。
+
             bool success = false;
             try {
                 success = m_rhi->renderFrame([this](RHI::RHICommandEncoder* encoder, uint32_t imageIndex) {
@@ -588,8 +568,7 @@ namespace StarryEngine {
             catch (const std::exception& e) {
                 LOG_ERROR("[Application] 渲染帧抛出异常(疑似设备丢失): {}", e.what());
                 m_deviceLost = true;
-                // 工业级做法：设备丢失不可修复，只能销毁重建。先尝试进程内软重启；
-                // 未注册 world factory 或重建失败时，退回受控退出（不崩溃）。
+
                 if (!recoverFromDeviceLoss()) {
                     LOG_ERROR("[Application] 软重启不可用或失败，受控退出");
                     shutdown();
@@ -599,10 +578,7 @@ namespace StarryEngine {
 
             if (!m_renderer) return;
 
-            // ── 出帧看门狗（与具体失败模式无关）──
-            // 之前的"卡死升级"挂在"跳过帧计数"上，实测在 10 FPS 状态下从未触发（判据与
-            // 实际失败模式错开：超时/out-of-date/呈现失败会走不同分支）。改为直接盯"是否出过帧"：
-            // 只要超过 1.5 秒没有任何一帧真正成功出图，就清掉节流强制重建交换链。
+
             if (success && !m_rhi->lastFrameSkipped()) {
                 m_lastPresentedFrameTime = glfwGetTime();
             }
@@ -623,14 +599,11 @@ namespace StarryEngine {
             }
 
             if (!success) {
-                // 交换链 out-of-date / 呈现失败：同样走节流重建，避免连续失败时每帧重建
+   
                 tryRecreateSwapChain();
                 return;
             }
 
-            // 渲染+呈现成功：通知后处理挂钩（帧读回等；本帧 GPU 命令已提交，读回走同队列序）
-            // 注意：lastFrameSkipped() 为真时本帧只是"没画"（最小化/遮挡），
-            // 读回会重复捕获上一帧内容，故跳过。
             if (m_postRenderCallback && !m_rhi->lastFrameSkipped()) {
                 m_postRenderCallback();
             }
@@ -662,7 +635,7 @@ namespace StarryEngine {
 
         // 窗口尺寸变化
         GetEventDispatcher().subscribe(EventType::WindowResize, [this](IEvent& e) {
-            // 直接从 GLFW 获取实际帧缓冲尺寸
+
             int newWidth, newHeight;
             glfwGetFramebufferSize(m_window->getHandle(), &newWidth, &newHeight);
             if (newWidth <= 1 || newHeight <= 1) {   // 退化尺寸(最小化为 1x1)一律不视为有效尺寸变化
@@ -725,16 +698,14 @@ namespace StarryEngine {
 
             if (ev.getAction() == GLFW_PRESS) {
                 m_controlActive = true;
-                // 先启用 + 重置鼠标基准，再移到中心禁用 ——
-                // 这样 glfwSetCursorPos 触发的第一帧会以中心为基准，视角不跳变
+
                 if (m_cameraController) {
                     m_cameraController->setEnabled(true);
                     m_cameraController->resetMouse();
-                    // 开启原始鼠标运动：位移直接取设备增量，不受光标屏幕边界与系统加速影响。
-                    // 否则光标被推到屏幕边缘后位置增量归零 —— 表现为"按住右键转不动画面"。
+
                     if (glfwRawMouseMotionSupported())
                         glfwSetInputMode(m_window->getHandle(), GLFW_RAW_MOUSE_MOTION, GLFW_TRUE);
-                    // 仅在确实有相机控制器时才 warp 指针（Wayland 不支持，无控制器时空转也免了）
+
                     glfwSetCursorPos(m_window->getHandle(), m_width / 2, m_height / 2);
                     glfwSetInputMode(m_window->getHandle(), GLFW_CURSOR, GLFW_CURSOR_DISABLED);
                 }
@@ -748,8 +719,7 @@ namespace StarryEngine {
             }
             });
 
-        // 摄像机控制相关订阅改由 tryBindCameraControl() 惰性绑定：
-        // 场景或相机晚于 initEventDispatcher 出现时，也能在首帧自动接上。
+
         tryBindCameraControl();
     }
 

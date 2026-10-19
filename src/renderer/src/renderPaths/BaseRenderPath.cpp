@@ -103,14 +103,26 @@ namespace StarryEngine {
         for (uint32_t i = 0; i < m_rhi->getSwapChainImageCount(); ++i) {
             views.push_back(m_rhi->getSwapChainImageView(i));
         }
-        // 图像数量也必须同步：交换链重建后可能是 2 张也可能是 3 张，
-        // 若图里仍记着旧数量，收集附件视图时会漏视图 → 零颜色附件 → 设备丢失。
+
         m_renderGraph->setSwapchainImageCount(m_rhi->getSwapChainImageCount());
         m_renderGraph->updateImportedTexture(m_swapchainTextureName, views, it->second);
     }
 
     void BaseRenderPath::render(RHI::RHICommandEncoder* encoder, uint32_t frameIndex) {
         if (!m_renderGraph) return;
+
+        if (!m_swapchainTextureName.empty()) {
+            const uint32_t cnt = m_rhi->getSwapChainImageCount();
+            void* v0 = (cnt > 0) ? m_rhi->getSwapChainImageView(0) : nullptr;
+            if (cnt != m_lastSwapchainCount || v0 != m_lastSwapchainView0) {
+                LOG_INFO("[path] 交换链视图变化（count {}→{}，view0 变化），刷新附件视图表",
+                         m_lastSwapchainCount, cnt);
+                m_lastSwapchainCount = cnt;
+                m_lastSwapchainView0 = v0;
+                refreshSwapchainImport();
+            }
+        }
+
         auto context = buildRenderContext();
         context.frameSlot = m_rhi->getCurrentFrameIndex();
         if (context.frameSlot >= RHI::kMaxFramesInFlight) context.frameSlot = 0;

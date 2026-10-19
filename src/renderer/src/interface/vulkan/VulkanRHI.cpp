@@ -18,13 +18,9 @@
 
 namespace StarryEngine {
 
-    // 交换链图像获取超时（100ms）：正常帧节奏为 16ms 以内，100ms 足够覆盖；
-    // 超时说明窗口当前无法出图（被遮挡/最小化/resize 中），此时跳过本帧而不是无限等待，
-    // 以免主线程停止响应 X 事件、被窗口管理器判定为"无响应"。
+
     static constexpr uint64_t kAcquireTimeoutNs = 100000000ull;
 
-    // 连续 acquire 超时多少次后判定"交换链卡死"并重建：100ms × 5 = 0.5 秒内自愈。
-    // 若重建后仍超时（例如窗口确实被遮挡），阈值倍增退避到上限，避免无谓重建。
     static constexpr uint32_t kTimeoutRecreateThresholdStart = 5;
     static constexpr uint32_t kTimeoutRecreateThresholdMax = 100;
 
@@ -114,7 +110,7 @@ namespace StarryEngine {
         };
 
         config.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-        // 透明窗口请求 alpha 合成；最终是否生效由 VulkanSwapChain 依据表面能力验证（不支持则回退 OPAQUE）
+
         config.compositeAlpha = rhiConfig.requestTransparentSwapchain
             ? VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR
             : VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
@@ -326,11 +322,6 @@ namespace StarryEngine {
         mWidth = swapChainConfig.width;
         mHeight = swapChainConfig.height;
 
-        // acquire 使用有限超时：窗口被遮挡/最小化时合成器不会归还交换链图像，
-        // 若用 UINT64_MAX，主线程会永久阻塞在 vkAcquireNextImageKHR —— 不再处理 X 事件，
-        // 窗口管理器数秒后判定"应用程序无响应"并弹出强制退出提示。
-        // 超时后本帧被跳过（beginFrame 已保证跳过时不留下未触发的栅栏），主线程继续跑事件循环，
-        // 窗口重新可见后自动恢复出图。
         mAcquireFunc = [this](VkSemaphore semaphore, VkFence fence, uint32_t& index) {
             return mSwapChain->acquireNextImage(semaphore, fence, kAcquireTimeoutNs, index);
         };
@@ -400,8 +391,7 @@ namespace StarryEngine {
     void VulkanRHI::destroyAsyncReadbackSlots() {
         if (!mDevice) return;
         for (size_t i = 0; i < m_readbackCmd.size(); ++i) {
-            // 只等 submit 过的 fence（clear() 已 waitIdle，必已信号，此处兜底防 pending 下销毁）；
-            // 从未 submit 的 fence 绝不能 wait（永不等信号 → 死锁），直接销毁。
+
             if (m_readbackFence[i]) {
                 if (m_readbackSubmitted[i]) {
                     vkWaitForFences(mDevice->getLogicalDevice(), 1, &m_readbackFence[i], VK_TRUE, UINT64_MAX);
@@ -441,22 +431,12 @@ namespace StarryEngine {
     }
 
     void VulkanRHI::releaseAsyncReadback(uint32_t slot) {
-        // 槽位复用在 beginAsyncReadback 的 vkResetFences；此方法表达"数据已取走、槽位可归还
-        // 轮换"的契约（FrameCapture 保证 waitAsyncReadback 成功后才调用）。
         (void)slot;
     }
 
     void VulkanRHI::waitFramesInFlight() {
-        // 与 waitIdle 的区别：不做全设备等待，只确保"在飞帧"完成。
-        //  · 先对每个帧槽位的 fence 做短超时等待（跳过帧的槽位栅栏仍处于已触发状态，立即返回；
-        //    启动初期栅栏未触发也会在 10ms 内返回，不会卡住）；
-        //  · 收尾用 vkQueueWaitIdle(图形队列)：绘制与呈现都提交在该队列
-        //    （见 renderFrame：submitFrame(..., getGraphicsQueue(), mPresentFunc)），
-        //    因此这一步即覆盖"在飞的呈现"，足以安全销毁/重建尺寸相关资源。
         if (!mDevice) { waitIdle(); return; }
-        // 逐槽位探测在语义上多余（队列排空已覆盖全部在飞工作），
-        // 且 10ms 超时会打出一堆 "waitForFrame failed result: 2(VK_TIMEOUT)" 误导性错误日志
-        // （实测被误读成"设备丢失"，浪费了两轮排查）。因此只做队列排空。
+
         vkQueueWaitIdle(mDevice->getGraphicsQueue());
     }
 
@@ -464,24 +444,12 @@ namespace StarryEngine {
         mLastFrameSkipped = false;
         VulkanFrameContext::FrameInfo frameInfo = mFrameContext->beginFrame(mAcquireFunc);
 
-        // 图像暂不可得（超时/未就绪）：本帧什么都不做，返回"成功"。
-        // 但连续超时必须升级为重建：单纯跳帧永远不会让卡死的交换链恢复 ——
-        // 实测密集 resize 之后画面会永久冻结在最后一帧（FPS 恒定 ~10 = 1/超时）。
-        // 阈值倍增退避：真卡死时约 0.5 秒即可自愈；只是被遮挡时重建频率会迅速降到很低。
+
         if (frameInfo.acquireResult == VK_TIMEOUT || frameInfo.acquireResult == VK_NOT_READY) {
             mLastFrameSkipped = true;
-            if (++mConsecutiveAcquireTimeouts >= mTimeoutRecreateThreshold) {
-                mConsecutiveAcquireTimeouts = 0;
-                if (mTimeoutRecreateThreshold < kTimeoutRecreateThresholdMax) {
-                    mTimeoutRecreateThreshold *= 2;
-                }
-                mFramebufferResized = true;
-                return false;   // 交给 Application：waitIdle + recreateSwapChain
-            }
-            return true;
+            return true;       
         }
         mConsecutiveAcquireTimeouts = 0;
-        mTimeoutRecreateThreshold = kTimeoutRecreateThresholdStart;
 
         if (frameInfo.needsRecreate || frameInfo.acquireResult != VK_SUCCESS) {
             if (frameInfo.needsRecreate) mFramebufferResized = true;
@@ -491,8 +459,6 @@ namespace StarryEngine {
         auto encoder = getCommandEncoder(frameInfo.commandBuffer);
         drawFunc(encoder.get(), frameInfo.imageIndex);
 
-        // 帧循环责任：把当前 swapchain 图像转换到 PRESENT_SRC（present 布局要求）。
-        // 渲染回调只负责录制内容；无论回调画了什么，present 前必须完成此转换。
         {
             VkImage swapImage = mSwapChain->getImage(frameInfo.imageIndex);
             VkImageMemoryBarrier presentBarrier{ VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
@@ -532,9 +498,7 @@ namespace StarryEngine {
             return false;
         }
 
-        // 销毁交换链必须确保"没有任何在飞工作引用它的图像/视图"。
-        // 实测：换成轻量 waitFramesInFlight 后，随机窗口操作压测出现设备丢失并 6/6 崩溃；
-        // 退回全设备等待后恢复稳定。轻量等待仍用于渲染图 resize 路径（那里只换纹理）。
+
         mDevice->waitIdle();
         if (!mSwapChain->recreate(width, height)) return false;
 
@@ -645,10 +609,9 @@ namespace StarryEngine {
     }
 
     std::unique_ptr<RHI::RHICommandEncoder> VulkanRHI::allocateSecondaryCommandEncoder(uint32_t workerIndex) const {
-        // 在 job 内（执行线程）调用：workerIndex 是执行线程的索引 → 只碰该 worker 自己的池。
-        // inline 软开关下 job 跑在主线程，currentWorkerIndex() = 哨兵 → 收敛到 0 号池（串行，安全）。
-        const uint32_t idx = workerIndex;   // Refactor 无 JobSystem worker 索引概念，直接使用
-        const uint32_t slot = mFrameContext->getCurrentFrameIndex();   // Phase 1 内 mCurrentFrameIndex 稳定
+
+        const uint32_t idx = workerIndex; 
+        const uint32_t slot = mFrameContext->getCurrentFrameIndex(); 
         VkCommandBuffer secondary = mFrameContext->allocateWorkerCommandBuffer(slot, idx, VK_COMMAND_BUFFER_LEVEL_SECONDARY);
         if (secondary == VK_NULL_HANDLE) {
             std::cerr << "[VulkanRHI] allocateSecondaryCommandEncoder: slot " << slot << " worker " << idx << " 分配失败" << std::endl;

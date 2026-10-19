@@ -133,6 +133,7 @@ namespace StarryEngine {
         double   m_lastPendingResizeFrame = 0.0;
         double   m_lastResizeEventTime = 0.0;
         double   m_pausedSince = 0.0;
+        int      m_stuckEscalations = 0;         ///< 遮挡期间重建的指数退避计数
         double   m_lastPresentedFrameTime = 0.0;             
         uint32_t m_flightFrame = 2;
 

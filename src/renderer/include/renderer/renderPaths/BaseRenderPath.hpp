@@ -19,8 +19,7 @@ namespace StarryEngine {
         std::shared_ptr<IPassExecutor> executor;
     };
 
-    // ── 路径槽位（Unity URP ScriptableRenderer 模型）──
-    // 核心管线固定顺序，自定义 pass 插到命名注入点；默认槽可替换/禁用。
+
     enum class RenderPassEvent {
         BeforeShadow, Shadow, AfterShadow,
         BeforeOpaque, Opaque, AfterOpaque,
@@ -66,8 +65,7 @@ namespace StarryEngine {
         void clearSlots() { m_slots.clear(); }
 
         void setPresentClearColor(const RHI::Color& color) { m_presentClearColor = color; }
-        // 呈现 pass 的输入纹理（默认 SceneColor；软光追+降噪时切 SceneColorFiltered，
-        // 使 RT→Present 链条完整，避免 cullUnusedPasses 裁剪掉 RT pass 导致 onAfterCompile 悬垂崩溃）
+
         void setPresentInput(const std::string& tex) { m_presentInputTexture = tex; }
 
         void setScene(Scene::Scene* scene) { m_blackboard.put<Scene::Scene*>(scene); }
@@ -83,14 +81,10 @@ namespace StarryEngine {
         void setParallelRecording(const ParallelRecordingContext* parallel) override { m_parallel = parallel; }
 
     protected:
-        // 子类建默认管线时注册默认槽
-        /// 挂到任意渲染层（Unity Layer 风格）：层索引固定，路径按层索引升序执行
+
         void setDefaultSlot(int layer, std::shared_ptr<IPass> pass);
-        /// 按层名挂载（系统层名或用户自定义层名）
         void setDefaultSlot(const std::string& layerName, std::shared_ptr<IPass> pass);
-        /// 兼容旧枚举槽位（映射到系统层）
         void setDefaultSlot(RenderPassEvent ev, std::shared_ptr<IPass> pass);
-        // 将启用的槽位按序组装为 m_passes（buildConfigPasses 调用）
         void assemblePassList();
 
         std::vector<PassSlot> m_slots;
@@ -109,10 +103,8 @@ namespace StarryEngine {
         std::unordered_map<std::string, RenderGraph::TextureId> buildTextureIdMap();
         bool hasSceneColorClearPass() const;
 
-        /// 交换链重建后，其 image view 已变，需要把新的视图刷进渲染图（纹理名不变）
         void refreshSwapchainImport();
 
-        /// 是否启用"尺寸相关资源增量重建"（默认启用）。关掉即回到整图全量重建。
         void setIncrementalResize(bool enabled) { m_incrementalResize = enabled; }
         bool incrementalResize() const { return m_incrementalResize; }
 
@@ -124,7 +116,7 @@ namespace StarryEngine {
         std::shared_ptr<RHI::IRHI> m_rhi;
         std::shared_ptr<RHI::ResourceManager> m_resMgr;
         std::shared_ptr<RenderGraph::RenderGraph> m_renderGraph;
-        bool m_incrementalResize = true;                    ///< 尺寸变化时只重建尺寸相关资源
+        bool m_incrementalResize = true;          
 
         RenderPathConfig m_config;
         std::vector<OverlayPassDesc> m_overlayPasses;
@@ -132,8 +124,7 @@ namespace StarryEngine {
         uint32_t m_width, m_height;
         const ParallelRecordingContext* m_parallel = nullptr;   
         bool m_resourceStatsPrinted = false;
-        /// 本次 buildGraph 是否由窗口尺寸变化触发：为真时保留管线缓存
-        /// （管线与尺寸无关，重建代价高，且密集重建会把交换链拖入卡死状态）
+
         bool m_resizeRebuild = false;
         RHI::SamplerHandle m_defaultSampler;
         std::string m_swapchainTextureName = "Swapchain";
@@ -148,6 +139,8 @@ namespace StarryEngine {
         std::vector<RHI::DescriptorSetHandle> m_globalDescSets;
 
         std::unordered_map<std::string, RHI::TextureDesc> m_textureDescs;
+        uint32_t m_lastSwapchainCount = 0;      ///< 上次见过的交换链图像数（检测重建）
+        void*    m_lastSwapchainView0 = nullptr;///< 上次见过的首张 image view（检测重建）
         std::unordered_map<std::string, RenderGraph::TextureId> m_textureIdMap;
 
         PassList m_passes;
