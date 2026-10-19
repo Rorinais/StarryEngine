@@ -29,6 +29,8 @@ namespace StarryEngine {
         DrawItemType type = DrawItemType::Mesh;
 
         std::string passTag;
+        int renderLayer = -1;   ///< 材质声明的渲染层（-1=未指定）
+        int renderQueue = 0;    ///< 同层绘制顺序
         std::array<std::unordered_map<uint32_t, RHI::DescriptorSetHandle>, RHI::kMaxFramesInFlight> descriptorSets;
         uint32_t pipelineIndex = 0;
         std::weak_ptr<Scene::RenderObject> object;

@@ -16,12 +16,11 @@ namespace StarryEngine {
     // demo 通过 insertPass/overrideSlot/setSlotEnabled 注入或调整；构造只传 Config。
     class DeferredRenderPath : public BaseRenderPath {
     public:
+        /// 渲染层 = pass 注册表（见 RenderLayers）。这里只给"用哪些层"，
+        /// 空 = 全部有 pass 的层（等价旧版全开）。
+        /// 例：{ RenderLayers::Background, RenderLayers::Opaque, RenderLayers::Surface }
         struct Config {
-            bool shadows = true;
-            bool skybox = true;
-            bool grid = true;
-            bool stencilOutline = true;
-            bool particles = true;
+            std::vector<int> layers;
         };
 
         DeferredRenderPath(std::shared_ptr<RHI::IRHI> rhi, uint32_t width, uint32_t height);

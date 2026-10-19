@@ -23,6 +23,7 @@
 #include <core/FrameMonitor.hpp>
 #include <core/Clock.hpp>
 #include <renderer/IRenderer.hpp>
+#include <renderer/renderPaths/BaseRenderPath.hpp>
 #include <renderer/graph/RenderGraph.hpp>
 #include <renderer/interface/RHIFactory.hpp>
 #include <renderer/interface/RHIEnums.hpp>
@@ -73,8 +74,26 @@ namespace StarryEngine {
 
         void createDescriptorPool();
         void initEventDispatcher();
+        /// 惰性绑定摄像机控制（场景/相机晚于事件初始化出现时也能生效）
+        void tryBindCameraControl();
         void setRenderer(std::shared_ptr<IRenderer> renderer) { m_renderer = renderer; }
-        void setScene(std::shared_ptr<Scene::Scene> scene) { m_scene = scene; }
+
+        /// 一步注册：渲染器 + 渲染路径，并完成彼此的接线（renderer->setRenderPath）。
+        /// 之后 setScene 会自动把场景同步给渲染路径。
+        void setRenderer(std::shared_ptr<IRenderer> renderer,
+                         std::shared_ptr<BaseRenderPath> path) {
+            m_renderer = renderer;
+            m_renderPath = path;
+            if (m_renderer && m_renderPath) {
+                m_renderer->setRenderPath(m_renderPath);
+                if (m_scene) m_renderPath->setScene(m_scene.get());
+            }
+        }
+
+        void setScene(std::shared_ptr<Scene::Scene> scene) {
+            m_scene = scene;
+            if (m_renderPath && m_scene) m_renderPath->setScene(m_scene.get());
+        }
 
         using UpdateCallback = std::function<void(float deltaTime)>;
         void setUpdateCallback(UpdateCallback cb) { m_updateCallback = std::move(cb); }
@@ -114,11 +133,12 @@ namespace StarryEngine {
         double   m_lastPendingResizeFrame = 0.0;
         double   m_lastResizeEventTime = 0.0;
         double   m_pausedSince = 0.0;
-        double   m_lastPresentedFrameTime = 0.0;             ///< 最近一次真正成功出帧的时刻(看门狗)                        ///< 进入"不可呈现暂停"的时刻(0=未暂停)                ///< 最近一次窗口尺寸变化的时刻             ///< 待重建期间的渲染限速(last frame time)                   ///< 暂停期间上次探测时刻
+        double   m_lastPresentedFrameTime = 0.0;             
         uint32_t m_flightFrame = 2;
 
         std::shared_ptr<Scene::Scene> m_scene;
         std::shared_ptr<IRenderer> m_renderer;
+        std::shared_ptr<BaseRenderPath> m_renderPath;
         WorldFactory m_worldFactory;                        ///< 设备丢失后重建世界的钩子
         bool         m_transparent = false;                 ///< 创建 RHI 时用的透明标志（软重启需一致）
         UpdateCallback m_updateCallback;
@@ -129,6 +149,7 @@ namespace StarryEngine {
         RHI::DescriptorPoolHandle m_descriptorPool;
 
         std::unique_ptr<CameraController> m_cameraController;
+        bool m_cameraControlBound = false;
         bool m_controlActive = false;
         bool m_enableControl = true;
 

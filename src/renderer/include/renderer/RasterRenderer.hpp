@@ -10,6 +10,11 @@ namespace StarryEngine {
     public:
         using BaseRenderer::BaseRenderer;
 
+        // 显式构造：全局布局/UBO 由 BaseRenderer 自初始化，这里补齐默认材质
+        explicit RasterRenderer(std::shared_ptr<RHI::IRHI> rhi,
+                                RHI::DescriptorPoolHandle globalPool,
+                                std::shared_ptr<Scene::Scene> scene);
+
         void initDefaultMaterials();
         void analysisScene();
         void setLightViewProj(const glm::mat4& lightVP) { m_lightVP = lightVP; }

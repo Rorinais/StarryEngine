@@ -294,10 +294,14 @@ function(add_engine_executable)
         target_link_libraries(${ARG_TARGET_NAME} PRIVATE
             application
             "$<LINK_GROUP:RESCAN,${_se_modules_link}>"
+            app
+            content
         )
     else()
         target_link_libraries(${ARG_TARGET_NAME} PRIVATE
             application
+            app
+            content
         )
     endif()
 

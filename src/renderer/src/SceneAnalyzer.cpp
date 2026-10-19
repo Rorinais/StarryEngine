@@ -202,6 +202,8 @@ namespace StarryEngine {
         item->descriptorSets = std::move(descSets);
         item->pipelineIndex = pipelineIdx;
         item->passTag = obj->materials[submesh.materialIndex]->getSubpassTag();
+        item->renderLayer = obj->materials[submesh.materialIndex]->getRenderLayer();
+        item->renderQueue = obj->materials[submesh.materialIndex]->getRenderQueue();
 
         item->isInstanced = instanced;
         if (instanced) {

@@ -6,6 +6,13 @@
 
 namespace StarryEngine {
 
+    RasterRenderer::RasterRenderer(std::shared_ptr<RHI::IRHI> rhi,
+                                   RHI::DescriptorPoolHandle globalPool,
+                                   std::shared_ptr<Scene::Scene> scene)
+        : BaseRenderer(std::move(rhi), globalPool, std::move(scene)) {
+        initDefaultMaterials();
+    }
+
     void RasterRenderer::initDefaultMaterials() {
         if (m_materialsInitialized) return;
         RHI::DescriptorSetHandle gs0 = m_globalDescriptorSets[0];

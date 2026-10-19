@@ -73,7 +73,7 @@ namespace StarryEngine {
         std::vector<PassSubpassInfo> result;
         uint32_t idx = 0;
         for (auto& sp : m_subpasses) {
-            result.push_back({sp.tag, idx, sp.executor, m_passNode});
+            result.push_back({sp.tag, sp.layer, sp.queue, idx, sp.executor, m_passNode});
             ++idx;
         }
         return result;

@@ -31,7 +31,7 @@ namespace StarryEngine {
     };
 
     struct PassSlot {
-        RenderPassEvent event = RenderPassEvent::Opaque;
+        int         layer = 1;          ///< 渲染层索引（见 RenderLayers；0 背景 … 8+ 用户自定义）
         std::string tag;
         std::shared_ptr<IPass> pass;
         bool enabled = true;
@@ -53,8 +53,12 @@ namespace StarryEngine {
             std::vector<RHI::DescriptorSetHandle> globalDescSets);
 
         // ── 槽位操作（demo 注入/覆盖/启停）──
+        void insertPass(int layer, std::shared_ptr<IPass> pass, const std::string& tag = "");
+        void insertPass(const std::string& layerName, std::shared_ptr<IPass> pass, const std::string& tag = "");
         void insertPass(RenderPassEvent ev, std::shared_ptr<IPass> pass, const std::string& tag = "");
+        void overrideSlot(const std::string& layerName, std::shared_ptr<IPass> pass);
         void overrideSlot(RenderPassEvent ev, std::shared_ptr<IPass> pass);
+        void setSlotEnabled(const std::string& layerName, bool enabled);
         void setSlotEnabled(RenderPassEvent ev, bool enabled);
         void clearSlots() { m_slots.clear(); }
 
@@ -77,6 +81,11 @@ namespace StarryEngine {
 
     protected:
         // 子类建默认管线时注册默认槽
+        /// 挂到任意渲染层（Unity Layer 风格）：层索引固定，路径按层索引升序执行
+        void setDefaultSlot(int layer, std::shared_ptr<IPass> pass, const std::string& tag = "");
+        /// 按层名挂载（系统层名或用户自定义层名）
+        void setDefaultSlot(const std::string& layerName, std::shared_ptr<IPass> pass, const std::string& tag = "");
+        /// 兼容旧枚举槽位（映射到系统层）
         void setDefaultSlot(RenderPassEvent ev, std::shared_ptr<IPass> pass, const std::string& tag = "");
         // 将启用的槽位按序组装为 m_passes（buildConfigPasses 调用）
         void assemblePassList();
@@ -130,6 +139,7 @@ namespace StarryEngine {
 
         // 子通道 → PassNode 映射（子类构建 config pass 时填充）
         std::unordered_map<std::string, SubpassTarget> m_tagToSubpass;
+        std::unordered_map<long long, std::string> m_layerQueueToTag;   ///< (layer<<32|queue) → subpass tag
         std::unordered_map<std::string, RenderGraph::GraphNode*> m_tagToPassNode;
 
         RHI::DescriptorSetLayoutHandle  m_globalSetLayout;

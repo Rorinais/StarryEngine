@@ -1,4 +1,5 @@
 #include <renderer/passes/ParticlePass.hpp>
+#include <renderer/renderPaths/LayerRegistry.hpp>
 #include <renderer/passExecutor/ParticleRenderExecutor.hpp>
 #include <assets/material/DefaultMaterialTemplate.hpp>
 #include <assets/material/MaterialInstance.hpp>
@@ -134,8 +135,9 @@ namespace StarryEngine {
 
     std::vector<PassSubpassInfo> ParticlePass::getSubpasses() const {
         std::vector<PassSubpassInfo> result;
+        int queue = 0;   // 同一层内每个发射器一个段号
         for (auto& st : m_emitterStates) {
-            result.push_back({st.emitter->name + "_Draw", st.renderSubpassIndex, st.executor, st.renderPassNode});
+            result.push_back({st.emitter->name + "_Draw", RenderLayers::Particles, queue++, st.renderSubpassIndex, st.executor, st.renderPassNode});
         }
         return result;
     }

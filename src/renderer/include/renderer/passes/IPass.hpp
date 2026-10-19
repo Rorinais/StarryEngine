@@ -14,6 +14,8 @@ namespace StarryEngine {
 
     struct PassSubpassInfo {
         std::string tag;
+        int layer = -1;         ///< 所属渲染层（-1=未声明）
+        int queue = 0;          ///< 同层段号
         uint32_t subpassIndex = 0;
         std::shared_ptr<IPassExecutor> executor;
         RenderGraph::GraphNode* passNode = nullptr;

@@ -1,4 +1,5 @@
 #include <renderer/renderPaths/BaseRenderPath.hpp>
+#include <renderer/renderPaths/LayerRegistry.hpp>
 #include <renderer/passExecutor/PresentationExecutor.hpp>
 #include <renderer/passes/GraphicsPass.hpp>
 #include <renderer/passes/ComputePass.hpp>
@@ -351,44 +352,102 @@ namespace StarryEngine {
 
     // ── 路径槽位（Unity URP ScriptableRenderer 模型）──
 
-    void BaseRenderPath::setDefaultSlot(RenderPassEvent ev, std::shared_ptr<IPass> pass, const std::string& tag) {
+    namespace {
+        /// 旧枚举槽位 → RenderLayers 系统层（Before/After 归到同名层）
+        int legacyLayerOf(RenderPassEvent ev) {
+            switch (ev) {
+                case RenderPassEvent::BeforeShadow:
+                case RenderPassEvent::Shadow:
+                case RenderPassEvent::AfterShadow:     return RenderLayers::Background;
+                case RenderPassEvent::BeforeOpaque:
+                case RenderPassEvent::Opaque:
+                case RenderPassEvent::AfterOpaque:     return RenderLayers::Opaque;
+                case RenderPassEvent::BeforePost:
+                case RenderPassEvent::Post:
+                case RenderPassEvent::AfterPost:       return RenderLayers::Surface;
+                case RenderPassEvent::BeforeStencil:
+                case RenderPassEvent::Stencil:
+                case RenderPassEvent::AfterStencil:    return RenderLayers::Outline;
+                case RenderPassEvent::BeforeParticles:
+                case RenderPassEvent::Particles:
+                case RenderPassEvent::AfterParticles:  return RenderLayers::Particles;
+                default:                               return RenderLayers::Background;
+            }
+        }
+    }
+
+    void BaseRenderPath::setDefaultSlot(int layer, std::shared_ptr<IPass> pass, const std::string& tag) {
         PassSlot slot;
-        slot.event = ev;
+        slot.layer = layer;
         slot.tag = tag;
         slot.pass = std::move(pass);
         slot.enabled = true;
-        // 保持按事件顺序：插到第一个事件 > ev 的槽之前
         auto it = std::find_if(m_slots.begin(), m_slots.end(),
-            [ev](const PassSlot& s) { return static_cast<int>(s.event) > static_cast<int>(ev); });
+            [&slot](const PassSlot& s) { return s.layer > slot.layer; });
         m_slots.insert(it, std::move(slot));
+    }
+
+    void BaseRenderPath::setDefaultSlot(const std::string& layerName, std::shared_ptr<IPass> pass, const std::string& tag) {
+        int layer = RenderLayers::instance().find(layerName);
+        if (layer < 0) {
+            LOG_WARN("[layer] 未定义的渲染层 '{}'，退回 Opaque", layerName);
+            layer = RenderLayers::Opaque;
+        }
+        setDefaultSlot(layer, std::move(pass), tag);
+    }
+
+    void BaseRenderPath::setDefaultSlot(RenderPassEvent ev, std::shared_ptr<IPass> pass, const std::string& tag) {
+        setDefaultSlot(legacyLayerOf(ev), std::move(pass), tag);
+    }
+
+    void BaseRenderPath::insertPass(int layer, std::shared_ptr<IPass> pass, const std::string& tag) {
+        setDefaultSlot(layer, std::move(pass), tag);
+    }
+
+    void BaseRenderPath::insertPass(const std::string& layerName, std::shared_ptr<IPass> pass, const std::string& tag) {
+        setDefaultSlot(layerName, std::move(pass), tag);
     }
 
     void BaseRenderPath::insertPass(RenderPassEvent ev, std::shared_ptr<IPass> pass, const std::string& tag) {
-        PassSlot slot;
-        slot.event = ev;
-        slot.tag = tag;
-        slot.pass = std::move(pass);
-        slot.enabled = true;
-        auto it = std::find_if(m_slots.begin(), m_slots.end(),
-            [ev](const PassSlot& s) { return static_cast<int>(s.event) > static_cast<int>(ev); });
-        m_slots.insert(it, std::move(slot));
+        setDefaultSlot(ev, std::move(pass), tag);
     }
 
-    void BaseRenderPath::overrideSlot(RenderPassEvent ev, std::shared_ptr<IPass> pass) {
+    void BaseRenderPath::overrideSlot(const std::string& layerName, std::shared_ptr<IPass> pass) {
+        const int layer = RenderLayers::instance().find(layerName);
         for (auto& slot : m_slots) {
-            if (slot.event == ev) {
+            if (slot.layer == layer) {
                 slot.pass = std::move(pass);
                 slot.enabled = true;
                 return;
             }
         }
         // 无默认槽 → 直接插入
+        insertPass(layer, std::move(pass));
+    }
+
+    void BaseRenderPath::overrideSlot(RenderPassEvent ev, std::shared_ptr<IPass> pass) {
+        const int layer = legacyLayerOf(ev);
+        for (auto& slot : m_slots) {
+            if (slot.layer == layer) {
+                slot.pass = std::move(pass);
+                slot.enabled = true;
+                return;
+            }
+        }
         insertPass(ev, std::move(pass));
     }
 
-    void BaseRenderPath::setSlotEnabled(RenderPassEvent ev, bool enabled) {
+    void BaseRenderPath::setSlotEnabled(const std::string& layerName, bool enabled) {
+        const int layer = RenderLayers::instance().find(layerName);
         for (auto& slot : m_slots) {
-            if (slot.event == ev) slot.enabled = enabled;
+            if (slot.layer == layer) slot.enabled = enabled;
+        }
+    }
+
+    void BaseRenderPath::setSlotEnabled(RenderPassEvent ev, bool enabled) {
+        const int layer = legacyLayerOf(ev);
+        for (auto& slot : m_slots) {
+            if (slot.layer == layer) slot.enabled = enabled;
         }
     }
 

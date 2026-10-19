@@ -19,12 +19,25 @@ add_subdirectory(utils)
 add_subdirectory(logging)
 add_subdirectory(renderer)
 add_subdirectory(application)
+add_subdirectory(app)
+add_subdirectory(content)
 add_subdirectory(ui)
 
 
 add_engine_executable(
     TARGET_NAME StarryEngine
-    SOURCES ../demo/StarryEngine.cpp
+    SOURCES ../apps/starry/main.cpp
+    SHADERS_DIR ${SHADERS_DIR}
+    FONTS_DIR ${FONTS_DIR}
+    MODELS_DIR ${MODELS_DIR}
+    TEXTURES_DIR ${TEXTURES_DIR}
+    ICONS_DIR ${ICONS_DIR}
+)
+
+# 外部最小应用：只链接引擎库，不包含任何内容模块
+add_engine_executable(
+    TARGET_NAME StarryMinimal
+    SOURCES ../apps/minimal/main.cpp
     SHADERS_DIR ${SHADERS_DIR}
     FONTS_DIR ${FONTS_DIR}
     MODELS_DIR ${MODELS_DIR}

@@ -441,6 +441,7 @@ namespace StarryEngine {
     void Application::step() {
         if (!m_monitor) return;
         if (!isWindowOpen()) return;
+        tryBindCameraControl();   // 相机晚到时首帧补绑
 
         glfwPollEvents();
         m_monitor->tick();
@@ -747,42 +748,51 @@ namespace StarryEngine {
             }
             });
 
-        // 摄像机控制相关事件（仅在 m_controlActive == true 时有效）
-        if (m_scene && m_scene->getActiveCamera() && m_enableControl) {
-            m_cameraController = std::make_unique<CameraController>(m_scene->getActiveCamera());
-            m_cameraController->setEnabled(false);
+        // 摄像机控制相关订阅改由 tryBindCameraControl() 惰性绑定：
+        // 场景或相机晚于 initEventDispatcher 出现时，也能在首帧自动接上。
+        tryBindCameraControl();
+    }
 
-            // 键盘移动（WASD 等），已在 m_controlActive 下生效
-            GetEventDispatcher().subscribe(EventType::KeyPressed, [this](IEvent& e) {
-                if (!m_controlActive) return;
-                auto& ev = static_cast<KeyEvent&>(e);
-                if (m_cameraController)
-                    m_cameraController->onKeyPressed(ev.getKey(), ev.getAction());
-                });
+    void Application::tryBindCameraControl() {
+        if (m_cameraControlBound || !m_enableControl) return;
+        if (!m_scene || !m_scene->getActiveCamera()) return;
+        m_cameraControlBound = true;
 
-            // 鼠标移动：旋转视角
-            GetEventDispatcher().subscribe(EventType::MouseMoved, [this](IEvent& e) {
-                if (!m_controlActive) return;
-                auto& ev = static_cast<MouseMoveEvent&>(e);
-                if (m_cameraController)
-                    m_cameraController->onMouseMoved(ev.getX(), ev.getY());
-                });
+        m_cameraController = std::make_unique<CameraController>(m_scene->getActiveCamera());
+        m_cameraController->setEnabled(false);
 
-            // 鼠标滚轮：缩放 / 调整 FOV
-            GetEventDispatcher().subscribe(EventType::MouseScrolled, [this](IEvent& e) {
-                if (!m_controlActive) return;
-                auto& ev = static_cast<MouseScrollEvent&>(e);
-                bool ctrlPressed = glfwGetKey(m_window->getHandle(), GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS ||
-                    glfwGetKey(m_window->getHandle(), GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS;
-                float delta = static_cast<float>(ev.getYOffset()) * 1.0f;
-                if (ctrlPressed) {
-                    if (m_cameraController) m_cameraController->setFov(delta);
-                }
-                else {
-                    if (m_cameraController) m_cameraController->onMouseScrolled(ev.getXOffset(), ev.getYOffset());
-                }
-                });
-        }
+        // 键盘移动（WASD 等），已在 m_controlActive 下生效
+        GetEventDispatcher().subscribe(EventType::KeyPressed, [this](IEvent& e) {
+            if (!m_controlActive) return;
+            auto& ev = static_cast<KeyEvent&>(e);
+            if (m_cameraController)
+                m_cameraController->onKeyPressed(ev.getKey(), ev.getAction());
+            });
+
+        // 鼠标移动：旋转视角
+        GetEventDispatcher().subscribe(EventType::MouseMoved, [this](IEvent& e) {
+            if (!m_controlActive) return;
+            auto& ev = static_cast<MouseMoveEvent&>(e);
+            if (m_cameraController)
+                m_cameraController->onMouseMoved(ev.getX(), ev.getY());
+            });
+
+        // 鼠标滚轮：缩放 / 调整 FOV
+        GetEventDispatcher().subscribe(EventType::MouseScrolled, [this](IEvent& e) {
+            if (!m_controlActive) return;
+            auto& ev = static_cast<MouseScrollEvent&>(e);
+            bool ctrlPressed = glfwGetKey(m_window->getHandle(), GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS ||
+                glfwGetKey(m_window->getHandle(), GLFW_KEY_RIGHT_CONTROL) == GLFW_PRESS;
+            float delta = static_cast<float>(ev.getYOffset()) * 1.0f;
+            if (ctrlPressed) {
+                if (m_cameraController) m_cameraController->setFov(delta);
+            }
+            else {
+                if (m_cameraController) m_cameraController->onMouseScrolled(ev.getXOffset(), ev.getYOffset());
+            }
+            });
+
+        LOG_INFO("[app] 摄像机控制已绑定（右键拖动旋转 / WASD 移动 / 滚轮缩放）");
     }
 
     Application::~Application() {

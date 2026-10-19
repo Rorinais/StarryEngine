@@ -30,6 +30,10 @@ namespace StarryEngine {
             m_jobSystem = std::make_unique<JobSystem>(jcfg);
             LOG_INFO("[render] 帧间解耦(FID): 隐式开线程池（worker={}）",m_jobSystem->workerCount());
         }
+
+        // 自包含初始化：渲染器构造完成即可用，外部无需记得手动创建全局布局/UBO
+        createGlobalSetLayout();
+        createGlobalUniformBuffer();
     }
 
     void BaseRenderer::destroy() {
@@ -38,6 +42,7 @@ namespace StarryEngine {
     }
 
     void BaseRenderer::createGlobalSetLayout() {
+        if (m_globalSetLayout.isValid()) return;   // 幂等：构造已初始化
         RHI::DescriptorSetLayoutDesc layoutDesc;
         layoutDesc.bindings = {
             {0, RHI::DescriptorType::UniformBuffer, 1, RHI::ShaderStage::Vertex | RHI::ShaderStage::Fragment}
@@ -61,6 +66,7 @@ namespace StarryEngine {
     }
 
     void BaseRenderer::createGlobalUniformBuffer() {
+        if (m_globalUniformBuffers[0].isValid()) return;   // 幂等：构造已初始化
         for (uint32_t s = 0; s < RHI::kMaxFramesInFlight; ++s) {
             RHI::BufferDesc bufDesc;
             bufDesc.size = sizeof(Assets::GlobalUniforms);

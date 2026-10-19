@@ -1,7 +1,7 @@
 #pragma once
 // 软光追 demo：RayTracingRenderer + RayTracingRenderPath + 离线读回/PNG + 标题栏
 #include <renderer/RayTracingRenderer.hpp>
-#include "DemoSwitches.hpp"
+#include <app/RuntimeSettings.hpp>
 #include <renderer/renderPaths/RayTracingRenderPath.hpp>
 #include <renderer/interface/RHIFactory.hpp>
 #include <scene/Scene.hpp>
@@ -111,14 +111,14 @@ namespace StarryEngine {
                        uint32_t width, uint32_t height)
             : m_rhi(rhi), m_descriptorPool(descriptorPool), m_width(width), m_height(height) {
             // 参数来自 DemoSwitches（原环境变量已移除）
-            m_offlineMode = DemoSwitches::kOfflineMode;
-            m_offlineDenoise = DemoSwitches::kOfflineDenoise;
-            if (DemoSwitches::kOfflinePath && DemoSwitches::kOfflinePath[0]) m_offlinePath = DemoSwitches::kOfflinePath;
+            m_offlineMode = StarryEngine::App::runtimeSettings().offlineMode;
+            m_offlineDenoise = StarryEngine::App::runtimeSettings().offlineDenoise;
+            if (!StarryEngine::App::runtimeSettings().offlinePath.empty()) m_offlinePath = StarryEngine::App::runtimeSettings().offlinePath;
             m_spp = m_offlineMode ? 256u : 64u;   // 交互默认 64 spp（降噪尽早停止滤波，画面更接近离线）；离线默认 256
-            if (DemoSwitches::kSpp > 0) m_spp = static_cast<uint32_t>(DemoSwitches::kSpp);
+            if (StarryEngine::App::runtimeSettings().spp > 0) m_spp = static_cast<uint32_t>(StarryEngine::App::runtimeSettings().spp);
             else if (m_offlineMode && m_offlineDenoise) m_spp = 1u;
             m_offlineFrames = m_offlineDenoise ? 1u : 5u;
-            if (DemoSwitches::kOfflineFrames > 0) m_offlineFrames = static_cast<uint32_t>(DemoSwitches::kOfflineFrames);
+            if (StarryEngine::App::runtimeSettings().offlineFrames > 0) m_offlineFrames = static_cast<uint32_t>(StarryEngine::App::runtimeSettings().offlineFrames);
 
             m_scene = std::make_shared<Scene::Scene>();
             m_renderer = std::make_shared<RayTracingRenderer>(rhi, m_descriptorPool, m_scene);

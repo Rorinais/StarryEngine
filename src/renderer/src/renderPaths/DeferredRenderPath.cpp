@@ -1,4 +1,5 @@
 #include <renderer/renderPaths/DeferredRenderPath.hpp>
+#include <renderer/renderPaths/LayerRegistry.hpp>
 #include <renderer/passes/GraphicsPass.hpp>
 #include <renderer/passes/MeshPass.hpp>
 #include <renderer/passes/ShadowPass.hpp>
@@ -36,60 +37,34 @@ namespace StarryEngine {
         addTextureDesc("Swapchain",   swapDesc);
         addTextureDesc("ShadowMap",   shadowMapDesc);
 
-        if (m_cfg.shadows) {
-            setDefaultSlot(RenderPassEvent::Shadow, std::make_shared<ShadowPass>("ShadowPass"), "ShadowPass");
-        }
+        // 标准 PBR 管线的各段由 PassRegistry 映射表构建（默认表：shadow/forward/skybox/grid/stencil/particles）
+        std::unordered_map<std::string, std::shared_ptr<GraphicsPass>> groups;
+        auto slotTags = std::make_shared<std::unordered_set<std::string>>();
 
-        auto forwardPass = std::make_shared<MeshPass>("ForwardPass", "Forward_Opaque", RHI::Color::Transparent());
-        forwardPass->addReadTextureByName("ShadowMap");
-        setDefaultSlot(RenderPassEvent::Opaque, forwardPass, "Forward_Opaque");
+        PassBuildContext ctx;
+        ctx.width = m_width;
+        ctx.height = m_height;
+        ctx.setSlot = [this, slotTags](int layer, std::shared_ptr<IPass> pass, const std::string& tag) {
+            if (tag.empty() || slotTags->count(tag)) return;
+            slotTags->insert(tag);
+            setDefaultSlot(layer, std::move(pass), tag);
+        };
+        ctx.getGroupPass = [&groups](const std::string& name) -> std::shared_ptr<GraphicsPass> {
+            auto it = groups.find(name);
+            if (it != groups.end()) return it->second;
+            auto pass = std::make_shared<GraphicsPass>(name);
+            groups[name] = pass;
+            return pass;
+        };
 
-        if (m_cfg.skybox || m_cfg.grid) {
-            auto postPass = std::make_shared<GraphicsPass>("PostProcessPass");
-            if (m_cfg.skybox) {
-                SubpassDesc sky;
-                sky.tag = "PostProcess_Skybox";
-                sky.executor = std::make_shared<SceneDrawExecutor>();
-                sky.colorAttachments.push_back({"SceneColor"});
-                sky.depthAttachment = {"Depth"};
-                postPass->addSubpass(sky);
+        // 层 = pass 注册表：按层索引升序执行各层工厂
+        auto& layers = RenderLayers::instance();
+        if (m_cfg.layers.empty()) {
+            layers.build(ctx);
+        } else {
+            for (int l : m_cfg.layers) {
+                if (auto* f = layers.passOf(l)) (*f)(ctx);
             }
-            if (m_cfg.grid) {
-                SubpassDesc grid;
-                grid.tag = "PostProcess_Grid";
-                grid.executor = std::make_shared<SceneDrawExecutor>();
-                grid.colorAttachments.push_back({"SceneColor"});
-                grid.depthAttachment = {"Depth"};
-                postPass->addSubpass(grid);
-            }
-            setDefaultSlot(RenderPassEvent::Post, postPass, "PostProcess");
-        }
-
-        if (m_cfg.stencilOutline) {
-            auto stencilPass = std::make_shared<GraphicsPass>("StencilPass");
-            RenderGraph::AttachmentParams ds;
-            ds.clearDepth = 1.0f;
-            ds.clearStencil = 0;
-
-            SubpassDesc sw;
-            sw.tag = "StencilWrite";
-            sw.executor = std::make_shared<SceneDrawExecutor>();
-            sw.colorAttachments.push_back({ "SceneColor", RenderGraph::AttachmentParams{} });
-            sw.depthAttachment = { "Depth", ds };
-            stencilPass->addSubpass(sw);
-
-            SubpassDesc st;
-            st.tag = "StencilTest";
-            st.executor = std::make_shared<SceneDrawExecutor>();
-            st.colorAttachments.push_back({ "SceneColor", RenderGraph::AttachmentParams{} });
-            st.depthAttachment = { "Depth", ds };
-            stencilPass->addSubpass(st);
-
-            setDefaultSlot(RenderPassEvent::Stencil, stencilPass, "Stencil");
-        }
-
-        if (m_cfg.particles) {
-            setDefaultSlot(RenderPassEvent::Particles, std::make_shared<ParticlePass>("Particles", "Particles"), "Particles");
         }
     }
 
@@ -123,6 +98,18 @@ namespace StarryEngine {
             for (auto& info : pass->getSubpasses()) {
                 m_tagToSubpass[info.tag] = SubpassTarget{{}, info.subpassIndex, info.executor};
                 m_tagToPassNode[info.tag] = info.passNode;
+
+                // (layer,queue) 索引：同一 (layer,queue) 只允许一个 subpass
+                if (info.layer >= 0) {
+                    const long long key = (static_cast<long long>(info.layer) << 32) | (info.queue & 0xFFFFFFFFLL);
+                    auto it = m_layerQueueToTag.find(key);
+                    if (it != m_layerQueueToTag.end() && it->second != info.tag) {
+                        LOG_ERROR("[path] (layer={}, queue={}) 已被 subpass '{}' 占用，'{}' 请换 queue",
+                                  info.layer, info.queue, it->second, info.tag);
+                    } else {
+                        m_layerQueueToTag[key] = info.tag;
+                    }
+                }
             }
         }
 
@@ -169,6 +156,17 @@ namespace StarryEngine {
             for (auto& info : pass->getSubpasses())
                 allTags.insert(info.tag);
         for (auto& item : sceneData.drawItems) {
+            // 优先 (renderLayer, renderQueue) 路由；未声明层则沿用旧 tag
+            if (item->renderLayer >= 0) {
+                const long long key = (static_cast<long long>(item->renderLayer) << 32) | (item->renderQueue & 0xFFFFFFFFLL);
+                auto it = m_layerQueueToTag.find(key);
+                if (it != m_layerQueueToTag.end()) {
+                    item->passTag = it->second;
+                } else {
+                    LOG_ERROR("材质 (layer={}, queue={}) 没有对应 subpass，退回 tag '{}'",
+                              item->renderLayer, item->renderQueue, item->passTag);
+                }
+            }
             std::string tag = item->passTag.empty() ? defaultTag : item->passTag;
             if (!allTags.count(tag)) LOG_ERROR("No subpass for tag '{}'", tag);
         }

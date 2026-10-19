@@ -1,4 +1,5 @@
 #include <renderer/passes/ShadowPass.hpp>
+#include <renderer/renderPaths/LayerRegistry.hpp>
 #include <assets/material/MaterialTemplate.hpp>
 #include <logging/Logger.hpp>
 #include <unordered_set>
@@ -35,7 +36,7 @@ namespace StarryEngine {
 
     std::vector<PassSubpassInfo> ShadowPass::getSubpasses() const {
         std::vector<PassSubpassInfo> result;
-        result.push_back({m_name + "_Depth", 0, m_executor, m_passNode});
+        result.push_back({m_name + "_Depth", RenderLayers::Background, 0, 0, m_executor, m_passNode});
         return result;
     }
 

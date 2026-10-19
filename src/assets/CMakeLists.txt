@@ -10,6 +10,7 @@ add_library(assets STATIC
     src/loader/TextureLoader.cpp
     src/material/DefaultMaterialTemplate.cpp
     src/material/MaterialInstance.cpp
+    src/material/MaterialFactory.cpp
     src/material/MaterialParameterBlock.cpp
     src/material/MaterialTemplate.cpp
 )

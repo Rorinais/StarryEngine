@@ -19,6 +19,7 @@ add_library(renderer STATIC
     src/interface/vulkan/VulkanSwapchain.cpp
     src/passExecutor/ParticleRenderExecutor.cpp
     src/passExecutor/PresentationExecutor.cpp
+    src/renderPaths/LayerRegistry.cpp
     src/passes/ComputePass.cpp
     src/passes/GraphicsPass.cpp
     src/passes/ParticlePass.cpp
